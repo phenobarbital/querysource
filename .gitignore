@@ -243,3 +243,8 @@ querysource/types/converters.cpp
 querysource/types/typedefs.c
 querysource/types/validators.cpp
 querysource/utils/functions.cpp
+
+
+### Temp ignoring tests and examples
+tests/*
+examples/*
