@@ -154,7 +154,7 @@ setup(
         'navconfig[default]>=1.1.0',
         'asyncdb[all]>=2.2.0',
         'navigator-session>=0.3.3',
-        'scikit-learn==1.2.1',
+        'scikit-learn==1.2.2',
         'elasticsearch-async==6.2.0',
         'seaborn==0.12.2',
         # 'pandas_profiling==3.6.6',
