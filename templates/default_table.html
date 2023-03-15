@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+{% if resultset %}
+<table style="width:100%" id="myTable" class="table table-striped table-class">
+    <!-- table header -->
+
+    <thead>
+      <tr>
+        {% for key in resultset[0].keys() %}
+        <th>{{ key }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+
+    <tbody>
+      <!-- table rows -->
+      {% for dict_item in resultset %}
+      <tr>
+        {% for value in dict_item.values() %}
+        <td> {{ value }} </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+{% endif %}
+
+{% endblock %}
+{% block import %}
+<script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.2/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.2/js/dataTables.bootstrap5.min.js"></script>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    $(document).ready(function () {
+      $('#myTable').DataTable();
+    });
+  </script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+   table {
+     width: 100%;
+     border-collapse: collapse;
+   }
+
+   th {
+     background-color: #add8e6;
+     padding: 8px;
+     text-align: left;
+     border-bottom: 1px solid #87cefa;
+   }
+
+   td {
+     padding: 8px;
+     text-align: left;
+     border-bottom: 1px solid #87cefa;
+   }
+ </style>
+
+{% if resultset %}
+<table style="width:100%" id="myTable" class="table table-striped table-class">
+    <!-- table header -->
+
+    <thead>
+      <tr>
+        {% for key in resultset[0].keys() %}
+        <th>{{ key }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+
+    <tbody>
+      <!-- table rows -->
+      {% for dict_item in resultset %}
+      <tr>
+        {% for value in dict_item.values() %}
+        <td> {{ value }} </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+{% endif %}
+
+<div>
+  {% if charts %}
+   {% for chart in charts %}
+       <div><img src="{{ chart|safe }}" /></div>
+   {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

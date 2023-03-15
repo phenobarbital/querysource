@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+   table {
+     width: 100%;
+     border-collapse: collapse;
+   }
+ 
+   th {
+     background-color: #add8e6;
+     padding: 8px;
+     text-align: left;
+     border-bottom: 1px solid #87cefa;
+   }
+ 
+   td {
+     padding: 8px;
+     text-align: left;
+     border-bottom: 1px solid #87cefa;
+   }
+ </style>
+
+<table style="width:100%">
+    <!-- table header -->
+    {% if resultset %}
+    <tr>
+       {% for key in resultset[0] %}
+       <th> {{ key }} </th>
+       {% endfor %}
+    </tr>
+    {% endif %}
+
+    <!-- table rows -->
+    {% for dict_item in resultset %}
+    <tr>
+       {% for value in dict_item.values() %}
+       <td> {{ value }} </td>
+       {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+
+{% endblock %}
