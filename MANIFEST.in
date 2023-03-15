@@ -1,0 +1,11 @@
+
+include LICENSE
+include CHANGES.rst
+include CONTRIBUTING.md
+include INSTALL
+include README.md
+include Makefile
+graft querysource
+graft tests
+global-exclude *.pyc
+prune docs/_build

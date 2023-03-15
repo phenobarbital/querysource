@@ -29,9 +29,9 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-etc/*
-google/*
-great_expetations/*
+etc/
+google/
+great_expetations/
 #lib/
 lib64/
 parts/
@@ -246,5 +246,5 @@ querysource/utils/functions.cpp
 
 
 ### Temp ignoring tests and examples
-tests/*
-examples/*
+tests/
+examples/

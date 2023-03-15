@@ -1,0 +1,3 @@
+## applications required before installing querysource.
+gcc python3.9-dev python3.9-venv libmemcached-dev zlib1g-dev build-essential libffi-dev unixodbc unixodbc-dev libsqliteodbc libev4 libev-dev
+sudo apt install python3-cassandra
