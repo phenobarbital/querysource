@@ -142,7 +142,7 @@ setup(
         'odfpy==1.4.1',
         'xlrd==2.0.1',
         'pandas_bokeh==0.5.5',
-        'plotly==5.13.0',
+        'plotly==5.13.1',
         'sweetviz==2.1.4',
         # 'great_expectations==0.15.48',
         'pygal==3.0.0',
