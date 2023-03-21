@@ -185,16 +185,10 @@ class QueryParser(ABC):
                 del self.conditions.filter
             except (KeyError, AttributeError):
                 pass
-        if not self.filter:
-            try:
-                self.filter = self.conditions.filter_by
-                del self.conditions.filter_by
-            except (KeyError, AttributeError):
-                self.filter: dict = {}
-        if not self.filter:
-            try:
+        if self.filter is None:
+            if self.options.filtering:
                 self.filter = self.options.filtering
-            except AttributeError:
+            else:
                 self.filter = {}
         # filtering options
         try:
@@ -275,7 +269,8 @@ class QueryParser(ABC):
         return self
 
     async def set_conditions(self, conditions: dict = None):
-        ## print('COND ', conditions, self.cond_definition)
+        if conditions is None:
+            conditions = {}
         # check if all conditions are valid and return the value
         elements = {**conditions, **self.filter}
         _filter = {}
