@@ -189,7 +189,6 @@ class QS(BaseQuery):
                 }
                 self._qs = self._provider(**args)
                 await self._qs.prepare_connection()
-                print('QS >>> ', self._qs)
                 return self
             except Exception as err:
                 self._logger.exception(

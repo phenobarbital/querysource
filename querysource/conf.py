@@ -1,5 +1,11 @@
 # Import Config Class
+import sys
 from navconfig import BASE_DIR, config
+
+### Plugins Folder:
+PLUGINS_FOLDER = BASE_DIR.joinpath('plugins/')
+### also, Add plugins folder to sys.path
+sys.path.append(PLUGINS_FOLDER)
 ### Databases
 
 # DB Default (database used for interaction (rw))

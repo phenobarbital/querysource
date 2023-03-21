@@ -3,6 +3,7 @@ from importlib import import_module
 from aiohttp import web
 from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.models import QueryModel
+from querysource.conf import PLUGINS_FOLDER
 from querysource.exceptions import (
     DataNotFound,
     DriverError,
@@ -55,15 +56,20 @@ class restProvider(httpProvider):
             module = import_module(module_name, package='sources')
         except SyntaxError as err:
             raise DriverError(
-                f"Error: SyntaxError over module {self.dialect}: {err}"
+                f"Syntax Error over {self.dialect}: {err}"
             ) from err
-        except ImportError as err:
-            self._logger.error(
-                f'Error importing REST Dialect {self.dialect}'
-            )
-            raise DriverError(
-                f"Error importing REST Dialect {self.dialect}"
-            ) from err
+        except ImportError:
+            ## check if can be loaded from other place:
+            module_name = f'plugins.sources.{self.dialect}'
+            try:
+                module = import_module(module_name, package='sources')
+            except ImportError as ex:
+                self._logger.error(
+                    f'Error importing REST Dialect {self.dialect}'
+                )
+                raise DriverError(
+                    f"Error importing REST {self.dialect}: {ex}"
+                ) from ex
         except Exception as err:
             raise QueryException(
                 f'Error: Unknown Error on Dialect {self.dialect}, error: {str(err)}'

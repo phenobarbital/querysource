@@ -94,7 +94,7 @@ class QueryModel(Model):
     class Meta:
         driver = 'pg'
         name = 'queries'
-        schema = 'public'
+        schema = 'troc'
         strict = True
         frozen = False
         remove_nulls = True # Auto-remove nullable (with null value) fields
