@@ -1,3 +1,4 @@
+import sys
 from typing import (
     Any,
     Union
@@ -17,7 +18,6 @@ from .abstract import BaseProvider
 
 urllib3.disable_warnings()
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-
 
 
 class httpProvider(BaseProvider):
@@ -57,12 +57,17 @@ class httpProvider(BaseProvider):
             module = importlib.import_module(module_name, package='sources')
         except SyntaxError as err:
             raise QueryException(
-                f"Error: SyntaxError over module httpSource: {err}"
+                f"Error: Syntax Error on HTTPSource: {err}"
             ) from err
-        except ModuleNotFoundError as err:
-            raise QueryException(
-                f'Error importing {module_name} module, error: {str(err)}'
-            ) from err
+        except ModuleNotFoundError:
+            ### try to find Module in plugins folder:
+            try:
+                module_name = f'plugins.sources.{self.dialect}'
+                module = importlib.import_module(module_name, package='sources')
+            except ModuleNotFoundError as err:
+                raise QueryException(
+                    f'Error importing {module_name} module, error: {str(err)}'
+                ) from err
         except ImportError as err:
             print(
                 f'Error importing HTTP Dialect {module_name}'
