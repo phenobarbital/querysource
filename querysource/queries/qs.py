@@ -10,15 +10,20 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 from aiohttp import web
-from asyncdb.exceptions import NoDataFound, ProviderError, StatementError
+from asyncdb.exceptions import (
+    NoDataFound,
+    ProviderError,
+    StatementError,
+    DriverError
+)
 
 from querysource.connections import QueryConnection
 from querysource.exceptions import (
     CacheException,
     DataNotFound,
-    DriverError,
     EmptySentence,
     QueryException,
+    QueryError,
     SlugNotFound,
 )
 from querysource.providers import BaseProvider  # renamed to Providers.
@@ -150,9 +155,13 @@ class QS(BaseQuery):
             ### getting the connection and the provider from Slug:
             try:
                 self._conn, self._provider = await self.connection.from_provider(objquery)
-            except (QueryException, DriverError) as ex:
+            except (QueryException, DriverError, ProviderError) as ex:
                 raise QueryException(
                     str(ex)
+                ) from ex
+            except Exception as ex:
+                raise QueryException(
+                    f"{ex}"
                 ) from ex
             ### Check conditions:
             conditions = {}
@@ -194,7 +203,7 @@ class QS(BaseQuery):
                 self._logger.exception(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 )
-                raise DriverError(
+                raise QueryError(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 ) from err
         elif self._type == 'query':
@@ -206,7 +215,7 @@ class QS(BaseQuery):
             try:
                 self._conn, self._provider = await self.connection.from_provider(objquery)
             except (QueryException, DriverError) as ex:
-                raise QueryException(
+                raise QueryError(
                     str(ex)
                 ) from ex
             ### Check conditions:
@@ -233,7 +242,7 @@ class QS(BaseQuery):
                 self._logger.exception(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 )
-                raise DriverError(
+                raise QueryError(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 ) from err
         elif self._type == 'raw':
@@ -275,11 +284,11 @@ class QS(BaseQuery):
                 self._logger.exception(
                     f"Cannot Initialize Provider {self._provider}, error: {err}"
                 )
-                raise DriverError(
+                raise QueryError(
                     f"Cannot Initialize Provider {self._provider}, error: {err}"
                 ) from err
         else:
-            raise DriverError(
+            raise QueryError(
                 f"Invalid type of Query: {self._query}"
             )
 
@@ -350,7 +359,7 @@ class QS(BaseQuery):
                         f'{self._qs.__name__!s}: {err}'
                     ) from err
                 except (StatementError, EmptySentence) as err:
-                    raise DriverError(
+                    raise QueryError(
                         f"Query Error: {err}"
                     ) from err
                 except Exception as ex:
