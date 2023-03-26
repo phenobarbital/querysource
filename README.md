@@ -22,7 +22,7 @@ Successfully installed querysource
 
 ### Requirements ###
 
-* Python >= 3.8
+* Python >= 3.9
 * asyncio (https://pypi.python.org/pypi/asyncio/)
 
 ## Basic Usage ##

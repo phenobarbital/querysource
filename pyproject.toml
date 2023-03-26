@@ -26,7 +26,7 @@ classifiers=[
 dynamic = ["version", "description"]
 
 [options]
-python_requires = ">=3.9"
+python_requires = ">=3.9.16"
 platforms = "manylinux_2_28_x86_64"
 
 [build-system]

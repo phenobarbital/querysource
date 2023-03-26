@@ -12,7 +12,11 @@ from aiohttp import web
 from datamodel import BaseModel
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB, AsyncPool
-from asyncdb.exceptions import NoDataFound, ProviderError
+from asyncdb.exceptions import (
+    NoDataFound,
+    ProviderError,
+    DriverError
+)
 from asyncdb.utils import cPrint
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
@@ -35,7 +39,12 @@ from querysource.models import QueryModel
 from querysource.providers import BaseProvider
 from querysource.types import Singleton
 
-from .exceptions import ConfigError, DriverError, QueryException, SlugNotFound
+from .exceptions import (
+    ConfigError,
+    QueryError,
+    QueryException,
+    SlugNotFound
+)
 
 DATASOURCES = {}
 PROVIDERS = {}
@@ -186,7 +195,7 @@ class QueryConnection(metaclass=Singleton):
                 await self._connection.connection()
             except Exception as err:
                 logging.exception(err)
-                raise DriverError(
+                raise ConfigError(
                     f"Unable to Connect to Database. {err}"
                 ) from err
         else:
@@ -338,7 +347,7 @@ class QueryConnection(metaclass=Singleton):
                 f'Slug not Found {slug!s}'
             ) from ex
         except (ProviderError, DriverError) as ex:
-            raise DriverError(
+            raise SlugNotFound(
                 f"Error getting Slug: {ex}"
             ) from ex
 
@@ -450,7 +459,7 @@ class QueryConnection(metaclass=Singleton):
                 PROVIDERS[provider] = obj
                 return obj
             except ImportError as ex:
-                raise DriverError(
+                raise QueryException(
                     f"Error: No QuerySource Provider {provider} was found: {ex}"
                 ) from ex
 
@@ -469,7 +478,7 @@ class QueryConnection(metaclass=Singleton):
                     f"Error creating AsyncDB instance: {ex}"
                 ) from ex
         else:
-            raise DriverError(
+            raise QueryError(
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
