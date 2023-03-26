@@ -2,7 +2,7 @@
 
 ## Preparation
 
-AsyncDB is designed to use last syntax of asyncio-tools, for that reason, you'll need to have at least Python 3.8 available for testing.
+AsyncDB is designed to use last syntax of asyncio-tools, for that reason, you'll need to have at least Python 3.9 available for testing.
 
 You can do this with [pyenv][]:
 
