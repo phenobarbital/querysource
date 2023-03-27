@@ -1,6 +1,12 @@
 # Import Config Class
 import sys
+import os
 from navconfig import BASE_DIR, config
+
+
+### Matplotlib Configuration
+mpldir = config.get('MPLCONFIGDIR', fallback=BASE_DIR.joinpath('templates'))
+os.environ['MPLCONFIGDIR'] = str(mpldir)
 
 ### Plugins Folder:
 PLUGINS_FOLDER = BASE_DIR.joinpath('plugins/')
