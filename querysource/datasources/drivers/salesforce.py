@@ -13,7 +13,7 @@ class salesforceDriver(CloudDriver):
     driver: str = 'salesforce'
     name: str = 'SalesForce'
     instance: str = Field(required=False)
-    domain: str = Field(required=True)
+    domain: str = Field(required=False)
     session_id: str = Field(required=False)
 
     def __post_init__(self, user, hostname, *args, **kwargs): # pylint: disable=W0613,W0221
