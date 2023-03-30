@@ -208,7 +208,9 @@ class QS(BaseQuery):
                 ) from err
         elif self._type == 'query':
             ## Query Object (TBD)
-            self._logger.debug(f'Starting Query: {self._query!s} for {self._driver}')
+            self._logger.debug(
+                f'Starting Query: {self._query!s} for {self._driver}'
+            )
             ### build manually objquery:
             objquery = AttrDict({"provider": self._driver})
             ### getting the connection and the provider from Slug:

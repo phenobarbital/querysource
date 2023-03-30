@@ -18,7 +18,8 @@ from google.analytics.data_v1beta.types import (
 # google analytics ga4
 from google.api_core.exceptions import PermissionDenied, ServiceUnavailable
 from querysource.conf import GA_SERVICE_ACCOUNT_NAME, GA_SERVICE_PATH
-
+from querysource.exceptions import QueryError, ConfigError
+from querysource.libs.json import json_encoder
 from .rest import restSource
 
 
@@ -53,6 +54,7 @@ class ga(restSource):
             self.property_id = self._conditions['property_id']
             del self._conditions['property_id']
         else:
+            ## Default Propertiy ID:
             self.property_id = self._env.get('GA_PROPERTY_ID')
             if not self.property_id:
                 try:
@@ -63,6 +65,7 @@ class ga(restSource):
                     ) from err
 
         # service account name (json)
+        ### Passing Credentials File directly from conditions
         self._credentials = {}
         if 'account_name' in self._conditions:
             self._credentials = self._conditions['account_name']
@@ -72,35 +75,60 @@ class ga(restSource):
 
         # getting credentials:
         if not self._credentials:
-            # read from file:
-            filename = None
-            try:
-                f = self._env.get('GA_SERVICE_ACCOUNT_NAME')
-                filename = Path(f).resolve()
-            except Exception:
-                pass
-            if not filename:
-                filename = BASE_DIR.joinpath(GA_SERVICE_PATH, GA_SERVICE_ACCOUNT_NAME)
-            if not filename or not filename.exists():
-                raise ValueError(
-                    "Google Analytics: Missing Service Account Name or Google Credentials"
-                )
-            self._credentials = str(filename)
+            if 'project_id' in self._conditions:
+                ### try to build file by ourself
+                project_id = self._conditions["project_id"]
+                del self._conditions["project_id"]
+                try:
+                    account_prefix = self._conditions["account_prefix"]
+                    del self._conditions["account_prefix"]
+                    private_key_id = self._env.get(f'{account_prefix}_PRIVATE_KEY_ID')
+                    private_key = os.environ[f'{account_prefix}_PRIVATE_KEY'].replace('\\n', '\n')
+                    client_id = self._env.get(f'{account_prefix}_CLIENT_ID')
+                except (KeyError, ValueError) as ex:
+                    raise ConfigError(
+                        "Missing *account_prefix* to extract credentials from ENV"
+                    ) from ex
+                credentials = {
+                    "type": "service_account",
+                    "project_id": project_id,
+                    "private_key_id": private_key_id,
+                    "private_key": f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----\n",
+                    "client_email": f"analytics-reporting@{project_id}.iam.gserviceaccount.com",
+                    "client_id": client_id,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/analytics-reporting%40{project_id}.iam.gserviceaccount.com"
+                }
+                filename = BASE_DIR.joinpath('google', f'{project_id}.json')
+                try:
+                    with open(filename, mode='w', encoding='utf-8') as f:
+                        f.write(json_encoder(credentials))
+                except Exception as ex:
+                    raise RuntimeError(
+                        f"Can't create Google GA4 credentials Filename {filename}, {ex}"
+                    ) from ex
+                self._credentials = str(filename)
+            else:
+                # read from file:
+                filename = None
+                try:
+                    f = self._env.get('GA_SERVICE_ACCOUNT_NAME')
+                    filename = Path(f).resolve()
+                except Exception:
+                    pass
+                if not filename:
+                    filename = BASE_DIR.joinpath(GA_SERVICE_PATH, GA_SERVICE_ACCOUNT_NAME)
+                if not filename or not filename.exists():
+                    raise ValueError(
+                        "Google Analytics: Missing Service Account Name or Google Credentials"
+                    )
+                self._credentials = str(filename)
             print('CREDENTIALS: ', self._credentials)
-
-            ## or loading credentials from JSON
-            # # read json:
-            # contents = None
-            # with open(filename, 'r') as fp:
-            #     contents = fp.read()
-            # try:
-            #     self._credentials = rapidjson.loads(contents)
-            # except Exception as err:
-            #     raise ValueError(
-            #         f"Google Analytics: Invalid Service Account Name File {err!s}"
-            #     )
+        ### start configuring
         if self._credentials:
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self._credentials
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(self._credentials)
         else:
             raise ValueError(
                 "Google Analytics: Missing Google JSON Credentials"
@@ -187,7 +215,9 @@ class ga(restSource):
             return self._result
         except Exception as err:
             logging.exception(err)
-            raise Exception from err
+            raise QueryError(
+                str(err)
+            ) from err
 
     async def pivot_report(self):
         """
