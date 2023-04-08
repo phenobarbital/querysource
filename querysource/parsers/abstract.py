@@ -186,9 +186,9 @@ class QueryParser(ABC):
             except (KeyError, AttributeError):
                 pass
         if self.filter is None:
-            if self.options.filtering:
+            try:
                 self.filter = self.options.filtering
-            else:
+            except AttributeError:
                 self.filter = {}
         # filtering options
         try:
