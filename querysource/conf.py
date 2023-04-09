@@ -9,9 +9,9 @@ mpldir = config.get('MPLCONFIGDIR', fallback=BASE_DIR.joinpath('templates'))
 os.environ['MPLCONFIGDIR'] = str(mpldir)
 
 ### Plugins Folder:
-PLUGINS_FOLDER = BASE_DIR.joinpath('plugins/')
+PLUGINS_FOLDER = BASE_DIR.joinpath('plugins')
 ### also, Add plugins folder to sys.path
-sys.path.append(PLUGINS_FOLDER)
+sys.path.append(str(PLUGINS_FOLDER))
 ### Databases
 
 # DB Default (database used for interaction (rw))
