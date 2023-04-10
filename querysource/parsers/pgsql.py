@@ -6,7 +6,7 @@ from querysource.models import QueryObject
 from querysource.providers import BaseProvider
 # from .parser import QueryParser, ParserHolders
 from querysource.types.typedefs import NullDefault, SafeDict
-from querysource.types.validators import Entity, field_components
+from querysource.types.validators import Entity, field_components, is_integer
 
 from .abstract import COMPARISON_TOKENS, QueryParser
 
@@ -73,8 +73,16 @@ class pgSQLParser(QueryParser):
                     _format = self.cond_definition[key]
                 except KeyError:
                     _format = None
-                # print('FILTER > > ', key, value, _format)
-                _, name, end = field_components(key)[0]
+                try:
+                    if is_integer(key):
+                        key = f'"{key}"'
+                except ValueError:
+                    pass
+                try:
+                    _, name, end = field_components(str(key))[0]
+                except IndexError:
+                    name = key
+                    end = None
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
                     op, v = value.popitem()
