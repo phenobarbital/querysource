@@ -249,6 +249,5 @@ querysource/utils/functions.cpp
 tests/
 examples/
 great_expectations/
-plugins/
 querysource/handlers/variables.py
 resources/

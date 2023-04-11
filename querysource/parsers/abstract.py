@@ -177,18 +177,20 @@ class QueryParser(ABC):
         # where condition (alias for Filter)
         self.filter = {}
         try:
-            self.filter = self.conditions.where_cond
+            self.filter = self.conditions.get('where_cond', {})
             del self.conditions.where_cond
         except (KeyError, AttributeError):
+            pass
+        if self.filter is None:
             try:
-                self.filter = self.conditions.filter
+                self.filter = self.conditions.get('filter', {})
                 del self.conditions.filter
             except (KeyError, AttributeError):
                 pass
         if self.filter is None:
             try:
                 self.filter = self.options.filtering
-            except AttributeError:
+            except (TypeError, AttributeError):
                 self.filter = {}
         # filtering options
         try:
@@ -272,7 +274,10 @@ class QueryParser(ABC):
         if conditions is None:
             conditions = {}
         # check if all conditions are valid and return the value
-        elements = {**conditions, **self.filter}
+        try:
+            elements = {**conditions, **self.filter}
+        except TypeError:
+            elements = conditions
         _filter = {}
         for name, val in elements.items():
             # All kind of new expressions like: @, |, # or ~
