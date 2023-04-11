@@ -34,7 +34,7 @@ class QueryObject(ClassDict):
     group_by: Optional[list]
     qry_options: Optional[dict]
     ## filter
-    filter_by: Optional[dict] = Field(default=empty_dict)
+    filter: Optional[dict] = Field(default=empty_dict)
     where_cond: Optional[dict]
     and_cond: Optional[dict]
     hierarchy: Optional[list]

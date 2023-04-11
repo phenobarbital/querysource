@@ -3,7 +3,6 @@ from importlib import import_module
 from aiohttp import web
 from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.models import QueryModel
-from querysource.conf import PLUGINS_FOLDER
 from querysource.exceptions import (
     DataNotFound,
     DriverError,
