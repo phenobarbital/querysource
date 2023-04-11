@@ -62,7 +62,7 @@ class httpProvider(BaseProvider):
         except ModuleNotFoundError:
             ### try to find Module in plugins folder:
             try:
-                module_name = f'plugins.sources.{self.dialect}'
+                module_name = f'querysource.plugins.sources.{self.dialect}'
                 module = importlib.import_module(module_name, package='sources')
             except ModuleNotFoundError as err:
                 raise QueryException(
