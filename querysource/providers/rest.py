@@ -60,7 +60,7 @@ class restProvider(httpProvider):
             ) from err
         except ImportError:
             ## check if can be loaded from other place:
-            module_name = f'plugins.sources.{self.dialect}'
+            module_name = f'querysource.plugins.sources.{self.dialect}'
             try:
                 module = import_module(module_name, package='sources')
             except ImportError as ex:
