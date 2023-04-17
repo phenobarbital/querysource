@@ -21,10 +21,10 @@ from .writers import (
     TSVWriter,
     PickleWriter,
     TableWriter,
-    ProfileWriter,
+    # ProfileWriter,
     ReportWriter,
     PDFWriter,
-    EDAWriter,
+    # EDAWriter,
     # DescribeWriter,
     # ClusterWriter
 )
@@ -45,10 +45,10 @@ WRITERS = {
     'bokeh': BokehWriter,
     'plotly': PlotlyWriter,
     'pickle': PickleWriter,
-    'profiling': ProfileWriter,
+    # 'profiling': ProfileWriter,
     'report': ReportWriter,
     'pdf': PDFWriter,
-    'eda': EDAWriter,
+    # 'eda': EDAWriter,
     # 'describe': DescribeWriter,
     # 'clustering': ClusterWriter
 }
