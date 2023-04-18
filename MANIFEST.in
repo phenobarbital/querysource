@@ -8,4 +8,9 @@ include Makefile
 graft querysource
 graft tests
 global-exclude *.pyc
-prune docs/_build
+prune docs
+prune samples
+prune settings
+prune plugins/*
+recursive-exclude */__pycache__
+prune */__pycache__
