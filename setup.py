@@ -115,7 +115,7 @@ setup(
     ],
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
-    packages=find_packages(exclude=['contrib', 'docs', 'tests', 'examples', 'samples']),
+    packages=find_packages(exclude=['contrib', 'docs', 'tests', 'examples', 'samples', 'settings']),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,

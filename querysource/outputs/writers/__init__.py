@@ -11,7 +11,7 @@ from .report import ReportWriter
 from .pickle import PickleWriter
 from .table import TableWriter
 from .pdf import PDFWriter
-from .profiling import ProfileWriter
-from .eda import EDAWriter
+# from .profiling import ProfileWriter
+# from .eda import EDAWriter
 # from .describe import DescribeWriter
 # from .clustering import ClusterWriter

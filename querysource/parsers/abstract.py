@@ -181,13 +181,13 @@ class QueryParser(ABC):
             del self.conditions.where_cond
         except (KeyError, AttributeError):
             pass
-        if self.filter is None:
+        if not self.filter:
             try:
                 self.filter = self.conditions.get('filter', {})
                 del self.conditions.filter
             except (KeyError, AttributeError):
                 pass
-        if self.filter is None:
+        if not self.filter:
             try:
                 self.filter = self.options.filtering
             except (TypeError, AttributeError):

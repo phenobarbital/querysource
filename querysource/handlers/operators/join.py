@@ -78,6 +78,10 @@ class Join:
                     # merge.append(ldf)
                     ldf.reset_index(drop=True)
                 df = ldf
+                if df is None:
+                    raise DataNotFound(
+                        "Empty Result Dataframe"
+                    )
                 df.is_copy = None
             else:
                 pass
@@ -85,6 +89,8 @@ class Join:
             for column, t in df.dtypes.items():
                 print(column, '->', t, '->', df[column].iloc[0])
             return df
+        except DataNotFound:
+            raise
         except (ValueError, KeyError) as err:
             raise QueryException(
                 f'Cannot Join with missing Column: {err!s}'
