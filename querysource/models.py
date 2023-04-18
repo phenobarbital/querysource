@@ -5,7 +5,8 @@ Models for querysource structure.
 from typing import Optional
 from datetime import datetime
 from asyncdb.models import Model, Field
-from querysource.types.mutables import ClassDict
+# from querysource.types.mutables import ClassDict
+from datamodel.libs.mapping import ClassDict
 
 def rigth_now(obj) -> datetime:
     return datetime.now()
@@ -34,7 +35,7 @@ class QueryObject(ClassDict):
     group_by: Optional[list]
     qry_options: Optional[dict]
     ## filter
-    filter: Optional[dict] = Field(default=empty_dict)
+    filter: Optional[dict]
     where_cond: Optional[dict]
     and_cond: Optional[dict]
     hierarchy: Optional[list]
