@@ -62,8 +62,9 @@ REDIS_DB = config.get('REDIS_DB', fallback=2)
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT!s}/{REDIS_DB}"
 
 # QuerySet Cache (cache for queries)
-QUERYSET_DB = config.get('QUERYSET_DB', fallback=1)
-QUERYSET_REDIS = CACHE_URL + "/" + str(QUERYSET_DB)
+QUERYSET_DB = config.get('QUERYSET_DB', fallback=3)
+QUERYSET_REDIS = f"redis://{REDIS_HOST}:{REDIS_PORT}/{QUERYSET_DB}"
+
 
 ### Memcache
 MEMCACHE_HOST = config.get('MEMCACHE_HOST', 'localhost')
@@ -104,6 +105,7 @@ SQLSERVER_PORT = config.get('SQLSERVER_PORT', fallback=1433)
 SQLSERVER_USER  = config.get('SQLSERVER_USER')
 SQLSERVER_PWD  = config.get('SQLSERVER_PWD')
 SQLSERVER_DATABASE  = config.get('SQLSERVER_DATABASE')
+SQLSERVER_TDS_VERSION = config.get('SQLSERVER_TDS_VERSION', fallback='8.0')
 
 ## ORACLE
 ORACLE_DRIVER = config.get('ORACLE_DRIVER', fallback='oracle')

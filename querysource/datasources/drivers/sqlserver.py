@@ -10,6 +10,7 @@ from querysource.conf import (
     SQLSERVER_USER,
     SQLSERVER_PWD,
     SQLSERVER_DATABASE,
+    SQLSERVER_TDS_VERSION
 )
 from .abstract import SQLDriver
 
@@ -51,6 +52,13 @@ class sqlserverDriver(SQLDriver):
         }
 
 if SQLSERVER_USER:
-    sqlserver_default = sqlserverDriver(host=SQLSERVER_HOST, port=SQLSERVER_PORT, database=SQLSERVER_DATABASE, user=SQLSERVER_USER, password=SQLSERVER_PWD)
+    sqlserver_default = sqlserverDriver(
+        host=SQLSERVER_HOST,
+        port=SQLSERVER_PORT,
+        database=SQLSERVER_DATABASE,
+        user=SQLSERVER_USER,
+        password=SQLSERVER_PWD,
+        tds_version=SQLSERVER_TDS_VERSION
+    )
 else:
     sqlserver_default = None
