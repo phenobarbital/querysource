@@ -7,6 +7,10 @@ from datetime import datetime
 from asyncdb.models import Model, Field
 # from querysource.types.mutables import ClassDict
 from datamodel.libs.mapping import ClassDict
+from querysource.conf import (
+    QS_QUERIES_SCHEMA,
+    QS_QUERIES_TABLE
+)
 
 def rigth_now(obj) -> datetime:
     return datetime.now()
@@ -94,8 +98,8 @@ class QueryModel(Model):
 
     class Meta:
         driver = 'pg'
-        name = 'queries'
-        schema = 'public'
+        name = QS_QUERIES_TABLE
+        schema = QS_QUERIES_SCHEMA
         strict = True
         frozen = False
         remove_nulls = True # Auto-remove nullable (with null value) fields

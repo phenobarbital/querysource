@@ -198,6 +198,9 @@ SALESFORCE_PASSWORD = config.get('SALESFORCE_PASSWORD')
 CSV_DEFAULT_DELIMITER = config.get('CSV_DEFAULT_DELIMITER', fallback=',')
 CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 
+## QuerySource Model:
+QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
+QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401
 except ImportError:
