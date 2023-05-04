@@ -104,7 +104,7 @@ class ga(restSource):
                 }
                 filename = BASE_DIR.joinpath('google', f'{project_id}.json')
                 if not filename.exists():
-                    logging.notice(
+                    self.logger.notice(
                         f"GA4 File Path: {filename!s}"
                     )
                     try:
