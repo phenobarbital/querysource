@@ -122,7 +122,7 @@ class ga(restSource):
                     filename = BASE_DIR.joinpath(GA_SERVICE_PATH, GA_SERVICE_ACCOUNT_NAME)
                 if not filename or not filename.exists():
                     raise ValueError(
-                        "Google Analytics: Missing Service Account Name or Google Credentials"
+                        f"Google Analytics: Missing Service Account Name or Google Credentials: {filename!s}"
                     )
                 self._credentials = str(filename)
             print('CREDENTIALS: ', self._credentials)
