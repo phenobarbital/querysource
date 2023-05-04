@@ -85,6 +85,7 @@ class ga(restSource):
                     private_key_id = self._env.get(f'{account_prefix}_PRIVATE_KEY_ID')
                     private_key = os.environ[f'{account_prefix}_PRIVATE_KEY'].replace('\\n', '\n')
                     client_id = self._env.get(f'{account_prefix}_CLIENT_ID')
+                    account_email = self._env.get(f'{account_prefix}_CLIENT_EMAIL')
                 except (KeyError, ValueError) as ex:
                     raise ConfigError(
                         "Missing *account_prefix* to extract credentials from ENV"
@@ -94,21 +95,25 @@ class ga(restSource):
                     "project_id": project_id,
                     "private_key_id": private_key_id,
                     "private_key": f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----\n",
-                    "client_email": f"analytics-reporting@{project_id}.iam.gserviceaccount.com",
+                    "client_email": account_email,
                     "client_id": client_id,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/analytics-reporting%40{project_id}.iam.gserviceaccount.com"
+                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{account_email}"
                 }
                 filename = BASE_DIR.joinpath('google', f'{project_id}.json')
-                try:
-                    with open(filename, mode='w', encoding='utf-8') as f:
-                        f.write(json_encoder(credentials))
-                except Exception as ex:
-                    raise RuntimeError(
-                        f"Can't create Google GA4 credentials Filename {filename}, {ex}"
-                    ) from ex
+                if not filename.exists():
+                    logging.notice(
+                        f"GA4 File Path: {filename!s}"
+                    )
+                    try:
+                        with open(filename, mode='w', encoding='utf-8') as f:
+                            f.write(json_encoder(credentials))
+                    except Exception as ex:
+                        raise RuntimeError(
+                            f"Can't create Google GA4 credentials Filename {filename}, {ex}"
+                        ) from ex
                 self._credentials = str(filename)
             else:
                 # read from file:
@@ -125,7 +130,7 @@ class ga(restSource):
                         f"Google Analytics: Missing Service Account Name or Google Credentials: {filename!s}"
                     )
                 self._credentials = str(filename)
-            print('CREDENTIALS: ', self._credentials)
+        print('CREDENTIALS: ', self._credentials)
         ### start configuring
         if self._credentials:
             os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(self._credentials)
