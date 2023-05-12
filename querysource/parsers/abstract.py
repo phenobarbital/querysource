@@ -121,9 +121,11 @@ class QueryParser(ABC):
             self.refresh = False
         # FIELDS (Columns needed by the Query)
         try:
-            self.fields = self.conditions.fields
+            self.fields = self.conditions.get('fields', [])
             del self.conditions.fields
         except (KeyError, AttributeError):
+            pass
+        if not self.fields:
             try:
                 self.fields = self.options.fields
             except AttributeError:
@@ -284,7 +286,7 @@ class QueryParser(ABC):
             _, key, _ = field_components(name)[0]
             if key in self.cond_definition:
                 _type = self.cond_definition[key]
-                if isinstance(val, dict): # its a comparison operator:
+                if isinstance(val, dict):  # its a comparison operator:
                     op, value = val.popitem()
                     result = is_valid(key, value, _type)
                     self.conditions[key] = {op: result}
@@ -316,13 +318,13 @@ class QueryParser(ABC):
         where_cond = {}
         for key, value in _filter.items():
             self.logger.debug(f"SET WHERE: key is {key}, value is {value}:{type(value)}")
-            if isinstance(value, dict): # its a comparison operator:
-                    op, v = value.popitem()
-                    result = is_valid(key, v)
-                    where_cond[key] = {op: result}
-                    continue
+            if isinstance(value, dict): #  its a comparison operator:
+                op, v = value.popitem()
+                result = is_valid(key, v)
+                where_cond[key] = {op: result}
+                continue
             if isinstance(value, str):
-                if parser:=is_parseable(value):
+                if (parser := is_parseable(value)):
                     try:
                         value = parser(value)
                     except (TypeError, ValueError):
@@ -361,7 +363,6 @@ class QueryParser(ABC):
                 return Entity.quoteString(result)
             except Exception:
                 return None
-
 
     async def get_query(self):
         query = await self.build_query()

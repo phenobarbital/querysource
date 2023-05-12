@@ -16,6 +16,7 @@ def rigth_now(obj) -> datetime:
     return datetime.now()
 
 def to_field_list(obj) -> list:
+    print('AQUI ', obj)
     if obj is None:
         return []
     if isinstance(obj, str):
@@ -34,7 +35,7 @@ class QueryObject(ClassDict):
     driver: Optional[str]
     conditions: Optional[dict] = Field(default=empty_dict)
     coldef: Optional[dict]
-    fields: list = Field(default=to_field_list)
+    fields: list = Field(default=to_field_list, default_factory=list)
     ordering: Optional[list]
     group_by: Optional[list]
     qry_options: Optional[dict]
