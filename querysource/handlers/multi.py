@@ -41,6 +41,8 @@ class ThreadQuery(threading.Thread):
             )
         except Exception as ex:
             self.exc = ex
+        finally:
+            self._loop.close()
 
 class QueryHandler(AbstractHandler):
 
@@ -60,7 +62,7 @@ class QueryHandler(AbstractHandler):
             options = await self.json_data(request)
         except (TypeError, ValueError):
             options = {}
-        if not 'queries' in options:
+        if 'queries' not in options:
             raise self.Error(
                 message='Invalid POST Option passed to MultiQuery.',
                 code=400

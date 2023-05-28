@@ -227,6 +227,8 @@ class BaseQuery(ABC):
         except Exception as e:
             self._logger.exception(e, stack_info=True)
             raise
+        finally:
+            loop.close()
 
     #### Datasources and drivers:
     async def get_datasource(self, datasource: str) -> Any:

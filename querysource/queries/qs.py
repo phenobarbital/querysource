@@ -376,6 +376,9 @@ class QS(BaseQuery):
                     if result and self.is_cached is True:
                         try:
                             loop = asyncio.new_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.get_event_loop()
+                        try:
                             fn = partial(
                                 self.save_in_cache,
                                 checksum,
@@ -384,12 +387,18 @@ class QS(BaseQuery):
                             )
                             with ThreadPoolExecutor(max_workers=2) as pool:
                                 status = loop.run_in_executor(pool, fn)
-                                self._logger.debug(f'Saved in cache with status: {status}')
+                                self._logger.debug(
+                                    f'Saved in cache with status: {status}'
+                                )
                         except (CacheException, ProviderError) as err:
-                            self._logger.error(f'Redis Saving Error {err!s}')
+                            self._logger.error(
+                                f'Redis Saving Error {err!s}'
+                            )
                         finally:
-                            loop.stop()
-                    return await self._output_format(self._result, error)  # pylint: disable=W0150
+                            loop.close()
+                    return await self._output_format(
+                        self._result, error
+                    )  # pylint: disable=W0150
                 else:
                     raise DataNotFound(
                         f'{self._qs.__name__!s} Empty Result'
