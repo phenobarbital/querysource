@@ -144,10 +144,12 @@ class QS(BaseQuery):
             raise EmptySentence(
                 "QS Error: cannot run with Empty Query/Sentence."
             )
-        if self._type == 'slug': # query-based provider:
+        if self._type == 'slug':  # query-based provider:
             self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
             try:
-                objquery = await self.connection.get_slug(self._query, program=self._program)
+                objquery = await self.connection.get_slug(
+                    self._query, program=self._program
+                )
             except (SlugNotFound):
                 raise
             except Exception:
@@ -175,7 +177,7 @@ class QS(BaseQuery):
             if self._conditions:
                 try:
                     conditions = {**objquery.conditions, **self._conditions}
-                except (AttributeError,TypeError):
+                except (AttributeError, TypeError):
                     conditions = {**self._conditions}
             else:
                 if objquery.conditions:
@@ -294,7 +296,6 @@ class QS(BaseQuery):
                 f"Invalid type of Query: {self._query}"
             )
 
-
     async def query(self, output_format: str = None):
         result = []
         error = None
@@ -346,7 +347,7 @@ class QS(BaseQuery):
                     return await self._output_format(self._result, error)  # pylint: disable=W0150
             # getting data directly from provider instead:
             self._logger.debug('= Query from PROVIDER =')
-            async with self.semaphore: # pylint: disable=E1701
+            async with self.semaphore:  # pylint: disable=E1701
                 try:
                     self._logger.debug(
                         f':: Query: {self._query}'
@@ -418,7 +419,7 @@ class QS(BaseQuery):
             )
         try:
             await self._qs.close()
-        except Exception: # pylint: disable=W0703
+        except Exception:  # pylint: disable=W0703
             pass
 
     async def dry_run(self):

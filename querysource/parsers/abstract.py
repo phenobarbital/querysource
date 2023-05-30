@@ -246,7 +246,10 @@ class QueryParser(ABC):
 
         try:
             if self.conditions.coldef:
-                self.cond_definition = {**self.cond_definition, **self.conditions.coldef}
+                self.cond_definition = {
+                    **self.cond_definition,
+                    **self.conditions.coldef
+                }
                 del self.conditions.coldef
         except (KeyError, AttributeError):
             pass
@@ -265,16 +268,24 @@ class QueryParser(ABC):
                 if params is None:
                     params = {}
             conditions = {**dict(conditions), **params}
-            await self.set_conditions(
+            await self._parser_conditions(
                 conditions=conditions
             )
         except KeyError as err:
             print(err)
         return self
 
-    async def set_conditions(self, conditions: dict = None):
+    async def _parser_conditions(self, conditions: dict = None):
         if conditions is None:
             conditions = {}
+        async with await self._redis.connection() as conn:
+            # One sigle connection for all Redis variables
+            # every other option then set where conditions
+            _filter = await self.set_conditions(conditions, conn)
+            await self.set_where(_filter, conn)
+        return self
+
+    async def set_conditions(self, conditions: dict, connection: Callable):
         # check if all conditions are valid and return the value
         try:
             elements = {**conditions, **self.filter}
@@ -302,23 +313,26 @@ class QueryParser(ABC):
                         continue
                 except IndexError:
                     pass
-                self.logger.debug(f'SET conditions: {key} = {val} with type {_type}')
-                if new_val := await self.get_operational_value(val):
+                self.logger.debug(
+                    f'SET conditions: {key} = {val} with type {_type}'
+                )
+                if new_val := await self.get_operational_value(val, connection):
                     result = new_val
                 else:
                     result = is_valid(key, val, _type)
                 self.conditions[key] = result
             else:
                 _filter[name] = val
-        # every other option then set where conditions
-        await self.set_where(_filter)
-        return self
+        ## any other condition go to where
+        return _filter
 
-    async def set_where(self, _filter: dict) -> None:
+    async def set_where(self, _filter: dict, connection: Callable) -> None:
         where_cond = {}
         for key, value in _filter.items():
-            self.logger.debug(f"SET WHERE: key is {key}, value is {value}:{type(value)}")
-            if isinstance(value, dict): #  its a comparison operator:
+            self.logger.debug(
+                f"SET WHERE: key is {key}, value is {value}:{type(value)}"
+            )
+            if isinstance(value, dict):  # its a comparison operator:
                 op, v = value.popitem()
                 result = is_valid(key, v)
                 where_cond[key] = {op: result}
@@ -342,7 +356,7 @@ class QueryParser(ABC):
                     continue
             except IndexError:
                 pass
-            if new_val := await self.get_operational_value(value):
+            if new_val := await self.get_operational_value(value, connection):
                 result = new_val
             else:
                 result = is_valid(key, value)
@@ -356,13 +370,12 @@ class QueryParser(ABC):
             return fn(key, val)
         return None
 
-    async def get_operational_value(self, value: str) -> Any:
-        async with await self._redis.connection() as conn:
-            try:
-                result = await conn.get(value)
-                return Entity.quoteString(result)
-            except Exception:
-                return None
+    async def get_operational_value(self, value: str, connection: Any) -> Any:
+        try:
+            result = await connection.get(value)
+            return Entity.quoteString(result)
+        except Exception:
+            return None
 
     async def get_query(self):
         query = await self.build_query()

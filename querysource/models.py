@@ -16,7 +16,6 @@ def rigth_now(obj) -> datetime:
     return datetime.now()
 
 def to_field_list(obj) -> list:
-    print('AQUI ', obj)
     if obj is None:
         return []
     if isinstance(obj, str):
