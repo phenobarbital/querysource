@@ -70,7 +70,7 @@ class QueryObject(BaseQuery):
         build_provider.
            create queries based on a query_slug, a raw query or an Object Query.
         """
-        if self._type == 'slug': # slug-based provider:
+        if self._type == 'slug':  # slug-based provider:
             self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
             try:
                 objquery = await self.get_slug(self._query)
@@ -97,7 +97,7 @@ class QueryObject(BaseQuery):
             if self._conditions:
                 try:
                     conditions = {**objquery.conditions, **self._conditions}
-                except (AttributeError,TypeError):
+                except (AttributeError, TypeError):
                     conditions = {**self._conditions}
             else:
                 if objquery.conditions:
@@ -125,7 +125,7 @@ class QueryObject(BaseQuery):
                 raise DriverError(
                     f"Cannot Initialize the provider {provider}, error: {err}"
                 ) from err
-        elif self._type == 'query': # query raw
+        elif self._type == 'query':  # query raw
             try:
                 self._qs = self.query_model(self._query)
             except TypeError as ex:
@@ -133,9 +133,9 @@ class QueryObject(BaseQuery):
                     message=f'QS: Invalid query {ex}',
                     exception=ex
                 )
-            if datasource:= self._qs.datasource:
+            if datasource := self._qs.datasource:
                 self._qs.connection = await self.get_datasource(datasource)
-            elif driver:= self._qs.driver:
+            elif driver := self._qs.driver:
                 ## using a default driver:
                 try:
                     self._qs.connection = await self.default_driver(driver)
@@ -156,12 +156,12 @@ class QueryObject(BaseQuery):
     async def query(self):
         ## TODO: adding Mapping to results (changing names)
         self.output_format('pandas')
-        if self._type == 'slug': # slug-based provider:
+        if self._type == 'slug':  # slug-based provider:
             if not self._qs:
                 await self.build_provider()
             ## refresh = self._qs.refresh() -> TODO: add refresh feature
             self._logger.debug('= Query from PROVIDER =')
-            async with self.semaphore: # pylint: disable=E1701
+            async with self.semaphore:  # pylint: disable=E1701
                 try:
                     self._logger.debug(
                         f':: Query: {self._query}'
@@ -213,7 +213,6 @@ class QueryObject(BaseQuery):
                 "result": self._query
             }
 
-
     def __repr__(self) -> str:
         return f'<QueryObject: {self._type}:"{self._query}" >'
 
@@ -258,7 +257,7 @@ class QueryObject(BaseQuery):
         finally:
             try:
                 await db.close()
-            except Exception as err: # pylint: disable=W0703
+            except Exception as err:  # pylint: disable=W0703
                 print(err)
 
     async def get_provider(self, entry: dict):
@@ -269,7 +268,7 @@ class QueryObject(BaseQuery):
             provider = entry.provider
         except (TypeError, KeyError):
             provider = 'db'
-        if provider == 'db': ## default DB connection for Postgres
+        if provider == 'db':  # default DB connection for Postgres
             _provider = self.load_provider('db')
             conn = self.get_connection(
                 driver='pg', dsn=default_dsn
@@ -289,7 +288,7 @@ class QueryObject(BaseQuery):
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
-            return [conn, _provider] # can be a dummy provider.
+            return [conn, _provider]  # can be a dummy provider.
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
