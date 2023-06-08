@@ -334,6 +334,10 @@ class QS(BaseQuery):
                 # cache exists from this query
                 try:
                     result = await self.connection.get_from_cache(checksum)
+                except asyncio.TimeoutError:
+                    self._logger.warning(
+                        'Querysource: Cache Miss due Timeout'
+                    )
                 except (ProviderError, DriverError, RuntimeError) as err:
                     self._logger.warning(
                         f'Querysource: Error getting from Cache: {err!s}'

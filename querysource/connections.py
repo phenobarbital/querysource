@@ -75,7 +75,7 @@ class QueryConnection(metaclass=Singleton):
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
-                return # already configured.
+                return  # already configured.
         self._postgres = None
         self._connection = None
         self._connected: bool = False
@@ -120,6 +120,17 @@ class QueryConnection(metaclass=Singleton):
         try:
             async with await self._redis.connection() as conn:
                 return await conn.get(key)
+        except asyncio.TimeoutError:
+            # trying to reconect:
+            try:
+                self.start_cache(QUERYSET_REDIS)
+                async with await self._redis.connection() as conn:
+                    return await conn.get(key)
+            except Exception as exc:
+                logging.exception(
+                    f"Failure on REDIS Cache: {exc}"
+                )
+                return False
         except (ProviderError, DriverError):
             return False
 
@@ -156,12 +167,11 @@ class QueryConnection(metaclass=Singleton):
     def set_connection(self, conn):
         self._connection = conn
 
-
     def setup(self, app: web.Application) -> web.Application:
-        if isinstance(app, BaseApplication): # migrate to BaseApplication (on types)
+        if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
             self.app = app.get_app()
         elif isinstance(app, WebApp):
-            self.app = app # register the app into the Extension
+            self.app = app  # register the app into the Extension
         else:
             raise TypeError(
                 f"Invalid type for Application Setup: {app}:{type(app)}"
@@ -229,7 +239,7 @@ class QueryConnection(metaclass=Singleton):
                     name = row['name']
                     try:
                         driver = self.get_driver(row['driver'])
-                    except Exception as ex: # pylint: disable=W0703
+                    except Exception as ex:  # pylint: disable=W0703
                         logging.exception(ex, stack_info=True)
                         continue
                     try:
@@ -252,7 +262,7 @@ class QueryConnection(metaclass=Singleton):
         app['qs_connection'] = self
         self._connected = True
 
-    def supported_drivers(self, driver): # pylint: disable=W0613
+    def supported_drivers(self, driver):  # pylint: disable=W0613
         try:
             return SUPPORTED[driver]
         except KeyError:
@@ -415,7 +425,7 @@ class QueryConnection(metaclass=Singleton):
             provider = entry.provider
         except (TypeError, KeyError):
             provider = 'db'
-        if provider == 'db': ## default DB connection for Postgres
+        if provider == 'db':  # default DB connection for Postgres
             _provider = self.load_provider('db')
             if self.lazy is True:
                 conn = self.default_connection(
@@ -442,7 +452,7 @@ class QueryConnection(metaclass=Singleton):
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
-            return [conn, _provider] # can be a dummy provider.
+            return [conn, _provider]  # can be a dummy provider.
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
@@ -482,7 +492,6 @@ class QueryConnection(metaclass=Singleton):
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-
     async def dispose(self, conn: Callable = None):
         """
         dispose a connection from the pg pool.
@@ -492,7 +501,7 @@ class QueryConnection(metaclass=Singleton):
             # TODO: check if connection is from instance pg
             try:
                 await self._postgres.release(conn)
-            except Exception: # pylint: disable=W0703
+            except Exception:  # pylint: disable=W0703
                 await conn.close()
 
     async def stop(self, app: web.Application = None):
