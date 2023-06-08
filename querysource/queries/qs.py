@@ -356,7 +356,9 @@ class QS(BaseQuery):
                     if error:
                         if isinstance(error, DataNotFound):
                             raise error
-                        return await self._output_format(self._result, error)  # pylint: disable=W0150
+                        return await self._output_format(
+                            self._result, error
+                        )  # pylint: disable=W0150
                 except (NoDataFound, DataNotFound) as err:
                     raise DataNotFound(
                         f'{self._qs.__name__!s}: {err}'
@@ -376,27 +378,10 @@ class QS(BaseQuery):
                     ## Saving into Cache:
                     if result and self.is_cached is True:
                         try:
-                            loop = asyncio.new_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.get_event_loop()
-                        try:
-                            fn = partial(
-                                self.save_in_cache,
-                                checksum,
-                                result,
-                                loop
-                            )
-                            with ThreadPoolExecutor(max_workers=2) as pool:
-                                status = loop.run_in_executor(pool, fn)
-                                self._logger.debug(
-                                    f'Saved in cache with status: {status}'
-                                )
-                        except (CacheException, ProviderError) as err:
-                            self._logger.error(
-                                f'Redis Saving Error {err!s}'
-                            )
-                        finally:
-                            loop.close()
+                            self.save_cache(checksum, result)
+                        except Exception:
+                            pass
+                    ## returning data:
                     return await self._output_format(
                         self._result, error
                     )  # pylint: disable=W0150
