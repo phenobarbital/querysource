@@ -201,6 +201,9 @@ CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 ## QuerySource Model:
 QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
+
+## QuerySource Query Timeout:
+DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401
 except ImportError:
