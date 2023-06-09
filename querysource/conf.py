@@ -64,7 +64,7 @@ REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT!s}/{REDIS_DB}"
 # QuerySet Cache (cache for queries)
 QUERYSET_DB = config.get('QUERYSET_DB', fallback=3)
 QUERYSET_REDIS = f"redis://{REDIS_HOST}:{REDIS_PORT}/{QUERYSET_DB}"
-
+DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
 
 ### Memcache
 MEMCACHE_HOST = config.get('MEMCACHE_HOST', 'localhost')
