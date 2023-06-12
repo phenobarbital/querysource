@@ -81,7 +81,7 @@ REDASH_API_KEY = config.get('REDASH_API_KEY')
 URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
-SEMAPHORE_LIMIT = config.getint('SEMAPHORE_LIMIT', fallback=4096)
+SEMAPHORE_LIMIT = int(config.getint('SEMAPHORE_LIMIT', fallback=4096))
 
 ### Other database support:
 ## MYSQL
@@ -97,16 +97,16 @@ MSSQL_DRIVER = config.get('MSSQL_DRIVER', fallback='mssql')
 MSSQL_HOST = config.get('MSSQL_HOST', fallback='127.0.0.1')
 MSSQL_PORT = config.get('MSSQL_PORT', fallback='1407')
 MSSQL_USER = config.get('MSSQL_USER')
-MSSQL_PWD= config.get('MSSQL_PWD')
+MSSQL_PWD = config.get('MSSQL_PWD')
 MSSQL_DATABASE = config.get('MSSQL_DATABASE')
 
 ### Microsoft SQL Server
 SQLSERVER_DRIVER = config.get('SQLSERVER_DRIVER', fallback='sqlserver')
 SQLSERVER_HOST = config.get('SQLSERVER_HOST', fallback='127.0.0.1')
 SQLSERVER_PORT = config.get('SQLSERVER_PORT', fallback=1433)
-SQLSERVER_USER  = config.get('SQLSERVER_USER')
-SQLSERVER_PWD  = config.get('SQLSERVER_PWD')
-SQLSERVER_DATABASE  = config.get('SQLSERVER_DATABASE')
+SQLSERVER_USER = config.get('SQLSERVER_USER')
+SQLSERVER_PWD = config.get('SQLSERVER_PWD')
+SQLSERVER_DATABASE = config.get('SQLSERVER_DATABASE')
 SQLSERVER_TDS_VERSION = config.get('SQLSERVER_TDS_VERSION', fallback='8.0')
 
 ## ORACLE
@@ -203,6 +203,7 @@ CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 ## QuerySource Model:
 QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401
 except ImportError:
