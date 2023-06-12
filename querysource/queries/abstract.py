@@ -45,7 +45,7 @@ class BaseQuery(ABC):
     post_cache: Callable = None
     _timeout: int = 10
     # SEMAPHORE LIMIT
-    semaphore: Callable = asyncio.Semaphore(SEMAPHORE_LIMIT)
+    semaphore: Callable = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
 
     def __init__(
             self,

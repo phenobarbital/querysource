@@ -19,4 +19,14 @@ class postgresDriver(SQLDriver):
     port: int = Column(required=True, default=5432)
     defaults: str = asyncpg_url
 
-postgres_default = postgresDriver(dsn=asyncpg_url, host=PG_HOST, port=PG_PORT, database=PG_DATABASE, username=PG_USER, password=PG_PWD)
+try:
+    postgres_default = postgresDriver(
+        dsn=asyncpg_url,
+        host=PG_HOST,
+        port=PG_PORT,
+        database=PG_DATABASE,
+        username=PG_USER,
+        password=PG_PWD
+    )
+except ValueError:
+    postgres_default = None

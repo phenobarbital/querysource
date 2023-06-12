@@ -16,7 +16,20 @@ from .abstract import SQLDriver
 class pgDriver(SQLDriver):
     driver: str = 'pg'
     name: str = 'PostgreSQL (using asyncpg)'
-    dsn_format: str = Column(default="postgres://{username}:{password}@{host}:{port}/{database}", repr=False)
+    dsn_format: str = Column(
+        default="postgres://{username}:{password}@{host}:{port}/{database}",
+        repr=False
+    )
     port: int = Column(required=True, default=5432)
 
-pg_default = pgDriver(dsn=asyncpg_url, host=PG_HOST, port=PG_PORT, database=PG_DATABASE, username=PG_USER, password=PG_PWD)
+try:
+    pg_default = pgDriver(
+        dsn=asyncpg_url,
+        host=PG_HOST,
+        port=PG_PORT,
+        database=PG_DATABASE,
+        username=PG_USER,
+        password=PG_PWD
+    )
+except ValueError:
+    pg_default = None
