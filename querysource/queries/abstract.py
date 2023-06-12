@@ -385,7 +385,7 @@ class BaseQuery(ABC):
                 loop=loop
             )
             if not self._timeout:
-                self._timeout = DEFAULT_QUERY_TIMEOUT
+                self._timeout = int(DEFAULT_QUERY_TIMEOUT)
             try:
                 data = self._encoder(
                     [dict(row) for row in result]
