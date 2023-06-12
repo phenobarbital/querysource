@@ -40,12 +40,15 @@ class influxDriver(NoSQLDriver):
             "token": self.token
         }
 
-influx_default = influxDriver(
-    host=INFLUX_HOST,
-    port=INFLUX_PORT,
-    user=INFLUX_USER,
-    password=INFLUX_PWD,
-    bucket=INFLUX_DATABASE,
-    org=INFLUX_ORG,
-    token=INFLUX_TOKEN
-)
+try:
+    influx_default = influxDriver(
+        host=INFLUX_HOST,
+        port=INFLUX_PORT,
+        user=INFLUX_USER,
+        password=INFLUX_PWD,
+        bucket=INFLUX_DATABASE,
+        org=INFLUX_ORG,
+        token=INFLUX_TOKEN
+    )
+except ValueError:
+    influx_default = None

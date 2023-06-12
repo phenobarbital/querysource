@@ -23,7 +23,7 @@ class mysqlDriver(SQLDriver):
     dsn_format: str = "mysql://{user}:{password}@{host}:{port}/{database}"
     port: int = Column(required=True, default=3306)
 
-    def __post_init__(self, username, hostname = None, **kwargs) -> None: # pylint: disable=W0613,W0221
+    def __post_init__(self, username, hostname: str = None, **kwargs) -> None:  # pylint: disable=W0613,W0221
         super(mysqlDriver, self).__post_init__(hostname, **kwargs)
         if username is not None and self.user is None:
             self.user = username
@@ -45,4 +45,13 @@ class mysqlDriver(SQLDriver):
             "password": self.password
         }
 
-mysql_default = mysqlDriver(host=MYSQL_HOST, port=MYSQL_PORT, database=MYSQL_DATABASE, user=MYSQL_USER, password=MYSQL_PWD)
+try:
+    mysql_default = mysqlDriver(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        database=MYSQL_DATABASE,
+        user=MYSQL_USER,
+        password=MYSQL_PWD
+    )
+except ValueError:
+    mysql_default = None

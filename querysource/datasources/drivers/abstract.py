@@ -10,7 +10,7 @@ from querysource.conf import (
 )
 
 def default_properties() -> tuple:
-    return ('host', 'port', 'user', 'username', 'password' )
+    return ('host', 'port', 'user', 'username', 'password')
 
 class DataDriver(BaseModel):
     """DataDriver.
@@ -18,7 +18,11 @@ class DataDriver(BaseModel):
     Description: Base class for all required datasources.
     """
     driver: str = Field(required=True, primary_key=True)
-    driver_type: str = Field(required=True, default='asyncdb', comment="type of driver, can be asyncdb, qs or REST")
+    driver_type: str = Field(
+        required=True,
+        default='asyncdb',
+        comment="type of driver, can be asyncdb, qs or REST"
+    )
     name: str = Field(required=False, comment='Datasource name, default to driver.')
     description: str = Field(comment='Datasource Description', repr=False)
     icon: str = Field(required=False, comment='Icon Path for Datasource.', repr=False)
@@ -30,7 +34,7 @@ class DataDriver(BaseModel):
     auth: dict = Field(required=False, default_factory=dict)
     required_properties: Optional[tuple] = Field(repr=False, default=default_properties())
 
-    def __post_init__(self, user, **kwargs) -> None: # pylint: disable=W0613,W0221
+    def __post_init__(self, user, **kwargs) -> None:  # pylint: disable=W0613,W0221
         if not self.name:
             self.name = self.driver
         if user:
@@ -73,7 +77,7 @@ class DataDriver(BaseModel):
             try:
                 f = cls.column(cls, field)
             except KeyError:
-                continue # Field Missing on Driver:
+                continue  # Field Missing on Driver:
             secret = False
             if 'is_secret' in f.metadata:
                 secret = f.metadata["is_secret"]
@@ -111,7 +115,7 @@ class DataDriver(BaseModel):
 
 ### SQL-based or SQL-like Drivers
 def default_sql_properties() -> tuple:
-    return ('host', 'port', 'user', 'username', 'password', 'database', 'dsn' )
+    return ('host', 'port', 'user', 'username', 'password', 'database', 'dsn')
 
 class SQLDriver(DataDriver):
     """
@@ -125,7 +129,7 @@ class SQLDriver(DataDriver):
     database: str
     required_properties: Optional[tuple] = Field(repr=False, default=default_sql_properties())
 
-    def __post_init__(self, user, hostname = None, *args, **kwargs): # pylint: disable=W0613,W0221
+    def __post_init__(self, user, hostname: str = None, *args, **kwargs):  # pylint: disable=W0613,W0221
         if hostname:
             self.host = hostname
         super(SQLDriver, self).__post_init__(user, *args, **kwargs)
@@ -177,7 +181,17 @@ class NoSQLDriver(DataDriver):
 
 ### Cloud-based Providers
 def cloud_properties() -> tuple:
-    return ('url', 'url_schema', 'host', 'port', 'user', 'username', 'password', 'protocol', 'access_token' )
+    return (
+        'url',
+        'url_schema',
+        'host',
+        'port',
+        'user',
+        'username',
+        'password',
+        'protocol',
+        'access_token'
+    )
 class CloudDriver(DataDriver):
     hostname: InitVar = ''
     driver_type: str = Field(required=False, default='external')
@@ -190,7 +204,7 @@ class CloudDriver(DataDriver):
     protocol: str = Field(required=False, default='http')
     required_properties: Optional[tuple] = Field(repr=False, default=cloud_properties())
 
-    def __post_init__(self, user, hostname, *args, **kwargs): # pylint: disable=W0613,W0221
+    def __post_init__(self, user, hostname, *args, **kwargs):  # pylint: disable=W0613,W0221
         if hostname:
             self.host = hostname
         if not self.url:
@@ -213,7 +227,7 @@ class CloudDriver(DataDriver):
 
 ### Amazon services:
 def aws_properties() -> tuple:
-    return ('url', 'region', 'access_key', 'secret_key', 'use_credentials' )
+    return ('url', 'region', 'access_key', 'secret_key', 'use_credentials')
 
 class AWSDriver(CloudDriver):
     """AWSDriver
@@ -228,14 +242,16 @@ class AWSDriver(CloudDriver):
 
 ### Google Services:
 def google_properties() -> tuple:
-    return ('url', 'json_key', 'service_path' )
+    return ('url', 'json_key', 'service_path')
 class GoogleDriver(CloudDriver):
     """GoogleDriver
     Abstract base class for all Google-related services.
     """
     json_key: Union[str, Path] = Field(required=False, default=GOOGLE_SERVICE_FILE)
     service_path: Union[str, Path] = Field(required=False, default=GOOGLE_SERVICE_PATH)
-    required_properties: Optional[tuple] = Field(repr=False, default=google_properties())
+    required_properties: Optional[tuple] = Field(
+        repr=False, default=google_properties()
+    )
 
     def credentials(self) -> str:
         cred = self.service_path.joinpath(self.json_key)

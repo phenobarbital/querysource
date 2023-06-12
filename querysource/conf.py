@@ -81,7 +81,9 @@ REDASH_API_KEY = config.get('REDASH_API_KEY')
 URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
-SEMAPHORE_LIMIT = int(config.getint('SEMAPHORE_LIMIT', fallback=4096))
+SEMAPHORE_LIMIT = int(
+    config.getint('SEMAPHORE_LIMIT', fallback=4096)
+)
 
 ### Other database support:
 ## MYSQL
@@ -206,6 +208,7 @@ QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
 DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401
 except ImportError:
