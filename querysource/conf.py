@@ -34,7 +34,9 @@ PG_PWD = config.get('PG_PWD')
 PG_DATABASE = config.get('PG_DATABASE', fallback='navigator')
 PG_PORT = config.get('PG_PORT', fallback=5432)
 if not PG_USER:
-    raise RuntimeError('Missing PostgreSQL Settings.')
+    raise RuntimeError(
+        'Missing PostgreSQL Settings.'
+    )
 
 
 POSTGRES_TIMEOUT = config.get('POSTGRES_TIMEOUT', fallback=3600000)
@@ -79,7 +81,7 @@ REDASH_API_KEY = config.get('REDASH_API_KEY')
 URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
-SEMAPHORE_LIMIT = config.get('SEMAPHORE_LIMIT', fallback=4096)
+SEMAPHORE_LIMIT = config.getint('SEMAPHORE_LIMIT', fallback=4096)
 
 ### Other database support:
 ## MYSQL
