@@ -64,12 +64,12 @@ class QueryConnection(metaclass=Singleton):
             "client_min_messages": "notice",
             "max_parallel_workers": "48",
             "tcp_keepalives_idle": "360",
-            # "jit": "off",
+            "jit": "off",
             "statement_timeout": "3600000",
             "effective_cache_size": "2147483647",
             "idle_in_transaction_session_timeout": "360",
         },
-        "max_inactive_timeout": 360
+        "max_inactive_timeout": 600
     }
 
     def __init__(self, **kwargs):
