@@ -119,7 +119,7 @@ setup(
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,
-    license_files = 'LICENSE',
+    license_files='LICENSE',
     setup_requires=[
         "wheel==0.40.0",
         "Cython==0.29.33",
@@ -161,11 +161,11 @@ setup(
         'simple_salesforce==1.12.3'
     ],
     tests_require=[
-            'pytest>=5.4.0',
-            'coverage',
-            'pytest-asyncio',
-            'pytest-xdist',
-            'pytest-assume'
+        'pytest>=5.4.0',
+        'coverage',
+        'pytest-asyncio',
+        'pytest-xdist',
+        'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
     project_urls={  # Optional

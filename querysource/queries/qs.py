@@ -6,9 +6,6 @@ Get queries from databases and other data sources.
 QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-
 from aiohttp import web
 from asyncdb.exceptions import (
     NoDataFound,
@@ -19,7 +16,6 @@ from asyncdb.exceptions import (
 
 from querysource.connections import QueryConnection
 from querysource.exceptions import (
-    CacheException,
     DataNotFound,
     EmptySentence,
     QueryException,
