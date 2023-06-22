@@ -30,6 +30,10 @@ from querysource.conf import (
     POSTGRES_SSL_CERT,
     POSTGRES_SSL_KEY,
     POSTGRES_TIMEOUT,
+    DB_STATEMENT_TIMEOUT,
+    DB_SESSION_TIMEOUT,
+    DB_IDLE_TRANSACTION_TIMEOUT,
+    DB_KEEPALIVE_IDLE,
     QUERYSET_REDIS,
     asyncpg_url,
     default_dsn,
@@ -59,15 +63,17 @@ class QueryConnection(metaclass=Singleton):
     (get connection params from enviroment)
     """
     pgargs: dict = {
+        "min_size": 2,
         "server_settings": {
-            "application_name": 'QuerySource',
+            "application_name": "QuerySource",
             "client_min_messages": "notice",
-            "max_parallel_workers": "48",
-            "tcp_keepalives_idle": "360",
-            "jit": "off",
-            "statement_timeout": "3600000",
+            "max_parallel_workers": "512",
+            "jit": "on",
+            "statement_timeout": f"{DB_STATEMENT_TIMEOUT}",
+            "idle_session_timeout": f"{DB_SESSION_TIMEOUT}",
             "effective_cache_size": "2147483647",
-            "idle_in_transaction_session_timeout": "360",
+            "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
+            "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
         },
         "max_inactive_timeout": 600
     }
@@ -217,7 +223,7 @@ class QueryConnection(metaclass=Singleton):
             try:
                 self._postgres = AsyncPool(
                     'pg',
-                    dsn=default_dsn,
+                    dsn=asyncpg_url,
                     loop=asyncio.get_event_loop(),
                     timeout=POSTGRES_TIMEOUT,
                     **self.pgargs

@@ -33,34 +33,35 @@ PG_USER = config.get('PG_USER')
 PG_PWD = config.get('PG_PWD')
 PG_DATABASE = config.get('PG_DATABASE', fallback='navigator')
 PG_PORT = config.get('PG_PORT', fallback=5432)
-if not PG_USER:
-    raise RuntimeError(
-        'Missing PostgreSQL Settings.'
-    )
 
+asyncpg_url = f'postgres://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+database_url = f'postgresql://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+SQLALCHEMY_DATABASE_URI = database_url
 
 POSTGRES_TIMEOUT = config.get('POSTGRES_TIMEOUT', fallback=3600000)
 POSTGRES_MIN_CONNECTIONS = config.getint('POSTGRES_MIN_CONNECTIONS', fallback=2)
 POSTGRES_MAX_CONNECTIONS = config.getint('POSTGRES_MAX_CONNECTIONS', fallback=200)
+DB_STATEMENT_TIMEOUT = config.get("DB_STATEMENT_TIMEOUT", fallback=3600000)
+DB_SESSION_TIMEOUT = config.get('DB_SESSION_TIMEOUT', fallback="5min")
+DB_IDLE_TRANSACTION_TIMEOUT = config.get('DB_IDLE_TRANSACTION_TIMEOUT', fallback="20min")
+DB_KEEPALIVE_IDLE = config.get('DB_KEEPALIVE_IDLE', fallback="30min")
+
 POSTGRES_SSL = config.getboolean('POSTGRES_SSL', fallback=False)
 POSTGRES_SSL_CA = config.get('POSTGRES_SSL_CA')
 POSTGRES_SSL_CERT = config.get('POSTGRES_SSL_CERT')
 POSTGRES_SSL_KEY = config.get('POSTGRES_SSL_KEY')
 
-database_url = f'postgresql://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
-SQLALCHEMY_DATABASE_URI = database_url
-asyncpg_url = f'postgres://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
 
 ### QuerySet (for QuerySource)
-CACHE_HOST = config.get('CACHEHOST', fallback='localhost')
-CACHE_PORT = config.get('CACHEPORT', fallback=6379)
-CACHE_DB = config.get('CACHEDB', fallback=2)
+CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')
+CACHE_PORT = config.get('CACHE_PORT', fallback=6379)
+CACHE_DB = config.get('CACHE_DB', fallback=0)
 CACHE_URL = f"redis://{CACHE_HOST}:{CACHE_PORT!s}/{CACHE_DB}"
 
 ## Redis as Database:
 REDIS_HOST = config.get('REDIS_HOST', fallback='localhost')
 REDIS_PORT = config.get('REDIS_PORT', fallback=6379)
-REDIS_DB = config.get('REDIS_DB', fallback=2)
+REDIS_DB = config.get('REDIS_DB', fallback=1)
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT!s}/{REDIS_DB}"
 
 # QuerySet Cache (cache for queries)
