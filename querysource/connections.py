@@ -67,8 +67,8 @@ class QueryConnection(metaclass=Singleton):
         "server_settings": {
             "application_name": "QuerySource",
             "client_min_messages": "notice",
-            "max_parallel_workers": "256",
-            "jit": "off",
+            "max_parallel_workers": "512",
+            "jit": "on",
             "statement_timeout": f"{DB_STATEMENT_TIMEOUT}",
             "idle_session_timeout": f"{DB_SESSION_TIMEOUT}",
             "effective_cache_size": "2147483647",
