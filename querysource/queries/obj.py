@@ -8,7 +8,7 @@ from asyncdb.exceptions import (
     StatementError
 )
 from querysource.conf import (
-    default_dsn,
+    default_dsn, asyncpg_url
 )
 from querysource.models import QueryModel
 from querysource.providers import BaseProvider  # renamed to Providers.
@@ -220,7 +220,7 @@ class QueryObject(BaseQuery):
         """Useful for internal connections of QS.
         """
         if not dsn:
-            dsn = default_dsn
+            dsn = asyncpg_url
         return AsyncDB(
             driver,
             dsn=dsn,
@@ -271,7 +271,7 @@ class QueryObject(BaseQuery):
         if provider == 'db':  # default DB connection for Postgres
             _provider = self.load_provider('db')
             conn = self.get_connection(
-                driver='pg', dsn=default_dsn
+                driver='pg', dsn=asyncpg_url
             )
             return [conn, _provider]
         if provider in DATASOURCES:

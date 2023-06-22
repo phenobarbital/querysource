@@ -158,6 +158,7 @@ setup(
         'elasticsearch-async==6.2.0',
         'seaborn==0.12.2',
         # 'pandas_profiling==3.6.6',
+        'bs4==0.0.1',
         'simple_salesforce==1.12.3'
     ],
     tests_require=[
