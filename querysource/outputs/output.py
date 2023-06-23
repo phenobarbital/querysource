@@ -3,7 +3,7 @@ import traceback
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 from navconfig.logging import logging
-from asyncdb.exceptions import NoDataFound, StatementError, ProviderError, DriverError
+from asyncdb.exceptions import NoDataFound, StatementError, DriverError
 from querysource.libs.encoders import DefaultEncoder
 from querysource.queries.abstract import BaseQuery
 from querysource.exceptions import (
@@ -57,14 +57,14 @@ class DataOutput:
     """Main Router for Output formats.
     """
 
-    def __init__(self, request: web.Request, query: BaseQuery, ctype: str = 'json', slug : str = None, **kwargs):
+    def __init__(self, request: web.Request, query: BaseQuery, ctype: str = 'json', slug: str = None, **kwargs):
         self.request = request
         compression = None
         self.query = None
         # determine content negotiation
         if compression := request.headers.get('X-Encoding', None):
             self._compression = compression
-        elif compression:= request.headers.get('Accept-Encoding', None):
+        elif compression := request.headers.get('Accept-Encoding', None):
             self._compression = compression
         else:
             self._compression = None
@@ -137,7 +137,7 @@ class DataOutput:
             obj = web.HTTPForbidden(**args)
         elif status == 404:  # not found
             obj = web.HTTPNotFound(**args)
-        elif status == 406: # Not acceptable
+        elif status == 406:  # Not acceptable
             obj = web.HTTPNotAcceptable(**args)
         elif status == 412:
             obj = web.HTTPPreconditionFailed(**args)
@@ -219,7 +219,7 @@ class DataOutput:
                 )
             except Exception as err:  # pylint: disable=W0703
                 logging.exception(err)
-                return self.error( # pylint: disable=E0702
+                return self.error(  # pylint: disable=E0702
                     message=f"Query Exception: {err}",
                     status=500,
                     exception=err,
@@ -228,7 +228,7 @@ class DataOutput:
             try:
                 return await writer.get_response()
             except (TypeError, RuntimeError, ValueError) as err:
-                headers={
+                headers = {
                     'x-status': 'Output Error',
                     'x-message': f'Writer Error: {err}'
                 }
@@ -240,7 +240,7 @@ class DataOutput:
                     content_type='application/json'
                 )
             except Exception as err:  # pylint: disable=W0703
-                headers={
+                headers = {
                     'x-status': 'QuerySource Error',
                     'x-message': f'Writer Error: {err}'
                 }
