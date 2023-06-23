@@ -125,7 +125,7 @@ class AbstractWriter(ABC):
             response = Response(
                 text=data,
                 status=200,
-                headers= {
+                headers={
                     'Pragma': "public",  # required,
                     'Expires': '0',
                     'Connection': 'keep-alive',
@@ -165,7 +165,7 @@ class AbstractWriter(ABC):
             response = StreamResponse(
                 status=200,
                 reason='OK',
-                headers= {
+                headers={
                     'Pragma': "public",  # required,
                     'Expires': '0',
                     'Connection': 'keep-alive',
@@ -187,7 +187,7 @@ class AbstractWriter(ABC):
     async def stream_response(self, response: web.StreamResponse, data: Any) -> web.StreamResponse:
         content_length = len(data)
         response.content_length = content_length
-        if self.response_type == 'stream': # an stream response:
+        if self.response_type == 'stream':  # an stream response:
             chunk_size = 16384
             response.headers[
                 "Content-Range"
@@ -196,7 +196,7 @@ class AbstractWriter(ABC):
                 i = 0
                 await response.prepare(self.request)
                 while True:
-                    chunk = data[i : i + chunk_size]
+                    chunk = data[i: i + chunk_size]
                     i += chunk_size
                     if not chunk:
                         break
@@ -205,13 +205,13 @@ class AbstractWriter(ABC):
                     # await asyncio.sleep(0.1)
                 await response.write_eof()
                 return response
-            except Exception as ex: # pylint: disable=W0703
+            except Exception as ex:  # pylint: disable=W0703
                 return self.error(
                     message="Error Starting Stream Transmision",
                     exception=ex,
                     status=500
                 )
-        else: # basic stream response:
+        else:  # basic stream response:
             await response.prepare(self.request)
             await response.write(data)
             await response.drain()  # switch point
@@ -265,7 +265,7 @@ class AbstractWriter(ABC):
             obj = web.HTTPForbidden(**args)
         elif status == 404:  # not found
             obj = web.HTTPNotFound(**args)
-        elif status == 406: # Not acceptable
+        elif status == 406:  # Not acceptable
             obj = web.HTTPNotAcceptable(**args)
         elif status == 412:
             obj = web.HTTPPreconditionFailed(**args)
@@ -304,7 +304,7 @@ class AbstractWriter(ABC):
     async def get_result(self):
         try:
             if isinstance(self.query, BaseQuery):
-                self.data, error = await self.query.query(output_format = self.output_format)
+                self.data, error = await self.query.query(output_format=self.output_format)
             else:
                 self.data = self.query
                 error = None

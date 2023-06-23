@@ -5,9 +5,11 @@
 JSON Encoder, Decoder.
 """
 import uuid
+import logging
 from asyncpg.pgproto import pgproto
 from datetime import datetime
 from dataclasses import _MISSING_TYPE, MISSING
+from psycopg2 import Binary  # Import Binary from psycopg2
 from typing import Any, Union
 from pathlib import PosixPath, PurePath
 from decimal import Decimal
@@ -39,7 +41,10 @@ cdef class JSONContent:
         elif isinstance(obj, (PosixPath, PurePath)):
             return str(obj)
         elif hasattr(obj, "hex"):
-            return obj.hex
+            if isinstance(obj, bytes):
+                return obj.hex()
+            else:
+                return obj.hex
         elif hasattr(obj, 'lower'): # asyncPg Range:
             up = obj.upper
             if isinstance(up, int):
@@ -51,6 +56,9 @@ cdef class JSONContent:
             return None
         elif obj == MISSING:
             return None
+        elif isinstance(obj, Binary):  # Handle bytea column from PostgreSQL
+            return str(obj)  # Convert Binary object to string
+        logging.error(f'{obj!r} of Type {type(obj)} is not JSON serializable')
         raise TypeError(f"{obj!r} is not JSON serializable")
 
     def encode(self, object obj, **kwargs) -> str:
