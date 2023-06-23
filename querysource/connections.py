@@ -220,12 +220,14 @@ class QueryConnection(metaclass=Singleton):
             # pgpool (postgres)
             self.pgargs['min_size'] = POSTGRES_MIN_CONNECTIONS
             self.pgargs['max_clients'] = POSTGRES_MAX_CONNECTIONS
+            self.pgargs['statement_timeout'] = "60"
+            self.pgargs['tcp_keepalives_idle'] = "60s"
             try:
                 self._postgres = AsyncPool(
                     'pg',
-                    dsn=asyncpg_url,
+                    dsn=default_dsn,
                     loop=asyncio.get_event_loop(),
-                    timeout=POSTGRES_TIMEOUT,
+                    timeout=60,
                     **self.pgargs
                 )
                 await self._postgres.connect()
@@ -353,6 +355,9 @@ class QueryConnection(metaclass=Singleton):
     async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
         try:
             QueryModel.Meta.connection = conn
+            logging.debug(
+                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+            )
             return await QueryModel.get(query_slug=slug)
         except ValidationError as ex:
             raise SlugNotFound(
@@ -369,13 +374,6 @@ class QueryConnection(metaclass=Singleton):
 
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
-        # try:
-        #     connection = await self.get_connection('pg')
-        #     async with await connection.connection() as conn:
-        #         obj = await self.get_query_slug(slug, conn)
-        # finally:
-        #     QueryModel.Meta.connection = None
-        #     await connection.close()
         if self.lazy is True:
             try:
                 connection = await self.get_connection('pg')
@@ -395,7 +393,9 @@ class QueryConnection(metaclass=Singleton):
             finally:
                 QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
-        logging.debug(f"Getting Slug, Execution Time: {exec_time:.3f}s\n")
+        logging.debug(
+            f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
+        )
         if obj is None:
             raise SlugNotFound(
                 f'Slug \'{slug}\' not found'
@@ -438,7 +438,10 @@ class QueryConnection(metaclass=Singleton):
                     driver='pg', dsn=asyncpg_url
                 )
             else:
-                conn = await self._postgres.acquire()
+                conn = self.default_connection(
+                    driver='pg', dsn=asyncpg_url
+                )
+                # conn = await self._postgres.acquire()
             return [conn, _provider]
         elif provider in EXTERNAL_PROVIDERS:
             _provider = self.load_provider(provider)

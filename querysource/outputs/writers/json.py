@@ -28,7 +28,6 @@ class jsonWriter(AbstractWriter):
             except Exception:  # pylint: disable=W0706
                 raise
         ### calculating the different responses:
-        print('DATA >>> ', data)
         if self.response_type == 'web':
             response = await self.response(self.response_type, data)
             self.logger.debug('::: SENDING WEB JSON RESPONSE: ')
