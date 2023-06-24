@@ -65,7 +65,7 @@ class QueryConnection(metaclass=Singleton):
     pgargs: dict = {
         "min_size": 2,
         "server_settings": {
-            "application_name": "QuerySource",
+            "application_name": "QS.Master",
             "client_min_messages": "notice",
             "max_parallel_workers": "512",
             "jit": "on",
@@ -158,6 +158,7 @@ class QueryConnection(metaclass=Singleton):
                 "keyfile": POSTGRES_SSL_KEY,
             }
         if self.lazy is True:
+            self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
             loop = asyncio.get_event_loop()
             return AsyncDB(
                 provider,
@@ -201,6 +202,7 @@ class QueryConnection(metaclass=Singleton):
             cPrint(':: Starting QuerySource in Lazy Mode ::', level='DEBUG')
             # # lazy mode: create a simple database connector
             try:
+                self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
                 self._connection = AsyncDB(
                     'pg',
                     dsn=asyncpg_url,
@@ -414,6 +416,7 @@ class QueryConnection(metaclass=Singleton):
                 "timeout": 360000,
                 **self.pgargs
             }
+            args['server_settings']['application_name'] = 'QS.Read'
         connection = AsyncDB(
             driver,
             dsn=dsn,

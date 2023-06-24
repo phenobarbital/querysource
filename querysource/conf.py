@@ -24,7 +24,7 @@ if not DBUSER:
     raise RuntimeError('Missing PostgreSQL Default Settings.')
 # database for changes (admin)
 default_dsn = f'postgres://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
-
+sqlalchemy_url = f'postgresql://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
 
 # POSTGRESQL used by QuerySource:
 PG_DRIVER = config.get('PG_DRIVER', fallback='pg')
