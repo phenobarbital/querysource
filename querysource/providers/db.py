@@ -22,13 +22,13 @@ class dbProvider(BaseProvider):
     """Example class for creating Data Providers for QS.
     """
     replacement: dict = {
-       "fields": "*",
-       "filterdate": "current_date",
-       "firstdate": "current_date",
-       "lastdate": "current_date",
-       "where_cond": "",
-       "and_cond": "",
-       "filter": ""
+        "fields": "*",
+        "filterdate": "current_date",
+        "firstdate": "current_date",
+        "lastdate": "current_date",
+        "where_cond": "",
+        "and_cond": "",
+        "filter": ""
     }
 
     __parser__ = pgSQLParser
@@ -38,7 +38,7 @@ class dbProvider(BaseProvider):
         slug: str = '',
         query: Any = None,
         qstype: str = '',
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -58,7 +58,7 @@ class dbProvider(BaseProvider):
                 self.is_raw = True
                 self._query = self._definition.query_raw
         elif qstype == 'raw':
-            self.is_raw = True # calling without passing the parser:
+            self.is_raw = True  # calling without passing the parser:
             self._query = self.raw_query(self._query)
         elif qstype == 'query':
             self._query = query
@@ -93,9 +93,9 @@ class dbProvider(BaseProvider):
 
     def raw_query(self, query: str):
         sql = query
-        conditions = {**self.replacement }
+        conditions = {**self.replacement}
         if self._conditions:
-            conditions = {**conditions, **self._conditions }
+            conditions = {**conditions, **self._conditions}
         return sql.format_map(
             defaultdict(str, SafeDict(**conditions))
         )
@@ -150,5 +150,5 @@ class dbProvider(BaseProvider):
     async def close(self):
         try:
             await self._connection.close()
-        except Exception: # pylint: disable=W0703
+        except Exception:  # pylint: disable=W0703
             pass

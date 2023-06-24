@@ -36,7 +36,7 @@ class DatasourceView(BaseView):
                 cls = import_module(clspath)
                 clsname = f'{name}_default'
                 drv = getattr(cls, clsname)
-                driver =  {
+                driver = {
                     "uid": uuid.uuid1(),
                     "driver": drv.driver,
                     "name": name,
@@ -90,7 +90,7 @@ class DatasourceView(BaseView):
                         status=401,
                         response={"error": "Wrong Filter QS, please check query-string Filter."}
                     )
-        except (KeyError, ValueError): # pylint: disable=W0703
+        except (KeyError, ValueError):  # pylint: disable=W0703
             ds = None
         # getting all datasources based on ds variable:
         db = self.get_connection()
@@ -169,7 +169,7 @@ class DatasourceView(BaseView):
         try:
             drvname = data['driver']
             drv = SUPPORTED[drvname]['driver']
-            args = {k:v for k,v in data.items() if k not in removed}
+            args = {k: v for k, v in data.items() if k not in removed}
             driver = drv(**args)
             return [driver, drvname]
         except ValueError as ex:
@@ -218,10 +218,10 @@ class DatasourceView(BaseView):
             driver, drvname = self.get_driver(data)
         except ValueError as ex:
             return self.error(
-                response= {
-                  "error": f"{ex!s}"
+                response={
+                    "error": f"{ex!s}"
                 },
-                status = 400
+                status=400
             )
         except ValidationError as ex:
             return self.error(

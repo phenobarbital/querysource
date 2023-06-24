@@ -119,7 +119,7 @@ setup(
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,
-    license_files = 'LICENSE',
+    license_files='LICENSE',
     setup_requires=[
         "wheel==0.40.0",
         "Cython==0.29.33",
@@ -137,12 +137,12 @@ setup(
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.30',
         'aiocsv==1.2.3',
-        'xlsxwriter==3.0.9',
+        'xlsxwriter==3.1.2',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
         'pandas_bokeh==0.5.5',
-        'plotly==5.13.1',
+        'plotly==5.15.0',
         'sweetviz==2.1.4',
         # 'great_expectations==0.15.48',
         'pygal==3.0.0',
@@ -158,14 +158,15 @@ setup(
         'elasticsearch-async==6.2.0',
         'seaborn==0.12.2',
         # 'pandas_profiling==3.6.6',
+        'bs4==0.0.1',
         'simple_salesforce==1.12.3'
     ],
     tests_require=[
-            'pytest>=5.4.0',
-            'coverage',
-            'pytest-asyncio',
-            'pytest-xdist',
-            'pytest-assume'
+        'pytest>=5.4.0',
+        'coverage',
+        'pytest-asyncio',
+        'pytest-xdist',
+        'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
     project_urls={  # Optional

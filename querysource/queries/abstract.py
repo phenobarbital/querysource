@@ -14,15 +14,16 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from importlib import import_module
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
-from asyncdb.exceptions import DriverError, ProviderError, handle_done_tasks
+from asyncdb.exceptions import DriverError, ProviderError
 from navigator_session import get_session
 from navigator_session.storages import SessionData
 from aiohttp import web
 from navconfig.logging import logging
 from querysource.libs.encoders import DefaultEncoder
 from querysource.conf import (
-        SEMAPHORE_LIMIT,
-        QUERYSET_REDIS
+    SEMAPHORE_LIMIT,
+    QUERYSET_REDIS,
+    DEFAULT_QUERY_TIMEOUT
 )
 from querysource.exceptions import (
     QueryException,
@@ -44,7 +45,7 @@ class BaseQuery(ABC):
     post_cache: Callable = None
     _timeout: int = 10
     # SEMAPHORE LIMIT
-    semaphore: Callable = asyncio.Semaphore(SEMAPHORE_LIMIT)
+    semaphore: Callable = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
 
     def __init__(
             self,
@@ -62,7 +63,7 @@ class BaseQuery(ABC):
         try:
             self._program = conditions['program']
         except (TypeError, KeyError):
-            self._program: str = 'public' # TODO: changing to public schema.
+            self._program: str = 'public'  # TODO: changing to public schema.
         try:
             self._provider = conditions['provider']
             del conditions['provider']
@@ -88,24 +89,24 @@ class BaseQuery(ABC):
                 self._loop = kwargs['loop']
                 del kwargs['loop']
             else:
-                self._loop = asyncio.get_event_loop()
+                self._loop = asyncio.get_running_loop()
         except RuntimeError:
-            logging.error(
-                "Couldn't get event loop for current thread. Creating a new event loop to be used!"
+            self._logger.error(
+                "Couldn't get event loop for current thread. Creating a new event loop"
             )
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
         # configuring the encoder:
         self._encoder = DefaultEncoder()
         ## default executor:
-        self._executor = ProcessPoolExecutor
+        self._executor = ThreadPoolExecutor(max_workers=4)
 
     async def output(self, result, error):
         # return result in default format
         self._result = result
         return [result, error]
 
-    def output_format(self, frmt: str = 'native', *args, **kwargs): # pylint: disable=W1113
+    def output_format(self, frmt: str = 'native', *args, **kwargs):  # pylint: disable=W1113
         self._output_format = OutputFactory(self, frmt=frmt, *args, **kwargs)
 
     @property
@@ -143,7 +144,7 @@ class BaseQuery(ABC):
             q = data
         try:
             return Query(**q)
-        except (ValueError, TypeError, ValidationError)  as ex:
+        except (ValueError, TypeError, ValidationError) as ex:
             raise TypeError(
                 f"Invalid Query Object: {ex}"
             ) from ex
@@ -202,7 +203,7 @@ class BaseQuery(ABC):
         return session
 
     ### threads
-    def get_executor(self, executor = 'thread', max_workers: int = 2) -> Any:
+    def get_executor(self, executor='thread', max_workers: int = 2) -> Any:
         """get_executor.
         description: Returns the executor to be used by run_in_executor.
         """
@@ -227,6 +228,8 @@ class BaseQuery(ABC):
         except Exception as e:
             self._logger.exception(e, stack_info=True)
             raise
+        finally:
+            loop.close()
 
     #### Datasources and drivers:
     async def get_datasource(self, datasource: str) -> Any:
@@ -267,68 +270,146 @@ class BaseQuery(ABC):
         ### creating a connector for this driver:
         if default.driver_type == 'asyncdb':
             try:
-                return AsyncDB(driver, dsn=default.dsn, params=default.params(), loop=self._loop)
+                return AsyncDB(
+                    driver,
+                    dsn=default.dsn,
+                    params=default.params(),
+                    loop=self._loop
+                )
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"
                 ) from ex
 
     #### Caching facilities
-    def cache_saved(self, checksum: str, loop: asyncio.AbstractEventLoop, task: asyncio.Task):
+    def save_cache(self, checksum, result, **kwargs):
+        """_thread_func.
+        Returns a future to be executed into a Thread Pool.
+        """
+        loop = asyncio.new_event_loop()
+        func = partial(
+            self.save_in_cache,
+            checksum,
+            result,
+            loop
+        )
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                loop.run_in_executor(pool, func)
+        except asyncio.TimeoutError:
+            # if a timeout is reached, we try again:
+            try:
+                loop.run_until_complete(
+                    self.caching_data(checksum, result)
+                )
+            except Exception as exc:
+                self._logger.exception(
+                    f'Cache Exception {exc!s}',
+                    stack_info=True
+                )
+        except (CacheException, ProviderError) as err:
+            self._logger.error(
+                f'Redis Saving Error {err!s}'
+            )
+        except Exception as exc:
+            self._logger.exception(
+                f'Cache Exception {exc!s}',
+                stack_info=True
+            )
+        finally:
+            loop.close()
+
+    def cache_saved(
+        self,
+        checksum: str,
+        loop: asyncio.AbstractEventLoop,
+        task: asyncio.Task,
+        **kwargs
+    ):
         """Notification when Query was saved in Cache.
         """
         try:
             if callable(self.post_cache):
                 self._thread_func(
-                    self.post_cache, checksum, loop
+                    self.post_cache, checksum, loop, **kwargs
                 )
-        finally:
-            task.cancel()
-            loop.stop()
+        except Exception as exc:
+            self._logger.error(
+                f"Error running post_cache function: {exc}"
+            )
+        self._logger.notice(
+            f"QuerySource: Cached {checksum} at {time.strftime('%X')}"
+        )
 
-    def save_in_cache(self, checksum: str, result: Any, loop: asyncio.AbstractEventLoop):
+    def save_in_cache(
+        self,
+        checksum: str,
+        result: Any,
+        loop: asyncio.AbstractEventLoop
+    ):
         asyncio.set_event_loop(loop)
-        loop.set_exception_handler(handle_done_tasks)
         fut = loop.create_task(
-            self.caching_data(checksum, result, loop)
+            self.caching_data(checksum, result)
         )
         # done callback
-        fn = partial(self.cache_saved, checksum, loop)
-        fut.add_done_callback(fn)
+        done_callback = partial(
+            self.cache_saved, checksum, loop
+        )
+        fut.add_done_callback(
+            done_callback
+        )
         try:
             loop.run_until_complete(
                 fut
             )
-        except Exception as err: # pylint: disable=W0703
-            self._logger.debug(
+        except asyncio.TimeoutError:
+            # Redis raises Timeout on Connection:
+            raise
+        except Exception as err:  # pylint: disable=W0703
+            self._logger.error(
                 f'Querysource: Error on caching: {err}'
             )
 
-    async def caching_data(self, checksum: str, result: Any, loop: asyncio.AbstractEventLoop):
+    async def caching_data(
+        self,
+        checksum: str,
+        result: Any
+        # loop: asyncio.AbstractEventLoop
+    ):
         try:
             data = None
+            loop = asyncio.get_running_loop()
             redis = AsyncDB(
                 'redis',
                 dsn=QUERYSET_REDIS,
                 loop=loop
             )
             if not self._timeout:
-                self._timeout = 3600
+                self._timeout = int(DEFAULT_QUERY_TIMEOUT)
             try:
-                data = self._encoder([dict(row) for row in result])
-            except Exception as err: # pylint: disable=W0703
-                self._logger.error(f'Cache Encode Error: {err}')
-            if data:
-                async with await redis.connection() as conn:
-                    # async with  as conn:
-                    result = await conn.setex(
-                        checksum,
-                        data,
-                        self._timeout
-                    )
-                    self._logger.debug(
-                        f"QuerySource: Caching query {checksum} finished at {time.strftime('%X')}"
-                    )
+                data = self._encoder(
+                    [dict(row) for row in result]
+                )
+            except Exception as err:  # pylint: disable=W0703
+                self._logger.error(
+                    f'Cache Encode Error: {err}'
+                )
+                return None
+            async with await redis.connection() as conn:
+                # async with  as conn:
+                await conn.setex(
+                    checksum,
+                    data,
+                    self._timeout
+                )
+                self._logger.debug(
+                    f"Successfully Cached: {checksum}"
+                )
+        except asyncio.TimeoutError as err:
+            self._logger.error(
+                f"Redis timeout: {err}"
+            )
+            raise
         except Exception as err:
             raise CacheException(
                 f'Error on Redis cache: {err}'
@@ -346,7 +427,12 @@ class BaseQuery(ABC):
         """
         return DataNotFound(message, code=404)
 
-    def Error(self, message: str, exception: BaseException = None, code: int = 500) -> BaseException:
+    def Error(
+        self,
+        message: str,
+        exception: BaseException = None,
+        code: int = 500
+    ) -> BaseException:
         """Error.
 
         Useful Function to raise Exceptions.

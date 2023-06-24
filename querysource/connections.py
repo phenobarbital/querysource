@@ -30,6 +30,10 @@ from querysource.conf import (
     POSTGRES_SSL_CERT,
     POSTGRES_SSL_KEY,
     POSTGRES_TIMEOUT,
+    DB_STATEMENT_TIMEOUT,
+    DB_SESSION_TIMEOUT,
+    DB_IDLE_TRANSACTION_TIMEOUT,
+    DB_KEEPALIVE_IDLE,
     QUERYSET_REDIS,
     asyncpg_url,
     default_dsn,
@@ -59,23 +63,25 @@ class QueryConnection(metaclass=Singleton):
     (get connection params from enviroment)
     """
     pgargs: dict = {
+        "min_size": 2,
         "server_settings": {
-            "application_name": 'QuerySource',
+            "application_name": "QS.Master",
             "client_min_messages": "notice",
-            "max_parallel_workers": "48",
-            "tcp_keepalives_idle": "360",
-            # "jit": "off",
-            "statement_timeout": "3600000",
+            "max_parallel_workers": "512",
+            "jit": "on",
+            "statement_timeout": f"{DB_STATEMENT_TIMEOUT}",
+            "idle_session_timeout": f"{DB_SESSION_TIMEOUT}",
             "effective_cache_size": "2147483647",
-            "idle_in_transaction_session_timeout": "360",
+            "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
+            "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
         },
-        "max_inactive_timeout": 360
+        "max_inactive_timeout": 600
     }
 
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
-                return # already configured.
+                return  # already configured.
         self._postgres = None
         self._connection = None
         self._connected: bool = False
@@ -120,6 +126,17 @@ class QueryConnection(metaclass=Singleton):
         try:
             async with await self._redis.connection() as conn:
                 return await conn.get(key)
+        except asyncio.TimeoutError:
+            # trying to reconect:
+            try:
+                self.start_cache(QUERYSET_REDIS)
+                async with await self._redis.connection() as conn:
+                    return await conn.get(key)
+            except Exception as exc:
+                logging.exception(
+                    f"Failure on REDIS Cache: {exc}"
+                )
+                return False
         except (ProviderError, DriverError):
             return False
 
@@ -141,6 +158,7 @@ class QueryConnection(metaclass=Singleton):
                 "keyfile": POSTGRES_SSL_KEY,
             }
         if self.lazy is True:
+            self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
             loop = asyncio.get_event_loop()
             return AsyncDB(
                 provider,
@@ -156,12 +174,11 @@ class QueryConnection(metaclass=Singleton):
     def set_connection(self, conn):
         self._connection = conn
 
-
     def setup(self, app: web.Application) -> web.Application:
-        if isinstance(app, BaseApplication): # migrate to BaseApplication (on types)
+        if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
             self.app = app.get_app()
         elif isinstance(app, WebApp):
-            self.app = app # register the app into the Extension
+            self.app = app  # register the app into the Extension
         else:
             raise TypeError(
                 f"Invalid type for Application Setup: {app}:{type(app)}"
@@ -185,6 +202,7 @@ class QueryConnection(metaclass=Singleton):
             cPrint(':: Starting QuerySource in Lazy Mode ::', level='DEBUG')
             # # lazy mode: create a simple database connector
             try:
+                self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
                 self._connection = AsyncDB(
                     'pg',
                     dsn=asyncpg_url,
@@ -204,12 +222,14 @@ class QueryConnection(metaclass=Singleton):
             # pgpool (postgres)
             self.pgargs['min_size'] = POSTGRES_MIN_CONNECTIONS
             self.pgargs['max_clients'] = POSTGRES_MAX_CONNECTIONS
+            self.pgargs['statement_timeout'] = "60"
+            self.pgargs['tcp_keepalives_idle'] = "60s"
             try:
                 self._postgres = AsyncPool(
                     'pg',
                     dsn=default_dsn,
                     loop=asyncio.get_event_loop(),
-                    timeout=POSTGRES_TIMEOUT,
+                    timeout=60,
                     **self.pgargs
                 )
                 await self._postgres.connect()
@@ -229,7 +249,7 @@ class QueryConnection(metaclass=Singleton):
                     name = row['name']
                     try:
                         driver = self.get_driver(row['driver'])
-                    except Exception as ex: # pylint: disable=W0703
+                    except Exception as ex:  # pylint: disable=W0703
                         logging.exception(ex, stack_info=True)
                         continue
                     try:
@@ -252,7 +272,7 @@ class QueryConnection(metaclass=Singleton):
         app['qs_connection'] = self
         self._connected = True
 
-    def supported_drivers(self, driver): # pylint: disable=W0613
+    def supported_drivers(self, driver):  # pylint: disable=W0613
         try:
             return SUPPORTED[driver]
         except KeyError:
@@ -337,6 +357,9 @@ class QueryConnection(metaclass=Singleton):
     async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
         try:
             QueryModel.Meta.connection = conn
+            logging.debug(
+                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+            )
             return await QueryModel.get(query_slug=slug)
         except ValidationError as ex:
             raise SlugNotFound(
@@ -353,13 +376,6 @@ class QueryConnection(metaclass=Singleton):
 
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
-        # try:
-        #     connection = await self.get_connection('pg')
-        #     async with await connection.connection() as conn:
-        #         obj = await self.get_query_slug(slug, conn)
-        # finally:
-        #     QueryModel.Meta.connection = None
-        #     await connection.close()
         if self.lazy is True:
             try:
                 connection = await self.get_connection('pg')
@@ -379,7 +395,9 @@ class QueryConnection(metaclass=Singleton):
             finally:
                 QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
-        logging.debug(f"Getting Slug, Execution Time: {exec_time:.3f}s\n")
+        logging.debug(
+            f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
+        )
         if obj is None:
             raise SlugNotFound(
                 f'Slug \'{slug}\' not found'
@@ -398,6 +416,7 @@ class QueryConnection(metaclass=Singleton):
                 "timeout": 360000,
                 **self.pgargs
             }
+            args['server_settings']['application_name'] = 'QS.Read'
         connection = AsyncDB(
             driver,
             dsn=dsn,
@@ -415,14 +434,17 @@ class QueryConnection(metaclass=Singleton):
             provider = entry.provider
         except (TypeError, KeyError):
             provider = 'db'
-        if provider == 'db': ## default DB connection for Postgres
+        if provider == 'db':  # default DB connection for Postgres
             _provider = self.load_provider('db')
             if self.lazy is True:
                 conn = self.default_connection(
                     driver='pg', dsn=asyncpg_url
                 )
             else:
-                conn = await self._postgres.acquire()
+                conn = self.default_connection(
+                    driver='pg', dsn=asyncpg_url
+                )
+                # conn = await self._postgres.acquire()
             return [conn, _provider]
         elif provider in EXTERNAL_PROVIDERS:
             _provider = self.load_provider(provider)
@@ -442,7 +464,7 @@ class QueryConnection(metaclass=Singleton):
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
-            return [conn, _provider] # can be a dummy provider.
+            return [conn, _provider]  # can be a dummy provider.
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
@@ -482,7 +504,6 @@ class QueryConnection(metaclass=Singleton):
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-
     async def dispose(self, conn: Callable = None):
         """
         dispose a connection from the pg pool.
@@ -492,7 +513,7 @@ class QueryConnection(metaclass=Singleton):
             # TODO: check if connection is from instance pg
             try:
                 await self._postgres.release(conn)
-            except Exception: # pylint: disable=W0703
+            except Exception:  # pylint: disable=W0703
                 await conn.close()
 
     async def stop(self, app: web.Application = None):

@@ -16,7 +16,6 @@ def rigth_now(obj) -> datetime:
     return datetime.now()
 
 def to_field_list(obj) -> list:
-    print('AQUI ', obj)
     if obj is None:
         return []
     if isinstance(obj, str):
@@ -55,7 +54,12 @@ class QueryModel(Model):
     # Source and primary attributes:
     source: Optional[str] = Field(required=False)
     params: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
-    attributes: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict, comment="Optional Attributes for Query")
+    attributes: Optional[dict] = Field(
+        required=False,
+        db_type='jsonb',
+        default_factory=dict,
+        comment="Optional Attributes for Query"
+    )
     #  main conditions
     conditions: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     cond_definition: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
@@ -67,7 +71,7 @@ class QueryModel(Model):
     qry_options: Optional[dict] = Field(required=False, db_type='jsonb')
     h_filtering: bool = Field(required=False, default=False, comment="filtering based on Hierarchical rules.")
     ### Query Information:
-    query_raw: str =  Field(required=False)
+    query_raw: str = Field(required=False)
     is_raw: bool = Field(required=False, default=False)
     is_cached: bool = Field(required=False, default=True)
     provider: str = Field(required=False, default='db')
@@ -89,13 +93,13 @@ class QueryModel(Model):
         default=datetime.now(),
         db_default='now()'
     )
-    created_by: int = Field(required=False) # TODO: validation for valid user
+    created_by: int = Field(required=False)  # TODO: validation for valid user
     updated_at: datetime = Field(
         required=False,
         default=datetime.now(),
         encoder=rigth_now
     )
-    updated_by: int = Field(required=False) # TODO: validation for valid user
+    updated_by: int = Field(required=False)  # TODO: validation for valid user
 
     class Meta:
         driver = 'pg'
@@ -103,4 +107,4 @@ class QueryModel(Model):
         schema = QS_QUERIES_SCHEMA
         strict = True
         frozen = False
-        remove_nulls = True # Auto-remove nullable (with null value) fields
+        remove_nulls = True  # Auto-remove nullable (with null value) fields

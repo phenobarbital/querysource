@@ -17,7 +17,7 @@ from querysource.conf import (
 from .abstract import SQLDriver
 
 def jdbc_properties() -> tuple:
-    return ('host', 'port', 'user', 'password', 'database', 'dsn', 'jar', 'classpath' )
+    return ('host', 'port', 'user', 'password', 'database', 'dsn', 'jar', 'classpath')
 
 class jdbcDriver(SQLDriver):
     driver: str = 'jdbc'
@@ -54,7 +54,8 @@ class jdbcDriver(SQLDriver):
         }
 
 
-jdbc_default = jdbcDriver(
+try:
+    jdbc_default = jdbcDriver(
         provider=JDBC_DRIVER,
         database=JDBC_DATABASE,
         user=JDBC_USER,
@@ -63,4 +64,6 @@ jdbc_default = jdbcDriver(
         port=JDBC_PORT,
         jar=JDBC_JAR,
         classpath=JDBC_CLASSPATH
-)
+    )
+except ValueError:
+    jdbc_default = None

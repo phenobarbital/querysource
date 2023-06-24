@@ -6,9 +6,6 @@ Get queries from databases and other data sources.
 QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-
 from aiohttp import web
 from asyncdb.exceptions import (
     NoDataFound,
@@ -19,7 +16,6 @@ from asyncdb.exceptions import (
 
 from querysource.connections import QueryConnection
 from querysource.exceptions import (
-    CacheException,
     DataNotFound,
     EmptySentence,
     QueryException,
@@ -144,10 +140,12 @@ class QS(BaseQuery):
             raise EmptySentence(
                 "QS Error: cannot run with Empty Query/Sentence."
             )
-        if self._type == 'slug': # query-based provider:
+        if self._type == 'slug':  # query-based provider:
             self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
             try:
-                objquery = await self.connection.get_slug(self._query, program=self._program)
+                objquery = await self.connection.get_slug(
+                    self._query, program=self._program
+                )
             except (SlugNotFound):
                 raise
             except Exception:
@@ -175,7 +173,7 @@ class QS(BaseQuery):
             if self._conditions:
                 try:
                     conditions = {**objquery.conditions, **self._conditions}
-                except (AttributeError,TypeError):
+                except (AttributeError, TypeError):
                     conditions = {**self._conditions}
             else:
                 if objquery.conditions:
@@ -294,7 +292,6 @@ class QS(BaseQuery):
                 f"Invalid type of Query: {self._query}"
             )
 
-
     async def query(self, output_format: str = None):
         result = []
         error = None
@@ -333,6 +330,10 @@ class QS(BaseQuery):
                 # cache exists from this query
                 try:
                     result = await self.connection.get_from_cache(checksum)
+                except asyncio.TimeoutError:
+                    self._logger.warning(
+                        'Querysource: Cache Miss due Timeout'
+                    )
                 except (ProviderError, DriverError, RuntimeError) as err:
                     self._logger.warning(
                         f'Querysource: Error getting from Cache: {err!s}'
@@ -346,7 +347,7 @@ class QS(BaseQuery):
                     return await self._output_format(self._result, error)  # pylint: disable=W0150
             # getting data directly from provider instead:
             self._logger.debug('= Query from PROVIDER =')
-            async with self.semaphore: # pylint: disable=E1701
+            async with self.semaphore:  # pylint: disable=E1701
                 try:
                     self._logger.debug(
                         f':: Query: {self._query}'
@@ -355,7 +356,9 @@ class QS(BaseQuery):
                     if error:
                         if isinstance(error, DataNotFound):
                             raise error
-                        return await self._output_format(self._result, error)  # pylint: disable=W0150
+                        return await self._output_format(
+                            self._result, error
+                        )  # pylint: disable=W0150
                 except (NoDataFound, DataNotFound) as err:
                     raise DataNotFound(
                         f'{self._qs.__name__!s}: {err}'
@@ -375,21 +378,13 @@ class QS(BaseQuery):
                     ## Saving into Cache:
                     if result and self.is_cached is True:
                         try:
-                            loop = asyncio.new_event_loop()
-                            fn = partial(
-                                self.save_in_cache,
-                                checksum,
-                                result,
-                                loop
-                            )
-                            with ThreadPoolExecutor(max_workers=2) as pool:
-                                status = loop.run_in_executor(pool, fn)
-                                self._logger.debug(f'Saved in cache with status: {status}')
-                        except (CacheException, ProviderError) as err:
-                            self._logger.error(f'Redis Saving Error {err!s}')
-                        finally:
-                            loop.stop()
-                    return await self._output_format(self._result, error)  # pylint: disable=W0150
+                            self.save_cache(checksum, result)
+                        except Exception:
+                            pass
+                    ## returning data:
+                    return await self._output_format(
+                        self._result, error
+                    )  # pylint: disable=W0150
                 else:
                     raise DataNotFound(
                         f'{self._qs.__name__!s} Empty Result'
@@ -409,7 +404,7 @@ class QS(BaseQuery):
             )
         try:
             await self._qs.close()
-        except Exception: # pylint: disable=W0703
+        except Exception:  # pylint: disable=W0703
             pass
 
     async def dry_run(self):

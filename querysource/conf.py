@@ -24,7 +24,7 @@ if not DBUSER:
     raise RuntimeError('Missing PostgreSQL Default Settings.')
 # database for changes (admin)
 default_dsn = f'postgres://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
-
+sqlalchemy_url = f'postgresql://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
 
 # POSTGRESQL used by QuerySource:
 PG_DRIVER = config.get('PG_DRIVER', fallback='pg')
@@ -33,38 +33,41 @@ PG_USER = config.get('PG_USER')
 PG_PWD = config.get('PG_PWD')
 PG_DATABASE = config.get('PG_DATABASE', fallback='navigator')
 PG_PORT = config.get('PG_PORT', fallback=5432)
-if not PG_USER:
-    raise RuntimeError('Missing PostgreSQL Settings.')
 
+asyncpg_url = f'postgres://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+database_url = f'postgresql://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+SQLALCHEMY_DATABASE_URI = database_url
 
 POSTGRES_TIMEOUT = config.get('POSTGRES_TIMEOUT', fallback=3600000)
 POSTGRES_MIN_CONNECTIONS = config.getint('POSTGRES_MIN_CONNECTIONS', fallback=2)
 POSTGRES_MAX_CONNECTIONS = config.getint('POSTGRES_MAX_CONNECTIONS', fallback=200)
+DB_STATEMENT_TIMEOUT = config.get("DB_STATEMENT_TIMEOUT", fallback=3600000)
+DB_SESSION_TIMEOUT = config.get('DB_SESSION_TIMEOUT', fallback="5min")
+DB_IDLE_TRANSACTION_TIMEOUT = config.get('DB_IDLE_TRANSACTION_TIMEOUT', fallback="20min")
+DB_KEEPALIVE_IDLE = config.get('DB_KEEPALIVE_IDLE', fallback="30min")
+
 POSTGRES_SSL = config.getboolean('POSTGRES_SSL', fallback=False)
 POSTGRES_SSL_CA = config.get('POSTGRES_SSL_CA')
 POSTGRES_SSL_CERT = config.get('POSTGRES_SSL_CERT')
 POSTGRES_SSL_KEY = config.get('POSTGRES_SSL_KEY')
 
-database_url = f'postgresql://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
-SQLALCHEMY_DATABASE_URI = database_url
-asyncpg_url = f'postgres://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
 
 ### QuerySet (for QuerySource)
-CACHE_HOST = config.get('CACHEHOST', fallback='localhost')
-CACHE_PORT = config.get('CACHEPORT', fallback=6379)
-CACHE_DB = config.get('CACHEDB', fallback=2)
+CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')
+CACHE_PORT = config.get('CACHE_PORT', fallback=6379)
+CACHE_DB = config.get('CACHE_DB', fallback=0)
 CACHE_URL = f"redis://{CACHE_HOST}:{CACHE_PORT!s}/{CACHE_DB}"
 
 ## Redis as Database:
 REDIS_HOST = config.get('REDIS_HOST', fallback='localhost')
 REDIS_PORT = config.get('REDIS_PORT', fallback=6379)
-REDIS_DB = config.get('REDIS_DB', fallback=2)
+REDIS_DB = config.get('REDIS_DB', fallback=1)
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT!s}/{REDIS_DB}"
 
 # QuerySet Cache (cache for queries)
 QUERYSET_DB = config.get('QUERYSET_DB', fallback=3)
 QUERYSET_REDIS = f"redis://{REDIS_HOST}:{REDIS_PORT}/{QUERYSET_DB}"
-
+DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
 
 ### Memcache
 MEMCACHE_HOST = config.get('MEMCACHE_HOST', 'localhost')
@@ -79,7 +82,9 @@ REDASH_API_KEY = config.get('REDASH_API_KEY')
 URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
-SEMAPHORE_LIMIT = config.get('SEMAPHORE_LIMIT', fallback=4096)
+SEMAPHORE_LIMIT = int(
+    config.getint('SEMAPHORE_LIMIT', fallback=4096)
+)
 
 ### Other database support:
 ## MYSQL
@@ -95,16 +100,16 @@ MSSQL_DRIVER = config.get('MSSQL_DRIVER', fallback='mssql')
 MSSQL_HOST = config.get('MSSQL_HOST', fallback='127.0.0.1')
 MSSQL_PORT = config.get('MSSQL_PORT', fallback='1407')
 MSSQL_USER = config.get('MSSQL_USER')
-MSSQL_PWD= config.get('MSSQL_PWD')
+MSSQL_PWD = config.get('MSSQL_PWD')
 MSSQL_DATABASE = config.get('MSSQL_DATABASE')
 
 ### Microsoft SQL Server
 SQLSERVER_DRIVER = config.get('SQLSERVER_DRIVER', fallback='sqlserver')
 SQLSERVER_HOST = config.get('SQLSERVER_HOST', fallback='127.0.0.1')
 SQLSERVER_PORT = config.get('SQLSERVER_PORT', fallback=1433)
-SQLSERVER_USER  = config.get('SQLSERVER_USER')
-SQLSERVER_PWD  = config.get('SQLSERVER_PWD')
-SQLSERVER_DATABASE  = config.get('SQLSERVER_DATABASE')
+SQLSERVER_USER = config.get('SQLSERVER_USER')
+SQLSERVER_PWD = config.get('SQLSERVER_PWD')
+SQLSERVER_DATABASE = config.get('SQLSERVER_DATABASE')
 SQLSERVER_TDS_VERSION = config.get('SQLSERVER_TDS_VERSION', fallback='8.0')
 
 ## ORACLE
@@ -201,6 +206,10 @@ CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 ## QuerySource Model:
 QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
+
+## QuerySource Query Timeout:
+DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401
 except ImportError:
