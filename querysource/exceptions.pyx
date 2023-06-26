@@ -59,3 +59,6 @@ cdef class CacheException(QueryException):
 
 cdef class ParserError(QueryException):
     pass
+
+cdef class OutputError(QueryException):
+    pass

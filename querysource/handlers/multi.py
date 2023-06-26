@@ -12,8 +12,9 @@ from querysource.exceptions import (
 )
 from querysource.queries.obj import QueryObject
 from .abstract import AbstractHandler
-from .operators import Join, Concat
+from .operators import Join, Concat, Melt
 from .transformations import crosstab, correlation
+from .outputs import TableOutput
 
 class ThreadQuery(threading.Thread):
     def __init__(self, name: str, query: dict, request: web.Request, queue: asyncio.Queue):
@@ -158,6 +159,16 @@ class QueryHandler(AbstractHandler):
                     message="Error on Concat",
                     exception=ex
                 ) from ex
+        if 'Melt' in options:
+            try:
+                ## making Join of Data
+                melt = Melt(data=result, **options['Melt'])
+                result = await melt.run()
+            except (QueryException, Exception) as ex:
+                raise self.Except(
+                    message=f"Error on Melting Data: {ex}",
+                    exception=ex
+                ) from ex
         ### Step 3: passing result to Transformations
         if 'Transform' in options:
             # passing the resultset for several transformation rules.
@@ -175,6 +186,14 @@ class QueryHandler(AbstractHandler):
         if 'Processors' in options:
             pass
         ### Step 4: Passing result to any Processor declared
+        if 'Output' in options:
+            ## Optionally saving result into Database (using Pandas)
+            for step in options['Output']:
+                obj = None
+                for step_name, component in step.items():
+                    if step_name == 'tableOutput':
+                        obj = TableOutput(data=result, **component)
+                        result = await obj.run()
         ### Step 5: passing Result to DataOutput
         try:
             output = DataOutput(request, query=result, ctype=queryformat, slug=None, **output_args)
