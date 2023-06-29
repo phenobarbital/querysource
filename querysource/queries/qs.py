@@ -138,7 +138,7 @@ class QS(BaseQuery):
         """
         if not self._query:
             raise EmptySentence(
-                "QS Error: cannot run with Empty Query/Sentence."
+                "QS Error: Cannot run with Empty Query/Sentence."
             )
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
@@ -353,6 +353,23 @@ class QS(BaseQuery):
                         f':: Query: {self._query}'
                     )
                     result, error = await self._qs.query()
+                    duration = self.epoch_duration(self._starttime)
+                    if self._type == 'slug':
+                        slug = self._query
+                    else:
+                        slug = 'Query'
+                    # Duration of Query:
+                    self._logger.debug(
+                        f"Slug: {slug}, duration: {duration}s"
+                    )
+                    payload = {
+                        "slug": slug,
+                        "duration": duration,
+                        "started": self._starttime,
+                        "ended": self._endtime
+                    }
+                    # send to influx event system:
+                    asyncio.create_task(self.event_log(payload))
                     if error:
                         if isinstance(error, DataNotFound):
                             raise error
