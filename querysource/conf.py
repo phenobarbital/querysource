@@ -85,7 +85,7 @@ URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
 SEMAPHORE_LIMIT = int(
-    config.getint('SEMAPHORE_LIMIT', fallback=4096)
+    config.getint('SEMAPHORE_LIMIT', fallback=8192)
 )
 
 ### Other database support:
@@ -152,6 +152,17 @@ INFLUX_DATABASE = config.get('INFLUX_DATABASE')
 INFLUX_ORG = config.get('INFLUX_ORG', fallback='navigator')
 INFLUX_TOKEN = config.get('INFLUX_TOKEN')
 
+# this is the backend for saving Query Execution
+ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')
+QS_EVENT_BACKEND = config.get('QS_EVENT_BACKEND', fallback='influx')
+QS_EVENT_TABLE = config.get('QS_EVENT_TABLE', fallback='querysource')
+QS_EVENT_CREDENTIALS = {
+    "host": INFLUX_HOST,
+    "port": INFLUX_PORT,
+    "bucket": INFLUX_DATABASE,
+    "org": INFLUX_ORG,
+    "token": INFLUX_TOKEN
+}
 
 # RETHINKDB
 rt_driver = config.get('RT_DRIVER', fallback='rethink')

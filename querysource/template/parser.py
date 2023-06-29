@@ -31,8 +31,6 @@ jinja_config = {
 }
 
 class TemplateParser:
-
-
     def __init__(self, template_dir: Union[list[Path], str] = None, **kwargs) -> None:
         self.env: Optional[Environment] = None
         if 'config' in kwargs:
@@ -67,7 +65,7 @@ class TemplateParser:
         """
         ## Added template system to App
         if isinstance(app, web.Application):
-            self.app = app # register the app into the Extension
+            self.app = app  # register the app into the Extension
         else:
             raise TypeError(
                 f"Invalid type for Application Setup: {app}:{type(app)}"
@@ -135,7 +133,6 @@ class TemplateParser:
                 f'NAV: Error rendering: {template}, error: {err}'
             ) from err
 
-
     async def view(
             self,
             filename: str,
@@ -143,7 +140,7 @@ class TemplateParser:
             content_type: str = 'text/html',
             charset: Optional[str] = "utf-8",
             status: int = 200,
-        ) -> web.Response:
+    ) -> web.Response:
         """view.
         description: view Method can return a Web Response from a Template content.
         Args:

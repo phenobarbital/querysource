@@ -31,6 +31,7 @@ from querysource.exceptions import (
     DataNotFound
 )
 from querysource.connections import DATASOURCES
+from querysource.events import LogEvent
 from .outputs import OutputFactory
 from .models import Query, QueryResult, supported_drivers
 
@@ -73,8 +74,8 @@ class BaseQuery(ABC):
         self._conditions = conditions if conditions else {}
         # web Request:
         self._request = request
-        self._generated: datetime = None
-        self._starttime: datetime = None
+        self._generated: Union[int, datetime] = None
+        self._starttime: Union[int, datetime] = self.epoch_time()
         self._logger = logging.getLogger('QuerySource')
         ## set the Output factory for Query:
         try:
@@ -120,6 +121,15 @@ class BaseQuery(ABC):
     @timeout.setter
     def timeout(self, timeout: int = 3600):
         self._timeout = timeout
+
+    ## calculated the start time on Epoch:
+    def epoch_time(self):
+        return time.time()
+
+    def epoch_duration(self, started: int):
+        self._endtime = time.time()
+        self._generated = self._endtime - started
+        return self._generated
 
     ### function for calculate duration:
     def start_timing(self, started: datetime = None):
@@ -452,4 +462,11 @@ class BaseQuery(ABC):
             message,
             stacktrace=trace,
             code=code
+        )
+
+    async def event_log(self, payload: dict, status: str = 'query', **kwargs):
+        await LogEvent(
+            payload=payload,
+            status=status,
+            **kwargs
         )
