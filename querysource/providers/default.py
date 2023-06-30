@@ -28,7 +28,7 @@ class defaultProvider(BaseProvider):
         slug: str = '',
         query: Any = None,
         qstype: str = '',
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -48,7 +48,6 @@ class defaultProvider(BaseProvider):
                 self.is_raw = True
                 self._query = self._definition.query_raw
 
-
     async def prepare_connection(self) -> Callable:
         """Signal run before connection is made.
         """
@@ -67,9 +66,9 @@ class defaultProvider(BaseProvider):
 
     def raw_query(self, query: str):
         sql = query
-        conditions = {**self.replacement }
+        conditions = {**self.replacement}
         if self._conditions:
-            conditions = {**conditions, **self._conditions }
+            conditions = {**conditions, **self._conditions}
         return sql.format_map(
             defaultdict(str, SafeDict(**conditions))
         )

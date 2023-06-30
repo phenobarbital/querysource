@@ -57,7 +57,6 @@ class rethinkProvider(BaseProvider):
                     f"Exception running Rethink Server: {err}"
                 ) from err
 
-
     def checksum(self):
         name = f'{self._slug}:{self._conditions!s}'
         return hashlib.sha1(f'{name}'.encode('utf-8')).hexdigest()
