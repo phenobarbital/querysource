@@ -38,7 +38,7 @@ class QueryExecutor(AbstractHandler):
 
     def get_executor(self, data, request: web.Request) -> Executor:
         try:
-            query = Executor(request = request)
+            query = Executor(request=request)
         except Exception as ex:
             print(ex)
             raise
@@ -60,7 +60,7 @@ class QueryExecutor(AbstractHandler):
             except QueryError as ex:
                 return self.error(
                     response=ex.message,
-                    status=ex.code # bad request
+                    status=ex.code  # bad request
                 )
             except Exception as ex:
                 self.logger.error(str(ex), stack_info=True)
@@ -78,7 +78,7 @@ class QueryExecutor(AbstractHandler):
             except (QueryError, QueryException) as ex:
                 return self.error(
                     response=ex.message,
-                    status=ex.code # bad request
+                    status=ex.code  # bad request
                 )
             except Exception as ex:
                 self.logger.error(str(ex), stack_info=True)
@@ -90,7 +90,7 @@ class QueryExecutor(AbstractHandler):
         else:
             return self.error(
                 response='QS: Missing Query object or sentence to run.',
-                status=410 # bad request
+                status=410  # bad request
             )
 
     async def dry_run(self, request: web.Request = None):
@@ -108,7 +108,7 @@ class QueryExecutor(AbstractHandler):
             except QueryError as ex:
                 return self.error(
                     response=ex.message,
-                    status=ex.code # bad request
+                    status=ex.code  # bad request
                 )
             except Exception as ex:
                 self.logger.error(str(ex), stack_info=True)
@@ -126,7 +126,7 @@ class QueryExecutor(AbstractHandler):
             except (QueryError, QueryException) as ex:
                 return self.error(
                     response=ex.message,
-                    status=ex.code # bad request
+                    status=ex.code  # bad request
                 )
             except Exception as ex:
                 self.logger.error(str(ex), stack_info=True)
@@ -137,5 +137,5 @@ class QueryExecutor(AbstractHandler):
         else:
             return self.error(
                 response='QS: Missing Query object or sentence to run.',
-                status=410 # bad request
+                status=410  # bad request
             )

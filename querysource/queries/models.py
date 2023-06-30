@@ -1,5 +1,4 @@
-from typing import Union, Optional
-from collections.abc import Callable
+from typing import Union, Optional, Any
 from datetime import datetime
 from datamodel import BaseModel, Field
 from querysource.datasources.drivers import SUPPORTED
@@ -19,7 +18,7 @@ class Query(BaseModel):
     retrieved: datetime = Field(required=False, default=datetime.utcnow())
     raw_result: bool = Field(default=False)
     queued: bool = Field(default=False)
-    connection: Optional[Callable] = Field(required=False)
+    connection: Optional[Any] = Field(required=False)
 
     class Meta:
         strict = True

@@ -11,7 +11,7 @@ from datetime import datetime
 from dataclasses import _MISSING_TYPE, MISSING
 from psycopg2 import Binary  # Import Binary from psycopg2
 from typing import Any, Union
-from pathlib import PosixPath, PurePath
+from pathlib import PosixPath, PurePath, Path
 from decimal import Decimal
 from querysource.exceptions cimport ParserError
 import orjson
@@ -38,7 +38,7 @@ cdef class JSONContent:
             return str(obj)
         elif isinstance(obj, uuid.UUID):
             return obj
-        elif isinstance(obj, (PosixPath, PurePath)):
+        elif isinstance(obj, (PosixPath, PurePath, Path)):
             return str(obj)
         elif hasattr(obj, "hex"):
             if isinstance(obj, bytes):
@@ -59,7 +59,9 @@ cdef class JSONContent:
         elif isinstance(obj, Binary):  # Handle bytea column from PostgreSQL
             return str(obj)  # Convert Binary object to string
         logging.error(f'{obj!r} of Type {type(obj)} is not JSON serializable')
-        raise TypeError(f"{obj!r} is not JSON serializable")
+        raise TypeError(
+            f'{obj!r} of Type {type(obj)} is not JSON serializable'
+        )
 
     def encode(self, object obj, **kwargs) -> str:
         # decode back to str, as orjson returns bytes
@@ -76,7 +78,7 @@ cdef class JSONContent:
             ).decode('utf-8')
         except orjson.JSONEncodeError as ex:
             raise ParserError(
-                f"Invalid JSON data: {ex}"
+                f"Invalid JSON: {ex}"
             )
 
     dumps = encode
