@@ -23,6 +23,7 @@ class influxDriver(NoSQLDriver):
     org: str
     bucket: str = Column(required=False)
     token: str = Column(required=True)
+    timeout: int = Column(required=False, default=10)
 
     def __post_init__(self, user, database: str = None, *args, **kwargs):  # pylint: disable=W0221
         if not self.bucket:
@@ -37,7 +38,8 @@ class influxDriver(NoSQLDriver):
             "password": self.password,
             "org": self.org,
             "bucket": self.bucket,
-            "token": self.token
+            "token": self.token,
+            "timeout": self.timeout
         }
 
 try:
@@ -48,7 +50,8 @@ try:
         password=INFLUX_PWD,
         bucket=INFLUX_DATABASE,
         org=INFLUX_ORG,
-        token=INFLUX_TOKEN
+        token=INFLUX_TOKEN,
+        timeout=10
     )
 except ValueError:
     influx_default = None
