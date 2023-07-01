@@ -48,7 +48,8 @@ try:
         password=INFLUX_PWD,
         bucket=INFLUX_DATABASE,
         org=INFLUX_ORG,
-        token=INFLUX_TOKEN
+        token=INFLUX_TOKEN,
+        timeout=10
     )
 except ValueError:
     influx_default = None
