@@ -17,7 +17,7 @@ class Executor(BaseQuery):
         except TypeError as ex:
             raise QueryError(
                 message=f'QS: Invalid Executor {ex}',
-                code=410 # bad request
+                code=410  # bad request
             ) from ex
 
     async def dry_run(self):
@@ -27,9 +27,9 @@ class Executor(BaseQuery):
         db = None
         state = None
         started = self.start_timing(self._query.retrieved)
-        if datasource:= self._query.datasource:
+        if datasource := self._query.datasource:
             db = await self.get_datasource(datasource)
-        elif driver:= self._query.driver:
+        elif driver := self._query.driver:
             ## using a default driver:
             try:
                 db = await self.default_driver(driver)
@@ -45,7 +45,7 @@ class Executor(BaseQuery):
         else:
             raise QueryError(
                 message=f'QS: Invalid Query Type {self._query!s}',
-                code=410 # bad request
+                code=410  # bad request
             )
         # finish: calculate duration and return result:
         duration = (self.generated_at(started).total_seconds() / 1000)
@@ -56,12 +56,12 @@ class Executor(BaseQuery):
         except TypeError as ex:
             raise QueryError(
                 message=f'QS: Result Error: {ex}',
-                code=400 # bad request
+                code=400  # bad request
             ) from ex
         except Exception as ex:
             raise QueryException(
                 message=f'QS: Result Error: {ex}',
-                code=400 # bad request
+                code=400  # bad request
             ) from ex
         finally:
             self._query = None
@@ -74,10 +74,10 @@ class Executor(BaseQuery):
         state = None
         result = []
         started = self.start_timing(self._query.retrieved)
-        if datasource:= self._query.datasource:
+        if datasource := self._query.datasource:
             db = await self.get_datasource(datasource)
             driver = 'default'
-        elif driver:= self._query.driver:
+        elif driver := self._query.driver:
             ## using a default driver:
             db = await self.default_driver(driver)
         else:
@@ -96,13 +96,13 @@ class Executor(BaseQuery):
                         kwargs = {}
                     # TODO: add support for selecting returning options
                     if driver == 'influx':
-                        result, error = await db.query(self._query.query, frmt = 'recordset', **kwargs)
+                        result, error = await db.query(self._query.query, frmt='recordset', **kwargs)
                     else:
                         result, error = await db.query(self._query.query, **kwargs)
                 except (TypeError, ValueError):
                     result = await db.query(self._query.query)
                 if error:
-                    state = 'With Errors.'
+                    state = f'With Errors: {error}'
         except (RuntimeError, QueryException) as ex:
             raise QueryError(
                 message=str(ex),
@@ -116,12 +116,12 @@ class Executor(BaseQuery):
         except TypeError as ex:
             raise QueryError(
                 message=f'QS: Result Error: {ex}',
-                code=410 # bad request
+                code=410  # bad request
             ) from ex
         except Exception as ex:
             raise QueryException(
                 message=f'QS: Result Error: {ex}',
-                code=400 # bad request
+                code=400  # bad request
             ) from ex
         finally:
             self._query = None

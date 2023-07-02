@@ -6,7 +6,7 @@ Handler to accessing querysource objects from API.
 from datetime import datetime
 # for aiohttp
 from aiohttp import web
-from asyncdb.exceptions import ProviderError# QuerySource Query, Executor, etc
+from asyncdb.exceptions import ProviderError  # QuerySource Query, Executor, etc
 # Output
 from querysource.outputs import DataOutput
 from querysource.outputs.writers import graph_ouputs
@@ -58,7 +58,7 @@ class QueryService(AbstractHandler):
         """
         options = {}
         params = self.query_parameters(request)
-        _format: str = 'json'  ## TODO: adding support for outputs.
+        _format: str = 'json'  # TODO: adding support for outputs.
         try:
             options = await self.json_data(request)
         except (TypeError, ValueError):
@@ -175,7 +175,7 @@ class QueryService(AbstractHandler):
         except KeyError:
             slug: str = None
             _format: str = 'json'
-        except Exception as err: # pylint: disable=W0703
+        except Exception as err:  # pylint: disable=W0703
             return self.NotFound(
                 message="QS: Error with parameters.", exception=err
             )
@@ -218,7 +218,7 @@ class QueryService(AbstractHandler):
             try:
                 writer_options = options['_csv_options']
                 del options['_csv_options']
-            except (TypeError, KeyError): # default options:
+            except (TypeError, KeyError):  # default options:
                 writer_options = {
                     "delimiter": CSV_DEFAULT_DELIMITER,
                     "quoting": CSV_DEFAULT_QUOTING
@@ -239,7 +239,7 @@ class QueryService(AbstractHandler):
         try:
             writer_options = options['_graph_options']
             del options['_graph_options']
-        except (TypeError, KeyError): # default options:
+        except (TypeError, KeyError):  # default options:
             pass
         output_args = {
             "filename": filename,

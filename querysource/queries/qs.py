@@ -303,116 +303,115 @@ class QS(BaseQuery):
         ## check the provider:
         if output_format is not None:
             self.output_format(output_format)
-        try:
-            self._logger.debug(f"= Refresh status: {refresh}")
-            if self.is_cached is True:
-                # get the cache
-                self._logger.debug('= Query Cache is Enabled =')
-                checksum = self._qs.checksum()
-                self._logger.debug(f"= Query Checksum is {checksum}")
-                try:
-                    exists = bool(
-                        await self.connection.in_cache(checksum)
-                    )
-                    self._logger.debug(f"= Detected on Cache? {exists}")
-                except (ProviderError, DriverError, RuntimeError) as err:
-                    self._logger.error(f'Error over caching System: {err!s}')
-                    self.is_cached = False
-                    exists = False
-                    result = []
-            if refresh is True and exists is True:
-                # we need to refresh the query and got from database
+        self._logger.debug(f"= Refresh status: {refresh}")
+        if self.is_cached is True:
+            # get the cache
+            self._logger.debug('= Query Cache is Enabled =')
+            checksum = self._qs.checksum()
+            self._logger.debug(f"= Query Checksum is {checksum}")
+            try:
+                exists = bool(
+                    await self.connection.in_cache(checksum)
+                )
+                self._logger.debug(f"= Detected on Cache? {exists}")
+            except (ProviderError, DriverError, RuntimeError) as err:
+                self._logger.error(f'Error over caching System: {err!s}')
+                self.is_cached = False
                 exists = False
-                error = None
                 result = []
-            # get this query from cache
-            if self.is_cached is True and exists is True:
-                # cache exists from this query
-                try:
-                    result = await self.connection.get_from_cache(checksum)
-                except asyncio.TimeoutError:
-                    self._logger.warning(
-                        'Querysource: Cache Miss due Timeout'
-                    )
-                except (ProviderError, DriverError, RuntimeError) as err:
-                    self._logger.warning(
-                        f'Querysource: Error getting from Cache: {err!s}'
-                    )
-                if result:
-                    self._logger.debug(
-                        f"Query {checksum} was cached!"
-                    )
-                    result = self._encoder.loads(result)
-                    self._result = result
-                    return await self._output_format(self._result, error)  # pylint: disable=W0150
-            # getting data directly from provider instead:
-            self._logger.debug('= Query from PROVIDER =')
-            async with self.semaphore:  # pylint: disable=E1701
-                try:
-                    self._logger.debug(
-                        f':: Query: {self._query}'
-                    )
-                    result, error = await self._qs.query()
-                    duration = self.epoch_duration(self._starttime)
-                    if self._type == 'slug':
-                        slug = self._query
-                    else:
-                        slug = 'Query'
-                    # Duration of Query:
-                    self._logger.debug(
-                        f"Slug: {slug}, duration: {duration}s"
-                    )
-                    payload = {
-                        "slug": slug,
-                        "duration": duration,
-                        "started": self._starttime,
-                        "ended": self._endtime
-                    }
-                    # send to influx event system:
-                    asyncio.create_task(self.event_log(payload))
-                    if error:
-                        if isinstance(error, DataNotFound):
-                            raise error
-                        return await self._output_format(
-                            self._result, error
-                        )  # pylint: disable=W0150
-                except (NoDataFound, DataNotFound) as err:
-                    raise DataNotFound(
-                        f'{self._qs.__name__!s}: {err}'
-                    ) from err
-                except (StatementError, EmptySentence) as err:
-                    raise QueryError(
-                        f"Query Error: {err}"
-                    ) from err
-                except Exception as ex:
-                    raise self.Error(
-                        "QS unhandler Error",
-                        exception=ex,
-                        code=500
-                    )
-                if result:
-                    self._result = result
-                    ## Saving into Cache:
-                    if result and self.is_cached is True:
-                        try:
-                            self.save_cache(checksum, result)
-                        except Exception:
-                            pass
-                    ## returning data:
+        if refresh is True and exists is True:
+            # we need to refresh the query and got from database
+            exists = False
+            error = None
+            result = []
+        # get this query from cache
+        if self.is_cached is True and exists is True:
+            # cache exists from this query
+            try:
+                result = await self.connection.get_from_cache(checksum)
+            except asyncio.TimeoutError:
+                self._logger.warning(
+                    'Querysource: Cache Miss due Timeout'
+                )
+            except (ProviderError, DriverError, RuntimeError) as err:
+                self._logger.warning(
+                    f'Querysource: Error getting from Cache: {err!s}'
+                )
+            if result:
+                self._logger.debug(
+                    f"Query {checksum} was cached!"
+                )
+                result = self._encoder.loads(result)
+                self._result = result
+                return await self._output_format(self._result, error)  # pylint: disable=W0150
+        # getting data directly from provider instead:
+        self._logger.debug('= Query from PROVIDER =')
+        async with self.semaphore:  # pylint: disable=E1701
+            try:
+                self._logger.debug(
+                    f':: Query: {self._query}'
+                )
+                result, error = await self._qs.query()
+                duration = self.epoch_duration(self._starttime)
+                if self._type == 'slug':
+                    slug = self._query
+                else:
+                    slug = 'Query'
+                # Duration of Query:
+                self._logger.debug(
+                    f"Slug: {slug}, duration: {duration}s"
+                )
+                payload = {
+                    "slug": slug,
+                    "duration": duration,
+                    "started": self._starttime,
+                    "ended": self._endtime
+                }
+                # send to influx event system:
+                asyncio.create_task(self.event_log(payload))
+                if error:
+                    if isinstance(error, DataNotFound):
+                        raise error
                     return await self._output_format(
                         self._result, error
                     )  # pylint: disable=W0150
-                else:
-                    raise DataNotFound(
-                        f'{self._qs.__name__!s} Empty Result'
-                    )
-        finally:
-            try:
-                await self.connection.dispose(
-                    self._conn
+            except (NoDataFound, DataNotFound) as err:
+                raise DataNotFound(
+                    f'{self._qs.__name__!s}: {err}'
+                ) from err
+            except (StatementError, EmptySentence) as err:
+                raise QueryError(
+                    f"Query Error: {err}"
+                ) from err
+            except Exception as ex:
+                raise self.Error(
+                    "QS unhandler Error",
+                    exception=ex,
+                    code=500
                 )
-            except AttributeError:
-                pass
+            finally:
+                try:
+                    await self.connection.dispose(
+                        self._conn
+                    )
+                except TypeError:
+                    pass
+            if result:
+                self._result = result
+                ## Saving into Cache:
+                if result and self.is_cached is True:
+                    try:
+                        self.save_cache(checksum, result)
+                    except Exception:
+                        pass
+                ## returning data:
+                return await self._output_format(
+                    self._result, error
+                )  # pylint: disable=W0150
+            else:
+                raise DataNotFound(
+                    f'{self._qs.__name__!s} Empty Result'
+                )
 
     async def close(self):
         if self._conn:

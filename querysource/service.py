@@ -3,11 +3,9 @@ from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
-import uvloop
 from aiohttp import web
 import aiohttp_cors
 from navconfig.logging import logging
-from asyncdb.exceptions import default_exception_handler
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
 # QS
@@ -30,9 +28,6 @@ except ImportError:
 
 from .connections import PROVIDERS, QueryConnection
 
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-uvloop.install()
-
 ## list of Variables:
 QS_VARIABLES = {}
 
@@ -54,17 +49,14 @@ class QuerySource(metaclass=Singleton):
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
-                return # already configured.
+                return  # already configured.
         if 'lazy' in kwargs:
             self.lazy = kwargs['lazy']
         else:
             self.lazy: bool = False
+        self._loop: asyncio.AbstractEventLoop = None
         if 'loop' in kwargs:
             self._loop = kwargs['loop']
-        else:
-            self._loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._loop.set_exception_handler(default_exception_handler)
         ### Connection Object:
         self.connection = QueryConnection(loop=self._loop, lazy=self.lazy)
         ### Loading all providers when started:
@@ -74,17 +66,17 @@ class QuerySource(metaclass=Singleton):
                 cls = self.connection.load_provider(name)
                 PROVIDERS[name] = cls
         for name, fn in QUERYSOURCE_FILTERS.items():
-            if func:=self.load_library(fn):
+            if func := self.load_library(fn):
                 QS_FILTERS[name] = func
         for name, fn in QUERYSOURCE_VARIABLES.items():
-            if func:=self.load_library(fn):
+            if func := self.load_library(fn):
                 QS_VARIABLES[name] = func
 
     def setup(self, app: web.Application) -> web.Application:
-        if isinstance(app, BaseApplication): # migrate to BaseApplication (on types)
+        if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
             self.app = app.get_app()
         elif isinstance(app, WebApp):
-            self.app = app # register the app into the Extension
+            self.app = app  # register the app into the Extension
         # register the Connection Object:
         self.connection.setup(app=app)
         ## Start the template System
@@ -113,7 +105,7 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
 
         ### Query Executor:
-        ds = QueryExecutor() # Support for Driver management.
+        ds = QueryExecutor()  # Support for Driver management.
         r = self.app.router.add_post('/api/v1/queries/test', ds.dry_run)
         routes.append(r)
         r = self.app.router.add_post('/api/v1/queries/run', ds.query)
@@ -131,8 +123,8 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
 
         # querying directly to drivers
-        #self.app.router.add_get('/api/v2/queries/{driver}/{method}', qs.query)
-        #self.app.router.add_post('/api/v2/queries/{driver}/{method}', qs.query)
+        # self.app.router.add_get('/api/v2/queries/{driver}/{method}', qs.query)
+        # self.app.router.add_post('/api/v2/queries/{driver}/{method}', qs.query)
         r = self.app.router.add_get('/api/v2/queries/{driver}/{source}/{attribute}', qs.query, allow_head=True)
         routes.append(r)
         r = self.app.router.add_post('/api/v2/queries/{driver}/{source}/{attribute}', qs.query)
@@ -216,6 +208,6 @@ class QuerySource(metaclass=Singleton):
             )
         return func
 
-
     async def qs_start(self, app: WebApp) -> None:
-        pass
+        if not self._loop:
+            self._loop = asyncio.get_event_loop()
