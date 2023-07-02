@@ -16,10 +16,9 @@ from .sql import SQLParser
 
 
 class SOQLParser(SQLParser):
-    _schema:str = None # default internal schema
-    _tablename:str = '{table}'
-    _base_sql:str = 'SELECT {fields} FROM {tablename} {filter} {offset} {limit}'
-
+    _schema: str = None  # default internal schema
+    _tablename: str = '{table}'
+    _base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {offset} {limit}'
 
     def __init__(
         self,

@@ -86,15 +86,13 @@ class QueryConnection(metaclass=Singleton):
         self._connection = None
         self._connected: bool = False
         self._dsmodule = None
+        self._loop: asyncio.AbstractEventLoop = None
         if 'lazy' in kwargs:
             self.lazy = kwargs['lazy']
         else:
             self.lazy: bool = False
         if 'loop' in kwargs:
             self._loop = kwargs['loop']
-        else:
-            self._loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self._loop)
         self.start_cache(QUERYSET_REDIS)
 
     def start_cache(self, dsn):
@@ -197,6 +195,8 @@ class QueryConnection(metaclass=Singleton):
          Create the connection to the database cache (redis).
          Also, reading the existing datasources in a list.
         """
+        if not self._loop:
+            self._loop = asyncio.get_event_loop()
         if self.lazy is True:
             logging.debug(':: Starting QuerySource in Lazy Mode ::')
             cPrint(':: Starting QuerySource in Lazy Mode ::', level='DEBUG')
@@ -228,7 +228,7 @@ class QueryConnection(metaclass=Singleton):
                 self._postgres = AsyncPool(
                     'pg',
                     dsn=default_dsn,
-                    loop=asyncio.get_event_loop(),
+                    loop=self._loop,
                     timeout=60,
                     **self.pgargs
                 )

@@ -23,13 +23,13 @@ class BaseProvider(ABC):
     _parser_options: dict = {}
 
     replacement: dict = {
-       "fields": "*",
-       "filterdate": "current_date",
-       "firstdate": "current_date",
-       "lastdate": "current_date",
-       "where_cond": "",
-       "and_cond": "",
-       "filter": ""
+        "fields": "*",
+        "filterdate": "current_date",
+        "firstdate": "current_date",
+        "lastdate": "current_date",
+        "where_cond": "",
+        "and_cond": "",
+        "filter": ""
     }
 
     def __init__(
@@ -38,7 +38,7 @@ class BaseProvider(ABC):
         query: Any = None,
         qstype: str = '',
         connection: Callable = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -46,7 +46,7 @@ class BaseProvider(ABC):
         self.__name__ = self.__class__.__name__
         self._logger = logging.getLogger(f'QS.{self.__name__}')
         # Provider Object from Table
-        self._definition = definition # definition Object
+        self._definition = definition  # definition Object
         self._conditions: dict = conditions
         self._connection = connection
 
@@ -59,7 +59,7 @@ class BaseProvider(ABC):
                 self._query = definition.query_raw
             except AttributeError:
                 pass
-        else: # is a raw query
+        else:  # is a raw query
             self._query: str = query
         ## Attributes of Query:
         self._columns: list = []
@@ -88,13 +88,17 @@ class BaseProvider(ABC):
             self._loop = kwargs['loop']
             del kwargs['loop']
         else:
-            self._loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self._loop)
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError as ex:
+                raise RuntimeError(
+                    f"There is no Running Loop on Query Provider: {ex}"
+                ) from ex
         ## Parser Logic:
         self._parser: Callable = None
         if self.__parser__:
             try:
-                self._parser = self.__parser__( # pylint: disable=E1102
+                self._parser = self.__parser__(  # pylint: disable=E1102
                     query=self._query,
                     options=definition,
                     conditions=conditions,
@@ -175,8 +179,8 @@ class BaseProvider(ABC):
         """Closing the Provider.
         """
         try:
-            await self._qs.close() # pylint: disable=E0203
-        except Exception: # pylint: disable=W0703
+            await self._qs.close()  # pylint: disable=E0203
+        except Exception:  # pylint: disable=W0703
             pass
         self._qs = None
 
