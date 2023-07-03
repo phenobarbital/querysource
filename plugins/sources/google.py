@@ -4,7 +4,7 @@ import time
 import copy
 from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.exceptions import DriverError
-from .rest import restSource
+from querysource.providers.rest import restSource
 
 
 class google(restSource):
