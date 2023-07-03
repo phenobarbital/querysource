@@ -28,7 +28,7 @@ from querysource.exceptions import (
     DataNotFound,
     QueryException
 )
-from settings.settings import CACHE_URL
+from querysource.conf import CACHE_URL
 from .abstract import baseSource
 
 if sys.version_info < (3, 10):
