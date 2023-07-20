@@ -290,9 +290,9 @@ class httpSource(baseSource):
         if self.use_proxies is True:
             proxy = self._proxies.pop(0)
             proxies = {
-              "http": proxy,
-              "https": proxy,
-              "ftp": proxy
+                "http": proxy,
+                "https": proxy,
+                "ftp": proxy
             }
         if self.auth:
             if 'apikey' in self.auth:
@@ -474,8 +474,11 @@ class httpSource(baseSource):
     async def query(self, data: dict = None):
         """Run a query on the Data Provider.
         """
-        if self.use_proxies is True:
-            self._proxies = await self.get_proxies()
+        try:
+            if self.use_proxies is True:
+                self._proxies = await self.get_proxies()
+        except AttributeError:
+            pass
         # credentials calculation
         self.processing_credentials()
         # create URL

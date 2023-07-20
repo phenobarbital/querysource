@@ -1,10 +1,10 @@
-import logging
-import requests
-import rapidjson
+from typing import Any
+from urllib.parse import urlencode
 import aiohttp
-import json
-from .rest import restSource
-from querysource.exceptions import *
+from navconfig.logging import logging
+from querysource.libs.json import json_encoder, json_decoder
+from querysource.exceptions import DataNotFound, ConfigError
+from querysource.providers.sources import restSource
 
 
 class icims(restSource):
@@ -14,7 +14,7 @@ class icims(restSource):
     """
 
     url: str = 'https://api.icims.com/'
-    original_url: str = 'https://api.icims.com/' # Keep original url 
+    original_url: str = 'https://api.icims.com/'  # Keep original url
     login_url = 'https://login.icims.com/oauth/token'
     stream_url: str = 'https://data-transfer-assembler.production.env.icims.tools/datastream/v2/streams/{customer_id}/'
     _token: str = None
@@ -24,75 +24,99 @@ class icims(restSource):
     _saved_token: str = 'navigator_icims_token'
     _legacy_call: bool = False
     _is_test: bool = False
+    use_redis: bool = True
 
-    def __init__(self, definition=None, params: dict = {}, **kwargs):
-        super(icims, self).__init__(definition, params, **kwargs)
+    def __init__(
+        self,
+        definition: dict = None,
+        conditions: dict = None,
+        request: Any = None, **kwargs
+    ):
+        super(icims, self).__init__(definition, conditions, request, **kwargs)
+
+        args = self._args
+        self._conditions = conditions
+        self.customer_id = conditions.get('customer_id', None)
+
+        if not self.customer_id:
+            self.customer_id = self._env.get('ICIMS_CUSTOMER_ID')
 
         try:
             self.type = definition.params['type']
         except (ValueError, AttributeError):
             self.type = None
 
-        if 'type' in params:
-            self.type = params['type']
-            del params['type']
+        if 'type' in kwargs:
+            self.type = kwargs['type']
+            del kwargs['type']
+
+        if 'type' in conditions:
+            self.type = conditions['type']
+            del conditions['type']
 
         # Credentials
-        if 'api_key' in self._params:
-            self.client_id = self._params['api_key']
-            del self._params['api_key']
-        else:
-            self.client_id = self._env.get('ICIMS_API_KEY')
-            if not self.client_id:
-                try:
-                    self.client_id = definition.params['api_key']
-                except (ValueError, AttributeError):
-                    raise ValueError("ICIMS: Missing API Key")
-
-        if 'api_secret' in self._params:
-            self.client_secret = self._params['api_secret']
-            del self._params['api_secret']
-        else:
-            self.client_secret = self._env.get('ICIMS_API_SECRET')
-            if not self.client_secret:
-                try:
-                    self.client_secret = definition.params['api_secret']
-                except (ValueError, AttributeError):
-                    raise ValueError("ICIMS: Missing API Secret")
-
-        if 'api_username' in self._params:
-            self.api_username = self._params['api_username']
-            del self._params['api_username']
+        # Username and password:
+        if 'api_username' in conditions:
+            self.api_username = conditions['api_username']
+            del conditions['api_username']
         else:
             self.api_username = self._env.get('ICIMS_API_USERNAME')
             if not self.api_username:
                 try:
                     self.api_username = definition.params['api_username']
-                except (ValueError, AttributeError):
-                    raise ValueError("ICIMS: Missing API Username")
+                except (ValueError, AttributeError) as exc:
+                    raise ValueError(
+                        "ICIMS: Missing API Username"
+                    ) from exc
 
-        if 'api_password' in self._params:
-            self.api_password = self._params['api_password']
-            del self._params['api_password']
+        if 'api_password' in conditions:
+            self.api_password = conditions['api_password']
+            del conditions['api_password']
         else:
             self.api_password = self._env.get('ICIMS_API_PASSWORD')
             if not self.api_password:
                 try:
                     self.api_password = definition.params['api_password']
                 except (ValueError, AttributeError):
-                    raise ValueError("ICIMS: Missing API Password")
+                    pass
+
+        if 'api_key' in conditions:
+            self.client_id = conditions['api_key']
+            del conditions['api_key']
+        else:
+            self.client_id = self._env.get('ICIMS_API_KEY')
+            if not self.client_id:
+                try:
+                    self.client_id = definition.params['api_key']
+                except (ValueError, AttributeError) as exc:
+                    raise ValueError(
+                        "ICIMS: Missing API Key"
+                    ) from exc
+
+        if 'api_secret' in conditions:
+            self.client_secret = conditions['api_secret']
+            del self._conditions['api_secret']
+        else:
+            self.client_secret = self._env.get('ICIMS_API_SECRET')
+            if not self.client_secret:
+                try:
+                    self.client_secret = definition.params['api_secret']
+                except (ValueError, AttributeError) as exc:
+                    raise ValueError(
+                        "ICIMS: Missing API Secret"
+                    ) from exc
 
         self.original_url = self.url
-        
+
         # check if the call is legacy
-        if 'legacy' in self._params and self._params['legacy'] is True:
+        if 'legacy' in conditions and conditions['legacy'] is True:
             self.setup_legacy_request()
-            del self._params['legacy']
+            del conditions['legacy']
 
         # check if the request is a test (To only get limited records)
-        if 'test' in self._params and self._params['test'] is True:
+        if 'test' in conditions and conditions['test'] is True:
             self._is_test = True
-            del self._params['test']
+            del conditions['test']
 
         # if types
         # if self.type == 'people':
@@ -100,9 +124,16 @@ class icims(restSource):
         # elif self.type == 'person':
         #     self.url = self.url + 'customers/{customer_id}/people/{person_id}'
 
-        # set parameters
-        self._args = params
+        if self.type == 'forms_list':
+            self.setup_legacy_request()
+            self.url = self.url + 'customers/{customer_id}/forms/list'
 
+        if self.type == 'forms':
+            self.setup_legacy_request()
+            self.url = self.url + 'customers/{customer_id}/forms'
+
+        # set parameters
+        self._args = args
 
     async def get_token(self):
         result = None
@@ -116,7 +147,7 @@ class icims(restSource):
         try:
             result = await self._redis.get(self._saved_token)
             if result:
-                data = rapidjson.loads(result)
+                data = json_decoder(result)
                 logging.debug(':: ICIMS: Using credentials in Cache')
                 self._token = data['access_token']
                 self._token_type = data['token_type']
@@ -166,33 +197,35 @@ class icims(restSource):
                         print(e)
                         b = await response.content.read()
                         result = b.decode("utf-8")
-                        raise DriverError(f'Error: {result}')
+                        raise ConfigError(
+                            f'Error: {result}'
+                        ) from e
                 else:
-                    raise DriverError(f'Error: {response.text()}')
+                    raise ConfigError(f'Error: {response.text()}')
 
     def setup_legacy_request(self):
         self.auth_type = 'basic'
         self._user = self.api_username
         self._pwd = self.api_password
-        self.auth = True
+        self.auth = {}
         self._legacy_call = True
 
     def setup_bearer_token_request(self, JWT):
         # pass
         self.auth_type = 'api_key'
-        self.auth = {'Authorization' : 'Bearer ' + JWT}
+        self.auth = {'Authorization': 'Bearer ' + JWT}
 
     async def people(self):
         """people
-        
+
         Get all the people for a given customer.
         """
         self.url = self.url + 'customers/{customer_id}/search/people'
         self.type = 'people'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
@@ -205,21 +238,21 @@ class icims(restSource):
 
     async def person(self):
         """person
-        
+
         Get a single person by id for a given customer.
         """
         self.url = self.url + 'customers/{customer_id}/people/{person_id}'
         self.type = 'person'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
         try:
-            self._args['person_id'] = self._params['person_id']
-            del self._params['person_id']
+            self._args['person_id'] = self._conditions['person_id']
+            del self._conditions['person_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Person ID")
 
@@ -229,24 +262,49 @@ class icims(restSource):
         except Exception as err:
             logging.exception(err)
             raise
-    
+
+    async def forms_list(self):
+        """forms.
+
+        Get a list of Forms.
+        """
+        self.url = self.url + 'customers/{customer_id}/forms/list'
+        self.type = 'forms_list'
+        self._legacy_call = True
+        self.method = 'get'
+        try:
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
+        except (KeyError, AttributeError) as exc:
+            self._args['customer_id'] = self.customer_id
+            if not self._args['customer_id']:
+                raise ValueError(
+                    "ICIMS: Missing Customer ID"
+                ) from exc
+        try:
+            self._result = await self.query()
+            return self._result
+        except Exception as err:
+            logging.exception(err)
+            raise
+
     async def jobs(self):
         """jobs
-        
+
         Get a all jobs for a given customer in a portal.
         """
         self.url = self.url + 'customers/{customer_id}/search/portals/{portal_id}'
         self.type = 'jobs'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
         try:
-            self._args['portal_id'] = self._params['portal_id']
-            del self._params['portal_id']
+            self._args['portal_id'] = self._conditions['portal_id']
+            del self._conditions['portal_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Portal ID")
 
@@ -256,30 +314,30 @@ class icims(restSource):
         except Exception as err:
             logging.exception(err)
             raise
-    
+
     async def job(self):
         """jobs
-        
+
         Get a job by id for a given customer in a portal.
         """
         self.url = self.url + 'customers/{customer_id}/portals/{portal_id}/{job_id}'
         self.type = 'job'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
         try:
-            self._args['portal_id'] = self._params['portal_id']
-            del self._params['portal_id']
+            self._args['portal_id'] = self._conditions['portal_id']
+            del self._conditions['portal_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Portal ID")
 
         try:
-            self._args['job_id'] = self._params['job_id']
-            del self._params['job_id']
+            self._args['job_id'] = self._conditions['job_id']
+            del self._conditions['job_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Job ID")
 
@@ -292,21 +350,21 @@ class icims(restSource):
 
     async def jobs_filters(self):
         """jobs filters
-        
+
         Get a all jobs filters for a given customer in a portal.
         """
         self.url = self.url + 'customers/{customer_id}/search/portals/{portal_id}/filters'
         self.type = 'jobs_filters'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
         try:
-            self._args['portal_id'] = self._params['portal_id']
-            del self._params['portal_id']
+            self._args['portal_id'] = self._conditions['portal_id']
+            del self._conditions['portal_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Portal ID")
 
@@ -319,7 +377,7 @@ class icims(restSource):
 
     async def get_next_result(self, result, resource):
         """get next result
-        
+
         Get the next pages of a given resource.
         """
         self.headers['Content-Type'] = 'application/json'
@@ -328,7 +386,7 @@ class icims(restSource):
         limit = 1
         current = 0
         while next is True and (current < limit or self._is_test is not True):
-            current+= 1
+            current += 1
             print('Fetching next result, page:', current)
             last_id = r[-1]['id']
             data = {
@@ -342,7 +400,7 @@ class icims(restSource):
                     },
                 ]
             }
-            data = json.dumps(data)
+            data = json_encoder(data)
             try:
                 res, error = await self.request(self.url, method='POST', data=data)
                 if error:
@@ -362,7 +420,7 @@ class icims(restSource):
 
     async def get_next_result_v2(self, result):
         """get next result
-        
+
         Get the next pages of a given stream data subscription.
         """
         r = result['events']
@@ -370,13 +428,13 @@ class icims(restSource):
         limit = 1
         current = 0
         while next is True and (current < limit or self._is_test is not True):
-            current+= 1
+            current += 1
             print('Fetching next result, page:', current)
             if 'lastEvaluatedKey' in result and result['lastEvaluatedKey'] != '':
                 last_id = result['lastEvaluatedKey']
-            else: break
-
-            self._params['exclusiveStartKey'] = last_id
+            else:
+                break
+            self._conditions['exclusiveStartKey'] = last_id
             try:
                 res, error = await self.request(self.url)
                 if error:
@@ -391,13 +449,13 @@ class icims(restSource):
             except Exception as err:
                 print(err)
                 next = False
-        if 'exclusiveStartKey' in self._params:
-            del self._params['exclusiveStartKey']
+        if 'exclusiveStartKey' in self._conditions:
+            del self._conditions['exclusiveStartKey']
         return r
 
     async def process_result_list(self, result, resource, resource_url):
         """process result list
-        
+
         Process results list and get each item details.
         """
         r = list()
@@ -425,14 +483,14 @@ class icims(restSource):
             except Exception as err:
                 print(err)
                 next = False
-            current+= 1
+            current += 1
         return r
 
     # Stream API
 
     async def stream_ids(self):
         """stream ids
-        
+
         Get the stream ids.
         """
 
@@ -442,48 +500,48 @@ class icims(restSource):
         try:
             self._result = await self.query()
             return self._result
-        except Exception as err:    
+        except Exception as err:
             logging.exception(err)
             raise
 
     async def stream_subscriptions(self):
         """stream subscriptions
-        
+
         Get the subscription stream ids for a given customer.
         """
         self.url = self.stream_url
         self.url = self.url + 'subscriptions'
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
         try:
             self._result = await self.query()
             return self._result
-        except Exception as err:    
+        except Exception as err:
             logging.exception(err)
             raise
 
     async def stream_data(self):
         """stream data
-        
+
         Get a subscription stream data by subscription id.
         """
         self.url = self.stream_url
         self.url = self.url + 'subscriptions/{subscription_id}/events'
 
         try:
-            self._args['subscription_id'] = self._params['subscription_id']
-            del self._params['subscription_id']
+            self._args['subscription_id'] = self._conditions['subscription_id']
+            del self._conditions['subscription_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Subscription ID")
 
         try:
-            self._args['customer_id'] = self._params['customer_id']
-            del self._params['customer_id']
+            self._args['customer_id'] = self._conditions['customer_id']
+            del self._conditions['customer_id']
         except (KeyError, AttributeError):
             raise ValueError("ICIMS: Missing Customer ID")
 
@@ -494,34 +552,44 @@ class icims(restSource):
             logging.exception(err)
             raise
 
-    async def query(self):
+    async def query(self, url: str = None, params: dict = {}):
         """Query.
 
         Basic Query of ICIMS API.
         """
         self._result = None
-        # initial connection
-        await self.prepare_connection()
+        if url:
+            self.url = self.build_url(url, queryparams=urlencode(params))
         # get the credentials
         try:
             # TODO Refactor this to call the token only when its stream api
             if self._legacy_call is False:
                 jwt = await self.get_token()
                 self.setup_bearer_token_request(jwt)
+            else:
+                self.setup_legacy_request()
         except Exception as err:
             print(err)
-            logging.error(f'ICIMS: Error getting token: {err!s}')
+            logging.error(
+                f'ICIMS: Error getting token: {err!s}'
+            )
+            raise
         try:
             result = await super().query()
             if self.type == 'jobs':
                 self._result = await self.get_next_result(result, 'job')
-                # self._result = await self.process_result_list(self._result, 'job', 'customers/{customer_id}/portals/{portal_id}/{job_id}')
             if self.type == 'people':
                 self._result = await self.get_next_result(result, 'person')
-                # self._result = await self.process_result_list(self._result, 'person', 'customers/{customer_id}/people/{person_id}')
+            if self.type in ('forms'):
+                self._result = await self.get_next_result(result, 'forms')
             if self.type == 'stream_data':
                 self._result = await self.get_next_result_v2(result)
-
+            elif self.type == 'forms_list':
+                self._result = result
+            if not self._result:
+                raise DataNotFound(
+                    "ICIMS: No ICIMS data was found."
+                )
             return self._result
         except Exception as err:
             print(err)

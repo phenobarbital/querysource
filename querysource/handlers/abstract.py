@@ -12,6 +12,9 @@ from querysource.outputs.writers import mime_formats
 from querysource.exceptions import (
     QueryException
 )
+from querysource.utils.events import enable_uvloop
+
+enable_uvloop()
 
 class AbstractHandler(BaseHandler):
 
