@@ -34,9 +34,12 @@ from querysource.connections import DATASOURCES
 from querysource.events import LogEvent
 from .outputs import OutputFactory
 from .models import Query, QueryResult, supported_drivers
+from ..utils.events import enable_uvloop
+
 
 vs = logging.getLogger('visions.backends')
 vs.setLevel(logging.WARNING)
+
 
 matlog = logging.getLogger('matplotlib')
 matlog.setLevel(logging.WARNING)
@@ -58,6 +61,7 @@ class BaseQuery(ABC):
         """
         Initialize the Query Object
         """
+        enable_uvloop()
         self.slug = slug
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None

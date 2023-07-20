@@ -157,7 +157,7 @@ class shoppertrack(restSource):
         """
         self._result = None
         # initial connection
-        await self.prepare_connection()
+        # await self.prepare_connection()
         # create URL
         self.url = self.build_url(
             self.url,

@@ -16,13 +16,13 @@ class mobileinsight(restSource):
       Vision mobileinsight
         Get all information from Vision API
     """
-    base_url:str = 'http://{api_url}/api/organizations/{orgid}/'
+    base_url: str = 'http://{api_url}/api/organizations/{orgid}/'
     login_url = 'https://{api_url}/api/authenticate'
     token_type: str = 'Bearer'
     _saved_token: str = 'navigator_mobileinsight_token'
     auth_type: str = 'api_key'
     auth: bool = True
-    method:str = 'GET'
+    method: str = 'GET'
     timeout: int = 60
     use_redis: bool = True
 
