@@ -136,7 +136,7 @@ setup(
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.35',
-        'aiocsv==1.2.3',
+        'aiocsv==1.2.4',
         'xlsxwriter==3.1.2',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
