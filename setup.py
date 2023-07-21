@@ -130,7 +130,7 @@ setup(
         "asyncio==3.4.3",
         "uvloop==0.17.0",
         'LivePopularTimes==1.3',
-        'hubspot-api-client==7.5.0',
+        'hubspot-api-client==8.0.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.16.2',
         'google-api-python-client==2.86.0',
