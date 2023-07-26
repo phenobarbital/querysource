@@ -38,6 +38,9 @@ class TableOutput:
     def constraints(self):
         return self._constraint
 
+    def get_schema(self):
+        return self._schema
+
     async def table_output(self, elem, datasource: pd.DataFrame):
         # get info
         options = {

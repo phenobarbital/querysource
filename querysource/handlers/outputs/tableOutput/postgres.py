@@ -1,9 +1,8 @@
 from collections.abc import Callable
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKeyConstraint
-from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy import MetaData, Table
+from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.inspection import inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
 from navconfig.logging import logging
@@ -74,8 +73,8 @@ class PgOutput(object):
         metadata.bind = self._engine
         constraint = self._parent.constraints()
         options = {
-            'schema': self._parent.schema,
-            'autoload': True
+            'schema': self._parent.get_schema(),
+            "autoload_with": self._engine
         }
         tbl = Table(tablename, metadata, *args, **options)
         # get list of fields making up primary key
