@@ -69,17 +69,19 @@ class restSource(httpSource):
 
     async def process_request(self, future):
         error = None
+        loop = asyncio.get_running_loop()
+        asyncio.set_event_loop(loop)
         try:
             for response in await asyncio.gather(*future):
                 result = None
                 try:
                     result = response.json()
                 except (ValueError) as e:
-                    error = e ### try using data from result
+                    error = e  # try using data from result
                     try:
                         result = self._encoder.loads(response.content.decode("utf-8", "replace"))
                     except orjson.JSONDecodeError as ex:
-                        error = ex # is not a valid response
+                        error = ex  # is not a valid response
                         # self.logger.exception(ex)
                         # is not an json, try if is a html
                         try:

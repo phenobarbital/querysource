@@ -386,8 +386,9 @@ class httpSource(baseSource):
                 proxies=proxies
             )
         # making request
+        loop = asyncio.get_event_loop()
         future = [
-            self._loop.run_in_executor(executor, my_request, url)
+            loop.run_in_executor(executor, my_request, url)
         ]
         try:
             result, error = await self.process_request(future)
@@ -413,10 +414,16 @@ class httpSource(baseSource):
 
     async def process_request(self, future):
         try:
+            loop = asyncio.get_running_loop()
+            asyncio.set_event_loop(loop)
             error = None
             for response in await asyncio.gather(*future):
                 # getting the result, based on the Accept logic
-                if self.accept in ('application/xhtml+xml', 'text/html', "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"):
+                if self.accept in (
+                    'application/xhtml+xml',
+                    'text/html',
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+                ):
                     try:
                         # html parser for lxml
                         self._parser = html.fromstring(response.text)
@@ -432,7 +439,7 @@ class httpSource(baseSource):
                         error = e
                 elif self.accept == 'application/json':
                     try:
-                        result = self._encoder.loads(response.text) # instead using .json method
+                        result = self._encoder.loads(response.text)  # instead using .json method
                         # result = response.json()
                     except (AttributeError, ValueError) as e:
                         logging.error(e)
@@ -461,7 +468,7 @@ class httpSource(baseSource):
             return ([], err)
         except (
             requests.exceptions.RequestException,
-            ) as e:
+        ) as e:
             raise DriverError(
                 f"HTTP Connection Error: {e!r}"
             ) from e
