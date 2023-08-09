@@ -15,6 +15,6 @@ pytest-xdist==3.2.0
 pytest-assume==2.4.3
 ruff==0.0.262
 sphinx==7.0.1
-tox==4.6.3
+tox==4.7.0
 sphinx==7.0.1
-tox==4.6.3
+tox==4.7.0
