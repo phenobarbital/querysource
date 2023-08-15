@@ -207,7 +207,7 @@ class QueryConnection(metaclass=Singleton):
                     'pg',
                     dsn=asyncpg_url,
                     loop=self._loop,
-                    timeout=POSTGRES_TIMEOUT,
+                    timeout=int(POSTGRES_TIMEOUT),
                     **self.pgargs
                 )
                 await self._connection.connection()
@@ -229,7 +229,7 @@ class QueryConnection(metaclass=Singleton):
                     'pg',
                     dsn=default_dsn,
                     loop=self._loop,
-                    timeout=60,
+                    timeout=3600,
                     **self.pgargs
                 )
                 await self._postgres.connect()

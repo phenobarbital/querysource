@@ -25,6 +25,7 @@ from querysource.exceptions import (
 from querysource.providers import BaseProvider  # renamed to Providers.
 from querysource.types.mutables import ClassDict
 from querysource.types.typedefs import AttrDict
+from querysource.utils.functions import check_empty
 from .abstract import BaseQuery
 
 
@@ -396,22 +397,22 @@ class QS(BaseQuery):
                     )
                 except TypeError:
                     pass
-            if result:
-                self._result = result
-                ## Saving into Cache:
-                if result and self.is_cached is True:
-                    try:
-                        self.save_cache(checksum, result)
-                    except Exception:
-                        pass
-                ## returning data:
-                return await self._output_format(
-                    self._result, error
-                )  # pylint: disable=W0150
-            else:
+            if check_empty(result):
                 raise DataNotFound(
                     f'{self._qs.__name__!s} Empty Result'
                 )
+            self._result = result
+            ## Saving into Cache:
+            if self.is_cached is True:
+                try:
+                    self.save_cache(checksum, result)
+                except Exception:
+                    pass
+            ## returning data:
+            return await self._output_format(
+                self._result, error
+            )  # pylint: disable=W0150
+
 
     async def close(self):
         if self._conn:

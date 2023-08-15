@@ -23,6 +23,7 @@ from navconfig.logging import logging
 from proxylists.proxies import ProxyDB
 from proxylists import check_address
 from querysource.models import QueryModel
+from querysource.utils.functions import check_empty
 from querysource.exceptions import (
     DriverError,
     DataNotFound,
@@ -73,11 +74,11 @@ class httpSource(baseSource):
     language: list = ['en-GB', 'en-US']
     method: str = 'get'
     headers = {
-        "Accept-Encoding":"gzip, deflate",
+        "Accept-Encoding": "gzip, deflate",
         "DNT": "1",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
-        'cache-control':'max-age=0',
+        'cache-control': 'max-age=0',
     }
     use_redis: bool = False
 
@@ -86,7 +87,7 @@ class httpSource(baseSource):
             *args: P.args,
             slug: str = None,
             query: Any = None,
-            qstype: str = '', # migrate to Enum
+            qstype: str = '',  # migrate to Enum
             definition: Union[QueryModel, dict] = None,
             conditions: dict = None,
             request: web.Request = None,
@@ -224,7 +225,6 @@ class httpSource(baseSource):
                 p.append(address)
         return p
 
-
     async def refresh_proxies(self):
         if self.use_proxies is True:
             self._proxies = await self.get_proxies()
@@ -277,7 +277,14 @@ class httpSource(baseSource):
                 ) as response:
                     return response
 
-    async def request(self, url, method: str ='get', data: dict = None):
+    async def request(
+        self,
+        url,
+        method: str = 'get',
+        data: dict = None,
+        cookies: dict = None,
+        headers: dict = None
+    ):
         """
         request
             connect to an http source
@@ -294,6 +301,8 @@ class httpSource(baseSource):
                 "https": proxy,
                 "ftp": proxy
             }
+        if headers is not None and isinstance(headers, dict):
+            self._headers = {**self._headers, **headers}
         if self.auth:
             if 'apikey' in self.auth:
                 self._headers['Authorization'] = f"{self.token_type} {self.auth['apikey']}"
@@ -322,7 +331,8 @@ class httpSource(baseSource):
                 auth=auth,
                 params=data,
                 timeout=self.timeout,
-                proxies=proxies
+                proxies=proxies,
+                cookies=cookies
             )
         elif method == 'post':
             if self.data_format == 'json':
@@ -333,7 +343,8 @@ class httpSource(baseSource):
                     verify=False,
                     auth=auth,
                     timeout=self.timeout,
-                    proxies=proxies
+                    proxies=proxies,
+                    cookies=cookies
                 )
             else:
                 my_request = partial(
@@ -383,7 +394,8 @@ class httpSource(baseSource):
                 verify=False,
                 auth=auth,
                 timeout=self.timeout,
-                proxies=proxies
+                proxies=proxies,
+                cookies=cookies
             )
         # making request
         loop = asyncio.get_event_loop()
@@ -395,6 +407,8 @@ class httpSource(baseSource):
             if error:
                 if isinstance(error, BaseException):
                     raise error
+                elif isinstance(error, bs):
+                    return (result, error)
                 else:
                     raise DriverError(str(error))
             ## saving last execution parameters:
@@ -437,6 +451,8 @@ class httpSource(baseSource):
                         self._parser = etree.fromstring(response.text)
                     except (AttributeError, ValueError) as e:
                         error = e
+                elif self.accept in ('text/plain', 'text/csv'):
+                    result = response.text
                 elif self.accept == 'application/json':
                     try:
                         result = self._encoder.loads(response.text)  # instead using .json method
@@ -498,7 +514,7 @@ class httpSource(baseSource):
             result, error = await self.request(
                 self.url, self.method, data=data
             )
-            if not result:
+            if check_empty(result):
                 raise DataNotFound(
                     message="No Data was found"
                 )

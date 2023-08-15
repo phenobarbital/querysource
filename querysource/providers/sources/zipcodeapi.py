@@ -55,7 +55,6 @@ class zipcodeapi(restSource):
         self._args = self._conditions.copy()
         self._conditions = {}
 
-
     async def units(self, zipcode: str = None):
         """units.
 
