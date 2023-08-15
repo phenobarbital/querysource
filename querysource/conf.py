@@ -206,6 +206,7 @@ GOOGLE_SERVICE_FILE = config.get('GA_SERVICE_ACCOUNT_NAME', fallback="ga-api-a78
 GOOGLE_SERVICE_PATH = config.get('GA_SERVICE_PATH', fallback=BASE_DIR.joinpath("env"))
 
 ### SalesForce:
+SALESFORCE_COMPANY = config.get('SALESFORCE_COMPANY')
 SALESFORCE_INSTANCE = config.get('SALESFORCE_INSTANCE')
 SALESFORCE_TOKEN = config.get('SALESFORCE_TOKEN')
 SALESFORCE_DOMAIN = config.get('SALESFORCE_DOMAIN', fallback="test")
