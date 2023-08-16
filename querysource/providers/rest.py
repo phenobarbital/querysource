@@ -3,6 +3,7 @@ from importlib import import_module
 from aiohttp import web
 from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.models import QueryModel
+from querysource.utils.functions import check_empty
 from querysource.exceptions import (
     DataNotFound,
     DriverError,
@@ -106,7 +107,7 @@ class restProvider(httpProvider):
             ) from ex
         try:
             result = await query()
-            if not result:
+            if check_empty(result):
                 raise DataNotFound('No Data was found')
             return result
         except DataNotFound:
@@ -132,14 +133,13 @@ class restProvider(httpProvider):
             raise DriverError(
                 f"Querysource REST Error: {err}"
             ) from err
-        if result:
-            self._dict = result
-            self._result = result
-            return [result, error]
-        else:
+        if check_empty(result):
             raise DataNotFound(
                 message=f"{self.dialect}: No Data was Found"
             )
+        self._dict = result
+        self._result = result
+        return [result, error]
 
     async def dry_run(self):
         return await super().dry_run()

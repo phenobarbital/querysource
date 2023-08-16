@@ -9,6 +9,7 @@ from aiohttp import web
 from navconfig.logging import logging
 from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.models import QueryModel
+from querysource.utils.functions import check_empty
 from querysource.exceptions import (
     DataNotFound,
     QueryException,
@@ -94,7 +95,7 @@ class httpProvider(BaseProvider):
         # refresh proxies
         await self._source.refresh_proxies()
 
-    async def result(self): # pylint: disable=W0236
+    async def result(self):  # pylint: disable=W0236
         """result.
            get the result from the Provider Source.
         """
@@ -113,8 +114,10 @@ class httpProvider(BaseProvider):
             ) from ex
         try:
             result = await query()
-            if not result:
-                raise NoDataFound
+            if check_empty(result):
+                raise NoDataFound(
+                    "Data no was found"
+                )
             return result
         except (RuntimeError, ProviderError) as err:
             raise DriverError(

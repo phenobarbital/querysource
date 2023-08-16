@@ -70,12 +70,12 @@ class QueryConnection(metaclass=Singleton):
             "max_parallel_workers": "512",
             "jit": "on",
             "statement_timeout": f"{DB_STATEMENT_TIMEOUT}",
-            "idle_session_timeout": f"{DB_SESSION_TIMEOUT}",
             "effective_cache_size": "2147483647",
             "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
             "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
+            "idle_session_timeout": f"{DB_SESSION_TIMEOUT}"
         },
-        "max_inactive_timeout": 600
+        "max_inactive_timeout": 3600
     }
 
     def __init__(self, **kwargs):
@@ -207,7 +207,7 @@ class QueryConnection(metaclass=Singleton):
                     'pg',
                     dsn=asyncpg_url,
                     loop=self._loop,
-                    timeout=POSTGRES_TIMEOUT,
+                    timeout=int(POSTGRES_TIMEOUT),
                     **self.pgargs
                 )
                 await self._connection.connection()
@@ -222,14 +222,14 @@ class QueryConnection(metaclass=Singleton):
             # pgpool (postgres)
             self.pgargs['min_size'] = POSTGRES_MIN_CONNECTIONS
             self.pgargs['max_clients'] = POSTGRES_MAX_CONNECTIONS
-            self.pgargs['statement_timeout'] = "60"
-            self.pgargs['tcp_keepalives_idle'] = "60s"
+            logging.debug(' :: Starting PostgreSQL with parameters ::')
+            logging.debug(f"{self.pgargs!r}")
             try:
                 self._postgres = AsyncPool(
                     'pg',
                     dsn=default_dsn,
                     loop=self._loop,
-                    timeout=60,
+                    timeout=3600,
                     **self.pgargs
                 )
                 await self._postgres.connect()

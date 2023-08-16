@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup as bs
 import requests
 import urllib3
 from querysource.libs.json import json_decoder, json_encoder
-from querysource.exceptions import DriverError
+from querysource.exceptions import DriverError, ParserError
 from .http import httpSource
 
 if sys.version_info < (3, 10):
@@ -52,7 +52,7 @@ class restSource(httpSource):
             loop=loop,
             **kwargs
         )
-        if not self._conditions: # pylint: disable=E0203
+        if not self._conditions:  # pylint: disable=E0203
             self._conditions = {}
         self._conditions = {**self._conditions, **kwargs}
         self.__post_init__(
@@ -61,7 +61,7 @@ class restSource(httpSource):
             request=request,
             **kwargs
         )
-        if 'source' in self._conditions: # removing usused call to driver
+        if 'source' in self._conditions:  # removing usused call to driver
             del self._conditions['source']
 
     def __post_init__(self, definition: dict, conditions: dict, request: Any = None, **kwargs) -> None:
@@ -69,27 +69,35 @@ class restSource(httpSource):
 
     async def process_request(self, future):
         error = None
+        loop = asyncio.get_running_loop()
+        asyncio.set_event_loop(loop)
         try:
             for response in await asyncio.gather(*future):
                 result = None
-                try:
-                    result = response.json()
-                except (ValueError) as e:
-                    error = e ### try using data from result
+                if self.accept in ('text/plain', 'text/csv'):
                     try:
-                        result = self._encoder.loads(response.content.decode("utf-8", "replace"))
-                    except orjson.JSONDecodeError as ex:
-                        error = ex # is not a valid response
-                        # self.logger.exception(ex)
-                        # is not an json, try if is a html
+                        result = response.content.decode('utf-8')
+                    except (ValueError) as e:
+                        error = e
+                else:
+                    try:
+                        result = response.json()
+                    except (ValueError) as e:
+                        error = e  # try using data from result
                         try:
-                            sp = bs(response.text, 'html.parser')
-                            return ([], sp)
-                        except Exception as err:
-                            logging.exception(err)
-                            raise DriverError(
-                                f"REST: Cannot parse Response Data {err!r}", stacktrace=result
-                            ) from ex
+                            result = self._encoder.loads(response.content.decode("utf-8", "replace"))
+                        except (orjson.JSONDecodeError, ParserError) as ex:
+                            error = ex  # is not a valid response
+                            # self.logger.exception(ex)
+                            # is not an json, try if is a html
+                            try:
+                                sp = bs(response.text, 'html.parser')
+                                return ([], sp)
+                            except Exception as err:
+                                logging.exception(err)
+                                raise DriverError(
+                                    f"REST: Cannot parse Response Data {err!r}", stacktrace=result
+                                ) from ex
             return (result, error)
         except (requests.exceptions.ProxyError) as err:
             raise DriverError(
@@ -102,8 +110,8 @@ class restSource(httpSource):
         except requests.exceptions.HTTPError as err:
             return ([], err)
         except (
-            requests.exceptions.RequestException,
-            ) as e:
+            requests.exceptions.RequestException
+        ) as e:
             raise DriverError(
                 f"HTTP Connection Error: {e!r}"
             ) from e
