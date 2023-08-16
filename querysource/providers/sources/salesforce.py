@@ -121,17 +121,21 @@ class salesforce(restSource):
 
         if self.type in ('report', 'report_metadata'):
             self.report_id = None
-            ## Report information:
-            if request.method == 'POST':
-                # comes from conditions:
-                self.report_id = self._conditions.get('report_id', None)
-            elif request.method == 'GET':
-                # comes from URL
-                self.report_id = conditions.get('var', kwargs.get('report_id', None))
-            else:
-                raise DriverError(
-                    "Invalid HTTP Method for requesting a Report."
-                )
+            if 'report_id' in self._conditions:
+                self.report_id = self._conditions['report_id']
+                del self._conditions['report_id']
+            elif request is not None:
+                ## Report information:
+                if request.method == 'POST':
+                    # comes from conditions:
+                    self.report_id = self._conditions.get('report_id', None)
+                elif request.method == 'GET':
+                    # comes from URL
+                    self.report_id = conditions.get('var', kwargs.get('report_id', None))
+                else:
+                    raise DriverError(
+                        "Invalid HTTP Method for requesting a Report."
+                    )
             if not self.report_id:
                 raise DriverError(
                     "Missing Report ID."
