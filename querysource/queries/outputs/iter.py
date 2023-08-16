@@ -12,7 +12,6 @@ class iterFormat(OutputFormat):
     Most Basic Definition of Format.
     """
     async def serialize(self, result, error, *args, **kwargs):
-        print('RESULT >> ', type(result))
         if isinstance(result, pandas.DataFrame):
             data = result
         elif isinstance(result, list):
