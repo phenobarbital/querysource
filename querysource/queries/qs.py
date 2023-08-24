@@ -52,7 +52,7 @@ class QS(BaseQuery):
         )
         if not conditions:
             conditions = {}
-        self._timeout = 3600
+        self._timeout = 360000
         self._qs: BaseProvider = None
         self._query: str = None
         self._type: str = ''

@@ -74,8 +74,7 @@ class QueryConnection(metaclass=Singleton):
             "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
             "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
             "idle_session_timeout": f"{DB_SESSION_TIMEOUT}"
-        },
-        "max_inactive_timeout": 3600
+        }
     }
 
     def __init__(self, **kwargs):
@@ -162,7 +161,7 @@ class QueryConnection(metaclass=Singleton):
                 provider,
                 dsn=asyncpg_url,
                 loop=loop,
-                timeout=60,
+                timeout=int(POSTGRES_TIMEOUT),
                 **self.pgargs
             )
         else:
@@ -229,7 +228,7 @@ class QueryConnection(metaclass=Singleton):
                     'pg',
                     dsn=default_dsn,
                     loop=self._loop,
-                    timeout=3600,
+                    timeout=int(POSTGRES_TIMEOUT),
                     **self.pgargs
                 )
                 await self._postgres.connect()
@@ -413,7 +412,7 @@ class QueryConnection(metaclass=Singleton):
         args = {}
         if driver == 'pg':
             args = {
-                "timeout": 360000,
+                "timeout": int(POSTGRES_TIMEOUT),
                 **self.pgargs
             }
             args['server_settings']['application_name'] = 'QS.Read'

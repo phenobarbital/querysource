@@ -42,7 +42,7 @@ POSTGRES_TIMEOUT = config.get('POSTGRES_TIMEOUT', fallback=3600000)
 POSTGRES_MIN_CONNECTIONS = config.getint('POSTGRES_MIN_CONNECTIONS', fallback=2)
 POSTGRES_MAX_CONNECTIONS = config.getint('POSTGRES_MAX_CONNECTIONS', fallback=200)
 
-DB_TIMEOUT = config.getint("DB_TIMEOUT", fallback=360)
+DB_TIMEOUT = config.getint("DB_TIMEOUT", fallback=3600)
 DB_STATEMENT_TIMEOUT = config.get("DB_STATEMENT_TIMEOUT", fallback="3600000")
 DB_SESSION_TIMEOUT = config.get('DB_SESSION_TIMEOUT', fallback="5min")
 DB_IDLE_TRANSACTION_TIMEOUT = config.get('DB_IDLE_TRANSACTION_TIMEOUT', fallback="20min")
@@ -85,7 +85,7 @@ URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
 SEMAPHORE_LIMIT = int(
-    config.getint('SEMAPHORE_LIMIT', fallback=8192)
+    config.getint('SEMAPHORE_LIMIT', fallback=16384)
 )
 
 ### Other database support:
