@@ -369,7 +369,16 @@ class QS(BaseQuery):
                     "ended": self._endtime
                 }
                 # send to influx event system:
-                asyncio.create_task(self.event_log(payload))
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.run_in_executor(
+                        self._executor,
+                        asyncio.run,
+                        self.event_log(payload)
+                    )
+                    # asyncio.wrap_future(future)
+                except Exception as e:
+                    self._logger.warning(e)
                 if error:
                     if isinstance(error, DataNotFound):
                         raise error

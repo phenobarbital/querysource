@@ -469,7 +469,7 @@ class BaseQuery(ABC):
         )
 
     async def event_log(self, payload: dict, status: str = 'query', **kwargs):
-        await LogEvent(
+        return await LogEvent(
             payload=payload,
             status=status,
             **kwargs
