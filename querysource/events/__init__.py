@@ -19,7 +19,12 @@ async def LogEvent(
     **kwargs
 ):
 
-    event_loop = asyncio.get_event_loop()
+    _new = False
+    try:
+        event_loop = asyncio.get_event_loop()
+    except RuntimeError:
+        event_loop = asyncio.new_event_loop()
+        _new = True
     influx = AsyncDB(
         QS_EVENT_BACKEND,
         params=QS_EVENT_CREDENTIALS,
@@ -27,27 +32,31 @@ async def LogEvent(
     )
     if status is None:
         status = 'event'
-    async with await influx.connection() as conn:
-        try:
-            # saving the log into metric database:
-            start_time = datetime.utcnow()
-            data = {
-                "measurement": QS_EVENT_TABLE,
-                "location": ENVIRONMENT,
-                "timestamp": start_time,
-                "fields": {
-                    "status": status
-                },
-                "tags": {
-                    "host": EVENT_HOST,
-                    "region": ENVIRONMENT,
-                    "start_time": start_time,
-                    **payload,
-                    **kwargs
+    try:
+        async with await influx.connection() as conn:
+            try:
+                # saving the log into metric database:
+                start_time = datetime.utcnow()
+                data = {
+                    "measurement": QS_EVENT_TABLE,
+                    "location": ENVIRONMENT,
+                    "timestamp": start_time,
+                    "fields": {
+                        "status": status
+                    },
+                    "tags": {
+                        "host": EVENT_HOST,
+                        "region": ENVIRONMENT,
+                        "start_time": start_time,
+                        **payload,
+                        **kwargs
+                    }
                 }
-            }
-            await conn.write(data, bucket=INFLUX_DATABASE)
-        except Exception as e:
-            logging.error(
-                f'DI: Error saving Query Execution: {e}'
-            )
+                await conn.write(data, bucket=INFLUX_DATABASE)
+            except Exception as e:
+                logging.error(
+                    f'DI: Error saving Query Execution: {e}'
+                )
+    finally:
+        if _new is True:
+            event_loop.close()
