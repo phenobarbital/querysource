@@ -38,6 +38,14 @@ cpdef list field_components(str field):
     except ValueError:
         return (None, field, None)
 
+cpdef is_camel_case(str value):
+    if ' ' in value:
+        return True
+    # Check for CamelCase
+    camel_case_pattern = re.compile(r'^(?:[A-Z][a-z]+)+$')
+    return bool(camel_case_pattern.match(value))
+
+
 cdef str escapeString(str value):
     v = value if value != 'None' else ""
     v = str(v).replace("'", "''")
@@ -59,8 +67,16 @@ cdef str quoteString(object value):
         # quoting to string:
         return "'{}'".format(v)
     elif isinstance(v, str):
-        if v.startswith("'"): # is already quoted
-            return v
+        start_quote = v.startswith("'")
+        end_quote = v.endswith("'")
+
+        # Slice the string if it starts/ends with a quote
+        inner = v[1:-1] if start_quote and end_quote else (v[1:] if start_quote else (v[:-1] if end_quote else v))
+        # Escape single quotes
+        inner = inner.replace("'", "''")
+
+        if start_quote: # was already quoted
+            return "'{}'".format(inner)
         elif v.startswith('"'): # is double quoted
             return v.replace('"', "'")
         else:
@@ -423,18 +439,33 @@ cdef class Entity:
         return v
 
     @classmethod
-    def quoteString(cls, value, bool_t no_dblquoting = True):
+    def quoteString(cls, value, bool_t no_dblquoting=True):
         v = value if value != 'None' else ""
         if value == 'null' or value == 'NULL':
             return v
         if isinstance(v, bool):
             return str(v)
         if isinstance(v, str):
-            if v.startswith("'"): # is already quoted
-                return v
-            elif v.startswith('"'): # is double quoted
-                if no_dblquoting is True:
-                    return v.replace('"', "'")
+            # Handle double quotes
+            if v.startswith('"') and no_dblquoting:
+                v = v.replace('"', "'")
+
+            # Check if the string starts or ends with a single quote
+            start_quote = v.startswith("'")
+            end_quote = v.endswith("'")
+
+            # Slice the string if it starts/ends with a quote
+            v = v[1:-1] if start_quote and end_quote else (v[1:] if start_quote else (v[:-1] if end_quote else v))
+
+            # Escape single quotes
+            v = v.replace("'", "''")
+
+            # # Add back the starting and/or ending quote if they were present
+            # if start_quote:
+            #     v = "'" + v
+            # if end_quote:
+            #     v += "'"
+
         v = "'{}'".format(v) if type(v) == str else v
         return v
 
