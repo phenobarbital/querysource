@@ -6,7 +6,7 @@ from querysource.models import QueryObject
 from querysource.providers import BaseProvider
 # from .parser import QueryParser, ParserHolders
 from querysource.types.typedefs import NullDefault, SafeDict
-from querysource.types.validators import Entity, field_components, is_integer
+from querysource.types.validators import Entity, field_components, is_integer, is_camel_case
 
 from .abstract import COMPARISON_TOKENS, QueryParser
 
@@ -68,7 +68,7 @@ class pgSQLParser(QueryParser):
                         key = f'"{key}"'
                 except ValueError:
                     pass
-                # print(':::: KEY: ', key, ' VALUE: ', value)
+                print(':::: KEY: ', key, ' VALUE: ', value)
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
@@ -97,7 +97,7 @@ class pgSQLParser(QueryParser):
                         where_cond.append(f"{key} {fval} {value[1]}")
                     else:
                         # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value]) #pylint: disable=C0209
+                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  #pylint: disable=C0209
                         # check for operator
                         if end == '!':
                             where_cond.append(f"{name} NOT IN ({val})")
@@ -168,6 +168,8 @@ class pgSQLParser(QueryParser):
                                 f"{value}::date <@ {key}::daterange"
                             )
                         else:
+                            if is_camel_case(key):
+                                key = '"{}"'.format(key)
                             where_cond.append(
                                 f"{key}={Entity.quoteString(value)}"
                             )
@@ -294,7 +296,9 @@ class pgSQLParser(QueryParser):
             # default null setters
             sql = sql.format_map(NullDefault())
         self.query_parsed = sql
-        self.logger.debug(f":: SQL : {sql}")
+        self.logger.debug(
+            f":: SQL : {sql}"
+        )
         if self.query_parsed == '' or self.query_parsed is None:
             raise EmptySentence(
                 'QuerySource SQL Error, no SQL query to parse.'

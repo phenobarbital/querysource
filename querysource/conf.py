@@ -85,7 +85,7 @@ URL_PROFILING = config.get('URL_PROFILING', fallback='http://localhost:5000')
 ### Resource Usage
 API_TIMEOUT = 36000  # 10 minutes
 SEMAPHORE_LIMIT = int(
-    config.getint('SEMAPHORE_LIMIT', fallback=16384)
+    config.getint('SEMAPHORE_LIMIT', fallback=163840)
 )
 
 ### Other database support:

@@ -69,7 +69,6 @@ class QueryConnection(metaclass=Singleton):
             "client_min_messages": "notice",
             "max_parallel_workers": "512",
             "jit": "on",
-            "statement_timeout": f"{DB_STATEMENT_TIMEOUT}",
             "effective_cache_size": "2147483647",
             "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
             "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
@@ -416,12 +415,18 @@ class QueryConnection(metaclass=Singleton):
                 **self.pgargs
             }
             args['server_settings']['application_name'] = 'QS.Read'
+        logging.debug(
+            f"Connection Arguments: {args!s}"
+        )
         connection = AsyncDB(
             driver,
             dsn=dsn,
             loop=self._loop,
             params=params,
             **args
+        )
+        logging.debug(
+            f'DSN {driver} > {dsn}'
         )
         return connection
 
@@ -435,15 +440,10 @@ class QueryConnection(metaclass=Singleton):
             provider = 'db'
         if provider == 'db':  # default DB connection for Postgres
             _provider = self.load_provider('db')
-            if self.lazy is True:
-                conn = self.default_connection(
-                    driver='pg', dsn=asyncpg_url
-                )
-            else:
-                conn = self.default_connection(
-                    driver='pg', dsn=asyncpg_url
-                )
-                # conn = await self._postgres.acquire()
+            conn = self.default_connection(
+                driver='pg', dsn=asyncpg_url
+            )
+            # conn = await self._postgres.acquire()
             return [conn, _provider]
         elif provider in EXTERNAL_PROVIDERS:
             _provider = self.load_provider(provider)

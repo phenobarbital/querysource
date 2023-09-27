@@ -397,7 +397,9 @@ class QueryParser(ABC):
         """
         if self.filter_options:
             # TODO: get instructions for getting the filter from session
-            self.logger.debug(f" == FILTER OPTION: {self.filter_options}")
+            self.logger.debug(
+                f" == FILTER OPTION: {self.filter_options}"
+            )
             if self.filter:
                 self.filter = {**self.filter, **self.filter_options}
             else:

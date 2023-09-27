@@ -252,13 +252,17 @@ class QS(BaseQuery):
         elif self._type == 'driver':
             ### calling an HTTP, REST or other provider:
             self._logger.debug(
-                f'Starting Driver: {self._driver!s}, Args: {self.kwargs!s}'
+                f'Starting Driver: {self._driver!s}, ARGS: {self.kwargs!s}'
             )
             try:
-                driver = ClassDict({"provider": self._driver['driver']})
+                driver = ClassDict(
+                    {"provider": self._driver['driver']}
+                )
                 del self._driver['driver']
             except KeyError:
-                self._logger.error('QS: Missing Driver declaration on Request.')
+                self._logger.error(
+                    'QS: Missing Driver declaration on Request.'
+                )
                 driver = 'rest'
             try:
                 self._conn, self._provider = await self.connection.from_provider(driver)
@@ -421,7 +425,6 @@ class QS(BaseQuery):
             return await self._output_format(
                 self._result, error
             )  # pylint: disable=W0150
-
 
     async def close(self):
         if self._conn:
