@@ -19,9 +19,13 @@ class QueryManager(View, QueryHandler):
     _model: QueryModel = None
 
     def __init__(self, request, *args, **kwargs):
-        super(QueryManager, self).__init__(request, *args, **kwargs)
-        self.logger = logging.getLogger('QS.Manager')
+        View.__init__(self, request)
+        QueryHandler.__init__(self, *args, **kwargs)
         self._request = request
+
+    def post_init(self, *args, **kwargs):
+        self._logger_name = 'QS.Manager'
+        super(QueryManager, self).post_init(*args, **kwargs)
 
     def get_model(self, **kwargs):
         try:
@@ -44,7 +48,7 @@ class QueryManager(View, QueryHandler):
                 _dbtype = field.db_type()
             except Exception:
                 _dbtype = None
-            value = Entity.toSQL(val, _type, dbtype = _dbtype)
+            value = Entity.toSQL(val, _type, dbtype=_dbtype)
             columns.append(name)
             values.append(value)
         values = ', '.join([Entity.quoteString(str(a), no_dblquoting=False) for a in values])
@@ -90,7 +94,11 @@ class QueryManager(View, QueryHandler):
                 }
             else:
                 args = {
-                    "fields": ["query_slug", "description", "conditions", "is_cached", "cache_refresh", "program_slug", "provider", "dwh", "created_at", "created_by", "updated_at", "updated_by"]
+                    "fields": [
+                        "query_slug", "description", "conditions", "is_cached",
+                        "cache_refresh", "program_slug", "provider", "dwh",
+                        "created_at", "created_by", "updated_at", "updated_by"
+                    ]
                 }
             try:
                 del qp['fields']
@@ -120,10 +128,10 @@ class QueryManager(View, QueryHandler):
                 return self.json_response(query)
         except NoDataFound as err:
             headers = {
-                    'X-STATUS': 'EMPTY',
-                    'X-ERROR': str(err),
-                    'X-MESSAGE': f'Query Source {query_slug} not Found'
-                }
+                'X-STATUS': 'EMPTY',
+                'X-ERROR': str(err),
+                'X-MESSAGE': f'Query Source {query_slug} not Found'
+            }
             return self.no_content(headers=headers)
         except Exception as err:
             return self.error(
@@ -142,9 +150,9 @@ class QueryManager(View, QueryHandler):
             query_slug = params['slug']
         except KeyError:
             headers = {
-                    'X-STATUS': 'Error',
-                    'X-MESSAGE': 'Query Slug is missing'
-                }
+                'X-STATUS': 'Error',
+                'X-MESSAGE': 'Query Slug is missing'
+            }
             return self.error(
                 response={"message": 'Query Slug is missing'},
                 headers=headers
@@ -166,7 +174,7 @@ class QueryManager(View, QueryHandler):
 
                 qry.Meta.connection = conn
                 slug = await qry.get(**parameters)
-                for k,v in data.items():
+                for k, v in data.items():
                     setattr(slug, k, v)
                 update = await slug.update()
             if update:
@@ -212,9 +220,9 @@ class QueryManager(View, QueryHandler):
             query_slug = params['slug']
         except KeyError as err:
             headers = {
-                    'X-STATUS': 'Error',
-                    'X-MESSAGE': 'Query slug Name is missing'
-                }
+                'X-STATUS': 'Error',
+                'X-MESSAGE': 'Query slug Name is missing'
+            }
             return self.error(
                 response={"message": 'Query slug Name is missing'},
                 exception=err,
@@ -245,12 +253,11 @@ class QueryManager(View, QueryHandler):
                 )
             else:
                 headers = {
-                        'X-STATUS': 'Error',
-                        'X-MESSAGE': f'Query Source {query_slug} Delete error'
-                    }
+                    'X-STATUS': 'Error',
+                    'X-MESSAGE': f'Query Source {query_slug} Delete error'
+                }
                 return self.error(
                     response={"message": f'Query Source {query_slug} was not deleted'},
-                    exception=err,
                     headers=headers
                 )
         except ValidationError as ex:
@@ -278,7 +285,6 @@ class QueryManager(View, QueryHandler):
                 traceback=''
             )
 
-
     async def put(self):
         """"
         put.
@@ -298,8 +304,8 @@ class QueryManager(View, QueryHandler):
             )
         if 'query_slug' not in data:
             headers = {
-                    'X-STATUS': 'Error',
-                    'X-MESSAGE': 'Query Name (slug) is missing'
+                'X-STATUS': 'Error',
+                'X-MESSAGE': 'Query Name (slug) is missing'
             }
             return self.error(
                 response={"message": 'Query Name (slug) is missing'},
@@ -311,7 +317,7 @@ class QueryManager(View, QueryHandler):
                 QueryModel.Meta.connection = conn
                 # first: try to get if Slug exists:
                 try:
-                    qry = self.get_model(**data) # pylint: disable=E1102
+                    qry = self.get_model(**data)  # pylint: disable=E1102
                 except ValidationError as ex:
                     error = {
                         "error": "Unable to insert Query Slug info",
@@ -322,13 +328,13 @@ class QueryManager(View, QueryHandler):
                         status=406
                     )
                 result = None
-                st=204
+                st = 204
                 try:
                     ## try to get an existing slug, or insert if none
                     slug = await QueryModel.get(query_slug=qry.query_slug)
                     if slug:
                         ## try to update slug:
-                        for k,v in data.items():
+                        for k, v in data.items():
                             setattr(slug, k, v)
                         result = await slug.update()
                         st = 202
@@ -378,7 +384,7 @@ class QueryManager(View, QueryHandler):
                 QueryModel.Meta.connection = conn
                 ### first, validate data:
                 try:
-                    qry = self.get_model(**data) # pylint: disable=E1102
+                    qry = self.get_model(**data)  # pylint: disable=E1102
                 except ValidationError as ex:
                     error = {
                         "error": "Unable to Update Query Slug info",
@@ -391,7 +397,7 @@ class QueryManager(View, QueryHandler):
                 try:
                     slug = await QueryModel.get(**slug)
                     ## try to update slug:
-                    for k,v in data.items():
+                    for k, v in data.items():
                         setattr(slug, k, v)
                     result = await slug.update()
                     return self.json_response(result, status=202)
