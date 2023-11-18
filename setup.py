@@ -159,7 +159,7 @@ setup(
         'proxylists>=0.10.2',
         'async-notify>=0.8.0',
         'navconfig[default]>=1.4.0',
-        'asyncdb[all]>=2.5.6',
+        'asyncdb[all]>=2.5.10',
     ],
     tests_require=[
         'pytest>=5.4.0',
