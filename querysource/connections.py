@@ -70,9 +70,9 @@ class QueryConnection(metaclass=Singleton):
             "max_parallel_workers": "512",
             "jit": "on",
             "effective_cache_size": "2147483647",
-            "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
-            "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
-            "idle_session_timeout": f"{DB_SESSION_TIMEOUT}"
+            # "tcp_keepalives_idle": f"{DB_KEEPALIVE_IDLE}",
+            # "idle_in_transaction_session_timeout": f"{DB_IDLE_TRANSACTION_TIMEOUT}",
+            # "idle_session_timeout": f"{DB_SESSION_TIMEOUT}"
         }
     }
 

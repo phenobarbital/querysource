@@ -47,7 +47,7 @@ matlog.setLevel(logging.WARNING)
 class BaseQuery(ABC):
 
     post_cache: Callable = None
-    _timeout: int = 10
+    _timeout: int = 3600
     # SEMAPHORE LIMIT
     semaphore = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
 
