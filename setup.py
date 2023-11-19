@@ -169,6 +169,11 @@ setup(
         'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
+    entry_points={
+        'console_scripts': [
+            'query = querysource.__cli__:main',
+        ],
+    },
     project_urls={  # Optional
         'Source': 'https://github.com/phenobarbital/querysource/',
         'Funding': 'https://paypal.me/phenobarbital',
