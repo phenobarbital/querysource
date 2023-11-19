@@ -44,11 +44,15 @@ POSTGRES_MAX_CONNECTIONS = config.getint('POSTGRES_MAX_CONNECTIONS', fallback=20
 
 DB_TIMEOUT = config.getint("DB_TIMEOUT", fallback=3600)
 DB_STATEMENT_TIMEOUT = config.get("DB_STATEMENT_TIMEOUT", fallback="3600000")
-DB_SESSION_TIMEOUT = config.get('DB_SESSION_TIMEOUT', fallback="5min")
-DB_IDLE_TRANSACTION_TIMEOUT = config.get('DB_IDLE_TRANSACTION_TIMEOUT', fallback="20min")
+DB_SESSION_TIMEOUT = config.get('DB_SESSION_TIMEOUT', fallback="60min")
+DB_IDLE_IN_TRANSACTION_TIMEOUT = config.get(
+    'DB_IDLE_IN_TRANSACTION_TIMEOUT',
+    fallback="60min"
+)
 DB_KEEPALIVE_IDLE = config.get('DB_KEEPALIVE_IDLE', fallback="30min")
+DB_MAX_WORKERS = config.get('DB_MAX_WORKERS', fallback=128)
 
-POSTGRES_SSL = config.getboolean('POSTGRES_SSL', fallback=False)
+POSTGRES_SSL = config.getboodlean('POSTGRES_SSL', fallback=False)
 POSTGRES_SSL_CA = config.get('POSTGRES_SSL_CA')
 POSTGRES_SSL_CERT = config.get('POSTGRES_SSL_CERT')
 POSTGRES_SSL_KEY = config.get('POSTGRES_SSL_KEY')
