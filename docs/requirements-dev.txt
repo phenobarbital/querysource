@@ -12,7 +12,7 @@ pytest-cov==4.0.0
 pytest-cython==0.2.0
 pytest-xdist==3.3.1
 pytest-assume==2.4.3
-ruff==0.0.262
+ruff==0.1.6
 sphinx==7.0.1
 tox==4.6.3
 sphinx==7.0.1
