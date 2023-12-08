@@ -37,7 +37,7 @@ class QueryHandler(BaseHandler):
         try:
             qry = {}
             for key, val in request.rel_url.query.items():
-                if parser:= is_parseable(val):
+                if (parser := is_parseable(val)):
                     qry[key] = parser(val)
                 else:
                     # is a norma string

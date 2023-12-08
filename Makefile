@@ -4,6 +4,8 @@ venv:
 
 develop:
 	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
+	pip install navigator-session==0.5.1
+	pip install --upgrade navigator-auth
 	pip install --upgrade navigator-api
 	pip install -e .
 	python -m pip install -Ur docs/requirements-dev.txt

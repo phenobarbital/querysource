@@ -121,22 +121,21 @@ setup(
     license=__license__,
     license_files='LICENSE',
     setup_requires=[
-        "wheel==0.40.0",
-        "Cython==0.29.33",
+        "wheel==0.42.0",
+        "Cython==3.0.6",
         "asyncio==3.4.3",
     ],
     install_requires=[
         "aiodns==3.0.0",
-        "asyncio==3.4.3",
-        "uvloop==0.19.0",
         'LivePopularTimes==1.3',
         'hubspot-api-client==7.5.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.16.2',
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
-        'sqloxide==0.1.35',
+        'sqloxide==0.1.39',
         'aiocsv==1.2.4',
+        'lxml==4.9.3',
         'xlsxwriter==3.1.2',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
@@ -148,18 +147,18 @@ setup(
         'reportlab==3.6.12',
         'WeasyPrint==58.1',
         'APScheduler==3.10.4',
-        'navigator-session>=0.3.3',
         'scikit-learn==1.2.2',
         'elasticsearch-async==6.2.0',
         'seaborn==0.13.0',
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         # 'great_expectations==0.15.48',
-        # 'ydata-profiling==4.6.0'
-        'proxylists>=0.10.2',
-        'async-notify>=0.8.0',
-        'navconfig[default]>=1.4.0',
-        'asyncdb[all]>=2.5.6',
+        # 'ydata-profiling==4.6.3'
+        'proxylists==0.12.2',
+        'async-notify==1.2.1',
+        'navconfig[default]>=1.5.0',
+        'asyncdb[default]>=2.6.0',
+        'navigator-session==0.5.1',
     ],
     tests_require=[
         'pytest>=5.4.0',
@@ -169,6 +168,11 @@ setup(
         'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
+    entry_points={
+        'console_scripts': [
+            'query = querysource.__cli__:main',
+        ],
+    },
     project_urls={  # Optional
         'Source': 'https://github.com/phenobarbital/querysource/',
         'Funding': 'https://paypal.me/phenobarbital',
