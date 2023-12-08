@@ -136,7 +136,7 @@ setup(
         'sqloxide==0.1.39',
         'aiocsv==1.2.4',
         'lxml==4.9.3',
-        'xlsxwriter==3.1.2',
+        'xlsxwriter==3.1.9',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
