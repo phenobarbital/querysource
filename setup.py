@@ -146,7 +146,7 @@ setup(
         'pygal==3.0.0',
         'reportlab==3.6.12',
         'WeasyPrint==58.1',
-        'APScheduler==3.10.1',
+        'APScheduler==3.10.4',
         'scikit-learn==1.2.2',
         'elasticsearch-async==6.2.0',
         'seaborn==0.13.0',
