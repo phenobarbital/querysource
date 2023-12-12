@@ -144,7 +144,7 @@ setup(
         'plotly==5.15.0',
         'sweetviz==2.1.4',
         'pygal==3.0.0',
-        'reportlab==3.6.12',
+        'reportlab==4.0.8',
         'WeasyPrint==58.1',
         'APScheduler==3.10.4',
         'scikit-learn==1.2.2',
