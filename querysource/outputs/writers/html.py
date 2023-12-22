@@ -24,6 +24,7 @@ class HTMLWriter(AbstractWriter):
         output = StringIO()
         # create the HTML file:
         columns = list(self.data.columns)
+        dimensions = self.kwargs.get('show_dimensions', False)
         self.data.to_html(
             output,
             columns=columns,
@@ -33,7 +34,7 @@ class HTMLWriter(AbstractWriter):
             bold_rows=True,
             # escape=True,
             border=1,
-            show_dimensions=True,
+            show_dimensions=dimensions,
             table_id="qs_table"
         )
         output.seek(0)
@@ -43,7 +44,7 @@ class HTMLWriter(AbstractWriter):
         content_length = len(buffer)
         response.content_length = content_length
         # response.headers['Content-Disposition'] = f"attachment; filename={self.filename}"
-        if self.download is True: # inmediately download response
+        if self.download is True:  # inmediately download response
             response.headers['Content-Disposition'] = f"attachment; filename={self.filename}"
             await response.prepare(self.request)
             await response.write(bytes(buffer, 'utf-8'))

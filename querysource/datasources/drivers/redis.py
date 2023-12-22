@@ -1,5 +1,5 @@
 from typing import Union
-from datamodel import Column
+from datamodel import Field
 from querysource.conf import (
     REDIS_HOST,
     REDIS_PORT,
@@ -10,8 +10,8 @@ from .abstract import NoSQLDriver
 class redisDriver(NoSQLDriver):
     driver: str = 'redis'
     name: str = 'Redis Server'
-    port: int = Column(required=True, default=6379)
-    database: Union[str, int] = Column(required=True, default=0)
+    port: int = Field(required=True, default=6379)
+    database: Union[str, int] = Field(required=True, default=0)
     dsn_format: str = "redis://{host}:{port}/{database}"
     defaults: str = REDIS_URL
 

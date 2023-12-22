@@ -26,10 +26,10 @@ class DataDriver(BaseModel):
     name: str = Field(required=False, comment='Datasource name, default to driver.')
     description: str = Field(comment='Datasource Description', repr=False)
     icon: str = Field(required=False, comment='Icon Path for Datasource.', repr=False)
-    dsn: str = None
+    dsn: str = Field(default=None)
     dsn_format: str = Field(required=False, default=None, repr=False)
-    user: InitVar = ''
-    username: str = ''
+    user: InitVar = Field(default='')
+    username: str = Field(default='')
     password: str = Field(required=False, default=None, repr=False, is_secret=True)
     auth: dict = Field(required=False, default_factory=dict)
     required_properties: Optional[tuple] = Field(repr=False, default=default_properties())

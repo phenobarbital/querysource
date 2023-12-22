@@ -85,6 +85,11 @@ class Executor(BaseQuery):
                 message=f'QS: Invalid Query Type {self._query!s}',
                 code=410  # bad request
             )
+        if db is None:
+            raise QueryError(
+                message=f'QS: Invalid Query Type {self._query!s}',
+                code=410  # bad request
+            )
         try:
             error = None
             async with await db.connection() as conn:

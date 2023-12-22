@@ -82,10 +82,16 @@ class Join:
                     raise DataNotFound(
                         "Empty Result Dataframe"
                     )
+                elif df.empty:
+                    raise DataNotFound(
+                        "Empty Result Dataframe"
+                    )
                 df.is_copy = None
             else:
                 pass
-            print('::: Printing Column Information === ')
+            print(
+                '::: Printing Column Information === '
+            )
             for column, t in df.dtypes.items():
                 print(column, '->', t, '->', df[column].iloc[0])
             return df

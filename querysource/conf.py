@@ -158,6 +158,7 @@ INFLUX_TOKEN = config.get('INFLUX_TOKEN')
 
 # this is the backend for saving Query Execution
 ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')
+USE_INFLUX = config.getboolean('USE_INFLUX', fallback=True)
 QS_EVENT_BACKEND = config.get('QS_EVENT_BACKEND', fallback='influx')
 QS_EVENT_TABLE = config.get('QS_EVENT_TABLE', fallback='querysource')
 QS_EVENT_CREDENTIALS = {
