@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime
 from importlib import import_module
-from typing import Any
+from typing import Any, Union
 
 from aiohttp import web
 from datamodel import BaseModel
@@ -50,8 +50,8 @@ from .exceptions import (
     SlugNotFound
 )
 
-DATASOURCES = {}
-PROVIDERS = {}
+DATASOURCES: dict = {}
+PROVIDERS: dict = {}
 
 EXTERNAL_PROVIDERS = ('http', 'rest', )
 
@@ -155,7 +155,10 @@ class QueryConnection(metaclass=Singleton):
             }
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
-            loop = asyncio.get_event_loop()
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.get_running_loop()
             return AsyncDB(
                 provider,
                 dsn=asyncpg_url,
@@ -186,8 +189,9 @@ class QueryConnection(metaclass=Singleton):
         self.app.on_shutdown.append(
             self.stop
         )
+        return self.app
 
-    async def start(self, app: web.Application = None):
+    async def start(self, app: Union[web.Application, None] = None):
         """
          Create the default connection for Postgres.
          Create the connection to the database cache (redis).
@@ -195,6 +199,10 @@ class QueryConnection(metaclass=Singleton):
         """
         if not self._loop:
             self._loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = self._loop
         if self.lazy is True:
             logging.debug(':: Starting QuerySource in Lazy Mode ::')
             cPrint(':: Starting QuerySource in Lazy Mode ::', level='DEBUG')
@@ -204,7 +212,7 @@ class QueryConnection(metaclass=Singleton):
                 self._connection = AsyncDB(
                     'pg',
                     dsn=asyncpg_url,
-                    loop=self._loop,
+                    loop=loop,
                     timeout=int(POSTGRES_TIMEOUT),
                     **self.pgargs
                 )
@@ -226,7 +234,7 @@ class QueryConnection(metaclass=Singleton):
                 self._postgres = AsyncPool(
                     'pg',
                     dsn=default_dsn,
-                    loop=self._loop,
+                    loop=loop,
                     timeout=int(POSTGRES_TIMEOUT),
                     **self.pgargs
                 )
