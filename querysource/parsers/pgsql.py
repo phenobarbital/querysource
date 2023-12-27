@@ -92,28 +92,35 @@ class pgSQLParser(QueryParser):
                         # currently, discard any non-supported comparison token
                         continue
                 elif isinstance(value, list):
-                    fval = value[0]
-                    if fval in valid_operators:
-                        where_cond.append(f"{key} {fval} {value[1]}")
-                    else:
-                        # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  #pylint: disable=C0209
-                        # check for operator
-                        if end == '!':
-                            where_cond.append(f"{name} NOT IN ({val})")
+                    try:
+                        fval = value[0]
+                        if fval in valid_operators:
+                            where_cond.append(f"{key} {fval} {value[1]}")
                         else:
-                            if _format == 'array':
-                                if end == '|':
-                                    where_cond.append(
-                                        "ARRAY[{val}]::character varying[]  && {name}::character varying[]"
-                                    )
-                                else:
-                                    # I need to build a query based array fields
-                                    where_cond.append(
-                                        "ARRAY[{val}]::character varying[]  <@ {key}::character varying[]"
-                                    )
+                            # is a list of values
+                            val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  #pylint: disable=C0209
+                            # check for operator
+                            if end == '!':
+                                where_cond.append(f"{name} NOT IN ({val})")
                             else:
-                                where_cond.append(f"{key} IN ({val})")
+                                if _format == 'array':
+                                    if end == '|':
+                                        where_cond.append(
+                                            "ARRAY[{val}]::character varying[]  && {name}::character varying[]"
+                                        )
+                                    else:
+                                        # I need to build a query based array fields
+                                        where_cond.append(
+                                            "ARRAY[{val}]::character varying[]  <@ {key}::character varying[]"
+                                        )
+                                else:
+                                    where_cond.append(f"{key} IN ({val})")
+                    except (KeyError, IndexError):
+                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])
+                        if not val:
+                            where_cond.append(f"{key} IN (NULL)")
+                        else:
+                            where_cond.append(f"{key} IN {val}")
                 elif isinstance(value, (str, int)):
                     if "BETWEEN" in str(value):
                         if isinstance(value, str) and "'" not in value:
