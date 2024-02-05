@@ -361,7 +361,6 @@ cpdef datetime.time to_time(object value = None, str mask= "%H:%M:%S"):
         except ValueError:
             return parser.parse(str(value)).time()
 
-
 cpdef datetime.datetime build_date(object value, object mask = "%Y-%m-%d %H:%M:%S"):
     if isinstance(value, list):
         dt = to_date(value[0], mask=mask[0])

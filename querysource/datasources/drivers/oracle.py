@@ -1,8 +1,9 @@
 """Driver for Oracle database connections.
 """
-from typing import Optional
+from typing import Optional, Union
 from dataclasses import InitVar
 from datamodel import Column
+from datamodel.exceptions import ValidationError
 from querysource.conf import (
     # ORacle Server
     ORACLE_DRIVER,
@@ -26,7 +27,7 @@ class oracleDriver(SQLDriver):
     username: InitVar = ''
     dsn_format: str = "{host}:{port}/{database}"
     client: str = Column(required=True)
-    required_properties: Optional[list] = Column(repr=False, default=oracle_properties())
+    required_properties: Optional[Union[list, tuple]] = Column(repr=False, default=oracle_properties())
 
     def params(self) -> dict:
         """params
@@ -44,13 +45,17 @@ class oracleDriver(SQLDriver):
         }
 
 if ORACLE_CLIENT:
-    oracle_default = oracleDriver(
-        host=ORACLE_HOST,
-        port=ORACLE_PORT,
-        database=ORACLE_DATABASE,
-        user=ORACLE_USER,
-        password=ORACLE_PWD,
-        client=ORACLE_CLIENT
-    )
+    try:
+        oracle_default = oracleDriver(
+            host=ORACLE_HOST,
+            port=ORACLE_PORT,
+            database=ORACLE_DATABASE,
+            user=ORACLE_USER,
+            password=ORACLE_PWD,
+            client=ORACLE_CLIENT
+        )
+    except ValidationError as exc:
+        oracle_default = None
+        print(exc.payload)
 else:
     oracle_default = None

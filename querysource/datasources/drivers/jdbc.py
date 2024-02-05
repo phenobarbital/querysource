@@ -4,6 +4,7 @@ from typing import Union, Optional
 from pathlib import Path
 from dataclasses import InitVar
 from datamodel import Column
+from datamodel.exceptions import ValidationError
 from querysource.conf import (
     JDBC_DRIVER,
     JDBC_HOST,
@@ -30,7 +31,9 @@ class jdbcDriver(SQLDriver):
     dsn_format: str = None
     jar: Union[list, str] = Column(Required=True)
     classpath: Path = Column(Required=False)
-    required_properties: Optional[list] = Column(repr=False, default=jdbc_properties())
+    required_properties: Optional[Union[list, tuple]] = Column(
+        repr=False, default=jdbc_properties()
+    )
 
     def __post_init__(self, username, hostname, *args, **kwargs):
         if isinstance(self.jar, str):
@@ -55,15 +58,19 @@ class jdbcDriver(SQLDriver):
 
 
 try:
-    jdbc_default = jdbcDriver(
-        provider=JDBC_DRIVER,
-        database=JDBC_DATABASE,
-        user=JDBC_USER,
-        password=JDBC_PWD,
-        host=JDBC_HOST,
-        port=JDBC_PORT,
-        jar=JDBC_JAR,
-        classpath=JDBC_CLASSPATH
-    )
+    try:
+        jdbc_default = jdbcDriver(
+            provider=JDBC_DRIVER,
+            database=JDBC_DATABASE,
+            user=JDBC_USER,
+            password=JDBC_PWD,
+            host=JDBC_HOST,
+            port=JDBC_PORT,
+            jar=JDBC_JAR,
+            classpath=JDBC_CLASSPATH
+        )
+    except ValidationError as exc:
+        jdbc_default = None
+        print(exc.payload)
 except ValueError:
     jdbc_default = None
