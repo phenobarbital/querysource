@@ -206,9 +206,11 @@ JIRA_HOST = config.get('JIRA_HOST')
 JIRA_USERNAME = config.get('JIRA_USERNAME')
 JIRA_PASSWORD = config.get('JIRA_PASSWORD')
 
-### Google Cloud
+# Google Analytics
 GOOGLE_SERVICE_FILE = config.get('GA_SERVICE_ACCOUNT_NAME', fallback="ga-api-a78f7d886a47.json")
 GOOGLE_SERVICE_PATH = config.get('GA_SERVICE_PATH', fallback=BASE_DIR.joinpath("env"))
+GA_SERVICE_ACCOUNT_NAME = "google.json"
+GA_SERVICE_PATH = "google/"
 
 ### SalesForce:
 SALESFORCE_COMPANY = config.get('SALESFORCE_COMPANY')
