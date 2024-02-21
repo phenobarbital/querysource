@@ -111,6 +111,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "License :: OSI Approved :: BSD License",
     ],
     author='Jesus Lara',
@@ -156,11 +157,11 @@ setup(
         'sqlalchemy==2.0.23',
         # 'great_expectations==0.15.48',
         # 'ydata-profiling==4.6.3'
-        'proxylists==0.12.2',
-        'async-notify==1.2.1',
+        'proxylists>=0.12.3',
+        'async-notify>=1.2.1',
         'navconfig[default]>=1.5.0',
         'asyncdb[default]>=2.6.0',
-        'navigator-session==0.5.1',
+        'navigator-session>=0.5.2',
     ],
     tests_require=[
         'pytest>=5.4.0',
