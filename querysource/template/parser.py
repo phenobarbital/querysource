@@ -82,9 +82,15 @@ class TemplateParser:
                 loader=self.loader,
                 **self.config
             )
-            compiled_path = str(self.tmpl_dir.joinpath('.compiled'))
+            compiled = self.tmpl_dir.joinpath('.compiled')
             self.env.compile_templates(
-                target=compiled_path, zip='deflated'
+                target=str(compiled), zip='deflated'
+            )
+        except UnicodeDecodeError:
+            compiled.unlink(missing_ok=True)
+            # re-trying
+            self.env.compile_templates(
+                target=str(compiled), zip='deflated'
             )
         except Exception as err:
             raise RuntimeError(
