@@ -4,7 +4,6 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 from aiohttp import web
-import aiohttp_cors
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
@@ -172,25 +171,6 @@ class QuerySource(metaclass=Singleton):
         self.app.on_startup.append(
             self.qs_start
         )
-
-        ## creating a CORS setup:
-        cors = aiohttp_cors.setup(
-            self.app,
-            defaults={
-                "*": aiohttp_cors.ResourceOptions(
-                    allow_credentials=True,
-                    expose_headers="*",
-                    allow_methods="*",
-                    allow_headers="*",
-                    max_age=3600,
-                )
-            },
-        )
-        for route in routes:
-            try:
-                cors.add(route)
-            except (TypeError, ValueError, RuntimeError):
-                pass
 
     def event_loop(self):
         return self._loop
