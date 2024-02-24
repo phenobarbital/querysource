@@ -1,7 +1,7 @@
 from typing import Any, Union
 from lxml import html
-from querysource.models import QueryModel
-from querysource.exceptions import ParserError
+from ....models import QueryModel
+from ....exceptions import ParserError
 
 class xpathParser:
     """Basic Parser for HTML content using Xpath.
@@ -11,7 +11,7 @@ class xpathParser:
     def __init__(
             self,
             query: Any = None,
-            definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+            definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
             conditions: dict = None,
             **kwargs
     ) -> None:

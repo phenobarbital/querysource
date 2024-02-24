@@ -1,7 +1,7 @@
 """MongoDB Driver Definition.
 """
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     mongo_driver,
     mongo_host,
     mongo_port,

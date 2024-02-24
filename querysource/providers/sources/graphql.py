@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Any
-from querysource.libs.json import json_encoder
-from querysource.exceptions import (
+from ...libs.json import json_encoder
+from ...exceptions import (
     DriverError,
     QueryError,
     DataNotFound,
@@ -20,7 +20,7 @@ class graphqlSource(restSource, ABC):
     auth_key_name: str = 'apikey'
     token_type: str = 'Bearer'
     env_key: str = ''
-    method: str = 'post' # All calls will be POST
+    method: str = 'post'  # All calls will be POST
     data_format: str = 'json'
     accept: str = "*/*"
     gql: str = '''

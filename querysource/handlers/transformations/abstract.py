@@ -2,7 +2,7 @@ from typing import Union
 from abc import abstractmethod
 import pandas as pd
 from navconfig.logging import logging
-from querysource.exceptions import (
+from ...exceptions import (
     DataNotFound,
     DriverError
 )

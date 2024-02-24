@@ -2,7 +2,7 @@
 JSON Encoders.
 """
 import sys
-from querysource.libs.json import JSONContent
+from .json import JSONContent
 
 DefaultEncoder = JSONContent
 

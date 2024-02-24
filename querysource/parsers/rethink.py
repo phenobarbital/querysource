@@ -5,9 +5,9 @@ from rethinkdb.errors import (
     ReqlRuntimeError,
     # ReqlNonExistenceError
 )
-from querysource.models import QueryObject
-from querysource.providers import BaseProvider
-from querysource.exceptions import (
+from ..models import QueryObject
+from ..providers import BaseProvider
+from ..exceptions import (
     ParserError,
     EmptySentence
 )
@@ -37,7 +37,7 @@ class RethinkParser(QueryParser):
         conditions = {}
         if self.conditions or self.filter:
             if self.conditions:
-                conditions = {** self.conditions }
+                conditions = {**self.conditions}
             if self.filter:
                 conditions = {**conditions, **self.filter}
             self.logger.debug(
@@ -67,7 +67,7 @@ class RethinkParser(QueryParser):
                 self.logger.debug(
                     f"RT MAP IS {self._map}"
                 )
-        except Exception as err: # pylint: disable=W0703
+        except Exception as err:  # pylint: disable=W0703
             self.logger.exception(err, stack_info=True)
 
         try:
@@ -109,7 +109,7 @@ class RethinkParser(QueryParser):
                 f'RethinkDB DateFilter ERROR: field: {field} error: {err}'
             )
         finally:
-            return query # pylint: disable=W0150
+            return query  # pylint: disable=W0150
 
     async def between(self, query):
         conditions = self.conditions.copy()
@@ -118,12 +118,10 @@ class RethinkParser(QueryParser):
                 if self.cond_definition[field] in ('date', 'timestamp', 'datetime'):
                     query = self.get_datefilter(query, conditions, field)
                 elif self.cond_definition[field] == 'epoch':
-                    query = self.get_datefilter(query, conditions, field, dtype = 'epoch')
+                    query = self.get_datefilter(query, conditions, field, dtype='epoch')
             elif field == 'date' or field == 'filterdate' or field == 'inserted_at':
                 query = self.get_datefilter(query, conditions, field)
-        #self.conditions = conditions
         return query
-
 
     async def orderby(self, query):
         # ordering
@@ -219,7 +217,7 @@ class RethinkParser(QueryParser):
 
     async def query_filter(self, query, indexing: bool = False):
         try:
-            #exp = self._engine.expr(True)
+            # exp = self._engine.expr(True)
             ### build FILTER based on rethink logic
             table = self._engine.table(self.table)
             conn = self._connection.get_connection()

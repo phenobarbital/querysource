@@ -33,7 +33,7 @@ class zipcodeapi(restSource):
         if 'key' in self._conditions:
             self._conditions['api_key'] = self._conditions['key']
             del self._conditions['key']
-        if not 'api_key' in conditions:
+        if 'api_key' not in conditions:
             self._conditions['api_key'] = self._env.get('ZIPCODE_API_KEY')
             if not self._conditions['api_key']:
                 try:

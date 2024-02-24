@@ -7,7 +7,7 @@ from datetime import datetime
 from asyncdb.models import Model, Field
 # from querysource.types.mutables import ClassDict
 from datamodel.libs.mapping import ClassDict
-from querysource.conf import (
+from .conf import (
     QS_QUERIES_SCHEMA,
     QS_QUERIES_TABLE
 )

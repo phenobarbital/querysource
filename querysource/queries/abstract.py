@@ -19,19 +19,19 @@ from navigator_session import get_session
 from navigator_session.storages import SessionData
 from aiohttp import web
 from navconfig.logging import logging
-from querysource.libs.encoders import DefaultEncoder
-from querysource.conf import (
+from ..libs.encoders import DefaultEncoder
+from ..conf import (
     SEMAPHORE_LIMIT,
     QUERYSET_REDIS,
     DEFAULT_QUERY_TIMEOUT
 )
-from querysource.exceptions import (
+from ..exceptions import (
     QueryException,
     CacheException,
     DataNotFound
 )
-from querysource.connections import DATASOURCES
-from querysource.events import LogEvent
+from ..connections import DATASOURCES
+from ..events import LogEvent
 from .outputs import OutputFactory
 from .models import Query, QueryResult, supported_drivers
 from ..utils.events import enable_uvloop

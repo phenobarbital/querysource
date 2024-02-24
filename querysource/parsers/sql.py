@@ -1,11 +1,11 @@
 import asyncio
 from functools import partial
 
-from querysource.exceptions import EmptySentence
-from querysource.models import QueryObject
-from querysource.providers import BaseProvider
-from querysource.types.typedefs import NullDefault, SafeDict
-from querysource.types.validators import Entity, field_components
+from ..exceptions import EmptySentence
+from ..models import QueryObject
+from ..providers import BaseProvider
+from ..types.typedefs import NullDefault, SafeDict
+from ..types.validators import Entity, field_components
 
 from .abstract import COMPARISON_TOKENS, QueryParser
 

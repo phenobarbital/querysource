@@ -1,5 +1,5 @@
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     rt_driver,
     rt_host,
     rt_port,

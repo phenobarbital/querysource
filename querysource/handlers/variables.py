@@ -2,8 +2,8 @@ import logging
 from datetime import datetime
 from asyncdb import AsyncDB
 from navigator.views import BaseView
-from querysource.conf import REDIS_URL, default_dsn
-from querysource.utils.functions import format_date
+from ..conf import REDIS_URL, default_dsn
+from ..utils.functions import format_date
 
 
 class VariablesService(BaseView):

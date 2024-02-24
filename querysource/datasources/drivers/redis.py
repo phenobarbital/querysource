@@ -1,6 +1,6 @@
 from typing import Union
 from datamodel import Field
-from querysource.conf import (
+from ...conf import (
     REDIS_HOST,
     REDIS_PORT,
     REDIS_URL

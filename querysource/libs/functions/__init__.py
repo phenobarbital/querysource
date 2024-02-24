@@ -1,9 +1,10 @@
 import logging
 import re
+from ...utils.functions import fdom, ldom
 
-from querysource.utils.functions import fdom, ldom
 
 pattern_eval = re.compile(r'^(\w*)\s(.*)\s(\w*)$')
+
 
 def eval_exp(val):
     parts = val.split(' AND ')
@@ -19,7 +20,7 @@ def eval_exp(val):
     return _exp
 
 
-#TODO: use program.json information to fill program hierarchy
+# TODO: use program.json information to fill program hierarchy
 def get_hierarchy(program):
     if program == 'walmart' or program == 'retail':
         hierarchy = ['territory_id', 'region_id', 'district_id', 'market_id', 'store_id']
@@ -128,8 +129,6 @@ def grouping_set(options: dict, where: dict, **kwargs): # pylint: disable=W0613
 
     Simulating a Grouping Set based on a Program Hierarchy.
     """
-
-
 
 def group_by_child(options: dict, where: dict, **kwargs): # pylint: disable=W0613
     """

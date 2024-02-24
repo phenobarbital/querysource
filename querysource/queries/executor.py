@@ -1,4 +1,4 @@
-from querysource.exceptions import QueryError, QueryException
+from ..exceptions import QueryError, QueryException
 from .abstract import BaseQuery
 
 

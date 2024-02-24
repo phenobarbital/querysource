@@ -6,8 +6,8 @@ from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.inspection import inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
 from navconfig.logging import logging
-from querysource.conf import sqlalchemy_url
-from querysource.exceptions import OutputError
+from ....conf import sqlalchemy_url
+from ....exceptions import OutputError
 
 
 class PgOutput(object):

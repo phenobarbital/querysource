@@ -14,18 +14,18 @@ from asyncdb.exceptions import (
     DriverError
 )
 
-from querysource.connections import QueryConnection
-from querysource.exceptions import (
+from ..connections import QueryConnection
+from ..exceptions import (
     DataNotFound,
     EmptySentence,
     QueryException,
     QueryError,
     SlugNotFound,
 )
-from querysource.providers import BaseProvider  # renamed to Providers.
-from querysource.types.mutables import ClassDict
-from querysource.types.typedefs import AttrDict
-from querysource.utils.functions import check_empty
+from ..providers import BaseProvider  # renamed to Providers.
+from ..types.mutables import ClassDict
+from ..types.typedefs import AttrDict
+from ..utils.functions import check_empty
 from .abstract import BaseQuery
 
 

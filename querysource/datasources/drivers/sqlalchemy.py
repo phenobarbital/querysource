@@ -1,7 +1,7 @@
 """Driver for MySQL database connections, using SQLAlchemy async
 """
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     SQLALCHEMY_DATABASE_URI
 )
 from .abstract import SQLDriver

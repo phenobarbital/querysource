@@ -19,7 +19,7 @@ from navconfig import config
 from decimal import Decimal
 from dateutil import parser
 from uuid import UUID
-from querysource.utils.functions import *
+from ..utils.functions import *
 from .typedefs import strtobool
 import orjson
 from numpy import int64, ndarray

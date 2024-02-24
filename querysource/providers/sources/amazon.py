@@ -4,7 +4,7 @@ from typing import (
     Union,
     Any
 )
-from querysource.models import QueryModel
+from ...models import QueryModel
 from .scrapper import scrapperSource
 from .parsers.amproduct import amProduct
 
@@ -13,8 +13,6 @@ if sys.version_info < (3, 10):
 else:
     from typing import ParamSpec
 P = ParamSpec("P")
-
-
 
 
 class amazon(scrapperSource):
@@ -38,7 +36,7 @@ class amazon(scrapperSource):
             self.asin: str = kwargs['asin']
             del kwargs['asin']
         except KeyError:
-            self.asin: str = 'B09655FJDB' # Sample ASIN
+            self.asin: str = 'B09655FJDB'  # Sample ASIN
         ## Replace Parser with Amazon Product parser:
         self.__parser__ = amProduct
         super().__init__(

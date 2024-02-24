@@ -1,5 +1,5 @@
 from datamodel import Field
-from querysource.conf import (
+from ...conf import (
     JIRA_HOST,
     JIRA_USERNAME,
     JIRA_PASSWORD

@@ -5,11 +5,11 @@ Handler to making queries directly to providers.
 """
 # for aiohttp
 from aiohttp import web
-from querysource.exceptions import (
+from ..exceptions import (
     QueryException,
     QueryError
 )
-from querysource.queries.executor import Executor
+from ..queries.executor import Executor
 from .abstract import AbstractHandler
 
 

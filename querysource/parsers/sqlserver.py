@@ -3,18 +3,17 @@ MS SQL Server Parser.
 
 Build SQL-Queries for MS SQL Server, validation and parsing.
 """
-from querysource.types.typedefs import SafeDict
-from querysource.types.validators import Entity, field_components
-from querysource.providers import BaseProvider
-from querysource.models import QueryObject
+from ..types.typedefs import SafeDict
+from ..types.validators import Entity, field_components
+from ..providers import BaseProvider
+from ..models import QueryObject
 from .sql import SQLParser
 
 
 class msSQLParser(SQLParser):
-    _schema:str = 'dbo' # default internal schema
-    _tablename:str = '{schema}.{table}'
-    _base_sql:str = 'SELECT {limit} {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
-
+    _schema: str = 'dbo'  # default internal schema
+    _tablename: str = '{schema}.{table}'
+    _base_sql: str = 'SELECT {limit} {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
 
     def __init__(
         self,
@@ -32,8 +31,7 @@ class msSQLParser(SQLParser):
             **kwargs
         )
 
-
-    async def process_fields(self, sql:str):
+    async def process_fields(self, sql: str):
         # adding option if not exists:
         if '{fields}' in self.query_raw:
             sql = sql.replace('SELECT {fields} FROM', 'SELECT {limit} {fields} FROM')
@@ -52,7 +50,7 @@ class msSQLParser(SQLParser):
             self.conditions.update({'fields': '*'})
         return sql
 
-    async def limiting(self, sql:str, limit:str = None, offset:str = None):
+    async def limiting(self, sql: str, limit: str = None, offset: str = None):
         if self._procedure is True:
             return sql
         if limit:
@@ -85,7 +83,7 @@ class msSQLParser(SQLParser):
                     # if format is not defined, need to be determined
                     if isinstance(value, list):
                         # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value]) # pylint: disable=C0209
+                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209
                         # check for operator
                         if end == '!':
                             where_cond.append(

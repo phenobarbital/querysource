@@ -5,8 +5,8 @@ from typing import (
     Any
 )
 import requests
-from querysource.exceptions import DriverError
-from querysource.models import QueryModel
+from ...exceptions import DriverError
+from ...models import QueryModel
 from .http import httpSource
 
 if sys.version_info < (3, 10):
@@ -77,7 +77,7 @@ class wm_stores(httpSource):
             return ([], err)
         except (
             requests.exceptions.RequestException,
-            ) as e:
+        ) as e:
             raise DriverError(
                 f"HTTP Connection Error: {e!r}"
             ) from e

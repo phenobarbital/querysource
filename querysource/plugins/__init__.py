@@ -1,5 +1,5 @@
 import sys
-from querysource.conf import PLUGINS_FOLDER
+from ..conf import PLUGINS_FOLDER
 from .importer import PluginImporter
 
 ### Sources Loader.

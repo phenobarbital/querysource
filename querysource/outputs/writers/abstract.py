@@ -11,10 +11,10 @@ from aiohttp.web import Response, StreamResponse
 from aiohttp.web_exceptions import (
     HTTPNoContent
 )
-from querysource.queries.abstract import BaseQuery
-from querysource.libs.encoders import DefaultEncoder
-from querysource.utils.functions import check_empty
-from querysource.exceptions import (
+from ...queries.abstract import BaseQuery
+from ...libs.encoders import DefaultEncoder
+from ...utils.functions import check_empty
+from ...exceptions import (
     CacheException,
     DataNotFound,
     DriverError,

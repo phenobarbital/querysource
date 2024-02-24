@@ -9,14 +9,14 @@ from typing import Any
 from asyncdb import AsyncDB
 from navconfig.logging import logging
 
-from querysource.exceptions import EmptySentence
-from querysource.models import QueryObject
-from querysource.providers import BaseProvider
-from querysource.service import QS_FILTERS, QS_VARIABLES
-from querysource.types import strtobool, is_boolean
-from querysource.types.validators import field_components, is_valid, Entity
-from querysource.utils.parseqs import is_parseable
-from querysource.conf import REDIS_URL
+from ..exceptions import EmptySentence
+from ..models import QueryObject
+from ..providers import BaseProvider
+from ..services import QS_FILTERS, QS_VARIABLES
+from ..types import strtobool, is_boolean
+from ..types.validators import field_components, is_valid, Entity
+from ..utils.parseqs import is_parseable
+from ..conf import REDIS_URL
 
 START_TOKENS = ('@', '$', '~', '^', '?', '*', )
 END_TOKENS = ('|', '&', '!', '<', '>', )

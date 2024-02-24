@@ -1,5 +1,5 @@
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     # cassandra
     CASSANDRA_DRIVER,
     CASSANDRA_HOST,

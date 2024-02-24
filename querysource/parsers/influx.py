@@ -1,9 +1,9 @@
 from collections.abc import Callable
-from querysource.models import QueryObject
-from querysource.types.validators import Entity
-from querysource.types.typedefs import NullDefault, SafeDict
-from querysource.providers import BaseProvider
-from querysource.exceptions import (
+from ..models import QueryObject
+from ..types.validators import Entity
+from ..types.typedefs import NullDefault, SafeDict
+from ..providers import BaseProvider
+from ..exceptions import (
     EmptySentence
 )
 from .abstract import QueryParser

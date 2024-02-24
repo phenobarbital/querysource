@@ -10,10 +10,10 @@ from asyncdb.exceptions import (
 from querysource.conf import (
     default_dsn, asyncpg_url
 )
-from querysource.models import QueryModel
-from querysource.providers import BaseProvider  # renamed to Providers.
-from querysource.connections import DATASOURCES, PROVIDERS
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..providers import BaseProvider  # renamed to Providers.
+from ..connections import DATASOURCES, PROVIDERS
+from ..exceptions import (
     SlugNotFound,
     QueryException,
     DriverError,

@@ -5,7 +5,7 @@ from pathlib import Path
 from dataclasses import InitVar
 from datamodel import Column
 from datamodel.exceptions import ValidationError
-from querysource.conf import (
+from ...conf import (
     JDBC_DRIVER,
     JDBC_HOST,
     JDBC_PORT,

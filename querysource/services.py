@@ -8,10 +8,10 @@ from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
 # QS
-from querysource.datasources.handlers import DatasourceDrivers, DatasourceView
-from querysource.template import TemplateParser
-from querysource.types import Singleton
-from querysource.handlers import (
+from .datasources.handlers import DatasourceDrivers, DatasourceView
+from .template import TemplateParser
+from .types import Singleton
+from .handlers import (
     QueryService,
     QueryHandler,
     QueryExecutor,
@@ -36,7 +36,8 @@ QS_FILTERS = {}
 class QuerySource(metaclass=Singleton):
     """QuerySource.
 
-    QuerySource is an Application (based on aiohttp) to processing data with different kind of Data Providers.
+    QuerySource is an Application (based on aiohttp)
+    to processing data with different kind of Data Providers.
     We are already to work with:
     - Database providers (RDBMS using a SQLParser)
     - noSQL Providers (like Mongo, Cassandra or RethinkDB)
@@ -88,12 +89,12 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v2/services/queries', qs.run_queries, allow_head=True)
         routes.append(r)
         # named-queries
-        r = self.app.router.add_get('/api/v2/test/queries/{slug}', qs.test_slug, allow_head=True) # dry-run
+        r = self.app.router.add_get('/api/v2/test/queries/{slug}', qs.test_slug, allow_head=True)
         routes.append(r)
-        r = self.app.router.add_post('/api/v2/test/queries/{slug}', qs.test_slug) # dry-run
+        r = self.app.router.add_post('/api/v2/test/queries/{slug}', qs.test_slug)
         routes.append(r)
         ## Test query without saving (also: running)
-        r = self.app.router.add_post('/api/v2/test/queries', qs.run_query) # dry-run
+        r = self.app.router.add_post('/api/v2/test/queries', qs.run_query)
         routes.append(r)
         r = self.app.router.add_get('/api/v2/services/queries/{slug}', qs.query, allow_head=True)
         routes.append(r)
@@ -135,7 +136,7 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
 
         ## Datasource Support
-        ds = DatasourceDrivers() # Support for Driver management.
+        ds = DatasourceDrivers()  # Support for Driver management.
         r = self.app.router.add_get('/api/v1/datasources/drivers/list', ds.supported_drivers)
         routes.append(r)
         r = self.app.router.add_get('/api/v1/datasources/driver/{driver}', ds.get_driver)

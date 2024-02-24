@@ -1,5 +1,5 @@
 from typing import Any
-from querysource.exceptions import QueryError, ConfigError
+from ...exceptions import QueryError, ConfigError
 from .rest import restSource
 
 class openweather(restSource):
@@ -12,14 +12,13 @@ class openweather(restSource):
     units: str = 'metric'
     days: int = 5
 
-
     def __init__(
-            self,
-            definition: dict = None,
-            conditions: dict = None,
-            request: Any = None,
-            **kwargs
-        ):
+        self,
+        definition: dict = None,
+        conditions: dict = None,
+        request: Any = None,
+        **kwargs
+    ):
         super(openweather, self).__init__(definition, conditions, request, **kwargs)
 
         self._conditions = conditions
@@ -43,11 +42,11 @@ class openweather(restSource):
         else:
             self._conditions['cnt'] = self.days
 
-        if not 'units' in self._conditions:
+        if 'units' not in self._conditions:
             self._conditions['units'] = self.units
 
         # Credentials
-        if not 'appid' in conditions:
+        if 'appid' not in conditions:
             self._conditions['appid'] = self._env.get('OPENWEATHER_APPID')
             if not self._conditions['appid']:
                 try:

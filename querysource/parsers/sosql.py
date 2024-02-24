@@ -7,11 +7,11 @@ import asyncio
 from collections.abc import Callable
 import re
 from functools import partial
-from querysource.types.typedefs import NullDefault, SafeDict
-from querysource.types.validators import Entity, field_components
-from querysource.providers import BaseProvider
-from querysource.models import QueryObject
-from querysource.exceptions import EmptySentence, ParserError
+from ..types.typedefs import NullDefault, SafeDict
+from ..types.validators import Entity, field_components
+from ..providers import BaseProvider
+from ..models import QueryObject
+from ..exceptions import EmptySentence, ParserError
 from .sql import SQLParser
 
 

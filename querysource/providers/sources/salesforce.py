@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup as bs
 from simple_salesforce import Salesforce
 from io import StringIO
 import pandas as pd
-from querysource.exceptions import (
+from ...exceptions import (
     DataNotFound,
     DriverError,
     QueryException

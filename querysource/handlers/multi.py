@@ -2,15 +2,15 @@ import time
 import asyncio
 import threading
 from aiohttp import web
-from querysource.outputs import DataOutput
-from querysource.exceptions import (
+from ..outputs import DataOutput
+from ..exceptions import (
     ParserError,
     DataNotFound,
     DriverError,
     QueryException,
     SlugNotFound,
 )
-from querysource.queries.obj import QueryObject
+from ..queries.obj import QueryObject
 from .abstract import AbstractHandler
 from .operators import Join, Concat, Melt
 from .transformations import crosstab, correlation

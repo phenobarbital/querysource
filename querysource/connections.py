@@ -22,7 +22,7 @@ from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
 
-from querysource.conf import (
+from .conf import (
     POSTGRES_MAX_CONNECTIONS,
     POSTGRES_MIN_CONNECTIONS,
     POSTGRES_SSL,
@@ -38,11 +38,10 @@ from querysource.conf import (
     asyncpg_url,
     default_dsn,
 )
-from querysource.datasources.drivers import SUPPORTED, DataDriver
-from querysource.models import QueryModel
-from querysource.providers import BaseProvider
-from querysource.types import Singleton
-
+from .datasources.drivers import SUPPORTED, DataDriver
+from .models import QueryModel
+from .providers import BaseProvider
+from .types import Singleton
 from .exceptions import (
     ConfigError,
     QueryError,

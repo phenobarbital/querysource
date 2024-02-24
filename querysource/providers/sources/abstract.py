@@ -13,10 +13,10 @@ import asyncio
 from aiohttp import web
 from navconfig import config
 from navconfig.logging import logging
-from querysource.models import QueryModel
-from querysource.libs.encoders import DefaultEncoder
-from querysource.exceptions import ParserError
-from querysource.utils.functions import get_hash
+from ...models import QueryModel
+from ...libs.encoders import DefaultEncoder
+from ...exceptions import ParserError
+from ...utils.functions import get_hash
 if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
 else:

@@ -1,7 +1,7 @@
 from typing import Any
 from datetime import date
 from urllib.parse import urlencode
-from querysource.exceptions import DriverError
+from ...exceptions import DriverError
 from .rest import restSource
 
 class retailnext(restSource):
@@ -96,7 +96,18 @@ class retailnext(restSource):
         except (KeyError, ValueError):
             first_day = date.today().isoformat()
             last_day = date.today().isoformat()
-        lista = [{"first_day": first_day, "last_day": last_day, "type": dat['name'],"time start": item['group']['start'], "time end": item['group']['finish'],"location":element['group']['uuid'],"location name":element['group']['name'],"traffic":element['value'] } for dat in data['metrics']  for item in dat['data'] for element in item['next_level'] ]
+        lista = [
+            {
+                "first_day": first_day,
+                "last_day": last_day,
+                "type": dat['name'],
+                "time start": item['group']['start'],
+                "time end": item['group']['finish'],
+                "location": element['group']['uuid'],
+                "location name": element['group']['name'],
+                "traffic": element['value']
+            } for dat in data['metrics'] for item in dat['data'] for element in item['next_level']
+        ]
         return lista
 
     async def query(self, url: str = None, params: dict = None):

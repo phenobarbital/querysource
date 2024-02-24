@@ -2,7 +2,7 @@
 """
 from dataclasses import InitVar
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     # MySQL Server
     MYSQL_DRIVER,
     MYSQL_HOST,

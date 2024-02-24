@@ -1,4 +1,3 @@
-import logging
 import pyarrow as pa
 from .abstract import OutputFormat
 

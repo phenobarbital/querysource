@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import asdict, InitVar
 from datamodel import BaseModel, Field
 from datamodel.types import JSON_TYPES
-from querysource.conf import (
+from ...conf import (
     DEFAULT_AWS_REGION,
     GOOGLE_SERVICE_FILE,
     GOOGLE_SERVICE_PATH

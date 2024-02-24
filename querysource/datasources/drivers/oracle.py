@@ -4,7 +4,7 @@ from typing import Optional, Union
 from dataclasses import InitVar
 from datamodel import Column
 from datamodel.exceptions import ValidationError
-from querysource.conf import (
+from ...conf import (
     # ORacle Server
     ORACLE_DRIVER,
     ORACLE_HOST,
@@ -17,7 +17,7 @@ from querysource.conf import (
 from .abstract import SQLDriver
 
 def oracle_properties() -> tuple:
-    return ('host', 'port', 'user', 'password', 'database', 'dsn', 'client' )
+    return ('host', 'port', 'user', 'password', 'database', 'dsn', 'client')
 
 class oracleDriver(SQLDriver):
     driver: str = ORACLE_DRIVER

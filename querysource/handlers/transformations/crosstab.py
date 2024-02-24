@@ -1,6 +1,6 @@
 from typing import Union
 import pandas as pd
-from querysource.exceptions import (
+from ...exceptions import (
     DriverError,
     QueryException
 )

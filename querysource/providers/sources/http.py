@@ -22,14 +22,14 @@ from asyncdb.utils import cPrint
 from navconfig.logging import logging
 from proxylists.proxies import ProxyDB
 from proxylists import check_address
-from querysource.models import QueryModel
-from querysource.utils.functions import check_empty
-from querysource.exceptions import (
+from ...models import QueryModel
+from ...utils.functions import check_empty
+from ...exceptions import (
     DriverError,
     DataNotFound,
     QueryException
 )
-from querysource.conf import CACHE_URL
+from ...conf import CACHE_URL
 from .abstract import baseSource
 
 if sys.version_info < (3, 10):

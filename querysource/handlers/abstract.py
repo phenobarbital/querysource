@@ -5,14 +5,14 @@ from navconfig import DEBUG
 from navconfig.logging import logging
 from navigator.views import BaseHandler
 # Queries:
-from querysource.queries.qs import QS
+from ..queries.qs import QS
 # Output
-from querysource.outputs import mime_types
-from querysource.outputs.writers import mime_formats
-from querysource.exceptions import (
+from ..outputs import mime_types
+from ..outputs.writers import mime_formats
+from ..exceptions import (
     QueryException
 )
-from querysource.utils.events import enable_uvloop
+from ..utils.events import enable_uvloop
 
 enable_uvloop()
 

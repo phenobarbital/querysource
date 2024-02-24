@@ -1,5 +1,5 @@
 from datamodel import Field
-from querysource.conf import (
+from ...conf import (
     SALESFORCE_INSTANCE,
     SALESFORCE_TOKEN,
     SALESFORCE_DOMAIN,
@@ -16,7 +16,7 @@ class salesforceDriver(CloudDriver):
     domain: str = Field(required=False)
     session_id: str = Field(required=False)
 
-    def __post_init__(self, user, hostname, *args, **kwargs): # pylint: disable=W0613,W0221
+    def __post_init__(self, user, hostname, *args, **kwargs):  # pylint: disable=W0613,W0221
         if not self.instance:
             self.instance = self.url
         super(salesforceDriver, self).__post_init__(user, hostname, *args, **kwargs)

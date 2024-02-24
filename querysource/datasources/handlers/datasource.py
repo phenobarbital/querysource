@@ -11,12 +11,11 @@ from asyncdb.exceptions import (
     StatementError
 )
 from navigator.views import BaseView
-from querysource.datasources.models import DataSource
-from querysource.datasources.drivers import SUPPORTED
-from querysource.conf import default_dsn
-from querysource.utils.parseqs import ParseDict
-from querysource.exceptions import ParserError
-
+from ...conf import default_dsn
+from ...utils.parseqs import ParseDict
+from ...exceptions import ParserError
+from ..models import DataSource
+from ..drivers import SUPPORTED
 
 class DatasourceView(BaseView):
     """API View for managing datasources.

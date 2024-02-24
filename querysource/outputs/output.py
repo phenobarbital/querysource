@@ -4,9 +4,9 @@ from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 from navconfig.logging import logging
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
-from querysource.libs.encoders import DefaultEncoder
-from querysource.queries.abstract import BaseQuery
-from querysource.exceptions import (
+from ..libs.encoders import DefaultEncoder
+from ..queries.abstract import BaseQuery
+from ..exceptions import (
     DataNotFound,
     QueryException,
 )

@@ -1,6 +1,6 @@
 from dataclasses import InitVar
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     # influxdb
     INFLUX_DRIVER,
     INFLUX_HOST,

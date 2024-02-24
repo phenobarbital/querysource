@@ -1,9 +1,8 @@
 import asyncio
 from functools import partial
 
-from querysource.exceptions import EmptySentence
-from querysource.types.typedefs import NullDefault, SafeDict
-
+from ..exceptions import EmptySentence
+from ..types.typedefs import NullDefault, SafeDict
 from .sql import SQLParser
 
 

@@ -2,7 +2,7 @@ from typing import Any
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from navconfig.logging import logging
-from querysource.exceptions import DataNotFound
+from ...exceptions import DataNotFound
 from .rest import restSource
 
 
@@ -87,7 +87,7 @@ class shoppertrack(restSource):
             dt1 = datetime.strptime(self._conditions['start_time'], "%Y-%m-%d %H:%M")
             self._conditions['start_time'] = dt1.strftime("%Y%m%d%H%M")
 
-            if not 'end_time' in self._conditions:
+            if 'end_time' not in self._conditions:
                 dt2 = dt1 + timedelta(minutes=15)
             else:
                 dt2 = datetime.strptime(self._conditions['end_time'], "%Y-%m-%d %H:%M")
@@ -148,7 +148,6 @@ class shoppertrack(restSource):
             return normalized
         else:
             return result['sites']
-
 
     async def query(self):
         """

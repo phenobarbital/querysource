@@ -1,7 +1,7 @@
 from typing import Union, Optional, Any
 from datetime import datetime
 from datamodel import BaseModel, Field
-from querysource.datasources.drivers import SUPPORTED
+from ..datasources.drivers import SUPPORTED
 
 def supported_drivers(field, driver):  # pylint: disable=W0613
     return driver in SUPPORTED

@@ -2,7 +2,7 @@
 """
 from dataclasses import InitVar
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     # SQL Server
     SQLSERVER_DRIVER,
     SQLSERVER_HOST,
@@ -26,7 +26,7 @@ class sqlserverDriver(SQLDriver):
     port: int = Column(required=True, default=1433)
     tds_version: str = Column(required=False, default='8.0')
 
-    def __post_init__(self, username, hostname = None, **kwargs) -> None: # pylint: disable=W0613,W0221
+    def __post_init__(self, username, hostname=None, **kwargs) -> None:  # pylint: disable=W0613,W0221
         super(sqlserverDriver, self).__post_init__(hostname, **kwargs)
         if username is not None and self.user is None:
             self.user = username

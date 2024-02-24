@@ -6,9 +6,8 @@ class countries(restSource):
       countries
         REST connector REST Countries (countries information)
     """
-
+    method: str = 'get'
     base_url: str = 'https://restcountries.com/v3.1/'
-
 
     def __post_init__(
             self,
@@ -71,7 +70,7 @@ class countries(restSource):
         elif 'country' in self._conditions:
             self._args['country'] = self._conditions['country']
             del self._conditions['country']
-        if not 'country' in self._args:
+        if 'country' not in self._args:
             raise ValueError(
                 'Countries API: Missing Country in API'
             )
@@ -82,7 +81,6 @@ class countries(restSource):
         except Exception as err:
             self.logger.exception(err)
             raise
-
 
     async def code(self, code: str = None):
         """code.

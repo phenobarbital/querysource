@@ -1,7 +1,7 @@
 """Driver for pg (asyncPG) database connections.
 """
 from datamodel import Column
-from querysource.conf import (
+from ...conf import (
     # postgres read-only
     asyncpg_url,
     PG_HOST,

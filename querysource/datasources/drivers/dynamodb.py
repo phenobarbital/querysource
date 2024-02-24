@@ -1,4 +1,4 @@
-from querysource.conf import (
+from ...conf import (
     DYNAMODB_REGION,
     DYNAMODB_KEY,
     DYNAMODB_SECRET

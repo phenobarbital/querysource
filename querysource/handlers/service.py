@@ -8,15 +8,15 @@ from datetime import datetime
 from aiohttp import web
 from asyncdb.exceptions import ProviderError  # QuerySource Query, Executor, etc
 # Output
-from querysource.outputs import DataOutput
-from querysource.outputs.writers import graph_ouputs
-from querysource.exceptions import (
+from ..outputs import DataOutput
+from ..outputs.writers import graph_ouputs
+from ..exceptions import (
     ParserError,
     QueryException,
     SlugNotFound,
     DriverError,
 )
-from querysource.conf import (
+from ..conf import (
     CSV_DEFAULT_DELIMITER,
     CSV_DEFAULT_QUOTING
 )
@@ -350,7 +350,7 @@ class QueryService(AbstractHandler):
         except KeyError:
             slug: str = None
             _format: str = 'json'
-        except Exception as err: # pylint: disable=W0703
+        except Exception as err:  # pylint: disable=W0703
             return self.NotFound(message="QS: Error with parameters.", exception=err)
         # get the format: returns a valid MIME-Type string to use in DataOutput
         queryformat = self.format(request, params, _format)
@@ -367,7 +367,7 @@ class QueryService(AbstractHandler):
         # Many other parsing options:
         try:
             del options['_csv_options']
-        except (TypeError, KeyError): # default options:
+        except (TypeError, KeyError):  # default options:
             pass
         if not options:
             options = {}
@@ -477,7 +477,7 @@ class QueryService(AbstractHandler):
         except KeyError:
             slug: str = None
             _format: str = 'json'
-        except Exception as err: # pylint: disable=W0703
+        except Exception as err:  # pylint: disable=W0703
             return self.NotFound(message="QS: Error with parameters.", exception=err)
         # get the format: returns a valid MIME-Type string to use in DataOutput
         if not params:
@@ -544,7 +544,6 @@ class QueryService(AbstractHandler):
             ) from ex
         finally:
             await query.close()
-
 
     async def clean_cache(self, request):
         """

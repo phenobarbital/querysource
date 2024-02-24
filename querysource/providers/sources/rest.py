@@ -11,8 +11,8 @@ from navconfig.logging import logging
 from bs4 import BeautifulSoup as bs
 import requests
 import urllib3
-from querysource.libs.json import json_decoder, json_encoder
-from querysource.exceptions import DriverError, ParserError
+from ...libs.json import json_decoder, json_encoder
+from ...exceptions import DriverError, ParserError
 from .http import httpSource
 
 if sys.version_info < (3, 10):
@@ -121,7 +121,6 @@ class restSource(httpSource):
                 f"HTTP Connection Error: {e!r}"
             ) from e
 
-
     async def jwt_token(self, user: str, password: str):
         result = None
         # get the redis connection
@@ -190,7 +189,7 @@ class restSource(httpSource):
                         result = b.decode("utf-8")
                         raise DriverError(
                             f'Error: {result}'
-                         ) from e
+                        ) from e
                 else:
                     error = await response.text()
                     raise DriverError(

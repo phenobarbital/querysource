@@ -17,9 +17,9 @@ from google.analytics.data_v1beta.types import (
 )
 # google analytics ga4
 from google.api_core.exceptions import PermissionDenied, ServiceUnavailable
-from querysource.conf import GA_SERVICE_ACCOUNT_NAME, GA_SERVICE_PATH
-from querysource.exceptions import QueryError, ConfigError
-from querysource.libs.json import json_encoder
+from ...conf import GA_SERVICE_ACCOUNT_NAME, GA_SERVICE_PATH
+from ...exceptions import QueryError, ConfigError
+from ...libs.json import json_encoder
 from .rest import restSource
 
 
@@ -148,7 +148,7 @@ class ga(restSource):
             )
         if 'enddate' in self._conditions:
             self._conditions['end_date'] = self._conditions['enddate']
-        if not 'end_date' in self._conditions:
+        if 'end_date' not in self._conditions:
             self._conditions['end_date'] = "today"
 
         # set parameters
@@ -174,8 +174,8 @@ class ga(restSource):
                 )
         else:
             metrics.append(
-                    Metric(name='activeUsers')
-                )
+                Metric(name='activeUsers')
+            )
         dimensions = []
         if 'dimensions' in self._conditions:
             for dimension in self._conditions['dimensions']:
@@ -243,8 +243,8 @@ class ga(restSource):
                 )
         else:
             metrics.append(
-                    Metric(name='activeUsers')
-                )
+                Metric(name='activeUsers')
+            )
         dimensions = []
         pivots = []
         if 'dimensions' in self._conditions:
@@ -298,13 +298,13 @@ class ga(restSource):
                 i = 0
                 for dimension in dimensions:
                     el[dimension] = row.dimension_values[i].value
-                    i+=1
+                    i += 1
                 # for dimension_value in row.dimension_values:
                 #     print('DIMENSIONS> ', dimension_value.value)
                 i = 0
                 for metric in metrics:
                     el[metric] = row.metric_values[i].value
-                    i+=1
+                    i += 1
                 result.append(el)
             return result
         except PermissionDenied as err:

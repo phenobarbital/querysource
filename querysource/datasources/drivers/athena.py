@@ -1,5 +1,5 @@
 from datamodel import Field
-from querysource.conf import (
+from ...conf import (
     ATHENA_REGION,
     ATHENA_KEY,
     ATHENA_SECRET,

@@ -3,7 +3,7 @@ from datetime import datetime
 import socket
 from asyncdb import AsyncDB
 from navconfig.logging import logging
-from querysource.conf import (
+from ..conf import (
     QS_EVENT_BACKEND,
     QS_EVENT_CREDENTIALS,
     QS_EVENT_TABLE,

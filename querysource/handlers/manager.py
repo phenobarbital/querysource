@@ -10,18 +10,13 @@ from datamodel.exceptions import ValidationError
 from asyncdb.exceptions import (
     NoDataFound
 )
-from querysource.models import QueryModel
+from ..models import QueryModel
 # Output
-from querysource.utils.handlers import QueryHandler
-from querysource.types.validators import Entity
+from ..utils.handlers import QueryView
+from ..types.validators import Entity
 
-class QueryManager(View, QueryHandler):
+class QueryManager(QueryView):
     _model: QueryModel = None
-
-    def __init__(self, request, *args, **kwargs):
-        View.__init__(self, request)
-        QueryHandler.__init__(self, *args, **kwargs)
-        self._request = request
 
     def post_init(self, *args, **kwargs):
         self._logger_name = 'QS.Manager'

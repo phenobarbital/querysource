@@ -8,13 +8,13 @@ from .drivers import SUPPORTED
 from .drivers.abstract import DataDriver
 
 
-def auto_now_add(*args, **kwargs): # pylint: disable=W0613
+def auto_now_add(*args, **kwargs):  # pylint: disable=W0613
     return uuid.uuid4()
 
-def get_default_program(**kwargs): # pylint: disable=W0613
+def get_default_program(**kwargs):  # pylint: disable=W0613
     return 1
 
-def supported_drivers(field, value): # pylint: disable=W0613
+def supported_drivers(field, value):  # pylint: disable=W0613
     return value in SUPPORTED
 
 class DataSource(Model):

@@ -1,6 +1,6 @@
 from typing import Union
 import pandas as pd
-from querysource.exceptions import (
+from ...exceptions import (
     DriverError,
     QueryException
 )
@@ -23,15 +23,15 @@ def categorize_correlation(coefficient):
         return "Very weak positive correlation"
     if coefficient == -1:
         return "Perfect negative correlation"
-    elif coefficient > -1 and coefficient <=-0.8:
+    elif coefficient > -1 and coefficient <= -0.8:
         return "Very strong negative correlation"
-    elif coefficient <=-0.6 and coefficient >-0.8:
+    elif coefficient <= -0.6 and coefficient > -0.8:
         return "Strong negative correlation"
-    elif coefficient <=-0.4 and coefficient >-0.6:
+    elif coefficient <= -0.4 and coefficient > -0.6:
         return "Moderate negative correlation"
     elif coefficient <= -0.2 and coefficient > -0.4:
         return "Weak negative correlation"
-    elif coefficient < 0 and coefficient >-0.2:
+    elif coefficient < 0 and coefficient > -0.2:
         return "Very weak negative correlation"
     elif coefficient == 0:
         return "No correlation"

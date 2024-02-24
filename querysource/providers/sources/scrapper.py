@@ -10,8 +10,8 @@ from typing import (
     Any
 )
 import requests
-from querysource.exceptions import DriverError
-from querysource.models import QueryModel
+from ...exceptions import DriverError
+from ...models import QueryModel
 from .http import httpSource
 from .parsers.xpath import xpathParser
 
@@ -48,7 +48,6 @@ class scrapperSource(httpSource):
             **kwargs
         )
 
-
     async def process_request(self, future):
         try:
             error = None
@@ -67,7 +66,7 @@ class scrapperSource(httpSource):
             return ([], err)
         except (
             requests.exceptions.RequestException,
-            ) as e:
+        ) as e:
             raise DriverError(
                 f"HTTP Connection Error: {e!r}"
             ) from e
