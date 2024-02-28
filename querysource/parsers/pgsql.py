@@ -97,6 +97,12 @@ class pgSQLParser(QueryParser):
                         if fval in valid_operators:
                             where_cond.append(f"{key} {fval} {value[1]}")
                         else:
+                            if _format in ('date', 'datetime'):
+                                if end == '!':
+                                    where_cond.append(f"{name} NOT BETWEEN '{value[0]}' AND '{value[1]}'")
+                                else:
+                                    where_cond.append(f"{name} BETWEEN '{value[0]}' AND '{value[1]}'")
+                                continue
                             # is a list of values
                             val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209
                             # check for operator

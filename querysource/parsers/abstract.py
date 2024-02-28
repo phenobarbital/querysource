@@ -319,7 +319,15 @@ class QueryParser(ABC):
                 if new_val := await self.get_operational_value(val, connection):
                     result = new_val
                 else:
-                    result = is_valid(key, val, _type)
+                    try:
+                        result = is_valid(key, val, _type)
+                    except TypeError as exc:
+                        self.logger.warning(
+                            f'Error on: {key} = {val} with type {_type}, {exc}'
+                        )
+                        if isinstance(val, list):
+                            _filter[name] = val
+                            continue
                 self.conditions[key] = result
             else:
                 _filter[name] = val

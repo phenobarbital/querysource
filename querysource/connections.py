@@ -514,7 +514,7 @@ class QueryConnection(metaclass=Singleton):
         """
         dispose a connection from the pg pool.
         """
-        logging.debug('Disposing a Query Connection')
+        # logging.debug('Disposing a Query Connection')
         if conn:
             # TODO: check if connection is from instance pg
             try:
