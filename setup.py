@@ -132,7 +132,7 @@ setup(
         'hubspot-api-client==7.5.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.16.2',
-        'google-api-python-client==2.86.0',
+        'google-api-python-client==2.120.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
         'aiocsv==1.2.4',
