@@ -265,7 +265,7 @@ class BaseQuery(ABC):
                 f'Invalid Datasource type {source.driver_type} for {datasource}'
             )
 
-    async def default_driver(self, driver: str) -> Any:
+    async def default_driver(self, driver: str) -> tuple:
         if not supported_drivers(None, driver=driver):
             raise TypeError(
                 f"QS: Invalid Database Driver: {driver}"
@@ -282,9 +282,10 @@ class BaseQuery(ABC):
                 f"QS: There is no default connection for Driver {driver}: {ex}"
             ) from ex
         ### creating a connector for this driver:
-        if default.driver_type == 'asyncdb':
+        driver_type = default.driver_type
+        if driver_type == 'asyncdb':
             try:
-                return AsyncDB(
+                return driver_type, AsyncDB(
                     driver,
                     dsn=default.dsn,
                     params=default.params(),
@@ -294,6 +295,9 @@ class BaseQuery(ABC):
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"
                 ) from ex
+        elif default.driver_type == 'external':
+            # Salesforce and others:
+            return driver_type, default
 
     #### Caching facilities
     def save_cache(self, checksum, result, **kwargs):

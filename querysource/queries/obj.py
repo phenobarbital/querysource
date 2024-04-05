@@ -138,7 +138,7 @@ class QueryObject(BaseQuery):
             elif driver := self._qs.driver:
                 ## using a default driver:
                 try:
-                    self._qs.connection = await self.default_driver(driver)
+                    _, self._qs.connection = await self.default_driver(driver)
                 except (RuntimeError, QueryException) as ex:
                     return self.Error(
                         message=str(ex),
@@ -204,9 +204,8 @@ class QueryObject(BaseQuery):
                     result, error = await self._output_format(result, error)  # pylint: disable=W0150
                     await self._queue.put({self._name: result})
                 except (RuntimeError, QueryException) as ex:
-                    return self.error(
-                        response=str(ex),
-                        exception=ex
+                    raise QueryException(
+                        f"Error on Query: {ex}"
                     )
         else:
             result = {
@@ -284,7 +283,7 @@ class QueryObject(BaseQuery):
             _provider = self.load_provider(provider)
             # can we use a default driver?
             try:
-                conn = await self.default_driver(provider)
+                _, conn = await self.default_driver(provider)
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None

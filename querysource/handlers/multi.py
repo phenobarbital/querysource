@@ -13,7 +13,7 @@ from ..exceptions import (
 from ..queries.obj import QueryObject
 from .abstract import AbstractHandler
 from .operators import Join, Concat, Melt
-from .transformations import crosstab, correlation
+from .transformations import crosstab, correlation, GoogleMaps
 from .outputs import TableOutput
 
 class ThreadQuery(threading.Thread):
@@ -23,7 +23,12 @@ class ThreadQuery(threading.Thread):
         self._queue = queue
         self.exc = None
         # I need to build a QueryObject task, and put arguments on there.
-        self._query = QueryObject(name, query, queue=queue, request=request, loop=self._loop)
+        self._query = QueryObject(
+            name, query,
+            queue=queue,
+            request=request,
+            loop=self._loop
+        )
 
     def slug(self):
         return self._query.slug
@@ -181,6 +186,9 @@ class QueryHandler(AbstractHandler):
                         result = await obj.run()
                     elif step_name == 'correlation':
                         obj = correlation(data=result, **component)
+                        result = await obj.run()
+                    elif step_name == 'GoogleMaps':
+                        obj = GoogleMaps(data=result, **component)
                         result = await obj.run()
                 break
         if 'Processors' in options:

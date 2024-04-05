@@ -466,7 +466,7 @@ class QueryConnection(metaclass=Singleton):
             _provider = self.load_provider(provider)
             # can we use a default driver?
             try:
-                conn = await self.default_driver(provider)
+                _, conn = await self.default_driver(provider)
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
