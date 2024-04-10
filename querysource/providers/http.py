@@ -30,7 +30,7 @@ class httpProvider(BaseProvider):
         query: Any = None,
         qstype: str = '',
         connection: Any = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs

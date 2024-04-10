@@ -29,7 +29,7 @@ class sqlserverProvider(BaseProvider):
         slug: str = '',
         query: Any = None,
         qstype: str = '',
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -79,10 +79,9 @@ class sqlserverProvider(BaseProvider):
                         f'MS SQL Server in SQL: {err}'
                     ) from err
 
-
     def get_raw_query(self, query):
         sql = query
-        conditions = {**self.replacement }
+        conditions = {**self.replacement}
         if self._conditions:
             return sql.format_map(
                 defaultdict(str, SafeDict(**self._conditions))
@@ -110,8 +109,8 @@ class sqlserverProvider(BaseProvider):
 
     async def close(self):
         try:
-           await self._connection.close()
-        except Exception: #pylint: disable=W0703
+            await self._connection.close()
+        except Exception:  # pylint: disable=W0703
             pass
 
     async def columns(self):

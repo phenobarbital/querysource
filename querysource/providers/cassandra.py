@@ -28,7 +28,7 @@ class cassandraProvider(BaseProvider):
         slug: str = '',
         query: Any = None,
         qstype: str = '',
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -62,10 +62,9 @@ class cassandraProvider(BaseProvider):
                         f'Cassandra Error CQL: {err}'
                     ) from err
 
-
     def get_raw_query(self, query):
         sql = query
-        conditions = {**self.replacement }
+        conditions = {**self.replacement}
         if self._conditions:
             return sql.format_map(
                 defaultdict(str, SafeDict(**self._conditions))
@@ -91,8 +90,8 @@ class cassandraProvider(BaseProvider):
 
     async def close(self):
         try:
-           await self._connection.close()
-        except Exception: #pylint: disable=W0703
+            await self._connection.close()
+        except Exception:  # pylint: disable=W0703
             pass
 
     async def columns(self):
@@ -103,7 +102,6 @@ class cassandraProvider(BaseProvider):
         """Running Build Query and return the Query to be executed (without execution).
         """
         return (self._query, None)
-
 
     async def query(self):
         result = []

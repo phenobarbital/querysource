@@ -13,8 +13,8 @@ valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
 
 class SQLParser(QueryParser):
     schema_based: bool = True
-    _tablename:str = '{schema}.{table}'
-    _base_sql:str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
+    _tablename: str = '{schema}.{table}'
+    _base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class SQLParser(QueryParser):
         self.filter = where
         return self
 
-    async def filtering_options(self, sentence): #pylint: disable=W0221
+    async def filtering_options(self, sentence):  # pylint: disable=W0221
         """
         Filtering Conditions.
         """
@@ -50,7 +50,7 @@ class SQLParser(QueryParser):
         _sql = sentence
         if self.filter_options:
             if 'where_cond' not in _sql or 'filter' not in _sql:
-                    _sql = f'{sentence!s} {{filter}}'
+                _sql = f'{sentence!s} {{filter}}'
         return _sql
 
     async def filter_conditions(self, sql):
@@ -89,7 +89,7 @@ class SQLParser(QueryParser):
                     else:
                         # TODO: passing for a Function Parser.
                         # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value]) #pylint: disable=C0209
+                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209
                         # check for operator
                         if end == '!':
                             where_cond.append(f"{name} NOT IN ({val})")
@@ -162,7 +162,7 @@ class SQLParser(QueryParser):
             _sql = _sql.format_map(SafeDict(filter=''))
         return _sql
 
-    async def group_by(self, sql:str):
+    async def group_by(self, sql: str):
         # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
         if self.grouping:
             if isinstance(self.grouping, str):
@@ -172,7 +172,7 @@ class SQLParser(QueryParser):
                 sql = f"{sql} GROUP BY {group}"
         return sql
 
-    async def order_by(self, sql:str):
+    async def order_by(self, sql: str):
         _sql = "{sql} ORDER BY {order}"
         if isinstance(self.ordering, list) and len(self.ordering) > 0:
             order = ', '.join(self.ordering)
@@ -181,7 +181,7 @@ class SQLParser(QueryParser):
             sql = _sql.format_map(SafeDict(sql=sql, order=self.ordering))
         return sql
 
-    async def limiting(self, sql:str, limit:str = None, offset:str = None):
+    async def limiting(self, sql: str, limit: str = None, offset: str = None):
         if '{limit}' in sql:
             if limit:
                 limit = f"LIMIT {limit}"
@@ -197,7 +197,7 @@ class SQLParser(QueryParser):
 
         return sql
 
-    async def process_fields(self, sql:str):
+    async def process_fields(self, sql: str):
         if isinstance(self.fields, list) and len(self.fields) > 0:
             sql = sql.replace(' * FROM', ' {fields} FROM')
             fields = ', '.join(self.fields)

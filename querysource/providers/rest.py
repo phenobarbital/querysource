@@ -21,7 +21,7 @@ class restProvider(httpProvider):
         query: Any = None,
         qstype: str = '',
         connection: Any = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -89,7 +89,7 @@ class restProvider(httpProvider):
                 f'Exception calling {self.dialect}, error: {str(err)}'
             ) from err
 
-    async def result(self): # pylint: disable=W0236
+    async def result(self):  # pylint: disable=W0236
         """result.
            get the result from the Source REST.
         """
