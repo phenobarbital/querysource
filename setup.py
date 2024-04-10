@@ -148,7 +148,7 @@ setup(
         'reportlab==4.1.0',
         'WeasyPrint==58.1',
         'APScheduler==3.10.4',
-        'scikit-learn==1.2.2',
+        'scikit-learn==1.4.2',
         'elasticsearch-async==6.2.0',
         'seaborn==0.13.0',
         'bs4==0.0.1',
