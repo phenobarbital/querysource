@@ -18,7 +18,7 @@ from querysource.exceptions import (
     QueryException
 )
 from querysource.models import QueryModel
-from querysource.parsers.pgsql import SQLParser
+from querysource.parsers.sql import SQLParser
 from querysource.types import SafeDict
 
 from .abstract import BaseProvider
