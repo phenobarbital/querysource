@@ -30,7 +30,7 @@ downloads/
 eggs/
 .eggs/
 etc/
-google/
+google/*.json
 great_expetations/
 #lib/
 lib64/
