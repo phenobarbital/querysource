@@ -91,6 +91,7 @@ class QueryConnection(metaclass=Singleton):
         if 'loop' in kwargs:
             self._loop = kwargs['loop']
         self.start_cache(QUERYSET_REDIS)
+        self.logger = logging.getLogger(name='QS.Connection')
 
     def start_cache(self, dsn):
         ### redis connection:
@@ -128,7 +129,7 @@ class QueryConnection(metaclass=Singleton):
                 async with await self._redis.connection() as conn:
                     return await conn.get(key)
             except Exception as exc:
-                logging.exception(
+                self.logger.exception(
                     f"Failure on REDIS Cache: {exc}"
                 )
                 return False
@@ -203,7 +204,7 @@ class QueryConnection(metaclass=Singleton):
         except RuntimeError:
             loop = self._loop
         if self.lazy is True:
-            logging.debug(':: Starting QuerySource in Lazy Mode ::')
+            self.logger.debug(':: Starting QuerySource in Lazy Mode ::')
             cPrint(':: Starting QuerySource in Lazy Mode ::', level='DEBUG')
             # # lazy mode: create a simple database connector
             try:
@@ -217,18 +218,18 @@ class QueryConnection(metaclass=Singleton):
                 )
                 await self._connection.connection()
             except Exception as err:
-                logging.exception(err)
+                self.logger.exception(err)
                 raise ConfigError(
                     f"Unable to Connect to Database. {err}"
                 ) from err
         else:
             cPrint(':: Starting QuerySource in Master Mode ::', level='DEBUG')
-            logging.debug(':: Starting QuerySource in Master Mode ::')
+            self.logger.debug(':: Starting QuerySource in Master Mode ::')
             # pgpool (postgres)
             self.pgargs['min_size'] = POSTGRES_MIN_CONNECTIONS
             self.pgargs['max_clients'] = POSTGRES_MAX_CONNECTIONS
-            logging.debug(' :: Starting PostgreSQL with parameters ::')
-            logging.debug(f"{self.pgargs!r}")
+            self.logger.debug(' :: Starting PostgreSQL with parameters ::')
+            self.logger.debug(f"{self.pgargs!r}")
             try:
                 self._postgres = AsyncPool(
                     'pg',
@@ -239,7 +240,7 @@ class QueryConnection(metaclass=Singleton):
                 )
                 await self._postgres.connect()
             except Exception as err:
-                logging.exception(err)
+                self.logger.exception(err)
                 raise
             ## getting all datasources (saved into variable)
             sql = "SELECT * FROM public.datasources;"
@@ -250,12 +251,17 @@ class QueryConnection(metaclass=Singleton):
                         f'Error on Starting QuerySource: {error!s}'
                     )
                 for row in result:
+                    if row['params'] is None or row['credentials'] is None:
+                        self.logger.warning(
+                            f"Error in DataSource {row['name']}: Missing Params or Credentials."
+                        )
+                        continue
                     # building a datasource based on driver:
                     name = row['name']
                     try:
                         driver = self.get_driver(row['driver'])
                     except Exception as ex:  # pylint: disable=W0703
-                        logging.exception(ex, stack_info=True)
+                        self.logger.exception(ex, stack_info=True)
                         continue
                     try:
                         # TODO: encrypting credentials in database:
@@ -270,7 +276,7 @@ class QueryConnection(metaclass=Singleton):
                                 data = dict(row['params'])
                         DATASOURCES[name] = driver(**data)
                     except (ValueError, ValidationError) as ex:
-                        logging.exception(ex, stack_info=False)
+                        self.logger.exception(ex, stack_info=False)
             # TODO: get a query-slug (only for speed up the next queries)
             # await self.get_slug('querysource_test')
             # TODO: SAVING DATASOURCES IN MEMORY (memcached)
@@ -362,7 +368,7 @@ class QueryConnection(metaclass=Singleton):
     async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
         try:
             QueryModel.Meta.connection = conn
-            logging.debug(
+            self.logger.debug(
                 f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
             )
             return await QueryModel.get(query_slug=slug)
@@ -400,7 +406,7 @@ class QueryConnection(metaclass=Singleton):
             finally:
                 QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
-        logging.debug(
+        self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
         )
         if obj is None:
@@ -422,7 +428,7 @@ class QueryConnection(metaclass=Singleton):
                 **self.pgargs
             }
             args['server_settings']['application_name'] = 'QS.Read'
-        logging.debug(
+        self.logger.debug(
             f"Connection Arguments: {args!s}"
         )
         connection = AsyncDB(
@@ -432,7 +438,7 @@ class QueryConnection(metaclass=Singleton):
             params=params,
             **args
         )
-        logging.debug(
+        self.logger.debug(
             f'DSN {driver} > {dsn}'
         )
         return connection
@@ -493,14 +499,18 @@ class QueryConnection(metaclass=Singleton):
 
     async def datasource(self, name: str = 'default'):
         try:
-            source = DATASOURCES[name].copy()
+            source = DATASOURCES[name]
         except KeyError:
             return None
         if source.driver_type == 'asyncdb':
             ### making an AsyncDB connection:
             driver = source.driver
             try:
-                return AsyncDB(driver, dsn=source.dsn, params=source.params())
+                return AsyncDB(
+                    driver,
+                    dsn=source.dsn,
+                    params=source.params()
+                )
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"
@@ -514,7 +524,7 @@ class QueryConnection(metaclass=Singleton):
         """
         dispose a connection from the pg pool.
         """
-        # logging.debug('Disposing a Query Connection')
+        # self.logger.debug('Disposing a Query Connection')
         if conn:
             # TODO: check if connection is from instance pg
             try:
@@ -527,7 +537,7 @@ class QueryConnection(metaclass=Singleton):
         stop.
            Close and dispose all connections
         """
-        logging.debug(':: Closing all Querysource connections ::')
+        self.logger.debug(':: Closing all Querysource connections ::')
         try:
             if self.lazy is True:
                 await self._connection.close()
@@ -535,9 +545,9 @@ class QueryConnection(metaclass=Singleton):
                 await self._postgres.wait_close(gracefully=True, timeout=10)
                 # await self._postgres.close(timeout=10)
         except RuntimeError as err:
-            logging.exception(err)
+            self.logger.exception(err)
         except Exception as err:
-            logging.exception(err)
+            self.logger.exception(err)
             raise
-        logging.debug('Exiting ...')
+        self.logger.debug('Exiting ...')
         self._connected = False
