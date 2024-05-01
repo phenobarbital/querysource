@@ -136,7 +136,7 @@ setup(
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
         'aiocsv==1.2.4',
-        'lxml==4.9.3',
+        'lxml==5.2.1',
         'xlsxwriter==3.1.2',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
