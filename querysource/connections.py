@@ -319,11 +319,17 @@ class QueryConnection(metaclass=Singleton):
                 f"QS: Error unsupported Driver: {driver}"
             )
         else:
+            self.logger.notice(
+                f"Getting Default Connection for Driver {driver}"
+            )
             default = None
             try:
                 if not self._dsmodule:
                     # load dynamically
                     clspath = f'querysource.datasources.drivers.{driver}'
+                    self.logger.notice(
+                        f"Loading Driver {driver} Module: {clspath}"
+                    )
                     try:
                         self._dsmodule = import_module(clspath)
                     except (AttributeError, ImportError) as ex:
@@ -472,7 +478,7 @@ class QueryConnection(metaclass=Singleton):
             _provider = self.load_provider(provider)
             # can we use a default driver?
             try:
-                _, conn = await self.default_driver(provider)
+                conn = await self.default_driver(provider)
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
