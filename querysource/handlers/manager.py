@@ -78,7 +78,7 @@ class QueryManager(QueryView):
             query_slug = params['slug']
             try:
                 query_slug, meta = query_slug.split(':')
-            except (TypeError, AttributeError):
+            except (TypeError, AttributeError, ValueError):
                 pass
         except KeyError:
             query_slug = None

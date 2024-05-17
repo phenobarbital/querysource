@@ -40,11 +40,8 @@ def categorize_correlation(coefficient):
 
 class correlation(AbstractTransform):
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
-        try:
-            self.reset_index: bool = kwargs['reset_index']
-            del kwargs['reset_index']
-        except KeyError:
-            self.reset_index: bool = True
+        self.reset_index: bool = bool(kwargs.pop('reset_index', True))
+        self.numeric_only: bool = bool(kwargs.pop('numeric_only', True))
         super(correlation, self).__init__(data, **kwargs)
         if not hasattr(self, 'columns'):
             raise DriverError(
@@ -56,16 +53,34 @@ class correlation(AbstractTransform):
     async def run(self):
         await self.start()
         try:
-            # Calculate the Pearson's correlation for these columns
-            df = self.data[self.columns].corr(method=self.method, numeric_only=True)
+            if hasattr(self, 'grouped'):
+                first_col = self.columns[0]
+                second_col = self.columns[1]
+                colname = self.grouped['col_name']
+                group_col = self.grouped['column']
+                correlation = self.data.groupby(group_col).apply(lambda x: x[first_col].corr(x[second_col]))
+                self.data[colname] = correlation
+            if hasattr(self, 'by_group'):
+                # Calculate the Correlation by Program:
+                corr = self.data.groupby(self.by_group).apply(
+                    lambda group: group[self.columns].corr(method=self.method).iloc[0, 1]
+                )
+                print('CORRELATION > ', corr)
+                df = corr.reset_index()
+                df.columns = [self.by_group, 'Correlation']  # Renaming the columns appropriately
+            else:
+                # Calculate the Pearson's correlation for these columns
+                df = self.data[self.columns].corr(method=self.method, numeric_only=self.numeric_only)
             # Add a new column for the correlation categories
             if hasattr(self, 'add_categorization'):
                 try:
                     # Add a new column for the correlation categories
-                    category_series = df.apply(lambda x: x.map(categorize_correlation))
-                    category_matrix = pd.concat([df, category_series.add_suffix('_category')], axis=1)
-                    df = category_matrix
-                    print(df)
+                    if hasattr(self, 'by_group'):
+                        df['Correlation Category'] = df['Correlation'].apply(categorize_correlation)
+                    else:
+                        category_series = df.apply(lambda x: x.map(categorize_correlation))
+                        category_matrix = pd.concat([df, category_series.add_suffix('_category')], axis=1)
+                        df = category_matrix
                 except Exception as err:
                     print(err)
             if self.reset_index is True:

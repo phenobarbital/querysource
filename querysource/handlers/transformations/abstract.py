@@ -16,6 +16,7 @@ class AbstractTransform:
             setattr(self, k, v)
 
     def colum_info(self, df):
+        print(df.head())
         print('::: Printing Column Information === ')
         for column, t in df.dtypes.items():
             print(column, '->', t, '->', df[column].iloc[0])

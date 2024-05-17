@@ -157,6 +157,15 @@ setup(
         'sqlalchemy==2.0.23',
         # 'great_expectations==0.15.48',
         # 'ydata-profiling==4.6.3'
+        'statsmodels==0.14.2',
+        'pmdarima==2.0.4',
+        # Jupyter Netbook:
+        'jupyter==1.0.0',
+        'jupyter-server-proxy==4.1.2',
+        'nbconvert==7.16.4',
+        'notebook==7.1.3',
+        'voila==0.5.6',
+        # NAV libraries:
         'proxylists>=0.12.3',
         'async-notify>=1.2.1',
         'navconfig[default]>=1.5.0',

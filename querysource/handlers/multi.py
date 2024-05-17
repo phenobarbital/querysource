@@ -10,45 +10,17 @@ from ..exceptions import (
     QueryException,
     SlugNotFound,
 )
-from ..queries.obj import QueryObject
 from .abstract import AbstractHandler
 from .operators import Join, Concat, Melt
-from .transformations import crosstab, correlation, GoogleMaps
+from .transformations import (
+    crosstab,
+    correlation,
+    GoogleMaps,
+    Forecast,
+    Map
+)
 from .outputs import TableOutput
-
-class ThreadQuery(threading.Thread):
-    def __init__(self, name: str, query: dict, request: web.Request, queue: asyncio.Queue):
-        super().__init__()
-        self._loop = asyncio.new_event_loop()
-        self._queue = queue
-        self.exc = None
-        # I need to build a QueryObject task, and put arguments on there.
-        self._query = QueryObject(
-            name, query,
-            queue=queue,
-            request=request,
-            loop=self._loop
-        )
-
-    def slug(self):
-        return self._query.slug
-
-    def run(self):
-        asyncio.set_event_loop(self._loop)
-        try:
-            self._loop.run_until_complete(
-                self._query.build_provider()
-            )
-        except Exception as ex:
-            self.exc = ex
-        try:
-            self._loop.run_until_complete(
-                self._query.query()
-            )
-        except Exception as ex:
-            self.exc = ex
-        finally:
-            self._loop.close()
+from .sources import ThreadQuery, ThreadFile
 
 class QueryHandler(AbstractHandler):
 
@@ -68,7 +40,11 @@ class QueryHandler(AbstractHandler):
             options = await self.json_data(request)
         except (TypeError, ValueError):
             options = {}
-        if 'queries' not in options:
+        ## Getting data from Queries or Files
+        _queries = options.get('queries', {})
+        _files = options.get('files', {})
+        if not (_queries or _files):  # Check if both are effectively empty
+            print('AQUI ')
             raise self.Error(
                 message='Invalid POST Option passed to MultiQuery.',
                 code=400
@@ -110,10 +86,16 @@ class QueryHandler(AbstractHandler):
         # creates the Result Queue:
         result_queue = asyncio.Queue()
         tasks = {}
-        for name, query in options['queries'].items():
-            t = ThreadQuery(name, query, request, result_queue)
-            t.start()
-            tasks[name] = t
+        if _queries:
+            for name, query in _queries.items():
+                t = ThreadQuery(name, query, request, result_queue)
+                t.start()
+                tasks[name] = t
+        if _files:
+            for name, file in _files.items():
+                t = ThreadFile(name, file, request, result_queue)
+                t.start()
+                tasks[name] = t
         ## then, run all jobs:
         for _, t in tasks.items():
             t.join()
@@ -174,6 +156,10 @@ class QueryHandler(AbstractHandler):
                     message=f"Error on Melting Data: {ex}",
                     exception=ex
                 ) from ex
+        else:
+            # Fallback is to passing one single Dataframe:
+            if len(result.values()) == 1:
+                result = list(result.values())[0]
         ### Step 3: passing result to Transformations
         if 'Transform' in options:
             # passing the resultset for several transformation rules.
@@ -190,10 +176,26 @@ class QueryHandler(AbstractHandler):
                     elif step_name == 'GoogleMaps':
                         obj = GoogleMaps(data=result, **component)
                         result = await obj.run()
-                break
+                    elif step_name == 'Forecast':
+                        obj = Forecast(data=result, **component)
+                        result = await obj.run()
+                    elif step_name == 'Map':
+                        obj = Map(data=result, **component)
+                        result = await obj.run()
+                continue
         if 'Processors' in options:
             pass
-        ### Step 4: Passing result to any Processor declared
+        ### Step 4: Check if result is empty or is a dictionary of dataframes:
+        if result is None:
+            raise self.Error(
+                message="Empty Result",
+                code=404
+            )
+        # reduce to one single Dataframe:
+        if isinstance(result, dict) and len(result) == 1:
+            result = list(result.values())[0]
+        # TODO: making a melt of all dataframes
+        ### Step 5: Passing result to any Processor declared
         if 'Output' in options:
             ## Optionally saving result into Database (using Pandas)
             for step in options['Output']:
@@ -204,7 +206,13 @@ class QueryHandler(AbstractHandler):
                         result = await obj.run()
         ### Step 5: passing Result to DataOutput
         try:
-            output = DataOutput(request, query=result, ctype=queryformat, slug=None, **output_args)
+            output = DataOutput(
+                request,
+                query=result,
+                ctype=queryformat,
+                slug=None,
+                **output_args
+            )
             total_time = time.monotonic() - started_at
             self.logger.debug(
                 f'Query Duration: {total_time:.2f} seconds'
