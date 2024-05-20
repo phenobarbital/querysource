@@ -159,12 +159,6 @@ setup(
         # 'ydata-profiling==4.6.3'
         'statsmodels==0.14.2',
         'pmdarima==2.0.4',
-        # Jupyter Netbook:
-        'jupyter==1.0.0',
-        'jupyter-server-proxy==4.1.2',
-        'nbconvert==7.16.4',
-        'notebook==7.1.3',
-        'voila==0.5.6',
         # NAV libraries:
         'proxylists>=0.12.3',
         'async-notify>=1.2.1',
@@ -172,6 +166,16 @@ setup(
         'asyncdb[default]>=2.6.0',
         'navigator-session>=0.5.2',
     ],
+    extras_require={
+        "jupyter": [
+            # Jupyter Netbook:
+            'jupyter==1.0.0',
+            'jupyter-server-proxy==4.1.2',
+            'nbconvert==7.16.4',
+            'notebook==7.1.3',
+            'voila==0.5.6',
+        ],
+    },
     tests_require=[
         'pytest>=5.4.0',
         'coverage',

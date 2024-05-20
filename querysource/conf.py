@@ -1,6 +1,7 @@
 # Import Config Class
 import sys
 import os
+from pathlib import Path
 from navconfig import BASE_DIR, config
 
 
@@ -230,6 +231,19 @@ QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
 DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+
+# Jupyter Server:
+JUPYTER_ENABLED = config.getboolean('JUPYTER_ENABLED', fallback=False)
+JUPYTER_PORT = config.getint('JUPYTER_PORT', fallback=8888)
+JUPYTER_TOKEN = config.get('JUPYTER_TOKEN', fallback='07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a')
+JUPYTER_CONFIG = config.get('JUPYTER_CONFIG', fallback=BASE_DIR.joinpath('.jupyter', 'jupyter_notebook_config.py'))
+if isinstance(JUPYTER_CONFIG, str):
+    JUPYTER_CONFIG = Path(JUPYTER_CONFIG).resolve()
+jupyter_dir = JUPYTER_CONFIG.parent
+if not jupyter_dir.exists():
+    jupyter_dir.mkdir(parents=True, exist_ok=True)
+    # Copy sample configuration:
+    sample_config = BASE_DIR.joinpath('templates', 'jupyter_notebook_config.py')
 
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401

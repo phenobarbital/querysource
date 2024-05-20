@@ -1,3 +1,5 @@
+import sys
+import subprocess
 import asyncio
 from collections.abc import Callable
 from importlib import import_module
@@ -17,6 +19,12 @@ from .handlers import (
     QueryExecutor,
     QueryManager,
     VariablesService
+)
+from .conf import (
+    JUPYTER_ENABLED,
+    JUPYTER_PORT,
+    JUPYTER_TOKEN,
+    JUPYTER_CONFIG
 )
 
 try:
@@ -46,6 +54,8 @@ class QuerySource(metaclass=Singleton):
     - Hypertext-Queries: making queries directly in the URL.
     - GrapQL Provider (minimal support for making graphQL queries to different backends - using datasources -)
     """
+    jupyter_process = None
+
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
@@ -172,6 +182,9 @@ class QuerySource(metaclass=Singleton):
         self.app.on_startup.append(
             self.qs_start
         )
+        self.app.on_shutdown.append(
+            self.qs_stop
+        )
 
     def event_loop(self):
         return self._loop
@@ -189,6 +202,31 @@ class QuerySource(metaclass=Singleton):
             )
         return func
 
+    async def jupyter_start(self):
+        if JUPYTER_ENABLED:
+            # Command to start Jupyter
+            command = [
+                sys.executable, '-m', 'notebook', f'--config={JUPYTER_CONFIG}',
+                '--no-browser', '--NotebookApp.allow_origin=https://colab.research.google.com',
+                f'--port={JUPYTER_PORT}', '--NotebookApp.port_retries=0',
+                f"--NotebookApp.token='{JUPYTER_TOKEN}'"
+            ]
+            # Start Jupyter as a subprocess
+            self.jupyter_process = subprocess.Popen(command)
+            print(
+                f"Jupyter Server started with PID: {self.jupyter_process.pid}"
+            )
+
+    async def jupyter_stop(self):
+        if self.jupyter_process:
+            # Terminate the Jupyter process
+            self.jupyter_process.terminate()
+            print("Jupyter Server stopped")
+
     async def qs_start(self, app: WebApp) -> None:
         if not self._loop:
             self._loop = asyncio.get_event_loop()
+        await self.jupyter_start()
+
+    async def qs_stop(self, app: WebApp) -> None:
+        await self.jupyter_stop()
