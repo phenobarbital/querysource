@@ -4,11 +4,24 @@ venv:
 
 develop:
 	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
+	pip install --upgrade asyncdb[all]
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth
 	pip install --upgrade navigator-api
 	pip install -e .
 	python -m pip install -Ur docs/requirements-dev.txt
+	echo 'start develop QuerySource'
+
+jupyter:
+	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
+	python -m pip install -Ur docs/requirements-dev.txt
+	pip install --upgrade asyncdb[all]
+	pip install --upgrade navigator-session
+	pip install --upgrade navigator-auth
+	pip install --upgrade navigator-api
+	pip install elyra[all]==3.15.0
+	pip install jupyterlab-code-snippets
+	pip install -e .[jupyter]
 	echo 'start develop QuerySource'
 
 setup:

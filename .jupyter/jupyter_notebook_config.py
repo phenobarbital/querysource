@@ -928,7 +928,7 @@ c.ServerApp.allow_root = False
 
 ## DEPRECATED, use root_dir.
 #  Default: ''
-c.ServerApp.notebook_dir = '/home/jesuslara/proyectos/parallel/querysource/lab'
+c.ServerApp.root_dir = '/home/jesuslara/proyectos/parallel/querysource/lab'
 
 ## Whether to open in a browser after starting.
 #                          The specific browser used is platform dependent and

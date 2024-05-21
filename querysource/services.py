@@ -209,7 +209,7 @@ class QuerySource(metaclass=Singleton):
                 sys.executable, '-m', 'notebook', f'--config={JUPYTER_CONFIG}',
                 '--no-browser', '--NotebookApp.allow_origin=https://colab.research.google.com',
                 f'--port={JUPYTER_PORT}', '--NotebookApp.port_retries=0',
-                f"--NotebookApp.token='{JUPYTER_TOKEN}'"
+                f"--NotebookApp.token='{JUPYTER_TOKEN}'", "--ServerApp.root_dir=./lab/"
             ]
             # Start Jupyter as a subprocess
             self.jupyter_process = subprocess.Popen(command)

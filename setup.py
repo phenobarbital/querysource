@@ -160,20 +160,29 @@ setup(
         'statsmodels==0.14.2',
         'pmdarima==2.0.4',
         # NAV libraries:
+        'asyncdb[all]>=2.6.0',
         'proxylists>=0.12.3',
         'async-notify>=1.2.1',
-        'navconfig[default]>=1.5.0',
-        'asyncdb[default]>=2.6.0',
-        'navigator-session>=0.5.2',
+        'navconfig[default]>=1.7.0',
+
     ],
     extras_require={
         "jupyter": [
             # Jupyter Netbook:
-            'jupyter==1.0.0',
+            # 'elyra[all]==3.15.0',
+            # 'dask-labextension==7.0.0',
+            'pylantern==0.1.6',
+            'jupyterlab_iframe==0.5.0',
+            'jupyter-fs==0.4.1',
             'jupyter-server-proxy==4.1.2',
+            'jupyter_contrib_nbextensions==0.7.0',
+            'python-language-server==0.36.2',
+            'ipython==8.24.0',
+            # 'perspective-python==2.10.0',
+            'jupyter_bokeh==4.0.4',
+            'jupyter==1.0.0',
+            'notebook==7.2.0',
             'nbconvert==7.16.4',
-            'notebook==7.1.3',
-            'voila==0.5.6',
         ],
     },
     tests_require=[
