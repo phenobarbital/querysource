@@ -164,7 +164,9 @@ setup(
         'proxylists>=0.12.3',
         'async-notify>=1.2.1',
         'navconfig[default]>=1.7.0',
-
+        'nbformat==5.10.4',
+        'nbconvert==7.16.4',
+        'jsonschema==4.22.0'
     ],
     extras_require={
         "jupyter": [
