@@ -244,6 +244,12 @@ if not jupyter_dir.exists():
     jupyter_dir.mkdir(parents=True, exist_ok=True)
     # Copy sample configuration:
     sample_config = BASE_DIR.joinpath('templates', 'jupyter_notebook_config.py')
+JUPYTER_LAB_DIR = config.get('JUPYTER_LAB_DIR')
+if not JUPYTER_LAB_DIR:
+    JUPYTER_LAB_DIR = BASE_DIR.joinpath('lab')
+    JUPYTER_LAB_DIR.mkdir(parents=True, exist_ok=True)
+elif isinstance(JUPYTER_LAB_DIR, str):
+    JUPYTER_LAB_DIR = Path(JUPYTER_LAB_DIR).resolve()
 
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401

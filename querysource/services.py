@@ -6,6 +6,8 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 from aiohttp import web
+import nbformat
+from nbconvert import HTMLExporter
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
@@ -24,7 +26,8 @@ from .conf import (
     JUPYTER_ENABLED,
     JUPYTER_PORT,
     JUPYTER_TOKEN,
-    JUPYTER_CONFIG
+    JUPYTER_CONFIG,
+    JUPYTER_LAB_DIR
 )
 
 try:
@@ -40,6 +43,24 @@ QS_VARIABLES = {}
 
 ## Filter List:
 QS_FILTERS = {}
+
+
+async def notebook_handler(request):
+    notebook_name = request.match_info['name']
+    notebook_path = JUPYTER_LAB_DIR.joinpath(f'{notebook_name}.ipynb')
+
+    if not notebook_path.exists():
+        return web.Response(
+            status=404,
+            text=f"Notebook not found at {notebook_path}"
+        )
+
+    with open(notebook_path) as f:
+        nb = nbformat.read(f, as_version=4)
+        exporter = HTMLExporter()
+        body, resources = exporter.from_notebook_node(nb)
+
+    return web.Response(text=body, content_type='text/html')
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -177,6 +198,11 @@ class QuerySource(metaclass=Singleton):
         self.app.router.add_view(
             "/api/v2/variables/{program}/{variable}", VariablesService
         )
+
+        ## Add Jupyter Notebooks
+        # Dynamically add routes for each notebook
+        route_path = f'/qs/reports/lab/{{name}}'
+        self.app.router.add_get(route_path, notebook_handler, allow_head=False)
 
         ### Startup Event for QuerySource:
         self.app.on_startup.append(

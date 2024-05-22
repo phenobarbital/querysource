@@ -54,9 +54,9 @@ class Main(AppHandler):
         qry = QuerySource(lazy=False, loop=self.event_loop())
         qry.setup(self.app)
 
-        # Dynamically add routes for each notebook
-        route_path = f'/reports/lab/{{name}}'
-        self.app.router.add_get(route_path, notebook_handler)
+        # # Dynamically add routes for each notebook
+        # route_path = f'/reports/lab/{{name}}'
+        # self.app.router.add_get(route_path, notebook_handler)
 
     @classmethod
     def evt(cls):
