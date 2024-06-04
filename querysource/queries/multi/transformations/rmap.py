@@ -1,7 +1,7 @@
 from typing import Union
 import pandas as pd
 import copy
-from ...exceptions import (
+from ....exceptions import (
     DriverError,
     QueryException
 )

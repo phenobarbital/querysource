@@ -277,8 +277,6 @@ class QueryConnection(metaclass=Singleton):
                         DATASOURCES[name] = driver(**data)
                     except (ValueError, ValidationError) as ex:
                         self.logger.exception(ex, stack_info=False)
-            # TODO: get a query-slug (only for speed up the next queries)
-            # await self.get_slug('querysource_test')
             # TODO: SAVING DATASOURCES IN MEMORY (memcached)
         app['qs_connection'] = self
         self._connected = True
@@ -469,8 +467,12 @@ class QueryConnection(metaclass=Singleton):
             ## TODO: return a QS Provider for REST/External operations
             return [None, _provider]
         if provider in DATASOURCES:
-            conn = await self.datasource(provider)
-            ### TODO: get provider from datasource type:
+            source, conn = await self.datasource(provider)
+            ### get provider from datasource type:
+            if source.driver == 'pg':
+                provider = 'db'
+            else:
+                provider = source.driver
             _provider = self.load_provider(provider)
             ## getting the provider of datasource:
             return [conn, _provider]
@@ -512,7 +514,7 @@ class QueryConnection(metaclass=Singleton):
             ### making an AsyncDB connection:
             driver = source.driver
             try:
-                return AsyncDB(
+                return source, AsyncDB(
                     driver,
                     dsn=source.dsn,
                     params=source.params()

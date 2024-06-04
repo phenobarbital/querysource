@@ -5,7 +5,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.seasonal import seasonal_decompose
-from ...exceptions import (
+from ....exceptions import (
     DriverError,
     QueryException
 )

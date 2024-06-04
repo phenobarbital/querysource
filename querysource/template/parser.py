@@ -5,28 +5,31 @@ from typing import (
     Optional,
     Union
 )
+import datetime
 from pathlib import Path
 from jinja2 import (
+    BaseLoader,
     Environment,
     FileSystemLoader,
+    FileSystemBytecodeCache,
     TemplateError,
     TemplateNotFound
 )
 from aiohttp import web
 from navconfig import config, BASE_DIR
 from navconfig.logging import logging
-
-
-__version__ = '0.0.1'
-__author__ = "Jesus Lara <jesuslarag@gmail.com>"
+from ..libs.json import json_encoder
 
 
 jinja_config = {
     'enable_async': True,
     'extensions': [
-        'jinja2.ext.i18n',
-        'jinja2.ext.loopcontrols',
-        'jinja2.ext.do'
+        "jinja2.ext.i18n",
+        "jinja2.ext.loopcontrols",
+        "jinja2_time.TimeExtension",
+        "jinja2_iso8601.ISO8601Extension",
+        "jinja2.ext.do",
+        "jinja2_humanize_extension.HumanizeExtension"
     ]
 }
 
@@ -38,7 +41,10 @@ class TemplateParser:
         else:
             self.config = jinja_config
 
-        template_debug = config.getboolean('TEMPLATE_DEBUG', fallback=False)
+        template_debug = config.getboolean(
+            'TEMPLATE_DEBUG',
+            fallback=False
+        )
         if template_debug is True:
             self.config['extensions'].append(
                 'jinja2.ext.debug'
@@ -72,6 +78,11 @@ class TemplateParser:
             )
         # register the extension into the app
         self.app['templating'] = self
+        # Bytecode Cache that saves to filesystem
+        bcache = FileSystemBytecodeCache(
+            str(self.directory),
+            "%s.cache"
+        )
         # create loader:
         self.loader = FileSystemLoader(
             searchpath=self.directory
@@ -81,6 +92,10 @@ class TemplateParser:
             self.env = Environment(
                 loader=self.loader,
                 **self.config
+            )
+            self._strparser = Environment(
+                loader=BaseLoader,
+                bytecode_cache=bcache
             )
             compiled = self.tmpl_dir.joinpath('.compiled')
             self.env.compile_templates(
@@ -96,6 +111,11 @@ class TemplateParser:
             raise RuntimeError(
                 f'QS: Error loading Template Environment: {err}'
             ) from err
+        ## Adding Filters:
+        self.env.filters["jsonify"] = json_encoder
+        self._strparser.filters["jsonify"] = json_encoder
+        self.env.filters["datetime"] = datetime.datetime.fromtimestamp
+        self._strparser.filters["datetime"] = datetime.datetime.fromtimestamp
 
     def get_template(self, filename: str):
         """
@@ -111,6 +131,16 @@ class TemplateParser:
             raise RuntimeError(
                 f"Error parsing Template {filename}: {ex}"
             ) from ex
+
+    def from_string(self, content: str, params: dict):
+        try:
+            template = self._strparser.from_string(content)
+            result = template.render(**params)
+            return result
+        except Exception as err:
+            raise RuntimeError(
+                f"QS: Error rendering string Template, error: {err}"
+            ) from err
 
     @property
     def environment(self):

@@ -1,20 +1,20 @@
 from typing import Union
 import pandas as pd
-from ...exceptions import (
+from ....exceptions import (
     DriverError,
     QueryException
 )
 from .abstract import AbstractTransform
 
 
-class crosstab(AbstractTransform):
+class pivot(AbstractTransform):
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         try:
             self.reset_index: bool = kwargs['reset_index']
             del kwargs['reset_index']
         except KeyError:
             self.reset_index: bool = True
-        super(crosstab, self).__init__(data, **kwargs)
+        super(pivot, self).__init__(data, **kwargs)
         if not hasattr(self, 'index'):
             raise DriverError(
                 "Crosstab Transform: Missing Index on definition"

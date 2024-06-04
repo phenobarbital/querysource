@@ -1,7 +1,7 @@
 import asyncio
 import threading
 from aiohttp import web
-from ...queries.obj import QueryObject
+from ...obj import QueryObject
 
 
 class ThreadQuery(threading.Thread):

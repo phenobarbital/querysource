@@ -1,6 +1,6 @@
 import pandas as pd
 from navconfig.logging import logging
-from ...exceptions import (
+from ....exceptions import (
     DataNotFound,
     DriverError,
     QueryException
