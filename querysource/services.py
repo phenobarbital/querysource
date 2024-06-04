@@ -201,7 +201,7 @@ class QuerySource(metaclass=Singleton):
 
         ## Add Jupyter Notebooks
         # Dynamically add routes for each notebook
-        route_path = f'/qs/reports/lab/{{name}}'
+        route_path = '/qs/reports/lab/{name}'
         self.app.router.add_get(route_path, notebook_handler, allow_head=False)
 
         ### Startup Event for QuerySource:
