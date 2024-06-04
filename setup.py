@@ -185,6 +185,10 @@ setup(
             'jupyter==1.0.0',
             'notebook==7.2.0',
             'nbconvert==7.16.4',
+            # Jinja2 extensions:
+            "jinja2-iso8601==1.0.0",
+            "jinja2-time==0.2.0",
+            "jinja2-humanize-extension==0.4.0"
         ],
     },
     tests_require=[
