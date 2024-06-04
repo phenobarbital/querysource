@@ -1,6 +1,4 @@
 import time
-import asyncio
-import threading
 from aiohttp import web
 from ..outputs import DataOutput
 from ..exceptions import (
@@ -11,16 +9,8 @@ from ..exceptions import (
     SlugNotFound,
 )
 from .abstract import AbstractHandler
-from .operators import Join, Concat, Melt
-from .transformations import (
-    crosstab,
-    correlation,
-    GoogleMaps,
-    Forecast,
-    Map
-)
+from ..queries import MultiQS
 from .outputs import TableOutput
-from .sources import ThreadQuery, ThreadFile
 
 class QueryHandler(AbstractHandler):
 
@@ -83,111 +73,32 @@ class QueryHandler(AbstractHandler):
             "writer_options": writer_options,
         }
         ## Step 1: Running all Queries and Files on QueryObject
-        # creates the Result Queue:
-        result_queue = asyncio.Queue()
-        tasks = {}
-        if _queries:
-            for name, query in _queries.items():
-                t = ThreadQuery(name, query, request, result_queue)
-                t.start()
-                tasks[name] = t
-        if _files:
-            for name, file in _files.items():
-                t = ThreadFile(name, file, request, result_queue)
-                t.start()
-                tasks[name] = t
-        ## then, run all jobs:
-        for _, t in tasks.items():
-            t.join()
-            if t.exc:
-                ## raise exception for this Task
-                if isinstance(t.exc, SlugNotFound):
-                    raise self.Error(
-                        message=f"Slug Not Found: {t.slug()}",
-                        exception=t.exc,
-                        code=404
-                    )
-                elif isinstance(t.exc, ParserError):
-                    raise self.Error(
-                        message=f"Error parsing Query Slug {t.slug()}",
-                        exception=t.exc
-                    )
-                elif isinstance(t.exc, (QueryException, DriverError)):
-                    raise self.Error(
-                        message="Query Error",
-                        exception=t.exc
-                    )
-                else:
-                    raise self.Except(
-                        message=f"Error on Query: {t!s}",
-                        exception=t.exc
-                    )
-        result = {}
-        while not result_queue.empty():
-            result.update(await result_queue.get())
-        ### Step 2: passing Results to JOIN virtuals
-        if 'Join' in options:
-            try:
-                ## making Join of Data
-                join = Join(data=result, **options['Join'])
-                result = await join.run()
-            except (QueryException, Exception) as ex:
-                raise self.Except(
-                    message="Error on JOIN",
-                    exception=ex
-                ) from ex
-        if 'Concat' in options:
-            try:
-                ## making Join of Data
-                concat = Concat(data=result, **options['Concat'])
-                result = await concat.run()
-            except (QueryException, Exception) as ex:
-                raise self.Except(
-                    message="Error on Concat",
-                    exception=ex
-                ) from ex
-        if 'Melt' in options:
-            try:
-                ## making Join of Data
-                melt = Melt(data=result, **options['Melt'])
-                result = await melt.run()
-            except (QueryException, Exception) as ex:
-                raise self.Except(
-                    message=f"Error on Melting Data: {ex}",
-                    exception=ex
-                ) from ex
-        else:
-            # Fallback is to passing one single Dataframe:
-            try:
-                if len(result.values()) == 1:
-                    result = list(result.values())[0]
-            except TypeError:
-                pass
-        ### Step 3: passing result to Transformations
-        if 'Transform' in options:
-            # passing the resultset for several transformation rules.
-            ## TODO: logic for calling components:
-            for step in options['Transform']:
-                obj = None
-                for step_name, component in step.items():
-                    if step_name == 'crosstab':
-                        obj = crosstab(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'correlation':
-                        obj = correlation(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'GoogleMaps':
-                        obj = GoogleMaps(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'Forecast':
-                        obj = Forecast(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'Map':
-                        obj = Map(data=result, **component)
-                        result = await obj.run()
-                continue
-        if 'Processors' in options:
-            pass
+        qs = MultiQS(
+            queries=_queries,
+            files=_files,
+            query=options
+        )
+        try:
+            result = await qs.query()
+        except SlugNotFound as snf:
+            raise self.Error(
+                message="Slug Not Found",
+                exception=snf,
+                code=404
+            )
+        except ParserError as pe:
+            raise self.Error(
+                message="Error parsing Query Slug",
+                exception=pe,
+                code=401
+            )
+        except (QueryException, DriverError) as qe:
+            raise self.Error(
+                message="Query Error",
+                exception=qe,
+                code=402
+            )
+
         ### Step 4: Check if result is empty or is a dictionary of dataframes:
         if result is None:
             raise self.Error(

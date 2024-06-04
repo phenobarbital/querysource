@@ -1,5 +1,6 @@
 import asyncio
 from typing import Union, Optional
+from importlib import import_module
 from aiohttp import web
 from asyncdb import AsyncDB
 from asyncdb.exceptions import (
@@ -7,12 +8,10 @@ from asyncdb.exceptions import (
     ProviderError,
     StatementError
 )
-from querysource.conf import (
-    default_dsn, asyncpg_url
-)
 from ..models import QueryModel
 from ..providers import BaseProvider  # renamed to Providers.
 from ..connections import DATASOURCES, PROVIDERS
+from ..conf import asyncpg_url
 from ..exceptions import (
     SlugNotFound,
     QueryException,
@@ -263,6 +262,7 @@ class QueryObject(BaseQuery):
         """
         Getting a connection from Table Provider.
         """
+        # TODO: getting manually the Provider from MultiQS
         try:
             provider = entry.provider
         except (TypeError, KeyError):
@@ -296,6 +296,15 @@ class QueryObject(BaseQuery):
         if provider in PROVIDERS:
             return PROVIDERS[provider]
         else:
-            raise DriverError(
-                f"Error: No QuerySource Provider {provider} was found"
-            )
+            # Dynamically load the Provider:
+            srcname = f'{provider!s}Provider'
+            classpath = f'querysource.providers.{provider}'
+            try:
+                cls = import_module(classpath, package=srcname)
+                obj = getattr(cls, srcname)
+                PROVIDERS[provider] = obj
+                return obj
+            except ImportError as ex:
+                raise DriverError(
+                    f"Error: No QuerySource Provider {provider} was found: {ex}"
+                )

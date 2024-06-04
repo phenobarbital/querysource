@@ -31,7 +31,7 @@ class MultiQS(BaseQuery):
             self,
             queries: Optional[list] = None,
             files: Optional[list] = None,
-            options: Optional[dict] = None,
+            query: Optional[dict] = None,
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
@@ -53,11 +53,11 @@ class MultiQS(BaseQuery):
         self._queries = queries
         self._files = files
         # Query Options:
-        self._options: dict = options
-        if options:
+        self._options: dict = query
+        if query:
             ## Getting data from Queries or Files
-            self._queries = options.get('queries', {})
-            self._files = options.get('files', {})
+            self._queries = query.get('queries', {})
+            self._files = query.get('files', {})
         if not (self._queries or self._files):  # Check if both are effectively empty
             raise DriverError(
                 'Invalid Option passed to MultiQuery.'
@@ -89,24 +89,22 @@ class MultiQS(BaseQuery):
             if t.exc:
                 ## raise exception for this Task
                 if isinstance(t.exc, SlugNotFound):
-                    raise self.Error(
-                        message=f"Slug Not Found: {t.slug()}",
-                        exception=t.exc,
-                        code=404
+                    raise SlugNotFound(
+                        f"Slug Not Found: {t.slug()}"
                     )
                 elif isinstance(t.exc, ParserError):
                     raise self.Error(
-                        message=f"Error parsing Query Slug {t.slug()}",
+                        f"Error parsing Query Slug {t.slug()}",
                         exception=t.exc
                     )
                 elif isinstance(t.exc, (QueryException, DriverError)):
                     raise self.Error(
-                        message="Query Error",
+                        f"Query Error: {str(t.exc)}",
                         exception=t.exc
                     )
                 else:
-                    raise self.Except(
-                        message=f"Error on Query: {t!s}",
+                    raise self.Error(
+                        f"Error on Query: {t!s}",
                         exception=t.exc
                     )
         result = {}
@@ -118,8 +116,10 @@ class MultiQS(BaseQuery):
                 ## making Join of Data
                 join = Join(data=result, **self._options['Join'])
                 result = await join.run()
+            except DataNotFound:
+                raise
             except (QueryException, Exception) as ex:
-                raise self.Except(
+                raise self.Error(
                     message="Error on JOIN",
                     exception=ex
                 ) from ex
@@ -129,7 +129,7 @@ class MultiQS(BaseQuery):
                 concat = Concat(data=result, **self._options['Concat'])
                 result = await concat.run()
             except (QueryException, Exception) as ex:
-                raise self.Except(
+                raise self.Error(
                     message="Error on Concat",
                     exception=ex
                 ) from ex
@@ -139,7 +139,7 @@ class MultiQS(BaseQuery):
                 melt = Melt(data=result, **self._options['Melt'])
                 result = await melt.run()
             except (QueryException, Exception) as ex:
-                raise self.Except(
+                raise self.Error(
                     message=f"Error on Melting Data: {ex}",
                     exception=ex
                 ) from ex
