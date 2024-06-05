@@ -164,9 +164,11 @@ setup(
         'proxylists>=0.12.3',
         'async-notify>=1.2.1',
         'navconfig[default]>=1.7.0',
-        'nbformat==5.10.4',
-        'nbconvert==7.16.4',
-        'jsonschema==4.22.0'
+        'jsonschema==4.22.0',
+        # Jinja2 extensions:
+        "jinja2-iso8601==1.0.0",
+        "jinja2-time==0.2.0",
+        "jinja2-humanize-extension==0.4.0"
     ],
     extras_require={
         "jupyter": [
@@ -185,10 +187,7 @@ setup(
             'jupyter==1.0.0',
             'notebook==7.2.0',
             'nbconvert==7.16.4',
-            # Jinja2 extensions:
-            "jinja2-iso8601==1.0.0",
-            "jinja2-time==0.2.0",
-            "jinja2-humanize-extension==0.4.0"
+            'nbformat==5.10.4',
         ],
     },
     tests_require=[

@@ -6,8 +6,12 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 from aiohttp import web
-import nbformat
-from nbconvert import HTMLExporter
+try:
+    import nbformat
+    from nbconvert import HTMLExporter
+    JUPYTER_ENABLED = True
+except ImportError:
+    JUPYTER_ENABLED = False
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
@@ -200,9 +204,14 @@ class QuerySource(metaclass=Singleton):
         )
 
         ## Add Jupyter Notebooks
-        # Dynamically add routes for each notebook
-        route_path = '/qs/reports/lab/{name}'
-        self.app.router.add_get(route_path, notebook_handler, allow_head=False)
+        if JUPYTER_ENABLED is True:
+            # Dynamically add routes for each notebook
+            route_path = '/qs/reports/lab/{name}'
+            self.app.router.add_get(
+                route_path,
+                notebook_handler,
+                allow_head=False
+            )
 
         ### Startup Event for QuerySource:
         self.app.on_startup.append(
