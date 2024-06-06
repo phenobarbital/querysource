@@ -11,7 +11,7 @@ from ..exceptions import (
     ParserError,
     EmptySentence
 )
-from .abstract import QueryParser
+from ._abstract import QueryParser
 
 
 class RethinkParser(QueryParser):

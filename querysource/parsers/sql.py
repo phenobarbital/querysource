@@ -7,7 +7,7 @@ from ..providers import BaseProvider
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
 
-from .abstract import COMPARISON_TOKENS, QueryParser
+from ._abstract import COMPARISON_TOKENS, QueryParser
 
 valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
 

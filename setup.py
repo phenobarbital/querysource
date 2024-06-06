@@ -50,6 +50,18 @@ COMPILE_ARGS = ["-O2"]
 
 extensions = [
     Extension(
+        name='querysource.types.mapping',
+        sources=['querysource/types/mapping.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    # Extension(
+    #     name='querysource.parsers.objects.obj',
+    #     sources=['querysource/parsers/objects/obj.pyx'],
+    #     extra_compile_args=COMPILE_ARGS,
+    #     language="c"
+    # ),
+    Extension(
         name='querysource.exceptions',
         sources=['querysource/exceptions.pyx'],
         extra_compile_args=COMPILE_ARGS,
