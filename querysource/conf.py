@@ -233,7 +233,7 @@ QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
 
 # Jupyter Server:
-JUPYTER_ENABLED = config.getboolean('JUPYTER_ENABLED', fallback=False)
+ENABLED_JUPYTER = config.getboolean('ENABLED_JUPYTER', fallback=False)
 JUPYTER_PORT = config.getint('JUPYTER_PORT', fallback=8888)
 JUPYTER_TOKEN = config.get('JUPYTER_TOKEN', fallback='07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a')
 JUPYTER_CONFIG = config.get('JUPYTER_CONFIG', fallback=BASE_DIR.joinpath('.jupyter', 'jupyter_notebook_config.py'))
