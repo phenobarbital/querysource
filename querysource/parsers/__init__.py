@@ -2,6 +2,6 @@
 
 Module for different query-parsers.
 """
-from .abstract import QueryParser
+from ._abstract import QueryParser
 
 __all__ = ('QueryParser', )

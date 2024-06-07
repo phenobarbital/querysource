@@ -1,78 +1,23 @@
 """
-Basic PostgreSQL Provider (based on asyncpg).
+Default PostgreSQL Provider (based on asyncpg).
 
-Default QS database.
+Used to connect to main PG Database used by QS.
 """
-from collections import defaultdict
 from collections.abc import Callable
-from typing import Any, Union
+from asyncdb.exceptions import (
+    DriverError,
+    NoDataFound,
+    ProviderError
+)
+from ..exceptions import (
+    DataNotFound,
+    ParserError,
+    QueryException
+)
+from .pg import pgProvider
 
-from aiohttp import web
-from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 
-from querysource.exceptions import DataNotFound, ParserError, QueryException
-from querysource.models import QueryModel
-from querysource.parsers.pgsql import pgSQLParser
-from querysource.types import SafeDict
-
-from .abstract import BaseProvider
-
-
-class dbProvider(BaseProvider):
-    """Example class for creating Data Providers for QS.
-    """
-    replacement: dict = {
-        "fields": "*",
-        "filterdate": "current_date",
-        "firstdate": "current_date",
-        "lastdate": "current_date",
-        "where_cond": "",
-        "and_cond": "",
-        "filter": ""
-    }
-
-    __parser__ = pgSQLParser
-
-    def __init__(
-        self,
-        slug: str = '',
-        query: Any = None,
-        qstype: str = '',
-        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
-        conditions: dict = None,
-        request: web.Request = None,
-        **kwargs
-    ):
-        super(dbProvider, self).__init__(
-            slug=slug,
-            query=query,
-            qstype=qstype,
-            definition=definition,
-            conditions=conditions,
-            request=request,
-            **kwargs
-        )
-        self.is_raw = False
-        if qstype == 'slug':
-            if self._definition.is_raw is True:
-                self.is_raw = True
-                self._query = self._definition.query_raw
-        elif qstype == 'raw':
-            self.is_raw = True  # calling without passing the parser:
-            self._query = self.raw_query(self._query)
-        elif qstype == 'query':
-            self._query = query
-            print(f"= SQL is:: {self._query}")
-        else:
-            self._query = kwargs['query_raw']
-            if kwargs['raw_query']:
-                try:
-                    self._query = self.raw_query(self._query)
-                    print(f"= SQL is:: {self._query}")
-                except Exception as err:
-                    raise DriverError(
-                        f'DB Error: {err}'
-                    ) from err
+class dbProvider(pgProvider):
 
     async def prepare_connection(self) -> Callable:
         """Signal run before connection is made.
@@ -90,29 +35,6 @@ class dbProvider(BaseProvider):
                 raise ParserError(
                     f"Unable to parse Query: {ex}"
                 ) from ex
-
-    def raw_query(self, query: str):
-        sql = query
-        conditions = {**self.replacement}
-        if self._conditions:
-            conditions = {**conditions, **self._conditions}
-        return sql.format_map(
-            defaultdict(str, SafeDict(**conditions))
-        )
-
-    async def columns(self):
-        """Return the columns (fields) involved on the query (when possible).
-        """
-        if self._query:
-            try:
-                async with await self._connection.connection() as conn:
-                    stmt, _ = await conn.prepare(self._query)
-                    self._columns = [a.name for a in stmt.get_attributes()]
-            except AttributeError as ex:
-                raise ParserError(
-                    f"Invalid Query or Column for query: {self._query}"
-                ) from ex
-        return self._columns
 
     async def query(self):
         """Run a query on the Data Provider.

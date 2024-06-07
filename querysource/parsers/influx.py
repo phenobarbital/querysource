@@ -6,7 +6,7 @@ from ..providers import BaseProvider
 from ..exceptions import (
     EmptySentence
 )
-from .abstract import QueryParser
+from ._abstract import QueryParser
 
 class InfluxParser(QueryParser):
     def __init__(

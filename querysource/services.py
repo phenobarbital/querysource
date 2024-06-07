@@ -27,7 +27,7 @@ from .handlers import (
     VariablesService
 )
 from .conf import (
-    JUPYTER_ENABLED,
+    ENABLED_JUPYTER,
     JUPYTER_PORT,
     JUPYTER_TOKEN,
     JUPYTER_CONFIG,
@@ -147,14 +147,21 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
 
         ### Query Manager ###
-        r = self.app.router.add_view('/api/v1/management/queries/{slug}', QueryManager)
+        r = self.app.router.add_view(
+            r'/api/v1/management/queries/{slug}', QueryManager
+        )
         routes.append(r)
-        r = self.app.router.add_view('/api/v1/management/queries{meta:\:?.*}', QueryManager)
+        r = self.app.router.add_view(
+            r'/api/v1/management/queries{meta:\:?.*}', QueryManager
+        )
         routes.append(r)
 
         ## Multi-Query:
         mq = QueryHandler()
-        r = self.app.router.add_post('/api/v3/queries{meta:\:?.*}', mq.query)
+        r = self.app.router.add_post(
+            r'/api/v3/queries{meta:\:?.*}',
+            mq.query
+        )
         routes.append(r)
 
         # querying directly to drivers
@@ -204,7 +211,7 @@ class QuerySource(metaclass=Singleton):
         )
 
         ## Add Jupyter Notebooks
-        if JUPYTER_ENABLED is True:
+        if ENABLED_JUPYTER is True:
             # Dynamically add routes for each notebook
             route_path = '/qs/reports/lab/{name}'
             self.app.router.add_get(
@@ -238,7 +245,7 @@ class QuerySource(metaclass=Singleton):
         return func
 
     async def jupyter_start(self):
-        if JUPYTER_ENABLED:
+        if ENABLED_JUPYTER:
             # Command to start Jupyter
             command = [
                 sys.executable, '-m', 'notebook', f'--config={JUPYTER_CONFIG}',
