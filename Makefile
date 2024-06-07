@@ -1,16 +1,15 @@
 venv:
-	python3.10 -m venv .venv
+	python3.12 -m venv .venv
 	echo 'run `source .venv/bin/activate` to start develop QuerySource'
 
-develop:
+install:
 	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
 	pip install --upgrade asyncdb[all]
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth
 	pip install --upgrade navigator-api
 	pip install -e .
-	python -m pip install -Ur docs/requirements-dev.txt
-	echo 'start develop QuerySource'
+	echo 'start using QuerySource'
 
 jupyter:
 	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
