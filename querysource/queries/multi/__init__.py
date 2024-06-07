@@ -114,8 +114,14 @@ class MultiQS(BaseQuery):
         if 'Join' in self._options:
             try:
                 ## making Join of Data
-                join = Join(data=result, **self._options['Join'])
-                result = await join.run()
+                _join = self._options.get('Join', {})
+                if isinstance(_join, dict):
+                    join = Join(data=result, **_join)
+                    result = await join.run()
+                elif isinstance(_join, list):
+                    for j in _join:
+                        join = Join(data=result, **j)
+                        result = await join.run()
             except DataNotFound:
                 raise
             except (QueryException, Exception) as ex:

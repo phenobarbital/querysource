@@ -12,6 +12,7 @@ from .abstract import AbstractHandler
 from ..queries import MultiQS
 from .outputs import TableOutput
 
+
 class QueryHandler(AbstractHandler):
 
     async def query(self, request: web.Request) -> web.StreamResponse:
