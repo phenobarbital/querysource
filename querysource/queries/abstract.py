@@ -255,7 +255,7 @@ class BaseQuery(ABC):
             ### making an AsyncDB connection:
             driver = source.driver
             try:
-                return AsyncDB(driver, dsn=source.dsn, params=source.params())
+                return source, AsyncDB(driver, dsn=source.dsn, params=source.params())
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"

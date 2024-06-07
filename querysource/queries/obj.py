@@ -10,7 +10,7 @@ from asyncdb.exceptions import (
 )
 from ..models import QueryModel
 from ..providers import BaseProvider  # renamed to Providers.
-from ..connections import DATASOURCES, PROVIDERS
+from ..connections import DATASOURCES, PROVIDERS, EXTERNAL_PROVIDERS
 from ..conf import asyncpg_url
 from ..exceptions import (
     SlugNotFound,
@@ -53,14 +53,18 @@ class QueryObject(BaseQuery):
         if "slug" in query:
             slug = query['slug']
             self.slug = slug
-            self._logger.debug(f'Initialize Slug: {slug!s}')
+            self._logger.debug(
+                f'Initialize Slug: {slug!s}'
+            )
             self._query = slug
             self._type = 'slug'
             del query['slug']
             # defining conditions
             self._conditions = query if query else {}
         elif 'query' in query:
-            self._logger.debug('Initialize Query:')
+            self._logger.debug(
+                ':: Initialize Query ::'
+            )
             self._query = query
             self._type = 'query'
 
@@ -70,7 +74,9 @@ class QueryObject(BaseQuery):
            create queries based on a query_slug, a raw query or an Object Query.
         """
         if self._type == 'slug':  # slug-based provider:
-            self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
+            self._logger.debug(
+                f'Starting Slug-based Query: {self._query!s}'
+            )
             try:
                 objquery = await self.get_slug(self._query)
             except (SlugNotFound):
@@ -102,7 +108,9 @@ class QueryObject(BaseQuery):
                 if objquery.conditions:
                     conditions = {**objquery.conditions}
             # TODO: try to discovering the type of conditions
-            self._logger.debug(f":: = SLUG {self._query}, provider: {provider!s}")
+            self._logger.debug(
+                f":: = SLUG {self._query}, provider: {provider!s}"
+            )
             try:
                 args = {
                     "slug": self._query,
@@ -133,7 +141,7 @@ class QueryObject(BaseQuery):
                     exception=ex
                 )
             if datasource := self._qs.datasource:
-                self._qs.connection = await self.get_datasource(datasource)
+                _, self._qs.connection = await self.get_datasource(datasource)
             elif driver := self._qs.driver:
                 ## using a default driver:
                 try:
@@ -273,9 +281,17 @@ class QueryObject(BaseQuery):
                 driver='pg', dsn=asyncpg_url
             )
             return [conn, _provider]
+        elif provider in EXTERNAL_PROVIDERS:
+            _provider = self.load_provider(provider)
+            ## TODO: return a QS Provider for REST/External operations
+            return [None, _provider]
         if provider in DATASOURCES:
-            conn = await self.get_datasource(provider)
-            ### TODO: get provider from datasource type:
+            source, conn = await self.get_datasource(provider)
+            ### get provider from datasource type:
+            if source.driver == 'pg':
+                provider = 'db'
+            else:
+                provider = source.driver
             _provider = self.load_provider(provider)
             ## getting the provider of datasource:
             return [conn, _provider]
@@ -296,7 +312,6 @@ class QueryObject(BaseQuery):
         if provider in PROVIDERS:
             return PROVIDERS[provider]
         else:
-            # Dynamically load the Provider:
             srcname = f'{provider!s}Provider'
             classpath = f'querysource.providers.{provider}'
             try:
@@ -307,4 +322,4 @@ class QueryObject(BaseQuery):
             except ImportError as ex:
                 raise DriverError(
                     f"Error: No QuerySource Provider {provider} was found: {ex}"
-                )
+                ) from ex

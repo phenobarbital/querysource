@@ -36,18 +36,23 @@ class AbstractHandler(BaseHandler):
         self._columns: list = []
         self.debug: bool = DEBUG
 
-    def format(self, request: web.Request, args: dict, ctype: str = None) -> str:
+    def format(
+        self,
+        request: web.Request,
+        args: dict,
+        ctype: str = None
+    ) -> str:
         """Extract Output format from Arguments.
 
         TODO: add @json declaration in QueryParams.
         """
         # determine using content negotiation
-        if ctype is not None: ## Ctype passed by user:
+        if ctype is not None:  # Ctype passed by user:
             if ctype in mime_formats:
                 return ctype
             else:
                 f = 'json'
-        elif accept:= request.headers.get('Content-Type'):
+        elif accept := request.headers.get('Content-Type'):
             f = mime_types[accept]
         elif accept := request.headers.get('Accept'):
             f = mime_types[accept]
@@ -59,9 +64,13 @@ class AbstractHandler(BaseHandler):
         except (KeyError, ValueError):
             pass
         finally:
-            return f # pylint: disable=W0150
+            return f  # pylint: disable=W0150
 
-    def NoData(self, message: str = 'Data Not Found', headers: dict = None) -> web.Response:
+    def NoData(
+        self,
+        message: str = 'Data Not Found',
+        headers: dict = None
+    ) -> web.Response:
         if not headers:
             headers = {
                 "x-message": message
@@ -84,12 +93,12 @@ class AbstractHandler(BaseHandler):
         raise web.HTTPNotFound(**args)
 
     def Error(
-            self,
-            reason: dict = None,
-            message: str = None,
-            exception: BaseException = None,
-            code: int = 400
-     ) -> HTTPException:
+        self,
+        reason: dict = None,
+        message: str = None,
+        exception: BaseException = None,
+        code: int = 400
+    ) -> HTTPException:
         """Error.
 
         Useful Function to raise Errors.
@@ -122,7 +131,7 @@ class AbstractHandler(BaseHandler):
             obj = web.HTTPForbidden(**args)
         elif code == 404:  # not found
             obj = web.HTTPNotFound(**args)
-        elif code == 406: # Not acceptable
+        elif code == 406:  # Not acceptable
             obj = web.HTTPNotAcceptable(**args)
         elif code == 412:
             obj = web.HTTPPreconditionFailed(**args)
@@ -133,13 +142,13 @@ class AbstractHandler(BaseHandler):
         return obj
 
     def Except(
-            self,
-            reason: dict = None,
-            message: str = None,
-            exception: BaseException = None,
-            headers: dict = None,
-            code: int = 500
-        ) -> HTTPException:
+        self,
+        reason: dict = None,
+        message: str = None,
+        exception: BaseException = None,
+        headers: dict = None,
+        code: int = 500
+    ) -> HTTPException:
         trace = None
         if not headers:
             headers = {}
@@ -169,7 +178,13 @@ class AbstractHandler(BaseHandler):
             obj = web.HTTPServiceUnavailable(**args)
         return obj
 
-    async def get_source(self, request, slug, conditions, **kwargs):
+    async def get_source(
+        self,
+        request,
+        slug,
+        conditions,
+        **kwargs
+    ) -> QS:
         try:
             query = QS(
                 slug=slug,
