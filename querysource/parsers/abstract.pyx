@@ -44,6 +44,14 @@ cdef class AbstractParser:
             dsn=REDIS_URL
         )
 
+    def __init__(
+        self,
+        *args,
+        **kwargs
+    ):
+        """Constructor."""
+        pass
+
     def _str__(self):
         return f"<{type(self).__name__}>"
 
@@ -272,7 +280,8 @@ cdef class AbstractParser:
 
         Set the options for the query.
         """
-        self.table = self.conditions.pop('table', None)
+        self.tablename = self.conditions.pop('tablename', None)
+        self.schema = self.conditions.pop('schema', None)
         self.database = self.conditions.pop('database', None)
         self._distinct = self.conditions.pop('distinct', None)
         # Data Type: Definition of columns
@@ -329,7 +338,7 @@ cdef class AbstractParser:
         except Exception:
             return None
 
-    cpdef void filtering_options(self):
+    cpdef str filtering_options(self, str sentence):
         """
         Add Filter Options.
         """
@@ -342,6 +351,9 @@ cdef class AbstractParser:
                 self.filter = {**self.filter, **self.filter_options}
             else:
                 self.filter = self.filter_options
+            if 'where_cond' not in sentence or 'filter' not in sentence:
+                return f'{sentence!s} {{filter}}'
+        return sentence
 
     async def _parser_conditions(self, conditions: dict):
         async with await self._redis.connection() as conn:
@@ -349,8 +361,8 @@ cdef class AbstractParser:
             # every other option then set where conditions
             _filter = await self.set_conditions(conditions, conn)
             await self.set_where(_filter, conn)
-            print(' :: CONDITIONS > ', self._conditions)
-            print(' :: FILTER OPTIONS > ', self.filter)
+            # print(' :: CONDITIONS > ', self._conditions)
+            # print(' :: FILTER OPTIONS > ', self.filter)
         return self
 
     cdef dict _merge_conditions_and_filters(self, dict conditions):
@@ -380,78 +392,95 @@ cdef class AbstractParser:
             return False
         return False
 
-    async def set_conditions(self, conditions: dict, connection: Callable) -> dict:
-        """ check if all conditions are valid and return the value."""
-        elements = self._merge_conditions_and_filters(conditions)
-        _filter = {}
-
-        for name, val in elements.items():
-            # All kind of new expressions like: @, |, # or ~
-            _, key, _ = field_components(name)[0]
-            if key in self.cond_definition:
-                # handle keys:
-                if self._handle_keys(key, val, _filter):
-                    continue
-                _type = self.cond_definition.get(key, None)
-                self.logger.notice(
-                    f'SET conditions: {key} = {val} with type {_type}'
-                )
-                if new_val := await self._get_operational_value(val, connection):
-                    result = new_val
-                else:
-                    try:
-                        result = is_valid(key, val, _type)
-                    except TypeError as exc:
-                        self.logger.warning(
-                            f'Error on: {key} = {val} with type {_type}, {exc}'
-                        )
-                        if isinstance(val, list):
-                            _filter[name] = val
-                            continue
-                self._conditions[key] = result
+    async def _process_element(self, name: str, value: Any, connection: Callable):
+        """Process a single element and return the key-value pair to be added to the filter."""
+        _, key, _ = field_components(name)[0]
+        if key in self.cond_definition:
+            if self._handle_keys(key, value, {}):
+                return None
+            _type = self.cond_definition.get(key, None)
+            # self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
+            if new_val := await self._get_operational_value(value, connection):
+                result = new_val
             else:
-                _filter[name] = val
-        ## any other condition go to where
+                try:
+                    result = is_valid(key, value, _type)
+                except TypeError as exc:
+                    self.logger.warning(
+                        f'Error on: {key} = {value} with type {_type}, {exc}'
+                    )
+                    if isinstance(value, list):
+                        return name, value
+                    return None
+            return key, result
+        else:
+            return name, value
+
+    async def set_conditions(self, conditions: dict, connection: Callable) -> dict:
+        """Check if all conditions are valid and return the value."""
+        elements = self._merge_conditions_and_filters(conditions)
+
+        tasks = [self._process_element(name, val, connection) for name, val in elements.items()]
+        results = await asyncio.gather(*tasks)
+
+        _filter = {}
+        for result in results:
+            if result:
+                key, value = result
+                if key in self.cond_definition:
+                    self._conditions[key] = value
+                else:
+                    _filter[key] = value
+
         return _filter
 
     cpdef object where_cond(self, dict where):
         self.filter = where
         return self
 
-    async def set_where(self, _filter: dict, connection: Callable) -> None:
-        where_cond = {}
-        for key, value in _filter.items():
-            self.logger.notice(
-                f"SET WHERE: key is {key}, value is {value}:{type(value)}"
-            )
-            if isinstance(value, dict):  # its a comparison operator:
-                op, v = value.popitem()
-                result = is_valid(key, v)
-                where_cond[key] = {op: result}
-                continue
-            if isinstance(value, str):
-                if (parser := is_parseable(value)):
-                    try:
-                        value = parser(value)
-                    except (TypeError, ValueError):
-                        pass
-            try:
-                prefix, fn, _ = field_components(str(value))[0]
-                if prefix == '@':
-                    result = self._get_function_replacement(fn, key, value)
-                    result = is_valid(key, result)
-                    where_cond[key] = result
-                    continue
-                elif prefix in ('|', '!', '&', '>', '<'):
-                    # Leave -as-is- because we use it in WHERE
-                    where_cond[key] = value
-                    continue
-            except IndexError:
-                pass
-            if new_val := await self._get_operational_value(value, connection):
-                result = new_val
-            else:
-                result = is_valid(key, value)
-            where_cond[key] = result
+    async def _where_element(self, key, value, connection):
+        """Process a single element for the WHERE clause and return the key-value pair."""
+        # self.logger.debug(
+        #     f"SET WHERE: key is {key}, value is {value}:{type(value)}"
+        # )
+        if isinstance(value, dict):  # its a comparison operator
+            op, v = value.popitem()
+            result = is_valid(key, v)
+            return key, {op: result}
+
+        if isinstance(value, str):
+            parser = is_parseable(value)
+            if parser:
+                try:
+                    value = parser(value)
+                except (TypeError, ValueError):
+                    pass
+
+        try:
+            prefix, fn, _ = field_components(str(value))[0]
+            if prefix == '@':
+                result = self._get_function_replacement(fn, key, value)
+                result = is_valid(key, result)
+                return key, result
+            elif prefix in ('|', '!', '&', '>', '<'):
+                # Leave as-is because we use it in WHERE
+                return key, value
+        except IndexError:
+            pass
+
+        new_val = await self._get_operational_value(value, connection)
+        if new_val:
+            result = new_val
+        else:
+            result = is_valid(key, value)
+
+        return key, result
+
+    async def set_where(self, _filter: dict, connection: Callable) -> object:
+        """Set the WHERE clause conditions in parallel."""
+        tasks = [self._where_element(key, value, connection) for key, value in _filter.items()]
+        results = await asyncio.gather(*tasks)
+
+        where_cond = {key: value for key, value in results}
         self.filter = where_cond
         return self

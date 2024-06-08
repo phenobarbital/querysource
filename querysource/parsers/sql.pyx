@@ -2,19 +2,20 @@
 Basic SQL Parser.
 """
 import asyncio
+from typing import Union
 from functools import partial
+from cpython cimport list, dict, tuple
 from ..exceptions import EmptySentence
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
 
-from .parser import QueryParser
+from .abstract cimport AbstractParser
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
 
-class SQLParser(QueryParser):
-    schema_based: bool = True
-
+cdef class SQLParser(AbstractParser):
+    """ SQL Parser. """
     def __init__(
         self,
         *args,
@@ -24,21 +25,16 @@ class SQLParser(QueryParser):
             *args,
             **kwargs
         )
+        self.tablename: str = '{schema}.{table}'
+        self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
+        # Schema based:
         if self.schema_based is True:
-            self._tablename = '{schema}.{table}'
+            self.tablename = '{schema}.{table}'
         else:
-            self._tablename = '{table}'
+            self.tablename = '{table}'
 
-    def filtering_options(self, sentence):  # pylint: disable=W0221
-        """
-        Filtering Conditions.
-        """
-        super(SQLParser, self).filtering_options()
-        _sql = sentence
-        if self.filter_options:
-            if 'where_cond' not in _sql or 'filter' not in _sql:
-                _sql = f'{sentence!s} {{filter}}'
-        return _sql
+    async def get_sql(self):
+        return await self.build_query()
 
     async def filter_conditions(self, sql):
         """
@@ -171,7 +167,7 @@ class SQLParser(QueryParser):
             sql = _sql.format_map(SafeDict(sql=sql, order=self.ordering))
         return sql
 
-    async def limiting(self, sql: str, limit: str = None, offset: str = None):
+    async def limiting(self, sql: str, limit: Union[str, int] = None, offset: Union[str, int] = None):
         if '{limit}' in sql:
             if limit:
                 limit = f"LIMIT {limit}"
@@ -238,7 +234,7 @@ class SQLParser(QueryParser):
                 sql = sql.format_map(NullDefault())
             except ValueError:
                 pass
-            # default null setters
+        # default null setters
         self.query_parsed = sql
         self.logger.debug(
             f": SQL :: {sql}"

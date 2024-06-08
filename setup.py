@@ -53,19 +53,25 @@ extensions = [
         name='querysource.types.mapping',
         sources=['querysource/types/mapping.pyx'],
         extra_compile_args=COMPILE_ARGS,
-        language="cython"
+        language="c"
     ),
     Extension(
         name='querysource.parsers.abstract',
         sources=['querysource/parsers/abstract.pyx'],
         extra_compile_args=COMPILE_ARGS,
-        language="cython"
+        language="c"
     ),
     Extension(
         name='querysource.parsers.parser',
         sources=['querysource/parsers/parser.pyx'],
         extra_compile_args=COMPILE_ARGS,
-        language="cython"
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.sql',
+        sources=['querysource/parsers/sql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
     ),
     Extension(
         name='querysource.exceptions',

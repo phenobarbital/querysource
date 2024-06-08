@@ -19,7 +19,7 @@ cdef class AbstractParser:
     cdef public list grouping
     cdef public str program_slug
     cdef public bint refresh
-    cdef public str table
+    cdef public str tablename
     cdef public bint schema_based
     cdef public str schema
     cdef public str database
@@ -48,7 +48,7 @@ cdef class AbstractParser:
     cpdef dict get_query_filters(self)
     cpdef object where_cond(self, dict where)
     cpdef str query(self)
-    cpdef void filtering_options(self)
+    cpdef str filtering_options(self, str sentence)
     cdef object _get_function_replacement(self, object function, str key, object val)
     cdef dict _merge_conditions_and_filters(self, dict conditions)
     cdef bint _handle_keys(self, str key, object val, dict _filter)

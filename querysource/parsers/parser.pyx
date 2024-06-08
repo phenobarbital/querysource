@@ -19,13 +19,4 @@ cdef class QueryParser(AbstractParser):
         *args,
         **kwargs
     ):
-        self._tablename: str = '{schema}.{table}'
-        self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
-        # Schema based:
-        if self.schema_based is True:
-            self._tablename = '{schema}.{table}'
-        else:
-            self._tablename = '{table}'
-
-    async def get_sql(self):
-        return await self.build_query()
+        pass
