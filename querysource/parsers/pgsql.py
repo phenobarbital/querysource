@@ -1,3 +1,6 @@
+"""
+SQL Parser for PostgreSQL.
+"""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -20,7 +23,6 @@ class pgSQLParser(SQLParser):
         _sql = sql
         if self.filter:
             where_cond = []
-            self.logger.debug(f" == WHERE: {self.filter}")
             for key, value in self.filter.items():
                 try:
                     if isinstance(int(key), (int, float)):
@@ -219,10 +221,12 @@ class pgSQLParser(SQLParser):
             sql = await self.limiting(sql, self.querylimit, self._offset)
         else:
             sql = await self.limiting(sql, '')
-        if self.conditions and len(self.conditions) > 0:
-            sql = sql.format_map(SafeDict(**self.conditions))
-            # default null setters
-            sql = sql.format_map(NullDefault())
+        if isinstance(self._conditions, dict):
+            try:
+                sql = sql.format_map(SafeDict(**self._conditions))
+                sql = sql.format_map(NullDefault())
+            except ValueError:
+                pass
         self.query_parsed = sql
         self.logger.debug(
             f":: SQL : {sql}"

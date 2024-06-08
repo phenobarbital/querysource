@@ -27,6 +27,7 @@ cdef class AbstractParser:
     cdef str _slug
     cdef public int querylimit
     cdef public dict cond_definition
+    cdef public dict _conditions
     cdef public int32_t _limit
     cdef public int32_t _offset
     cdef str _distinct

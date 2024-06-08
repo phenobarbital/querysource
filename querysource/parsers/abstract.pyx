@@ -24,9 +24,9 @@ cdef class AbstractParser:
     def __cinit__(
         self,
         *args,
-        query: str,
         definition: object,
         conditions: object,
+        query: str = None,
         **kwargs: P.kwargs
     ):
         self._name_ = type(self).__name__
@@ -57,6 +57,7 @@ cdef class AbstractParser:
         self.params: dict = {}
         self._limit: int = 0
         self._offset: int = 0
+        self._conditions: dict = {}
 
     cdef void define_conditions(self, object conditions):
         """
@@ -114,13 +115,13 @@ cdef class AbstractParser:
 
     async def _program_slug(self):
         try:
-            self.program_slug = self.options.program_slug
+            self.program_slug = self.definition.program_slug
         except (KeyError, IndexError, AttributeError):
             self.program_slug = None
 
     async def _query_slug(self):
         try:
-            self._slug = self.options.query_slug
+            self._slug = self.definition.query_slug
         except (KeyError, IndexError, AttributeError):
             try:
                 self._slug = self.conditions.pop('slug', None)
@@ -142,7 +143,7 @@ cdef class AbstractParser:
         self.fields = self.conditions.pop('fields', [])
         if not self.fields:
             try:
-                self.fields = self.options.fields
+                self.fields = self.definition.fields
             except AttributeError:
                 self.fields = []
 
@@ -189,7 +190,7 @@ cdef class AbstractParser:
                 self.grouping: list = []
         if not self.grouping:
             try:
-                self.grouping = self.options.grouping
+                self.grouping = self.definition.grouping
             except AttributeError:
                 self.grouping: list = []
 
@@ -204,7 +205,7 @@ cdef class AbstractParser:
                 self.ordering: list = []
         if not self.ordering:
             try:
-                self.ordering = self.options.ordering
+                self.ordering = self.definition.ordering
             except AttributeError:
                 pass
 
@@ -230,7 +231,7 @@ cdef class AbstractParser:
                 pass
         if not self.filter:
             try:
-                self.filter = self.options.filtering
+                self.filter = self.definition.filtering
             except (TypeError, AttributeError):
                 self.filter = {}
 
@@ -247,7 +248,7 @@ cdef class AbstractParser:
     async def _col_definition(self):
         # Data Type: Definition of columns
         try:
-            self.cond_definition = self.options.cond_definition
+            self.cond_definition = self.definition.cond_definition
         except (KeyError, AttributeError):
             self.cond_definition: dict = {}
         try:
@@ -276,7 +277,7 @@ cdef class AbstractParser:
         self._distinct = self.conditions.pop('distinct', None)
         # Data Type: Definition of columns
         try:
-            self.cond_definition = self.options.cond_definition
+            self.cond_definition = self.definition.cond_definition
         except (KeyError, AttributeError):
             self.cond_definition: dict = {}
         await asyncio.gather(
@@ -297,11 +298,15 @@ cdef class AbstractParser:
         # other options are set of conditions
         try:
             params = {}
-            conditions: QueryObject = self.conditions if self.conditions else {}
+            conditions: dict = dict(self.conditions) if self.conditions else {}
+            try:
+                def_conditions = self.definition.conditions
+            except AttributeError:
+                def_conditions = {}
             params = conditions.pop('conditions', {})
             if params is None:
                 params = {}
-            conditions = {**dict(conditions), **params}
+            conditions = {**def_conditions, **conditions, **params}
             await self._parser_conditions(
                 conditions=conditions
             )
@@ -344,8 +349,8 @@ cdef class AbstractParser:
             # every other option then set where conditions
             _filter = await self.set_conditions(conditions, conn)
             await self.set_where(_filter, conn)
-            print('LAST CONDITIONS > ', conditions)
-            print('FILTER OPTIONS > ', self.filter)
+            print(' :: CONDITIONS > ', self._conditions)
+            print(' :: FILTER OPTIONS > ', self.filter)
         return self
 
     cdef dict _merge_conditions_and_filters(self, dict conditions):
@@ -360,7 +365,7 @@ cdef class AbstractParser:
         if isinstance(val, dict):  # its a comparison operator:
             op, value = val.popitem()
             result = is_valid(key, value, _type)
-            self.conditions[key] = {op: result}
+            self._conditions[key] = {op: result}
             return True
         ## if value start with a symbol (ex: @, : or #), variable replacement.
         try:
@@ -369,10 +374,11 @@ cdef class AbstractParser:
                 ## Calling a Variable Replacement:
                 result = self._get_function_replacement(fn, key, val)
                 result = is_valid(key, result, _type)
-                self.conditions[key] = result
+                self._conditions[key] = result
                 return True
         except IndexError:
-            return True
+            return False
+        return False
 
     async def set_conditions(self, conditions: dict, connection: Callable) -> dict:
         """ check if all conditions are valid and return the value."""
@@ -384,10 +390,10 @@ cdef class AbstractParser:
             _, key, _ = field_components(name)[0]
             if key in self.cond_definition:
                 # handle keys:
-                if await self._handle_keys(key, val, _filter):
+                if self._handle_keys(key, val, _filter):
                     continue
                 _type = self.cond_definition.get(key, None)
-                self.logger.debug(
+                self.logger.notice(
                     f'SET conditions: {key} = {val} with type {_type}'
                 )
                 if new_val := await self._get_operational_value(val, connection):
@@ -402,7 +408,7 @@ cdef class AbstractParser:
                         if isinstance(val, list):
                             _filter[name] = val
                             continue
-                self.conditions[key] = result
+                self._conditions[key] = result
             else:
                 _filter[name] = val
         ## any other condition go to where

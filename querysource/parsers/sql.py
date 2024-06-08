@@ -47,7 +47,6 @@ class SQLParser(QueryParser):
         _sql = sql
         if self.filter:
             where_cond = []
-            print(f" == WHERE: {self.filter}")
             for key, value in self.filter.items():
                 try:
                     if isinstance(int(key), (int, float)):
@@ -198,7 +197,7 @@ class SQLParser(QueryParser):
             fields = ', '.join(self.fields.split(','))
             sql = sql.format_map(SafeDict(fields=fields))
         elif '{fields}' in self.query_raw:
-            self.conditions.update({'fields': '*'})
+            self._conditions.update({'fields': '*'})
         return sql
 
     async def build_query(self, querylimit: int = None, offset: int = None):
@@ -219,7 +218,6 @@ class SQLParser(QueryParser):
             self.filter = {**self.filter, **result}
             if ordering:
                 self.ordering = self.ordering + ordering
-        # self.filter = self.query_options(self.qry_options)
         # add filtering conditions
         sql = self.filtering_options(sql)
         # processing filter options
@@ -234,15 +232,17 @@ class SQLParser(QueryParser):
             sql = await self.limiting(sql, self.querylimit, self._offset)
         else:
             sql = await self.limiting(sql, '')
-        if self.conditions and len(self.conditions) > 0:
+        if isinstance(self._conditions, dict):
             try:
-                sql = sql.format_map(SafeDict(**self.conditions))
+                sql = sql.format_map(SafeDict(**self._conditions))
                 sql = sql.format_map(NullDefault())
             except ValueError:
                 pass
             # default null setters
         self.query_parsed = sql
-        self.logger.debug(f": SQL :: {sql}")
+        self.logger.debug(
+            f": SQL :: {sql}"
+        )
         if self.query_parsed == '' or self.query_parsed is None:
             raise EmptySentence(
                 'QS SQL Error, no SQL query to parse.'
