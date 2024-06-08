@@ -10,9 +10,7 @@ from .sql import SQLParser
 
 class msSQLParser(SQLParser):
     schema_based: bool = True
-    _schema: str = 'dbo'  # default internal schema
-    _tablename: str = '{schema}.{table}'
-    _base_sql: str = 'SELECT {limit} {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
+    schema: str = 'dbo'  # default internal schema
 
     def __init__(
         self,
@@ -25,6 +23,8 @@ class msSQLParser(SQLParser):
             *args,
             **kwargs
         )
+        self._base_sql: str = 'SELECT {limit} {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
+        self.tablename: str = '{schema}.{table}'
 
     async def process_fields(self, sql: str):
         # adding option if not exists:

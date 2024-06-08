@@ -203,6 +203,11 @@ cdef class SQLParser(AbstractParser):
          Last Step: Build a SQL Query
         """
         sql = self.query_raw
+        # check table and schema names:
+        if '{schema}' in sql:
+            sql = sql.format_map(SafeDict(schema=self.schema, table=self.tablename))
+        elif '{table}' in sql:
+            sql = sql.format_map(SafeDict(table=self.tablename))
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)

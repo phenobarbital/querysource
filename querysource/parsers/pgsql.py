@@ -27,7 +27,6 @@ class pgSQLParser(SQLParser):
                         key = f'"{key}"'
                 except ValueError:
                     pass
-                print(':::: KEY: ', key, ' VALUE: ', value)
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
@@ -191,6 +190,11 @@ class pgSQLParser(SQLParser):
         self.logger.notice(
             f"RAW SQL is: {sql}"
         )
+        # check table and schema names:
+        if '{schema}' in sql:
+            sql = sql.format_map(SafeDict(schema=self.schema, table=self.tablename))
+        elif '{table}' in sql:
+            sql = sql.format_map(SafeDict(table=self.tablename))
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)

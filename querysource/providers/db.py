@@ -14,27 +14,11 @@ from ..exceptions import (
     ParserError,
     QueryException
 )
+from ..types.validators import is_empty
 from .pg import pgProvider
 
 
 class dbProvider(pgProvider):
-
-    async def prepare_connection(self) -> Callable:
-        """Signal run before connection is made.
-        """
-        await super(dbProvider, self).prepare_connection()
-        if not self._connection:
-            raise QueryException(
-                "Connection Object Missing for this Provider."
-            )
-        ## Parse Query:
-        if self.is_raw is False:
-            try:
-                self._query = await self._parser.build_query()
-            except Exception as ex:
-                raise ParserError(
-                    f"Unable to parse Query: {ex}"
-                ) from ex
 
     async def query(self):
         """Run a query on the Data Provider.
@@ -45,7 +29,7 @@ class dbProvider(pgProvider):
                 result, error = await conn.query(self._query)
             if error:
                 return [result, error]
-            if result:
+            if not is_empty(result):
                 # check if return a dataframe instead
                 self._result = result
                 return [self._result, error]

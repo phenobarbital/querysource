@@ -38,6 +38,32 @@ cpdef list field_components(str field):
     except ValueError:
         return (None, field, None)
 
+cpdef bool_t is_pandas_dataframe(obj):
+    """
+    Check if an object is a pandas DataFrame without importing pandas.
+
+    Parameters:
+    obj (any): The object to check.
+
+    Returns:
+    bool: True if the object is a pandas DataFrame, False otherwise.
+    """
+    return hasattr(obj, "_data") and hasattr(obj, "loc") and hasattr(obj, "iloc")
+
+cpdef bool_t is_empty(object value):
+    cdef bool_t result = False
+    if value is None:
+        return True
+    if is_pandas_dataframe(value):
+        return value.empty
+    elif isinstance(value, str) and value == '':
+        result = True
+    elif isinstance(value, (int, float)) and value == 0:
+        result = False
+    elif not value:
+        result = True
+    return result
+
 cpdef is_camel_case(str value):
     if ' ' in value:
         return True
