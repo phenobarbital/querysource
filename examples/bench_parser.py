@@ -50,7 +50,7 @@ async def main():
 if __name__ == "__main__":
     start_time = time.time()
     measures = []
-    size = 1000
+    size = 100
     for _ in range(size):
         _start = time.time()
         asyncio.run(main())
