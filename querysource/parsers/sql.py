@@ -216,9 +216,9 @@ class SQLParser(QueryParser):
          Last Step: Build a SQL Query
         """
         sql = self.query_raw
-        # self.logger.debug(f"RAW SQL is: {sql}")
-        # self.logger.debug(f"FIELDS ARE {self.fields}")
-        # self.logger.debug(f'Conditions ARE: {self.filter}')
+        self.logger.debug(f"RAW SQL is: {sql}")
+        self.logger.debug(f"FIELDS ARE {self.fields}")
+        self.logger.debug(f'Conditions ARE: {self.filter}')
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)

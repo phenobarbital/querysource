@@ -20,6 +20,8 @@ cdef class AbstractParser:
     cdef public str program_slug
     cdef public bint refresh
     cdef public str table
+    cdef public bint schema_based
+    cdef public str schema
     cdef public str database
     # Query Options:
     cdef str _slug
@@ -38,6 +40,13 @@ cdef class AbstractParser:
     # internal:
     cdef object _redis
 
+    # methods:
+    cpdef object sentence(self, str sentence)
     cdef void set_attributes(self)
     cdef void define_conditions(self, dict conditions)
+    cpdef object where_cond(self, dict where)
     cpdef str query(self)
+    cpdef void filtering_options(self)
+    cdef object _get_function_replacement(self, object function, str key, object val)
+    cdef dict _merge_conditions_and_filters(self, dict conditions)
+    cdef bint _handle_keys(self, str key, object val, dict _filter)

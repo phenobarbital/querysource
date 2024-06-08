@@ -474,7 +474,7 @@ cdef class Entity:
         return f'"{value}"'
 
 ### Validation of conditions:
-def is_valid(object key, object value, str T = None):
+cpdef object is_valid(object key, object value, str T = None):
     """is_valid.
 
     Check if a type is a valid Condition for a Query.
@@ -525,6 +525,8 @@ def is_valid(object key, object value, str T = None):
         try:
             val = to_udf(value)
             return quoteString(val)
+        except KeyError:
+            print(f'Valid: There is no Key {key}')
         except Exception as ex:
-            print(f'Is Valid Error: {key}:{value}: {ex}')
+            print(f'Valid Error on {key}:{value}, error: {ex}')
         return quoteString(value)

@@ -62,6 +62,12 @@ extensions = [
         language="cython"
     ),
     Extension(
+        name='querysource.parsers.parser',
+        sources=['querysource/parsers/parser.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="cython"
+    ),
+    Extension(
         name='querysource.exceptions',
         sources=['querysource/exceptions.pyx'],
         extra_compile_args=COMPILE_ARGS,

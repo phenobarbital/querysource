@@ -1,7 +1,7 @@
 # file: abstract.pyx
 from abc import abstractmethod
 import asyncio
-from cpython cimport list, dict
+from cpython cimport list, dict, tuple
 from navconfig.logging import logging
 from asyncdb import AsyncDB
 from ..services import QS_FILTERS, QS_VARIABLES
@@ -11,6 +11,15 @@ from ..types import strtobool, is_boolean
 from ..models import QueryObject
 from ..exceptions import EmptySentence
 from ..conf import REDIS_URL
+from ..types.validators import Entity, is_valid, field_components
+from ..utils.parseqs import is_parseable
+
+
+
+cdef tuple START_TOKENS = ('@', '$', '~', '^', '?', '*', )
+cdef tuple END_TOKENS = ('|', '&', '!', '<', '>', )
+cdef tuple KEYWORD_TOKENS = ('::', '@>', '<@', '->', '->>', '>=', '<=', '<>', '!=', '<', '>', )
+cdef tuple COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 
 cdef class AbstractParser:
@@ -26,10 +35,11 @@ cdef class AbstractParser:
         self.logger = logging.getLogger(f'QS.Parser.{self._name_}')
         self.query_raw = query
         self.query_parsed: str = None
+        self.schema_based = kwargs.pop('schema_based', False)
+        self._limit = kwargs.pop('max_limit', 0)
         self.definition: BaseProvider = definition if definition else None
         self.set_attributes()
         self.define_conditions(conditions)
-        self._limit = kwargs.get('max_limit', 0)
         ## redis connection:
         self._redis = AsyncDB(
             'redis',
@@ -75,6 +85,13 @@ cdef class AbstractParser:
 
     cpdef str query(self):
         return self.query_parsed
+
+    async def get_query(self):
+        return await self.build_query()
+
+    cpdef object sentence(self, str sentence):
+        self.query_raw = sentence
+        return self
 
     @abstractmethod
     async def build_query(self):
@@ -288,11 +305,141 @@ cdef class AbstractParser:
             print(err)
         return self
 
+    cdef object _get_function_replacement(self, object function, str key, object val):
+        fn = QS_VARIABLES.get(function, None)
+        if callable(fn):
+            return fn(key, val)
+        return None
+
+    async def _get_operational_value(self, value: str, connection: Any) -> Any:
+        try:
+            result = await connection.get(value)
+            return Entity.quoteString(result)
+        except Exception:
+            return None
+
+    cpdef void filtering_options(self):
+        """
+        Add Filter Options.
+        """
+        if self.filter_options:
+            # TODO: get instructions for getting the filter from session
+            self.logger.notice(
+                f" == FILTER OPTION: {self.filter_options}"
+            )
+            if self.filter:
+                self.filter = {**self.filter, **self.filter_options}
+            else:
+                self.filter = self.filter_options
+
     async def _parser_conditions(self, conditions: dict):
         async with await self._redis.connection() as conn:
             # One sigle connection for all Redis variables
             # every other option then set where conditions
-            #_filter = await self.set_conditions(conditions, conn)
-            # await self.set_where(_filter, conn)
-            print('LAST CONDITIONS > ', conditions)
+            _filter = await self.set_conditions(conditions, conn)
+            await self.set_where(_filter, conn)
+            print('LAST CONDITIONS > ', self.conditions)
+            print('FILTER OPTIONS > ', self.filter)
+        return self
+
+    cdef dict _merge_conditions_and_filters(self, dict conditions):
+        """Merge conditions with filters, handling potential TypeError."""
+        try:
+            return {**conditions, **self.filter}
+        except TypeError:
+            return conditions
+
+    cdef bint _handle_keys(self, str key, object val, dict _filter):
+        _type = self.cond_definition.get(key, None)
+        if isinstance(val, dict):  # its a comparison operator:
+            op, value = val.popitem()
+            result = is_valid(key, value, _type)
+            self.conditions[key] = {op: result}
+            return True
+        ## if value start with a symbol (ex: @, : or #), variable replacement.
+        try:
+            prefix, fn, _ = field_components(str(val))[0]
+            if prefix == '@':
+                ## Calling a Variable Replacement:
+                result = self._get_function_replacement(fn, key, val)
+                result = is_valid(key, result, _type)
+                self.conditions[key] = result
+                return True
+        except IndexError:
+            return True
+
+    async def set_conditions(self, conditions: dict, connection: Callable) -> dict:
+        """ check if all conditions are valid and return the value."""
+        elements = self._merge_conditions_and_filters(conditions)
+        _filter = {}
+
+        for name, val in elements.items():
+            # All kind of new expressions like: @, |, # or ~
+            _, key, _ = field_components(name)[0]
+            if key in self.cond_definition:
+                # handle keys:
+                if await self._handle_keys(key, val, _filter):
+                    continue
+                _type = self.cond_definition.get(key, None)
+                self.logger.debug(
+                    f'SET conditions: {key} = {val} with type {_type}'
+                )
+                if new_val := await self._get_operational_value(val, connection):
+                    result = new_val
+                else:
+                    try:
+                        result = is_valid(key, val, _type)
+                    except TypeError as exc:
+                        self.logger.warning(
+                            f'Error on: {key} = {val} with type {_type}, {exc}'
+                        )
+                        if isinstance(val, list):
+                            _filter[name] = val
+                            continue
+                self.conditions[key] = result
+            else:
+                _filter[name] = val
+        ## any other condition go to where
+        return _filter
+
+    cpdef object where_cond(self, dict where):
+        self.filter = where
+        return self
+
+    async def set_where(self, _filter: dict, connection: Callable) -> None:
+        where_cond = {}
+        for key, value in _filter.items():
+            self.logger.notice(
+                f"SET WHERE: key is {key}, value is {value}:{type(value)}"
+            )
+            if isinstance(value, dict):  # its a comparison operator:
+                op, v = value.popitem()
+                result = is_valid(key, v)
+                where_cond[key] = {op: result}
+                continue
+            if isinstance(value, str):
+                if (parser := is_parseable(value)):
+                    try:
+                        value = parser(value)
+                    except (TypeError, ValueError):
+                        pass
+            try:
+                prefix, fn, _ = field_components(str(value))[0]
+                if prefix == '@':
+                    result = self._get_function_replacement(fn, key, value)
+                    result = is_valid(key, result)
+                    where_cond[key] = result
+                    continue
+                elif prefix in ('|', '!', '&', '>', '<'):
+                    # Leave -as-is- because we use it in WHERE
+                    where_cond[key] = value
+                    continue
+            except IndexError:
+                pass
+            if new_val := await self._get_operational_value(value, connection):
+                result = new_val
+            else:
+                result = is_valid(key, value)
+            where_cond[key] = result
+        self.filter = where_cond
         return self
