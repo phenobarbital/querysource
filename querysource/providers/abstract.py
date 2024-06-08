@@ -17,11 +17,12 @@ from ..exceptions import (
 )
 from ..models import QueryModel
 from ..utils.functions import get_hash
+from ..parsers.abstract import AbstractParser
 
 
 class BaseProvider(ABC):
 
-    __parser__: Callable = None
+    __parser__: AbstractParser = None
     _parser_options: dict = {}
 
     replacement: dict = {
@@ -66,7 +67,7 @@ class BaseProvider(ABC):
         ## Attributes of Query:
         self._columns: list = []
         self._sentence: str = ''
-        self._parser: Callable = None
+        self._parser: AbstractParser = None
         self._result = None
         self._refresh: bool = False
         self._provider: str = 'base'
@@ -102,9 +103,8 @@ class BaseProvider(ABC):
             try:
                 self._parser = self.__parser__(  # pylint: disable=E1102
                     query=self._query,
-                    options=definition,
+                    definition=definition,
                     conditions=conditions,
-                    connection=connection,
                     **self._parser_options
                 )
             except Exception as err:
@@ -128,7 +128,12 @@ class BaseProvider(ABC):
         """
         return DataNotFound(message, code=404)
 
-    def Error(self, message: str, exception: BaseException = None, code: int = 500) -> BaseException:
+    def Error(
+        self,
+        message: str,
+        exception: BaseException = None,
+        code: int = 500
+    ) -> BaseException:
         """Error.
 
         Useful Function to raise Exceptions.

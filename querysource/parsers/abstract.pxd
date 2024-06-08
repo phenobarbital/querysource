@@ -26,24 +26,25 @@ cdef class AbstractParser:
     # Query Options:
     cdef str _slug
     cdef public int querylimit
-    cdef dict cond_definition
+    cdef public dict cond_definition
+    cdef public int32_t _limit
+    cdef public int32_t _offset
     cdef str _distinct
     # Parser Options:
     cdef public dict params
-    cdef list _hierarchy
-    cdef dict _query_filters
-    cdef int32_t _limit
-    cdef int32_t _offset
+    cdef public dict _query_filters
+    cdef public list _hierarchy
     cdef int32_t c_length
     cdef bint _paged
     cdef int32_t _page_
     # internal:
-    cdef object _redis
+    cdef public object _redis
 
     # methods:
     cpdef object sentence(self, str sentence)
     cdef void set_attributes(self)
-    cdef void define_conditions(self, dict conditions)
+    cdef void define_conditions(self, object conditions)
+    cpdef dict get_query_filters(self)
     cpdef object where_cond(self, dict where)
     cpdef str query(self)
     cpdef void filtering_options(self)

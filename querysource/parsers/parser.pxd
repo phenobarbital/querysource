@@ -3,5 +3,5 @@
 from .abstract cimport AbstractParser
 
 cdef class QueryParser(AbstractParser):
-    cdef str _tablename
-    cdef str _base_sql
+    cdef public str _tablename
+    cdef public str _base_sql

@@ -6,9 +6,11 @@ Base Query Parser.
 """
 from abc import ABC, abstractmethod
 import asyncio
+from cpython cimport list, dict, tuple
 from ..exceptions import EmptySentence
 from ..models import QueryObject
 from .abstract cimport AbstractParser
+
 
 cdef class QueryParser(AbstractParser):
     """ Base Query Parser for All Queries. """

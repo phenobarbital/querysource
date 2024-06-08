@@ -4,11 +4,10 @@ import asyncio
 from cpython cimport list, dict, tuple
 from navconfig.logging import logging
 from asyncdb import AsyncDB
-from ..services import QS_FILTERS, QS_VARIABLES
-from ..providers import BaseProvider
+from . import QS_FILTERS, QS_VARIABLES
 from ..types.mapping cimport ClassDict
 from ..types import strtobool, is_boolean
-from ..models import QueryObject
+from ..models import QueryObject, QueryModel
 from ..exceptions import EmptySentence
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
@@ -19,7 +18,6 @@ from ..utils.parseqs import is_parseable
 cdef tuple START_TOKENS = ('@', '$', '~', '^', '?', '*', )
 cdef tuple END_TOKENS = ('|', '&', '!', '<', '>', )
 cdef tuple KEYWORD_TOKENS = ('::', '@>', '<@', '->', '->>', '>=', '<=', '<>', '!=', '<', '>', )
-cdef tuple COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 
 cdef class AbstractParser:
@@ -27,8 +25,8 @@ cdef class AbstractParser:
         self,
         *args,
         query: str,
-        definition: dict,
-        conditions: dict,
+        definition: object,
+        conditions: object,
         **kwargs: P.kwargs
     ):
         self._name_ = type(self).__name__
@@ -37,7 +35,7 @@ cdef class AbstractParser:
         self.query_parsed: str = None
         self.schema_based = kwargs.pop('schema_based', False)
         self._limit = kwargs.pop('max_limit', 0)
-        self.definition: BaseProvider = definition if definition else None
+        self.definition: QueryModel = definition if definition else None
         self.set_attributes()
         self.define_conditions(conditions)
         ## redis connection:
@@ -60,13 +58,16 @@ cdef class AbstractParser:
         self._limit: int = 0
         self._offset: int = 0
 
-    cdef void define_conditions(self, dict conditions):
+    cdef void define_conditions(self, object conditions):
         """
         define_conditions.
 
         Build the options needed by every query in QuerySource.
         """
-        cdef ClassDict qobj = QueryObject(**conditions)
+        if isinstance(conditions, dict):
+            qobj = QueryObject(**conditions)
+        else:
+            qobj = conditions
         # Use qobj to set up various attributes
         self.conditions = qobj
         if not self.query_raw:
@@ -240,6 +241,9 @@ cdef class AbstractParser:
                 _f = self.conditions.pop(_filter)
                 self._query_filters[_filter] = (fn, _f)
 
+    cpdef dict get_query_filters(self):
+        return self._query_filters
+
     async def _col_definition(self):
         # Data Type: Definition of columns
         try:
@@ -311,10 +315,12 @@ cdef class AbstractParser:
             return fn(key, val)
         return None
 
-    async def _get_operational_value(self, value: str, connection: Any) -> Any:
+    async def _get_operational_value(self, value: object, connection: Any) -> Any:
         try:
-            result = await connection.get(value)
-            return Entity.quoteString(result)
+            if isinstance(value, str):
+                result = await connection.get(value)
+                return Entity.quoteString(result)
+            return None
         except Exception:
             return None
 
@@ -338,7 +344,7 @@ cdef class AbstractParser:
             # every other option then set where conditions
             _filter = await self.set_conditions(conditions, conn)
             await self.set_where(_filter, conn)
-            print('LAST CONDITIONS > ', self.conditions)
+            print('LAST CONDITIONS > ', conditions)
             print('FILTER OPTIONS > ', self.filter)
         return self
 

@@ -5,29 +5,24 @@ Build SQL-Queries for MS SQL Server, validation and parsing.
 """
 from ..types.typedefs import SafeDict
 from ..types.validators import Entity, field_components
-from ..providers import BaseProvider
-from ..models import QueryObject
 from .sql import SQLParser
 
 
 class msSQLParser(SQLParser):
+    schema_based: bool = True
     _schema: str = 'dbo'  # default internal schema
     _tablename: str = '{schema}.{table}'
     _base_sql: str = 'SELECT {limit} {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
 
     def __init__(
         self,
-        query: str = None,
-        options: BaseProvider = None,
-        conditions: QueryObject = None,
+        *args,
         is_procedure: bool = False,
         **kwargs
     ):
         self._procedure: bool = is_procedure
         super(msSQLParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
+            *args,
             **kwargs
         )
 
@@ -143,24 +138,24 @@ class msSQLParser(SQLParser):
                 # build WHERE
                 if _sql.count('and_cond') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' AND {_and}'
-                    _sql = _sql.format_map(SafeDict(and_cond=self.filter))
+                    _filter = f' AND {_and}'
+                    _sql = _sql.format_map(SafeDict(and_cond=_filter))
                 elif _sql.count('where_cond') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' WHERE {_and}'
-                    _sql = _sql.format_map(SafeDict(where_cond=self.filter))
+                    _filter = f' WHERE {_and}'
+                    _sql = _sql.format_map(SafeDict(where_cond=_filter))
                 elif _sql.count('filter') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' WHERE {_and}'
-                    _sql = _sql.format_map(SafeDict(filter=self.filter))
+                    _filter = f' WHERE {_and}'
+                    _sql = _sql.format_map(SafeDict(filter=_filter))
                 else:
                     # need to attach the condition
                     _and = ' AND '.join(where_cond)
                     if 'WHERE' in _sql:
-                        self.filter = f' AND {_and}'
+                        _filter = f' AND {_and}'
                     else:
-                        self.filter = f' WHERE {_and}'
-                    _sql = f'{_sql}{self.filter}'
+                        _filter = f' WHERE {_and}'
+                    _sql = f'{_sql}{_filter}'
         if '{where_cond}' in _sql:
             _sql = _sql.format_map(SafeDict(where_cond=''))
         if '{and_cond}' in _sql:
