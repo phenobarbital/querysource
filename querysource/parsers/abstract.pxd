@@ -1,5 +1,5 @@
 # abstract.pxd
-from cpython cimport list, dict
+from cpython cimport list, dict, tuple
 from libc.stdint cimport int32_t
 from ..types.mapping cimport ClassDict
 from ..models import QueryObject

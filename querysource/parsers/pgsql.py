@@ -5,13 +5,11 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from ..exceptions import EmptySentence
-# from .parser import QueryParser, ParserHolders
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
+from .sql import SQLParser
 
-from .sql import COMPARISON_TOKENS, SQLParser
-
-valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
+COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 class pgSQLParser(SQLParser):
     schema_based: bool = True
@@ -55,7 +53,7 @@ class pgSQLParser(SQLParser):
                 elif isinstance(value, list):
                     try:
                         fval = value[0]
-                        if fval in valid_operators:
+                        if fval in self.valid_operators:
                             where_cond.append(f"{key} {fval} {value[1]}")
                         else:
                             if _format in ('date', 'datetime'):

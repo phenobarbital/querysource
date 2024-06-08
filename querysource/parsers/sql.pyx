@@ -8,11 +8,11 @@ from cpython cimport list, dict, tuple
 from ..exceptions import EmptySentence
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
-
 from .abstract cimport AbstractParser
 
+
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
-valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
+
 
 cdef class SQLParser(AbstractParser):
     """ SQL Parser. """
@@ -25,6 +25,7 @@ cdef class SQLParser(AbstractParser):
             *args,
             **kwargs
         )
+        self.valid_operators: tuple = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
         self.tablename: str = '{schema}.{table}'
         self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
         # Schema based:
@@ -66,7 +67,7 @@ cdef class SQLParser(AbstractParser):
                         continue
                 elif isinstance(value, list):
                     fval = value[0]
-                    if fval in valid_operators:
+                    if fval in self.valid_operators:
                         where_cond.append(f"{key} {fval} {value[1]}")
                     else:
                         # TODO: passing for a Function Parser.
