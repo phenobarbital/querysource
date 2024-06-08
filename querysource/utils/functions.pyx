@@ -25,6 +25,11 @@ from pandas import DataFrame
 from .validators import is_udf
 
 
+cpdef dict empty_dict(object obj):
+    if obj is None:
+        return {}
+    return obj
+
 # hash utilities
 cpdef object generate_key():
     return binascii.hexlify(os.urandom(20)).decode()

@@ -53,14 +53,14 @@ extensions = [
         name='querysource.types.mapping',
         sources=['querysource/types/mapping.pyx'],
         extra_compile_args=COMPILE_ARGS,
-        language="c"
+        language="cython"
     ),
-    # Extension(
-    #     name='querysource.parsers.objects.obj',
-    #     sources=['querysource/parsers/objects/obj.pyx'],
-    #     extra_compile_args=COMPILE_ARGS,
-    #     language="c"
-    # ),
+    Extension(
+        name='querysource.parsers.abstract',
+        sources=['querysource/parsers/abstract.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="cython"
+    ),
     Extension(
         name='querysource.exceptions',
         sources=['querysource/exceptions.pyx'],
@@ -128,7 +128,9 @@ setup(
     ],
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
-    packages=find_packages(exclude=['contrib', 'docs', 'tests', 'plugins', 'examples', 'samples', 'settings']),
+    packages=find_packages(
+        exclude=['contrib', 'docs', 'plugins', 'examples', 'samples', 'settings']
+    ),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,
@@ -210,6 +212,7 @@ setup(
         'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
+    zip_safe=False,
     entry_points={
         'console_scripts': [
             'query = querysource.__cli__:main',
