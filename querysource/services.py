@@ -40,7 +40,8 @@ except ImportError:
     QUERYSOURCE_FILTERS = {}
     QUERYSOURCE_VARIABLES = {}
 
-from .connections import PROVIDERS, QueryConnection
+from .interfaces.connections import PROVIDERS
+from .connections import QueryConnection
 from .parsers import QS_VARIABLES, QS_FILTERS
 
 

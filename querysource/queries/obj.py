@@ -10,7 +10,11 @@ from asyncdb.exceptions import (
 )
 from ..models import QueryModel
 from ..providers import BaseProvider  # renamed to Providers.
-from ..connections import DATASOURCES, PROVIDERS, EXTERNAL_PROVIDERS
+from ..interfaces.connections import (
+    DATASOURCES,
+    PROVIDERS,
+    EXTERNAL_PROVIDERS
+)
 from ..conf import asyncpg_url
 from ..exceptions import (
     SlugNotFound,

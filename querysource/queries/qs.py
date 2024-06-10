@@ -153,7 +153,7 @@ class QS(BaseQuery):
                 raise
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.from_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(objquery)
             except (QueryException, DriverError, ProviderError) as ex:
                 raise QueryException(
                     str(ex)
@@ -214,7 +214,7 @@ class QS(BaseQuery):
             objquery = AttrDict({"provider": self._driver})
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.from_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(objquery)
             except (QueryException, DriverError) as ex:
                 raise QueryError(
                     str(ex)
@@ -265,7 +265,7 @@ class QS(BaseQuery):
                 )
                 driver = 'rest'
             try:
-                self._conn, self._provider = await self.connection.from_provider(driver)
+                self._conn, self._provider = await self.connection.get_provider(driver)
             except (QueryException, DriverError) as ex:
                 raise QueryException(
                     str(ex)
@@ -333,7 +333,7 @@ class QS(BaseQuery):
         if self.is_cached is True and exists is True:
             # cache exists from this query
             try:
-                result = await self.connection.get_from_cache(checksum)
+                result = await self.connection.from_cache(checksum)
             except asyncio.TimeoutError:
                 self._logger.warning(
                     'Querysource: Cache Miss due Timeout'
