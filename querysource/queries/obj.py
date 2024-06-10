@@ -2,13 +2,10 @@ import asyncio
 from typing import Union, Optional
 from importlib import import_module
 from aiohttp import web
-from asyncdb import AsyncDB
 from asyncdb.exceptions import (
     NoDataFound,
-    ProviderError,
     StatementError
 )
-from ..models import QueryModel
 from ..providers import BaseProvider  # renamed to Providers.
 from ..interfaces.connections import (
     DATASOURCES,
@@ -55,14 +52,13 @@ class QueryObject(BaseQuery):
         self._queue = queue
         self.is_cached: bool = False
         if "slug" in query:
-            slug = query['slug']
+            slug = query.pop('slug')
             self.slug = slug
             self._logger.debug(
                 f'Initialize Slug: {slug!s}'
             )
             self._query = slug
             self._type = 'slug'
-            del query['slug']
             # defining conditions
             self._conditions = query if query else {}
         elif 'query' in query:
@@ -145,7 +141,7 @@ class QueryObject(BaseQuery):
                     exception=ex
                 )
             if datasource := self._qs.datasource:
-                _, self._qs.connection = await self.get_datasource(datasource)
+                _, self._qs.connection = await self.datasource(datasource)
             elif driver := self._qs.driver:
                 ## using a default driver:
                 try:
@@ -225,105 +221,3 @@ class QueryObject(BaseQuery):
 
     def __repr__(self) -> str:
         return f'<QueryObject: {self._type}:"{self._query}" >'
-
-    def get_connection(self, driver: str = 'pg', dsn: str = None, params: list = None):
-        """Useful for internal connections of QS.
-        """
-        if not dsn:
-            dsn = asyncpg_url
-        return AsyncDB(
-            driver,
-            dsn=dsn,
-            params=params,
-            loop=self._loop,
-            timeout=60
-        )
-
-    async def get_slug(self, slug: str):
-        db = self.get_connection('pg')
-        try:
-            async with await db.connection() as conn:
-                try:
-                    QueryModel.Meta.connection = conn
-                    obj = await QueryModel.get(query_slug=slug)
-                    if obj is None:
-                        raise SlugNotFound(
-                            f'Slug \'{slug}\' not found'
-                        )
-                    else:
-                        return obj
-                except NoDataFound as ex:
-                    raise SlugNotFound(
-                        f'Slug not Found {slug!s}'
-                    ) from ex
-                except (ProviderError, DriverError) as ex:
-                    raise SlugNotFound(
-                        f"Error getting Slug: {ex}"
-                    ) from ex
-        except Exception as err:
-            raise SlugNotFound(
-                f'Error on Slug {slug}: {err}'
-            ) from err
-        finally:
-            try:
-                await db.close()
-            except Exception as err:  # pylint: disable=W0703
-                print(err)
-
-    async def get_provider(self, entry: dict):
-        """
-        Getting a connection from Table Provider.
-        """
-        # TODO: getting manually the Provider from MultiQS
-        try:
-            provider = entry.provider
-        except (TypeError, KeyError):
-            provider = 'db'
-        if provider == 'db':  # default DB connection for Postgres
-            _provider = self.load_provider('db')
-            conn = self.get_connection(
-                driver='pg', dsn=asyncpg_url
-            )
-            return [conn, _provider]
-        elif provider in EXTERNAL_PROVIDERS:
-            _provider = self.load_provider(provider)
-            ## TODO: return a QS Provider for REST/External operations
-            return [None, _provider]
-        if provider in DATASOURCES:
-            source, conn = await self.get_datasource(provider)
-            ### get provider from datasource type:
-            if source.driver == 'pg':
-                provider = 'db'
-            else:
-                provider = source.driver
-            _provider = self.load_provider(provider)
-            ## getting the provider of datasource:
-            return [conn, _provider]
-        else:
-            _provider = self.load_provider(provider)
-            # can we use a default driver?
-            try:
-                _, conn = await self.default_driver(provider)
-            except (AttributeError, TypeError, ValueError) as ex:
-                print(ex)
-                conn = None
-            return [conn, _provider]  # can be a dummy provider.
-
-    def load_provider(self, provider: str) -> BaseProvider:
-        """
-        Dynamically load a defined Provider.
-        """
-        if provider in PROVIDERS:
-            return PROVIDERS[provider]
-        else:
-            srcname = f'{provider!s}Provider'
-            classpath = f'querysource.providers.{provider}'
-            try:
-                cls = import_module(classpath, package=srcname)
-                obj = getattr(cls, srcname)
-                PROVIDERS[provider] = obj
-                return obj
-            except ImportError as ex:
-                raise DriverError(
-                    f"Error: No QuerySource Provider {provider} was found: {ex}"
-                ) from ex

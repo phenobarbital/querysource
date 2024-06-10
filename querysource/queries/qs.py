@@ -22,7 +22,7 @@ from ..exceptions import (
     QueryError,
     SlugNotFound,
 )
-from ..providers import BaseProvider  # renamed to Providers.
+from ..providers import BaseProvider
 from ..types.mutables import ClassDict
 from ..types.typedefs import AttrDict
 from ..utils.functions import check_empty
@@ -133,7 +133,7 @@ class QS(BaseQuery):
                 objquery = await self.connection.get_slug(
                     self._query, program=self._program
                 )
-            except (SlugNotFound):
+            except SlugNotFound:
                 raise
             except Exception:
                 raise

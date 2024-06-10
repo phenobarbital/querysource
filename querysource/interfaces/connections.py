@@ -4,6 +4,7 @@ Connections Manager.
 from typing import Any
 import asyncio
 from importlib import import_module
+from datetime import datetime
 from asyncdb import AsyncDB
 from asyncdb.exceptions import (
     ProviderError,
@@ -14,7 +15,8 @@ from ..providers import BaseProvider
 from ..exceptions import (
     QueryException,
     ConfigError,
-    QueryError
+    QueryError,
+    SlugNotFound
 )
 from ..datasources.drivers import SUPPORTED, DataDriver
 from ..conf import (
@@ -29,12 +31,12 @@ from ..conf import (
     POSTGRES_SSL_CERT,
     POSTGRES_SSL_KEY
 )
+from ..models import QueryModel
 
 
 DATASOURCES: dict = {}
 PROVIDERS: dict = {}
-
-
+SLUG_CACHE: dict = {}
 EXTERNAL_PROVIDERS = ('http', 'rest', )
 
 
@@ -56,8 +58,9 @@ class Connection:
         }
     }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         self._connection = None
+        self._dsmodule = None
         self._loop: asyncio.AbstractEventLoop = kwargs.get(
             'loop',
             asyncio.get_event_loop()
@@ -75,6 +78,21 @@ class Connection:
 
     def set_connection(self, conn):
         self._connection = conn
+
+    async def get_connection(self, driver: str = 'pg'):
+        """Useful for internal connections of QS.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.get_running_loop()
+        return AsyncDB(
+            driver,
+            dsn=asyncpg_url,
+            loop=loop,
+            timeout=int(POSTGRES_TIMEOUT),
+            **self.pgargs
+        )
 
     def default_connection(self, driver: str = 'pg', dsn: str = None, params: dict = None):
         """Useful for internal connections of QS.
@@ -146,49 +164,49 @@ class Connection:
             raise ConfigError(
                 f"QS: Error unsupported Driver: {driver}"
             )
-        else:
-            self.logger.notice(
-                f"Getting Default Connection for Driver {driver}"
-            )
-            default = None
-            try:
-                if not self._dsmodule:
-                    # load dynamically
-                    clspath = f'querysource.datasources.drivers.{driver}'
-                    self.logger.notice(
-                        f"Loading Driver {driver} Module: {clspath}"
-                    )
-                    try:
-                        self._dsmodule = import_module(clspath)
-                    except (AttributeError, ImportError) as ex:
-                        raise RuntimeError(
-                            f"QS: There is no DataSource called {driver}: {ex}"
-                        ) from ex
-                clsname = f'{driver}_default'
-                default = getattr(self._dsmodule, clsname)
-            except (AttributeError, ImportError) as ex:
-                # No module for driver exists.
-                raise RuntimeError(
-                    f"QS: There is no default connection for Driver {driver}: {ex}"
-                ) from ex
+        self.logger.notice(
+            f"Getting Default Connection for Driver {driver}"
+        )
+        default = None
+        try:
+            if not self._dsmodule:
+                # load dynamically
+                clspath = f'querysource.datasources.drivers.{driver}'
+                self.logger.notice(
+                    f"Loading Driver {driver} Module: {clspath}"
+                )
+                try:
+                    self._dsmodule = import_module(clspath)
+                except (AttributeError, ImportError) as ex:
+                    raise RuntimeError(
+                        f"QS: There is no DataSource called {driver}: {ex}"
+                    ) from ex
+            clsname = f'{driver}_default'
+            default = getattr(self._dsmodule, clsname)
+        except (AttributeError, ImportError) as ex:
+            # No module for driver exists.
+            raise RuntimeError(
+                f"QS: There is no default connection for Driver {driver}: {ex}"
+            ) from ex
         ### creating a connector for this driver:
-        if default.driver_type == 'asyncdb':
+        driver_type = default.driver_type
+        if driver_type == 'asyncdb':
             try:
-                return AsyncDB(driver, dsn=default.dsn, params=default.params())
+                return driver_type, AsyncDB(driver, dsn=default.dsn, params=default.params())
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"
                 ) from ex
         elif default.driver_type == 'external':
             ## returning -as-is- for use internal by provider
-            return default
+            return driver_type, default
         else:
             ## Other Components.
             return None
 
     async def get_provider(self, entry: dict):
         """
-        Getting a connection from Table Provider.
+        Getting a connection from Provider.
         """
         try:
             provider = entry.provider
@@ -208,10 +226,7 @@ class Connection:
         if provider in DATASOURCES:
             source, conn = await self.datasource(provider)
             ### get provider from datasource type:
-            if source.driver == 'pg':
-                provider = 'db'
-            else:
-                provider = source.driver
+            provider = source.driver
             _provider = self.load_provider(provider)
             ## getting the provider of datasource:
             return [conn, _provider]
@@ -219,7 +234,7 @@ class Connection:
             _provider = self.load_provider(provider)
             # can we use a default driver?
             try:
-                conn = await self.default_driver(provider)
+                _, conn = await self.default_driver(provider)
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
@@ -268,3 +283,37 @@ class Connection:
             raise QueryError(
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
+
+    async def get_slug(self, slug: str, program: str = None):
+        start = datetime.now()
+        if slug in SLUG_CACHE:
+            return SLUG_CACHE[slug]
+        if self.lazy is True:
+            try:
+                connection = await self.get_connection(driver='pg')
+                async with connection as conn:
+                    obj = await self.get_query_slug(slug, conn)
+            except Exception:  # pylint: disable=W0706
+                raise
+            finally:
+                await connection.close()
+                QueryModel.Meta.connection = None
+        else:
+            try:
+                async with await self._postgres.acquire() as conn:
+                    obj = await self.get_query_slug(slug, conn)
+            except Exception:  # pylint: disable=W0706
+                raise
+            finally:
+                QueryModel.Meta.connection = None
+                SLUG_CACHE[slug] = obj
+        exec_time = (datetime.now() - start).total_seconds()
+        self.logger.debug(
+            f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
+        )
+        if obj is None:
+            raise SlugNotFound(
+                f'Slug \'{slug}\' not found'
+            )
+        else:
+            return obj

@@ -3,7 +3,7 @@
 Base Class for all Query-objects in QuerySource.
 """
 import asyncio
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Union, Optional
 from collections.abc import Callable
 import time
@@ -11,10 +11,9 @@ from datetime import datetime
 import traceback
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from importlib import import_module
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
-from asyncdb.exceptions import DriverError, ProviderError
+from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
 from navigator_session.storages import SessionData
 from aiohttp import web
@@ -30,10 +29,10 @@ from ..exceptions import (
     CacheException,
     DataNotFound
 )
-from ..connections import DATASOURCES
+from ..interfaces.connections import Connection
 from ..events import LogEvent
 from .outputs import OutputFactory
-from .models import Query, QueryResult, supported_drivers
+from .models import Query, QueryResult
 from ..utils.events import enable_uvloop
 
 
@@ -44,7 +43,7 @@ vs.setLevel(logging.WARNING)
 matlog = logging.getLogger('matplotlib')
 matlog.setLevel(logging.WARNING)
 
-class BaseQuery(ABC):
+class BaseQuery(Connection):
 
     post_cache: Callable = None
     _timeout: int = 3600
@@ -62,17 +61,18 @@ class BaseQuery(ABC):
         Initialize the Query Object
         """
         enable_uvloop()
+        super(BaseQuery, self).__init__(**kwargs)
         self.slug = slug
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None
         try:
-            self._program = conditions['program']
-        except (TypeError, KeyError):
-            self._program: str = 'public'  # TODO: changing to public schema.
+            self._program = conditions.get('program', 'public')
+        except (TypeError, ValueError):
+            self._program: str = 'public'
+        # default Provider:
         try:
-            self._provider = conditions['provider']
-            del conditions['provider']
-        except (TypeError, KeyError):
+            self._provider = conditions.pop('provider', 'db')
+        except (TypeError, ValueError):
             self._provider: str = 'db'
         # defining conditions
         self._conditions = conditions if conditions else {}
@@ -82,19 +82,13 @@ class BaseQuery(ABC):
         self._starttime: Union[int, datetime] = self.epoch_time()
         self._logger = logging.getLogger('QuerySource')
         ## set the Output factory for Query:
-        try:
-            self.output_format(kwargs['output_format'])
-            del kwargs['output_format']
-        except KeyError:
-            self.output_format('native')
+        frm = kwargs.pop('output_format', 'native')
+        self.output_format(frm)
+        # Any other keyword arguments be passed to Provider.
         self.kwargs = kwargs
         # trying to configure the asyncio loop
         try:
-            if 'loop' in kwargs:
-                self._loop = kwargs['loop']
-                del kwargs['loop']
-            else:
-                self._loop = asyncio.get_running_loop()
+            self._loop = kwargs.pop('loop', asyncio.get_running_loop())
         except RuntimeError:
             self._logger.error(
                 "Couldn't get event loop for current thread. Creating a new event loop"
@@ -104,7 +98,7 @@ class BaseQuery(ABC):
         # configuring the encoder:
         self._encoder = DefaultEncoder()
         ## default executor:
-        self._executor = ThreadPoolExecutor(max_workers=4)
+        self._executor = ThreadPoolExecutor(max_workers=10)
 
     async def output(self, result, error):
         # return result in default format
@@ -244,60 +238,6 @@ class BaseQuery(ABC):
             raise
         finally:
             loop.close()
-
-    #### Datasources and drivers:
-    async def get_datasource(self, datasource: str) -> Any:
-        try:
-            source = DATASOURCES[datasource]
-        except KeyError:
-            return None
-        if source.driver_type == 'asyncdb':
-            ### making an AsyncDB connection:
-            driver = source.driver
-            try:
-                return source, AsyncDB(driver, dsn=source.dsn, params=source.params())
-            except (DriverError, ProviderError) as ex:
-                raise QueryException(
-                    f"Error creating AsyncDB instance: {ex}"
-                ) from ex
-        else:
-            raise DriverError(
-                f'Invalid Datasource type {source.driver_type} for {datasource}'
-            )
-
-    async def default_driver(self, driver: str) -> tuple:
-        if not supported_drivers(None, driver=driver):
-            raise TypeError(
-                f"QS: Invalid Database Driver: {driver}"
-            )
-        clspath = f'querysource.datasources.drivers.{driver}'
-        default = None
-        try:
-            cls = import_module(clspath)
-            clsname = f'{driver}_default'
-            default = getattr(cls, clsname)
-        except (AttributeError, ImportError) as ex:
-            # No module for driver exists.
-            raise RuntimeError(
-                f"QS: There is no default connection for Driver {driver}: {ex}"
-            ) from ex
-        ### creating a connector for this driver:
-        driver_type = default.driver_type
-        if driver_type == 'asyncdb':
-            try:
-                return driver_type, AsyncDB(
-                    driver,
-                    dsn=default.dsn,
-                    params=default.params(),
-                    loop=self._loop
-                )
-            except (DriverError, ProviderError) as ex:
-                raise QueryException(
-                    f"Error creating AsyncDB instance: {ex}"
-                ) from ex
-        elif default.driver_type == 'external':
-            # Salesforce and others:
-            return driver_type, default
 
     #### Caching facilities
     def save_cache(self, checksum, result, **kwargs):

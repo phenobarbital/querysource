@@ -4,7 +4,6 @@ Manage Database connections and supporting datasources.
 """
 import asyncio
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any, Union
 
 from aiohttp import web
@@ -45,10 +44,6 @@ from .interfaces.connections import (
     DATASOURCES
 )
 
-
-SLUG_CACHE: dict = {}
-
-
 class QueryConnection(Connection, metaclass=Singleton):
     """QueryConnection.
 
@@ -71,13 +66,12 @@ class QueryConnection(Connection, metaclass=Singleton):
 
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
-            if self.__initialized__ is True:
+            if self.__initialized__ is True:  # pylint: disable=E0203
                 return  # already configured.
         Connection.__init__(self, **kwargs)
         self.__initialized__ = True
         self._postgres = None
         self._connected: bool = False
-        self._dsmodule = None
         self.lazy: bool = kwargs.get('lazy', False)
         self._redis: Callable = None
         self._memcached: Callable = None
@@ -145,17 +139,7 @@ class QueryConnection(Connection, metaclass=Singleton):
         """
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.get_running_loop()
-            return AsyncDB(
-                provider,
-                dsn=asyncpg_url,
-                loop=loop,
-                timeout=int(POSTGRES_TIMEOUT),
-                **self.pgargs
-            )
+            return super().get_connection(provider)
         else:
             ### using current Pool
             return None
@@ -321,40 +305,6 @@ class QueryConnection(Connection, metaclass=Singleton):
             raise SlugNotFound(
                 f"Error getting Slug: {ex}"
             ) from ex
-
-    async def get_slug(self, slug: str, program: str = None):
-        start = datetime.now()
-        if slug in SLUG_CACHE:
-            return SLUG_CACHE[slug]
-        if self.lazy is True:
-            try:
-                connection = await self.get_connection('pg')
-                async with connection as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                await connection.close()
-                QueryModel.Meta.connection = None
-        else:
-            try:
-                async with await self._postgres.acquire() as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                QueryModel.Meta.connection = None
-                SLUG_CACHE[slug] = obj
-        exec_time = (datetime.now() - start).total_seconds()
-        self.logger.debug(
-            f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
-        )
-        if obj is None:
-            raise SlugNotFound(
-                f'Slug \'{slug}\' not found'
-            )
-        else:
-            return obj
 
     async def dispose(self, conn: Callable = None):
         """
