@@ -28,7 +28,7 @@ class Executor(BaseQuery):
         state = None
         started = self.start_timing(self._query.retrieved)
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
+            _, db = await self.datasource(datasource)
             drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:
@@ -77,7 +77,7 @@ class Executor(BaseQuery):
         started = self.start_timing(self._query.retrieved)
         driver = 'default'
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
+            _, db = await self.datasource(datasource)
             drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:

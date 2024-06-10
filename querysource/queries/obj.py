@@ -1,18 +1,11 @@
 import asyncio
 from typing import Union, Optional
-from importlib import import_module
 from aiohttp import web
 from asyncdb.exceptions import (
     NoDataFound,
     StatementError
 )
 from ..providers import BaseProvider  # renamed to Providers.
-from ..interfaces.connections import (
-    DATASOURCES,
-    PROVIDERS,
-    EXTERNAL_PROVIDERS
-)
-from ..conf import asyncpg_url
 from ..exceptions import (
     SlugNotFound,
     QueryException,
