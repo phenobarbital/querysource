@@ -329,6 +329,8 @@ cdef class AbstractParser:
             conditions: dict = dict(self.conditions) if self.conditions else {}
             try:
                 def_conditions = self.definition.conditions
+                if def_conditions is None:
+                    def_conditions = {}
             except AttributeError:
                 def_conditions = {}
             params = conditions.pop('conditions', {})

@@ -24,7 +24,8 @@ from .handlers import (
     QueryHandler,
     QueryExecutor,
     QueryManager,
-    VariablesService
+    VariablesService,
+    LoggingService
 )
 from .conf import (
     ENABLED_JUPYTER,
@@ -140,6 +141,11 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_post('/api/v1/queries/test', ds.dry_run)
         routes.append(r)
         r = self.app.router.add_post('/api/v1/queries/run', ds.query)
+        routes.append(r)
+
+        ### Logging Service:
+        lg = LoggingService()
+        r = self.app.router.add_get('/api/v1/audit_log', lg.audit_log)
         routes.append(r)
 
         ### Query Manager ###
