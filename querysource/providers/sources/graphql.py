@@ -48,12 +48,10 @@ class graphqlSource(restSource, ABC):
             self.type = None
 
         if 'type' in self._conditions:
-            self.type = self._conditions['type']
-            del self._conditions['type']
+            self.type = self._conditions.pop('type')
 
         if 'type' in kwargs:
-            self.type = kwargs['type']
-            del kwargs['type']
+            self.type = kwargs.pop('type')
 
         if self.auth_type == 'apikey':
             if 'apikey' in self._conditions:

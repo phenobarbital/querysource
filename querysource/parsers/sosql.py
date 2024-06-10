@@ -9,28 +9,23 @@ import re
 from functools import partial
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
-from ..providers import BaseProvider
-from ..models import QueryObject
 from ..exceptions import EmptySentence, ParserError
 from .sql import SQLParser
 
 
 class SOQLParser(SQLParser):
+    schema_based: bool = False
     _schema: str = None  # default internal schema
     _tablename: str = '{table}'
     _base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {offset} {limit}'
 
     def __init__(
         self,
-        query: str = None,
-        options: BaseProvider = None,
-        conditions: QueryObject = None,
+        *args,
         **kwargs
     ):
         super(SOQLParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
+            *args,
             **kwargs
         )
         ## connection:
@@ -50,10 +45,10 @@ class SOQLParser(SQLParser):
                 f"SF: Invalid Object {_table}: {ex}"
             ) from ex
 
-    async def process_fields(self, sql:str):
+    async def process_fields(self, sql: str):
         # adding option if not exists:
         if '*' in self.query_raw:
-             sql = sql.replace('SELECT * FROM', 'SELECT {fields} FROM')
+            sql = sql.replace('SELECT * FROM', 'SELECT {fields} FROM')
         if not self.fields:
             self.fields = self.get_sf_fields()
         # verify FIELDS:
@@ -92,7 +87,11 @@ class SOQLParser(SQLParser):
                     # if format is not defined, need to be determined
                     if isinstance(value, list):
                         # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value]) # pylint: disable=C0209
+                        val = ','.join(
+                            [
+                                "{}".format(Entity.quoteString(v)) for v in value
+                            ]
+                        )  # pylint: disable=C0209
                         # check for operator
                         if end == '!':
                             where_cond.append(
@@ -152,24 +151,24 @@ class SOQLParser(SQLParser):
                 # build WHERE
                 if _sql.count('and_cond') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' AND {_and}'
-                    _sql = _sql.format_map(SafeDict(and_cond=self.filter))
+                    _filter = f' AND {_and}'
+                    _sql = _sql.format_map(SafeDict(and_cond=_filter))
                 elif _sql.count('where_cond') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' WHERE {_and}'
-                    _sql = _sql.format_map(SafeDict(where_cond=self.filter))
+                    _filter = f' WHERE {_and}'
+                    _sql = _sql.format_map(SafeDict(where_cond=_filter))
                 elif _sql.count('filter') > 0:
                     _and = ' AND '.join(where_cond)
-                    self.filter = f' WHERE {_and}'
-                    _sql = _sql.format_map(SafeDict(filter=self.filter))
+                    _filter = f' WHERE {_and}'
+                    _sql = _sql.format_map(SafeDict(filter=_filter))
                 else:
                     # need to attach the condition
                     _and = ' AND '.join(where_cond)
                     if 'WHERE' in _sql:
-                        self.filter = f' AND {_and}'
+                        _filter = f' AND {_and}'
                     else:
-                        self.filter = f' WHERE {_and}'
-                    _sql = f'{_sql}{self.filter}'
+                        _filter = f' WHERE {_and}'
+                    _sql = f'{_sql}{_filter}'
         if '{where_cond}' in _sql:
             _sql = _sql.format_map(SafeDict(where_cond=''))
         if '{and_cond}' in _sql:
@@ -191,7 +190,7 @@ class SOQLParser(SQLParser):
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
-        for _, func in self._query_filters.items():
+        for _, func in self.get_query_filters().items():
             fn, args = func
             func = partial(fn, args, where=self.filter, program=self.program_slug)
             result, ordering = await asyncio.get_event_loop().run_in_executor(

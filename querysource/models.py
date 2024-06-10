@@ -5,8 +5,8 @@ Models for querysource structure.
 from typing import Optional
 from datetime import datetime
 from asyncdb.models import Model, Field
-# from querysource.types.mutables import ClassDict
-from datamodel.libs.mapping import ClassDict
+from .types.mapping import ClassDict
+from .utils.functions import empty_dict
 from .conf import (
     QS_QUERIES_SCHEMA,
     QS_QUERIES_TABLE
@@ -22,10 +22,10 @@ def to_field_list(obj) -> list:
         return [x.strip() for x in obj.split(',')]
     return obj
 
-def empty_dict(obj) -> dict:
-    if obj is None:
-        return {}
-    return obj
+# def empty_dict(obj) -> dict:
+#     if obj is None:
+#         return {}
+#     return obj
 
 class QueryObject(ClassDict):
     """Base Class for all options passed to Parsers.
@@ -90,13 +90,13 @@ class QueryModel(Model):
     # Creation Information:
     created_at: datetime = Field(
         required=False,
-        default=datetime.now(),
+        default=datetime.now,
         db_default='now()'
     )
     created_by: int = Field(required=False)  # TODO: validation for valid user
     updated_at: datetime = Field(
         required=False,
-        default=datetime.now(),
+        default=datetime.now,
         encoder=rigth_now
     )
     updated_by: int = Field(required=False)  # TODO: validation for valid user

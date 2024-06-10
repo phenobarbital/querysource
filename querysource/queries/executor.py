@@ -28,7 +28,7 @@ class Executor(BaseQuery):
         state = None
         started = self.start_timing(self._query.retrieved)
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
+            _, db = await self.datasource(datasource)
             drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:
@@ -77,7 +77,7 @@ class Executor(BaseQuery):
         started = self.start_timing(self._query.retrieved)
         driver = 'default'
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
+            _, db = await self.datasource(datasource)
             drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:
@@ -129,7 +129,13 @@ class Executor(BaseQuery):
         # finish: calculate duration and return result:
         duration = (self.generated_at(started).total_seconds() / 1000)
         try:
-            obj = self.get_result(self._query, data=result, duration=duration, errors=error, state=state)
+            obj = self.get_result(
+                self._query,
+                data=result,
+                duration=duration,
+                errors=error,
+                state=state
+            )
             return obj
         except TypeError as ex:
             raise QueryError(

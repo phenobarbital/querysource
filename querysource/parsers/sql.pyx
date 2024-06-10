@@ -1,57 +1,51 @@
+"""
+Basic SQL Parser.
+"""
 import asyncio
+import re
+from typing import Union
 from functools import partial
-
+from cpython cimport list, dict, tuple
 from ..exceptions import EmptySentence
-from ..models import QueryObject
-from ..providers import BaseProvider
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
+from .abstract cimport AbstractParser
 
-from ._abstract import COMPARISON_TOKENS, QueryParser
 
-valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
+COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
-class SQLParser(QueryParser):
-    schema_based: bool = True
-    _tablename: str = '{schema}.{table}'
-    _base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
 
+cdef class SQLParser(AbstractParser):
+    """ SQL Parser. """
     def __init__(
         self,
-        query: str = None,
-        options: BaseProvider = None,
-        conditions: QueryObject = None,
+        *args,
         **kwargs
     ):
         super(SQLParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
+            *args,
             **kwargs
         )
+        self.valid_operators: tuple = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
+        self.tablename: str = '{schema}.{table}'
+        self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
+        # Schema based:
         if self.schema_based is True:
-            self._tablename = '{schema}.{table}'
+            self.tablename = '{schema}.{table}'
         else:
-            self._tablename = '{table}'
+            self.tablename = '{table}'
+        # Group Pattern:
+        self._group_pattern = re.compile(
+            r"GROUP\s+BY\s+(.*?)(?=\b(?:FROM|HAVING|ORDER|LIMIT|WHERE)\b|$)"
+        )
+        # DOTALL to handle multiline SELECT clauses
+        self._select_pattern = re.compile(
+            r"(SELECT\s+)(.*?)(?=\bFROM\b)",
+            re.IGNORECASE | re.DOTALL
+        )
 
     async def get_sql(self):
-        sql = await self.build_query()
-        return sql
-
-    def where_cond(self, where):
-        self.filter = where
-        return self
-
-    async def filtering_options(self, sentence):  # pylint: disable=W0221
-        """
-        Filtering Conditions.
-        """
-        await super(SQLParser, self).filtering_options()
-        _sql = sentence
-        if self.filter_options:
-            if 'where_cond' not in _sql or 'filter' not in _sql:
-                _sql = f'{sentence!s} {{filter}}'
-        return _sql
+        return await self.build_query()
 
     async def filter_conditions(self, sql):
         """
@@ -60,7 +54,6 @@ class SQLParser(QueryParser):
         _sql = sql
         if self.filter:
             where_cond = []
-            print(f" == WHERE: {self.filter}")
             for key, value in self.filter.items():
                 try:
                     if isinstance(int(key), (int, float)):
@@ -84,12 +77,16 @@ class SQLParser(QueryParser):
                         continue
                 elif isinstance(value, list):
                     fval = value[0]
-                    if fval in valid_operators:
+                    if fval in self.valid_operators:
                         where_cond.append(f"{key} {fval} {value[1]}")
                     else:
                         # TODO: passing for a Function Parser.
                         # is a list of values
-                        val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209
+                        val = ','.join(
+                            [
+                                "{}".format(Entity.quoteString(v)) for v in value
+                            ]
+                        )  # pylint: disable=C0209
                         # check for operator
                         if end == '!':
                             where_cond.append(f"{name} NOT IN ({val})")
@@ -136,24 +133,24 @@ class SQLParser(QueryParser):
             # build WHERE
             if _sql.count('and_cond') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' AND {_and}'
-                _sql = _sql.format_map(SafeDict(and_cond=self.filter))
+                _filter = f' AND {_and}'
+                _sql = _sql.format_map(SafeDict(and_cond=_filter))
             elif _sql.count('where_cond') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' WHERE {_and}'
-                _sql = _sql.format_map(SafeDict(where_cond=self.filter))
+                _filter = f' WHERE {_and}'
+                _sql = _sql.format_map(SafeDict(where_cond=_filter))
             elif _sql.count('filter') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' WHERE {_and}'
-                _sql = _sql.format_map(SafeDict(filter=self.filter))
+                _filter = f' WHERE {_and}'
+                _sql = _sql.format_map(SafeDict(filter=_filter))
             else:
                 # need to attach the condition
                 _and = ' AND '.join(where_cond)
                 if 'WHERE' in _sql:
-                    self.filter = f' AND {_and}'
+                    _filter = f' AND {_and}'
                 else:
-                    self.filter = f' WHERE {_and}'
-                _sql = f'{_sql}{self.filter}'
+                    _filter = f' WHERE {_and}'
+                _sql = f'{_sql}{_filter}'
         if '{where_cond}' in _sql:
             _sql = _sql.format_map(SafeDict(where_cond=''))
         if '{and_cond}' in _sql:
@@ -165,11 +162,22 @@ class SQLParser(QueryParser):
     async def group_by(self, sql: str):
         # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
         if self.grouping:
-            if isinstance(self.grouping, str):
-                sql = f"{sql} GROUP BY {self.grouping}"
+            match = self._group_pattern.search(sql)
+            if match:
+                # Extract the current group by columns
+                current_columns = [
+                    col.strip() for col in match.group(1).split(",")
+                ]
+                # Add the additional columns to the current columns
+                all_columns = current_columns + self.grouping
+                # Reconstruct the SQL query with the modified GROUP BY clause
+                sql = sql[:match.start(1)] + ", ".join(all_columns) + sql[match.end(1):]
             else:
-                group = ', '.join(self.grouping)
-                sql = f"{sql} GROUP BY {group}"
+                if isinstance(self.grouping, str):
+                    sql = f"{sql} GROUP BY {self.grouping}"
+                else:
+                    group = ', '.join(self.grouping)
+                    sql = f"{sql} GROUP BY {group}"
         return sql
 
     async def order_by(self, sql: str):
@@ -181,7 +189,7 @@ class SQLParser(QueryParser):
             sql = _sql.format_map(SafeDict(sql=sql, order=self.ordering))
         return sql
 
-    async def limiting(self, sql: str, limit: str = None, offset: str = None):
+    async def limiting(self, sql: str, limit: Union[str, int] = None, offset: Union[str, int] = None):
         if '{limit}' in sql:
             if limit:
                 limit = f"LIMIT {limit}"
@@ -199,6 +207,17 @@ class SQLParser(QueryParser):
 
     async def process_fields(self, sql: str):
         if isinstance(self.fields, list) and len(self.fields) > 0:
+            if self._add_fields:
+                # Only add new fields if requested:
+                match = self._select_pattern.search(sql)
+                if match:
+                    # Extract the current SELECT fields
+                    _fields = [field.strip() for field in match.group(2).split(",")]
+                    # Add the new fields after the current fields
+                    all_fields = _fields + self.fields
+                    # Reconstruct the SQL query with the modified SELECT clause
+                    sql = sql[:match.start(2)] + ' ' + ", ".join(all_fields) + ' ' + sql[match.end(2):]
+                    return sql
             sql = sql.replace(' * FROM', ' {fields} FROM')
             fields = ', '.join(self.fields)
             sql = sql.format_map(SafeDict(fields=fields))
@@ -207,7 +226,7 @@ class SQLParser(QueryParser):
             fields = ', '.join(self.fields.split(','))
             sql = sql.format_map(SafeDict(fields=fields))
         elif '{fields}' in self.query_raw:
-            self.conditions.update({'fields': '*'})
+            self._conditions.update({'fields': '*'})
         return sql
 
     async def build_query(self, querylimit: int = None, offset: int = None):
@@ -216,13 +235,15 @@ class SQLParser(QueryParser):
          Last Step: Build a SQL Query
         """
         sql = self.query_raw
-        # self.logger.debug(f"RAW SQL is: {sql}")
-        # self.logger.debug(f"FIELDS ARE {self.fields}")
-        # self.logger.debug(f'Conditions ARE: {self.filter}')
+        # check table and schema names:
+        if '{schema}' in sql:
+            sql = sql.format_map(SafeDict(schema=self.schema, table=self.tablename))
+        elif '{table}' in sql:
+            sql = sql.format_map(SafeDict(table=self.tablename))
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
-        for _, func in self._query_filters.items():
+        for _, func in self.get_query_filters().items():
             fn, args = func
             func = partial(fn, args, where=self.filter, program=self.program_slug)
             result, ordering = await asyncio.get_event_loop().run_in_executor(
@@ -231,9 +252,8 @@ class SQLParser(QueryParser):
             self.filter = {**self.filter, **result}
             if ordering:
                 self.ordering = self.ordering + ordering
-        # self.filter = self.query_options(self.qry_options)
         # add filtering conditions
-        sql = await self.filtering_options(sql)
+        sql = self.filtering_options(sql)
         # processing filter options
         sql = await self.filter_conditions(sql)
         # processing conditions
@@ -246,17 +266,19 @@ class SQLParser(QueryParser):
             sql = await self.limiting(sql, self.querylimit, self._offset)
         else:
             sql = await self.limiting(sql, '')
-        if self.conditions and len(self.conditions) > 0:
+        if isinstance(self._conditions, dict):
             try:
-                sql = sql.format_map(SafeDict(**self.conditions))
+                sql = sql.format_map(SafeDict(**self._conditions))
                 sql = sql.format_map(NullDefault())
             except ValueError:
                 pass
-            # default null setters
+        # default null setters
         self.query_parsed = sql
-        self.logger.debug(f": SQL :: {sql}")
+        self.logger.debug(
+            f": SQL :: {sql}"
+        )
         if self.query_parsed == '' or self.query_parsed is None:
             raise EmptySentence(
-                'QuerySource SQL Error, no SQL query to parse.'
+                'QS SQL Error, no SQL query to parse.'
             )
         return self.query_parsed

@@ -6,28 +6,22 @@ from ..providers import BaseProvider
 from ..exceptions import (
     EmptySentence
 )
-from ._abstract import QueryParser
+from .parser import QueryParser
 
 class InfluxParser(QueryParser):
     def __init__(
         self,
-        query: str = None,
-        options: BaseProvider = None,
-        connection: Callable = None,
-        conditions: QueryObject = None,
+        *args,
         **kwargs
     ):
         self.bucket: str = None
         self.database: str = None
         super(InfluxParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
-            connection=connection,
+            *args,
             **kwargs
         )
-        if options.source is not None:
-            self.measurement = options.source
+        if self.definition.source is not None:
+            self.measurement = self.definition.source
         else:
             self.measurement = self.database
 

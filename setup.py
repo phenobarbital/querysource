@@ -55,12 +55,24 @@ extensions = [
         extra_compile_args=COMPILE_ARGS,
         language="c"
     ),
-    # Extension(
-    #     name='querysource.parsers.objects.obj',
-    #     sources=['querysource/parsers/objects/obj.pyx'],
-    #     extra_compile_args=COMPILE_ARGS,
-    #     language="c"
-    # ),
+    Extension(
+        name='querysource.parsers.abstract',
+        sources=['querysource/parsers/abstract.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.parser',
+        sources=['querysource/parsers/parser.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.sql',
+        sources=['querysource/parsers/sql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
     Extension(
         name='querysource.exceptions',
         sources=['querysource/exceptions.pyx'],
@@ -128,7 +140,9 @@ setup(
     ],
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
-    packages=find_packages(exclude=['contrib', 'docs', 'tests', 'plugins', 'examples', 'samples', 'settings']),
+    packages=find_packages(
+        exclude=['contrib', 'docs', 'plugins', 'examples', 'samples', 'settings']
+    ),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,
@@ -147,9 +161,9 @@ setup(
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
-        'aiocsv==1.2.4',
+        'aiocsv==1.3.2',
         'lxml==4.9.3',
-        'xlsxwriter==3.1.2',
+        'xlsxwriter==3.2.0',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
@@ -158,7 +172,7 @@ setup(
         'sweetviz==2.1.4',
         'pygal==3.0.0',
         'reportlab==4.1.0',
-        'WeasyPrint==58.1',
+        'WeasyPrint==61.2',
         'APScheduler==3.10.4',
         'scikit-learn==1.4.2',
         'elasticsearch-async==6.2.0',
@@ -210,6 +224,7 @@ setup(
         'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
+    zip_safe=False,
     entry_points={
         'console_scripts': [
             'query = querysource.__cli__:main',

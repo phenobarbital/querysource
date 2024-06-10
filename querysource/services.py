@@ -40,13 +40,9 @@ except ImportError:
     QUERYSOURCE_FILTERS = {}
     QUERYSOURCE_VARIABLES = {}
 
-from .connections import PROVIDERS, QueryConnection
-
-## list of Variables:
-QS_VARIABLES = {}
-
-## Filter List:
-QS_FILTERS = {}
+from .interfaces.connections import PROVIDERS
+from .connections import QueryConnection
+from .parsers import QS_VARIABLES, QS_FILTERS
 
 
 async def notebook_handler(request):

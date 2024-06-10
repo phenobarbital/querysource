@@ -106,28 +106,22 @@ class httpSource(baseSource):
             request (web.Request, optional): _description_. Defaults to None.
         """
         ## URL:
-        try:
-            self.url = kwargs['url']
-            del kwargs['url']
-        except KeyError:
+        if not hasattr(self, 'url'):
+            self.url: str = None
+        self.url: str = kwargs.pop('url', self.url)
+        if not self.url:
             try:
-                if definition.source:
-                    self.url = definition.source
+                self.url = definition.source
             except AttributeError:
                 pass
         if conditions and 'url' in conditions:
-            self.url = conditions['url']
-            del conditions['url']
-        if not hasattr(self, 'url'):
-            self.url: str = None
+            self.url = conditions.pop('url')
         ### URL arguments:
         self._args: dict = {}
         ### Language:
-        try:
-            self.language = kwargs['language']
-            del kwargs['language']
-        except KeyError:
-            pass
+        self.language = kwargs.pop('language', self.language)
+        if not isinstance(self.language, list):
+            self.language = [self.language]
         super(httpSource, self).__init__(
             *args,
             slug=slug,
@@ -144,26 +138,16 @@ class httpSource(baseSource):
             del kwargs['loop']
         except KeyError:
             pass
-        # self.logger.debug(f'URL :: {self.url}')
-        try:
-            self.use_proxies: bool = kwargs['use_proxy']
-        except KeyError:
-            pass
+        self.use_proxies: bool = kwargs.pop('use_proxy', False)
         self._proxies: list = []
-        try:
-            self.rotate_ua: bool = kwargs['rotate_ua']
-        except KeyError:
-            pass
+        self.rotate_ua: bool = kwargs.pop('rotate_ua', False)
         ## User Agent Rotation:
         if self.rotate_ua is True:
             self._ua = random.choice(ua)
         else:
             self._ua: str = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
         ## Headers
-        try:
-            headers = kwargs['headers']
-        except KeyError:
-            headers = {}
+        headers = kwargs.pop('headers', {})
         self._headers = {
             "Accept": self.accept,
             "Content-Type": self.content_type,
@@ -172,12 +156,9 @@ class httpSource(baseSource):
             **headers
         }
         ## referer information:
-        try:
-            self.referer = kwargs['referer']
-            del kwargs['referer']
+        self.referer = kwargs.pop('referer', None)
+        if self.referer:
             self._headers['referer'] = self.referer
-        except KeyError:
-            self.referer = None
         ### Language Header:
         langs = []
         for lang in self.language:
@@ -188,20 +169,12 @@ class httpSource(baseSource):
         ## Auth Object:
         self.auth: dict = {}
         # authentication credentials
-        if 'user' in kwargs:
-            self._user = kwargs['user']
-            del kwargs['user']
-        elif 'user' in self._conditions:
+        self._user = kwargs.pop('user', '')
+        if 'user' in self._conditions:
             self._user = self._conditions['user']
-        else:
-            self._user = ''
-        if 'password' in kwargs:
-            self._pwd = kwargs['password']
-            del kwargs['password']
-        elif 'password' in self._conditions:
+        self._pwd = kwargs.pop('password', '')
+        if 'password' in self._conditions:
             self._pwd = self._conditions['password']
-        else:
-            self._pwd = ''
         ## BeautifulSoup Object:
         self._bs: Callable = None
         self._last_execution: dict = None

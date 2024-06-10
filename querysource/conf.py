@@ -79,6 +79,10 @@ DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
 ### Memcache
 MEMCACHE_HOST = config.get('MEMCACHE_HOST', 'localhost')
 MEMCACHE_PORT = config.get('MEMCACHE_PORT', 11211)
+MEMCACHE_SERVICE = {
+    'host': MEMCACHE_HOST,
+    'port': MEMCACHE_PORT,
+}
 
 ### Redash System
 REDASH_HOST = config.get('REDASH_HOST')

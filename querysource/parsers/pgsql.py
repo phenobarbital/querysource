@@ -1,58 +1,18 @@
+"""
+SQL Parser for PostgreSQL.
+"""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-
 from ..exceptions import EmptySentence
-from ..models import QueryObject
-from ..providers import BaseProvider
-# from .parser import QueryParser, ParserHolders
 from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
+from .sql import SQLParser
 
-from ._abstract import COMPARISON_TOKENS, QueryParser
+COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
-valid_operators = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
-
-class pgSQLParser(QueryParser):
+class pgSQLParser(SQLParser):
     schema_based: bool = True
-    _tablename: str = '{schema}.{table}'
-    _base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
-
-    def __init__(
-        self,
-        query: str = None,
-        options: BaseProvider = None,
-        conditions: QueryObject = None,
-        **kwargs
-    ):
-        super(pgSQLParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
-            **kwargs
-        )
-        if self.schema_based is True:
-            self._tablename = '{schema}.{table}'
-        else:
-            self._tablename = '{table}'
-
-    async def get_sql(self):
-        sql = await self.build_query()
-        return sql
-
-    def where_cond(self, where):
-        self.filter = where
-        return self
-
-    async def filtering_options(self, sentence):  # pylint: disable=W0221
-        """
-        Filtering Conditions.
-        """
-        await super(pgSQLParser, self).filtering_options()
-        _sql = sentence
-        if self.filter_options:
-            if 'where_cond' not in _sql or 'filter' not in _sql:
-                _sql = f'{sentence!s} {{filter}}'
-        return _sql
 
     async def filter_conditions(self, sql):
         """
@@ -61,14 +21,12 @@ class pgSQLParser(QueryParser):
         _sql = sql
         if self.filter:
             where_cond = []
-            self.logger.debug(f" == WHERE: {self.filter}")
             for key, value in self.filter.items():
                 try:
                     if isinstance(int(key), (int, float)):
                         key = f'"{key}"'
                 except ValueError:
                     pass
-                print(':::: KEY: ', key, ' VALUE: ', value)
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
@@ -94,7 +52,7 @@ class pgSQLParser(QueryParser):
                 elif isinstance(value, list):
                     try:
                         fval = value[0]
-                        if fval in valid_operators:
+                        if fval in self.valid_operators:
                             where_cond.append(f"{key} {fval} {value[1]}")
                         else:
                             if _format in ('date', 'datetime'):
@@ -197,24 +155,24 @@ class pgSQLParser(QueryParser):
             # build WHERE
             if _sql.count('and_cond') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' AND {_and}'
-                _sql = _sql.format_map(SafeDict(and_cond=self.filter))
+                _filter = f' AND {_and}'
+                _sql = _sql.format_map(SafeDict(and_cond=_filter))
             elif _sql.count('where_cond') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' WHERE {_and}'
-                _sql = _sql.format_map(SafeDict(where_cond=self.filter))
+                _filter = f' WHERE {_and}'
+                _sql = _sql.format_map(SafeDict(where_cond=_filter))
             elif _sql.count('filter') > 0:
                 _and = ' AND '.join(where_cond)
-                self.filter = f' WHERE {_and}'
-                _sql = _sql.format_map(SafeDict(filter=self.filter))
+                _filter = f' WHERE {_and}'
+                _sql = _sql.format_map(SafeDict(filter=_filter))
             else:
                 # need to attach the condition
                 _and = ' AND '.join(where_cond)
                 if 'WHERE' in _sql:
-                    self.filter = f' AND {_and}'
+                    _filter = f' AND {_and}'
                 else:
-                    self.filter = f' WHERE {_and}'
-                _sql = f'{_sql}{self.filter}'
+                    _filter = f' WHERE {_and}'
+                _sql = f'{_sql}{_filter}'
         if '{where_cond}' in _sql:
             _sql = _sql.format_map(SafeDict(where_cond=''))
         if '{and_cond}' in _sql:
@@ -223,75 +181,36 @@ class pgSQLParser(QueryParser):
             _sql = _sql.format_map(SafeDict(filter=''))
         return _sql
 
-    async def group_by(self, sql: str):
-        # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
-        if self.grouping:
-            if isinstance(self.grouping, str):
-                sql = f"{sql} GROUP BY {self.grouping}"
-            else:
-                group = ', '.join(self.grouping)
-                sql = f"{sql} GROUP BY {group}"
-        return sql
-
-    async def order_by(self, sql: str):
-        _sql = "{sql} ORDER BY {order}"
-        if isinstance(self.ordering, list) and len(self.ordering) > 0:
-            order = ', '.join(self.ordering)
-            sql = _sql.format_map(SafeDict(sql=sql, order=order))
-        else:
-            sql = _sql.format_map(SafeDict(sql=sql, order=self.ordering))
-        return sql
-
-    async def limiting(self, sql: str, limit: str = None, offset: str = None):
-        if '{limit}' in sql:
-            if limit:
-                limit = f"LIMIT {limit}"
-            sql = sql.format_map(SafeDict(limit=limit))
-        elif limit:
-            sql = f"{sql} LIMIT {limit}"
-        if '{offset}' in sql:
-            if offset:
-                offset = f"OFFSET {offset}"
-                sql = sql.format_map(SafeDict(offset=offset))
-        elif offset:
-            sql = f"{sql} OFFSET {offset}"
-
-        return sql
-
-    async def process_fields(self, sql: str):
-        if isinstance(self.fields, list) and len(self.fields) > 0:
-            sql = sql.replace(' * FROM', ' {fields} FROM')
-            fields = ', '.join(self.fields)
-            sql = sql.format_map(SafeDict(fields=fields))
-        elif isinstance(self.fields, str):
-            sql = sql.replace(' * FROM', ' {fields} FROM')
-            fields = ', '.join(self.fields.split(','))
-            sql = sql.format_map(SafeDict(fields=fields))
-        elif '{fields}' in self.query_raw:
-            self.conditions.update({'fields': '*'})
-        return sql
-
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
          Last Step: Build a SQL Query
         """
         sql = self.query_raw
-        # self.logger.debug(f"RAW SQL is: {sql}")
+        self.logger.notice(
+            f"RAW SQL is: {sql}"
+        )
+        # check table and schema names:
+        if '{schema}' in sql:
+            sql = sql.format_map(SafeDict(schema=self.schema, table=self.tablename))
+        elif '{table}' in sql:
+            sql = sql.format_map(SafeDict(table=self.tablename))
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
-        for _, func in self._query_filters.items():
+        for _, func in self.get_query_filters().items():
             fn, args = func
+            result = {}
             func = partial(fn, args, where=self.filter, program=self.program_slug, hierarchy=self._hierarchy)
-            result, ordering = await asyncio.get_event_loop().run_in_executor(
-                self._executor, func
-            )
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result, ordering = await asyncio.get_event_loop().run_in_executor(
+                    executor, func
+                )
             self.filter = {**self.filter, **result}
             if ordering:
                 self.ordering = self.ordering + ordering
         # add filtering conditions
-        sql = await self.filtering_options(sql)
+        sql = self.filtering_options(sql)
         # processing filter options
         sql = await self.filter_conditions(sql)
         # processing conditions
@@ -304,16 +223,18 @@ class pgSQLParser(QueryParser):
             sql = await self.limiting(sql, self.querylimit, self._offset)
         else:
             sql = await self.limiting(sql, '')
-        if self.conditions and len(self.conditions) > 0:
-            sql = sql.format_map(SafeDict(**self.conditions))
-            # default null setters
-            sql = sql.format_map(NullDefault())
+        if isinstance(self._conditions, dict):
+            try:
+                sql = sql.format_map(SafeDict(**self._conditions))
+                sql = sql.format_map(NullDefault())
+            except ValueError:
+                pass
         self.query_parsed = sql
         self.logger.debug(
             f":: SQL : {sql}"
         )
         if self.query_parsed == '' or self.query_parsed is None:
             raise EmptySentence(
-                'QuerySource SQL Error, no SQL query to parse.'
+                'PG SQL Error, no SQL query to parse.'
             )
         return self.query_parsed

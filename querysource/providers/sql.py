@@ -21,6 +21,7 @@ from ..exceptions import (
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
 from ..types import SafeDict
+from ..types.validators import is_empty
 from .abstract import BaseProvider
 
 
@@ -125,7 +126,7 @@ class sqlProvider(BaseProvider):
                 result, error = await conn.query(self._query)
             if error:
                 return [result, error]
-            if result:
+            if not is_empty(result):
                 # check if return a dataframe instead
                 self._result = result
                 return [self._result, error]

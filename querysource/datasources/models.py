@@ -22,12 +22,17 @@ class DataSource(Model):
     Datasource model for saving Datasources in databases.
     TODO: serialize object using pickle.
     """
-    uid: uuid.UUID = Field(default=auto_now_add, required=True, primary_key=True, db_default='uuid_generate_v4()')
+    uid: uuid.UUID = Field(
+        default=auto_now_add,
+        required=True,
+        primary_key=True,
+        db_default='uuid_generate_v4()'
+    )
     driver: str = Field(required=True, validator=supported_drivers)
     name: str = Column(required=True)
     description: str
     params: dict = Column(required=False, default_factory=dict)
-    credentials: dict = Field(required=False)
+    credentials: dict = Field(required=False, default_factory=dict)
     dsn: str = Field(required=False)
     program_slug: str = Column(required=True, default=get_default_program)
     drv: DataDriver = Column(required=False, comment="Serialized version of the Driver.")
