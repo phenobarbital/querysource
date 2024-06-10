@@ -81,7 +81,6 @@ class restProvider(httpProvider):
                 definition=self._definition,
                 conditions=self._conditions,
                 request=self._request,
-                # loop=self._loop,
                 **self.kwargs
             )
         except Exception as err:
@@ -95,10 +94,7 @@ class restProvider(httpProvider):
         """
         # preparing any connection (if needed)
         result = None
-        try:
-            attr = self.kwargs['attribute']
-        except KeyError:
-            attr = 'query'
+        attr = self.kwargs.get('attribute', 'query')
         try:
             query = getattr(self._source, attr)
         except AttributeError as ex:

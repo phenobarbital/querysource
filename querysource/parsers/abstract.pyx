@@ -189,13 +189,18 @@ cdef class AbstractParser:
 
     async def _grouping(self):
         # # GROUPING
+        self.grouping: list = []
+        group1: list = []
+        group2: list = []
         try:
-            self.grouping = self.conditions.pop('group_by', [])
+            group1 = self.conditions.pop('group_by', [])
         except AttributeError:
-            try:
-                self.grouping = self.conditions.pop('grouping', [])
-            except AttributeError:
-                self.grouping: list = []
+            pass
+        try:
+            group2 = self.conditions.pop('grouping', [])
+        except AttributeError:
+            pass
+        self.grouping = group1 + group2
         if not self.grouping:
             try:
                 self.grouping = self.definition.grouping
@@ -204,13 +209,18 @@ cdef class AbstractParser:
 
     async def _ordering(self):
         # ordering condition
+        self.ordering: list = []
+        order1: list = []
+        order2: list = []
         try:
-            self.ordering = self.conditions.pop('order_by', [])
+            order1 = self.conditions.pop('order_by', [])
         except AttributeError:
-            try:
-                self.ordering = self.conditions.pop('ordering', [])
-            except AttributeError:
-                self.ordering: list = []
+            pass
+        try:
+            order2 = self.conditions.pop('ordering', [])
+        except AttributeError:
+            pass
+        self.ordering = order1 + order2
         if not self.ordering:
             try:
                 self.ordering = self.definition.ordering
