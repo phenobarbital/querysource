@@ -61,18 +61,19 @@ class BaseQuery(Connection):
         Initialize the Query Object
         """
         enable_uvloop()
-        super(BaseQuery, self).__init__(**kwargs)
+        __name__ = type(self).__name__
+        Connection.__init__(self, **kwargs)
         self.slug = slug
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None
         try:
             self._program = conditions.get('program', 'public')
-        except (TypeError, ValueError):
+        except (TypeError, AttributeError):
             self._program: str = 'public'
         # default Provider:
         try:
             self._provider = conditions.pop('provider', 'db')
-        except (TypeError, ValueError):
+        except (TypeError, AttributeError):
             self._provider: str = 'db'
         # defining conditions
         self._conditions = conditions if conditions else {}
@@ -80,7 +81,7 @@ class BaseQuery(Connection):
         self._request = request
         self._generated: Union[int, datetime] = None
         self._starttime: Union[int, datetime] = self.epoch_time()
-        self._logger = logging.getLogger('QuerySource')
+        self._logger = logging.getLogger(f'QS.{__name__}')
         ## set the Output factory for Query:
         frm = kwargs.pop('output_format', 'native')
         self.output_format(frm)
@@ -105,8 +106,12 @@ class BaseQuery(Connection):
         self._result = result
         return [result, error]
 
-    def output_format(self, frmt: str = 'native', *args, **kwargs):  # pylint: disable=W1113
-        self._output_format = OutputFactory(self, frmt=frmt, *args, **kwargs)
+    def output_format(self, frmt: str = 'native', **kwargs):  # pylint: disable=W1113
+        self._output_format = OutputFactory(
+            self,
+            frmt=frmt,
+            **kwargs
+        )
 
     @property
     def provider(self):

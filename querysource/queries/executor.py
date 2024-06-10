@@ -129,7 +129,13 @@ class Executor(BaseQuery):
         # finish: calculate duration and return result:
         duration = (self.generated_at(started).total_seconds() / 1000)
         try:
-            obj = self.get_result(self._query, data=result, duration=duration, errors=error, state=state)
+            obj = self.get_result(
+                self._query,
+                data=result,
+                duration=duration,
+                errors=error,
+                state=state
+            )
             return obj
         except TypeError as ex:
             raise QueryError(
