@@ -160,6 +160,7 @@ INFLUX_PWD = config.get('INFLUX_PWD')
 INFLUX_DATABASE = config.get('INFLUX_DATABASE')
 INFLUX_ORG = config.get('INFLUX_ORG', fallback='navigator')
 INFLUX_TOKEN = config.get('INFLUX_TOKEN')
+INFLUX_LOGGING = config.get('INFLUX_LOGGING', fallback='navigator_logs')
 
 # this is the backend for saving Query Execution
 ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')
@@ -235,6 +236,10 @@ QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
 DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+
+## Geoloc Support:
+GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
+
 
 # Jupyter Server:
 ENABLED_JUPYTER = config.getboolean('ENABLED_JUPYTER', fallback=False)

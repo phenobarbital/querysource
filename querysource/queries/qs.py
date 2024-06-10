@@ -269,7 +269,6 @@ class QS(BaseQuery):
                 "request": self._request,
                 **self._driver
             }
-            print('ARGUMENTS > ', args)
             try:
                 self._qs = self._provider(**args)
                 await self._qs.prepare_connection()

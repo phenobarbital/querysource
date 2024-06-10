@@ -8,6 +8,8 @@ from .multi import QueryHandler
 from .manager import QueryManager
 from .executor import QueryExecutor
 from .variables import VariablesService
+from .log import LoggingService
+
 
 __all__ = (
     'QueryService',
@@ -15,4 +17,5 @@ __all__ = (
     'QueryManager',
     'QueryExecutor',
     'VariablesService',
+    'LoggingService',
 )
