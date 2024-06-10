@@ -2,6 +2,7 @@
 Basic SQL Parser.
 """
 import asyncio
+import re
 from typing import Union
 from functools import partial
 from cpython cimport list, dict, tuple
@@ -33,6 +34,15 @@ cdef class SQLParser(AbstractParser):
             self.tablename = '{schema}.{table}'
         else:
             self.tablename = '{table}'
+        # Group Pattern:
+        self._group_pattern = re.compile(
+            r"GROUP\s+BY\s+(.*?)(?=\b(?:FROM|HAVING|ORDER|LIMIT|WHERE)\b|$)"
+        )
+        # DOTALL to handle multiline SELECT clauses
+        self._select_pattern = re.compile(
+            r"(SELECT\s+)(.*?)(?=\bFROM\b)",
+            re.IGNORECASE | re.DOTALL
+        )
 
     async def get_sql(self):
         return await self.build_query()
@@ -152,11 +162,22 @@ cdef class SQLParser(AbstractParser):
     async def group_by(self, sql: str):
         # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
         if self.grouping:
-            if isinstance(self.grouping, str):
-                sql = f"{sql} GROUP BY {self.grouping}"
+            match = self._group_pattern.search(sql)
+            if match:
+                # Extract the current group by columns
+                current_columns = [
+                    col.strip() for col in match.group(1).split(",")
+                ]
+                # Add the additional columns to the current columns
+                all_columns = current_columns + self.grouping
+                # Reconstruct the SQL query with the modified GROUP BY clause
+                sql = sql[:match.start(1)] + ", ".join(all_columns) + sql[match.end(1):]
             else:
-                group = ', '.join(self.grouping)
-                sql = f"{sql} GROUP BY {group}"
+                if isinstance(self.grouping, str):
+                    sql = f"{sql} GROUP BY {self.grouping}"
+                else:
+                    group = ', '.join(self.grouping)
+                    sql = f"{sql} GROUP BY {group}"
         return sql
 
     async def order_by(self, sql: str):
@@ -186,6 +207,17 @@ cdef class SQLParser(AbstractParser):
 
     async def process_fields(self, sql: str):
         if isinstance(self.fields, list) and len(self.fields) > 0:
+            if self._add_fields:
+                # Only add new fields if requested:
+                match = self._select_pattern.search(sql)
+                if match:
+                    # Extract the current SELECT fields
+                    _fields = [field.strip() for field in match.group(2).split(",")]
+                    # Add the new fields after the current fields
+                    all_fields = _fields + self.fields
+                    # Reconstruct the SQL query with the modified SELECT clause
+                    sql = sql[:match.start(2)] + ' ' + ", ".join(all_fields) + ' ' + sql[match.end(2):]
+                    return sql
             sql = sql.replace(' * FROM', ' {fields} FROM')
             fields = ', '.join(self.fields)
             sql = sql.format_map(SafeDict(fields=fields))

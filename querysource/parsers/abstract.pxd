@@ -40,6 +40,7 @@ cdef class AbstractParser:
     cdef int32_t _page_
     # internal:
     cdef public object _redis
+    cdef bint _add_fields
 
     # methods:
     cpdef object sentence(self, str sentence)

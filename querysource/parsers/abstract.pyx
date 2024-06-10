@@ -191,10 +191,10 @@ cdef class AbstractParser:
         # # GROUPING
         try:
             self.grouping = self.conditions.pop('group_by', [])
-        except (KeyError, AttributeError):
+        except AttributeError:
             try:
                 self.grouping = self.conditions.pop('grouping', [])
-            except (KeyError, AttributeError):
+            except AttributeError:
                 self.grouping: list = []
         if not self.grouping:
             try:
@@ -206,10 +206,10 @@ cdef class AbstractParser:
         # ordering condition
         try:
             self.ordering = self.conditions.pop('order_by', [])
-        except (KeyError, AttributeError):
+        except AttributeError:
             try:
                 self.ordering = self.conditions.pop('ordering', [])
-            except (KeyError, AttributeError):
+            except AttributeError:
                 self.ordering: list = []
         if not self.ordering:
             try:
@@ -284,6 +284,7 @@ cdef class AbstractParser:
         self.schema = self.conditions.pop('schema', None)
         self.database = self.conditions.pop('database', None)
         self._distinct = self.conditions.pop('distinct', None)
+        self._add_fields: bool = self.conditions.pop('add_fields', False)
         # Data Type: Definition of columns
         try:
             self.cond_definition = self.definition.cond_definition
