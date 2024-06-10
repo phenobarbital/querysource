@@ -200,6 +200,10 @@ cdef class AbstractParser:
             group2 = self.conditions.pop('grouping', [])
         except AttributeError:
             pass
+        if isinstance(group1, str):
+            group1 = [a.strip() for a in group1.split(',')]
+        if isinstance(group2, str):
+            group2 = [a.strip() for a in group2.split(',')]
         self.grouping = group1 + group2
         if not self.grouping:
             try:
@@ -210,8 +214,8 @@ cdef class AbstractParser:
     async def _ordering(self):
         # ordering condition
         self.ordering: list = []
-        order1: list = []
-        order2: list = []
+        order1: object = None
+        order2: object = None
         try:
             order1 = self.conditions.pop('order_by', [])
         except AttributeError:
@@ -220,6 +224,10 @@ cdef class AbstractParser:
             order2 = self.conditions.pop('ordering', [])
         except AttributeError:
             pass
+        if isinstance(order1, str):
+            order1 = [a.strip() for a in order1.split(',')]
+        if isinstance(order2, str):
+            order2 = [a.strip() for a in order2.split(',')]
         self.ordering = order1 + order2
         if not self.ordering:
             try:

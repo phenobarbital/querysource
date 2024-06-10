@@ -246,8 +246,6 @@ querysource/utils/functions.cpp
 
 
 ### Temp ignoring tests and examples
-tests/
-examples/
 great_expectations/
 querysource/handlers/variables.py
 resources/
