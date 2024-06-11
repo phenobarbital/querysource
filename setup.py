@@ -170,7 +170,7 @@ setup(
         'pandas_bokeh==0.5.5',
         'plotly==5.22.0',
         'sweetviz==2.1.4',
-        'pygal==3.0.0',
+        'pygal==3.0.4',
         'reportlab==4.1.0',
         'WeasyPrint==61.2',
         'APScheduler==3.10.4',
