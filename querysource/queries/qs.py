@@ -11,7 +11,8 @@ from asyncdb.exceptions import (
     NoDataFound,
     ProviderError,
     StatementError,
-    DriverError
+    DriverError,
+    ConnectionTimeout
 )
 
 from ..connections import QueryConnection
@@ -377,6 +378,12 @@ class QS(BaseQuery):
                     return await self._output_format(
                         self._result, error
                     )  # pylint: disable=W0150
+            except ConnectionTimeout as err:
+                raise self.Error(
+                    f"QS: {err}",
+                    exception=err,
+                    code=400
+                )
             except (NoDataFound, DataNotFound) as err:
                 raise DataNotFound(
                     f'{self._qs.__name__!s}: {err}'

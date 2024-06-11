@@ -6,7 +6,10 @@ Handler to accessing querysource objects from API.
 from datetime import datetime
 # for aiohttp
 from aiohttp import web
-from asyncdb.exceptions import ProviderError  # QuerySource Query, Executor, etc
+from asyncdb.exceptions import (
+    ProviderError,
+    ConnectionTimeout
+)  # QuerySource Query, Executor, etc
 # Output
 from ..outputs import DataOutput
 from ..outputs.writers import graph_ouputs
@@ -275,6 +278,10 @@ class QueryService(AbstractHandler):
                 try:
                     output = DataOutput(request, query=query, ctype=queryformat, slug=slug, **output_args)
                     return await output.response()
+                except ConnectionTimeout as err:
+                    raise DriverError(
+                        f"Connection Timeout: {err}"
+                    ) from err
                 except (ProviderError, DriverError) as err:
                     raise self.Error(
                         message="DataOutput Error",

@@ -114,7 +114,7 @@ class LoggingService(BaseHandler):
         try:
             final_data = {**data, **kwargs}
             final_data.update(additional_info)
-        except (KeyError, AttributeError):
+        except (KeyError, TypeError, AttributeError):
             final_data = {**kwargs, **additional_info}
         point = self.prepare_point(
             fields=[
@@ -133,6 +133,7 @@ class LoggingService(BaseHandler):
                 await conn.create_database(INFLUX_LOGGING)
             except DriverError:
                 pass
+            print('POINT TO BE SAVED > ', point)
             await conn.write(bucket=INFLUX_LOGGING, data=[point])
             headers = {
                 'X-STATUS': 'OK',

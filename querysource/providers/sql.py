@@ -72,13 +72,13 @@ class sqlProvider(BaseProvider):
             self._query = self.raw_query(self._query)
         elif qstype == 'query':
             self._query = query
-            print(f"= SQL is:: {self._query}")
+            print(f"= Query is:: {self._query}")
         else:
             self._query = kwargs['query_raw']
             if kwargs['raw_query']:
                 try:
                     self._query = self.raw_query(self._query)
-                    print(f"= SQL is:: {self._query}")
+                    print(f"= Query is:: {self._query}")
                 except Exception as err:
                     raise DriverError(
                         f'DB Error: {err}'
@@ -109,6 +109,18 @@ class sqlProvider(BaseProvider):
         return sql.format_map(
             defaultdict(str, SafeDict(**conditions))
         )
+
+    def get_raw_query(self, query: str):
+        sql = query
+        conditions = {**self.replacement}
+        if self._conditions:
+            return sql.format_map(
+                defaultdict(str, SafeDict(**self._conditions))
+            )
+        else:
+            return sql.format_map(
+                defaultdict(str, SafeDict(**conditions))
+            )
 
     async def columns(self):
         """Return the columns (fields) involved on the query (when possible).

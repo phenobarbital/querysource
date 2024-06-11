@@ -151,6 +151,14 @@ CASSANDRA_USER = config.get('CASSANDRA_USER')
 CASSANDRA_PWD = config.get('CASSANDRA_PWD')
 CASSANDRA_DATABASE = config.get('CASSANDRA_DATABASE')
 
+## SCYLLADB
+SCYLLA_DRIVER = config.get('SCYLLA_DRIVER', fallback='scylladb')
+SCYLLA_HOST = config.get('SCYLLA_HOST', fallback='127.0.0.1')
+SCYLLA_PORT = config.get('SCYLLA_PORT', fallback='9042')
+SCYLLA_USER = config.get('SCYLLA_USER')
+SCYLLA_PWD = config.get('SCYLLA_PWD')
+SCYLLA_DATABASE = config.get('SCYLLA_DATABASE')
+
 ## INFLUXDB
 INFLUX_DRIVER = config.get('INFLUX_DRIVER', fallback='influx')
 INFLUX_HOST = config.get('INFLUX_HOST', fallback='127.0.0.1')
@@ -161,6 +169,10 @@ INFLUX_DATABASE = config.get('INFLUX_DATABASE')
 INFLUX_ORG = config.get('INFLUX_ORG', fallback='navigator')
 INFLUX_TOKEN = config.get('INFLUX_TOKEN')
 INFLUX_LOGGING = config.get('INFLUX_LOGGING', fallback='navigator_logs')
+
+# BigQuery Service:
+BIGQUERY_CREDENTIALS = config.get('BIGQUERY_CREDENTIALS', fallback='env/bigquery.json')
+BIGQUERY_PROJECT_ID = config.get('BIGQUERY_PROJECT_ID')
 
 # this is the backend for saving Query Execution
 ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')

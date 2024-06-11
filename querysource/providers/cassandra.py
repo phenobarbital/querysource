@@ -17,9 +17,9 @@ from .abstract import BaseProvider
 
 
 class cassandraProvider(BaseProvider):
-    """sqlserverProvider.
+    """cassandraProvider.
 
-    Querysource Provider for MS SQL Server.
+    Querysource Provider for Apache Cassandra (with basic CQL Support).
     """
     __parser__ = CQLParser
 
