@@ -82,13 +82,8 @@ class QuerySource(metaclass=Singleton):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
                 return  # already configured.
-        if 'lazy' in kwargs:
-            self.lazy = kwargs['lazy']
-        else:
-            self.lazy: bool = False
-        self._loop: asyncio.AbstractEventLoop = None
-        if 'loop' in kwargs:
-            self._loop = kwargs['loop']
+        self.lazy: bool = kwargs.get('lazy', False)
+        self._loop: asyncio.AbstractEventLoop = kwargs.get('loop', asyncio.get_event_loop())
         ### Connection Object:
         self.connection = QueryConnection(loop=self._loop, lazy=self.lazy)
         ### Loading all providers when started:

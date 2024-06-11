@@ -286,26 +286,6 @@ class QueryConnection(Connection, metaclass=Singleton):
         else:
             return False
 
-    async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
-        try:
-            QueryModel.Meta.connection = conn
-            self.logger.debug(
-                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
-            )
-            return await QueryModel.get(query_slug=slug)
-        except ValidationError as ex:
-            raise SlugNotFound(
-                f'Invalid Slug Data {slug!s}: {ex}'
-            ) from ex
-        except NoDataFound as ex:
-            raise SlugNotFound(
-                f'Slug not Found {slug!s}'
-            ) from ex
-        except (ProviderError, DriverError) as ex:
-            raise SlugNotFound(
-                f"Error getting Slug: {ex}"
-            ) from ex
-
     async def dispose(self, conn: Callable = None):
         """
         dispose a connection from the pg pool.

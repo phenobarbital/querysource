@@ -5,10 +5,13 @@ from typing import Any
 import asyncio
 from importlib import import_module
 from datetime import datetime
+from datamodel import BaseModel
+from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
 from asyncdb.exceptions import (
     ProviderError,
-    DriverError
+    DriverError,
+    NoDataFound
 )
 from navconfig.logging import logging
 from ..providers import BaseProvider
@@ -284,21 +287,31 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
+    async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
+        try:
+            QueryModel.Meta.connection = conn
+            self.logger.debug(
+                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+            )
+            return await QueryModel.get(query_slug=slug)
+        except ValidationError as ex:
+            raise SlugNotFound(
+                f'Invalid Slug Data {slug!s}: {ex}'
+            ) from ex
+        except NoDataFound as ex:
+            raise SlugNotFound(
+                f'Slug not Found {slug!s}'
+            ) from ex
+        except (ProviderError, DriverError) as ex:
+            raise SlugNotFound(
+                f"Error getting Slug: {ex}"
+            ) from ex
+
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
         if slug in SLUG_CACHE:
             return SLUG_CACHE[slug]
-        if self.lazy is True:
-            try:
-                connection = await self.get_connection(driver='pg')
-                async with connection as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                await connection.close()
-                QueryModel.Meta.connection = None
-        else:
+        if hasattr(self, 'lazy') and self.lazy is True:
             try:
                 async with await self._postgres.acquire() as conn:
                     obj = await self.get_query_slug(slug, conn)
@@ -306,7 +319,15 @@ class Connection:
                 raise
             finally:
                 QueryModel.Meta.connection = None
-                SLUG_CACHE[slug] = obj
+        else:
+            try:
+                connection = await self.get_connection(driver='pg')
+                async with connection as conn:
+                    obj = await self.get_query_slug(slug, conn)
+            except Exception:  # pylint: disable=W0706
+                raise
+            finally:
+                QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
@@ -316,4 +337,5 @@ class Connection:
                 f'Slug \'{slug}\' not found'
             )
         else:
+            SLUG_CACHE[slug] = obj
             return obj
