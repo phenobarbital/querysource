@@ -2,6 +2,7 @@
 Connections Manager.
 """
 from typing import Any
+from collections.abc import Callable
 import asyncio
 from importlib import import_module
 from datetime import datetime
@@ -82,7 +83,7 @@ class Connection:
     def set_connection(self, conn):
         self._connection = conn
 
-    async def get_connection(self, driver: str = 'pg'):
+    def get_connection(self, driver: str = 'pg') -> Callable:
         """Useful for internal connections of QS.
         """
         try:
@@ -311,7 +312,7 @@ class Connection:
         start = datetime.now()
         if slug in SLUG_CACHE:
             return SLUG_CACHE[slug]
-        if hasattr(self, 'lazy') and self.lazy is True:
+        if hasattr(self, 'lazy') and self.lazy is False:
             try:
                 async with await self._postgres.acquire() as conn:
                     obj = await self.get_query_slug(slug, conn)
@@ -321,8 +322,8 @@ class Connection:
                 QueryModel.Meta.connection = None
         else:
             try:
-                connection = await self.get_connection(driver='pg')
-                async with connection as conn:
+                db = self.get_connection(driver='pg')
+                async with await db.connection() as conn:
                     obj = await self.get_query_slug(slug, conn)
             except Exception:  # pylint: disable=W0706
                 raise

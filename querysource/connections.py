@@ -134,12 +134,12 @@ class QueryConnection(Connection, metaclass=Singleton):
         """
         return await self._postgres.acquire()
 
-    async def get_connection(self, provider: str = 'pg'):
+    def get_connection(self, driver: str = 'pg'):
         """Useful for internal connections of QS.
         """
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
-            return super().get_connection(provider)
+            return super().get_connection(driver=driver)
         else:
             ### using current Pool
             return None
