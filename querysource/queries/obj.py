@@ -3,7 +3,8 @@ from typing import Union, Optional
 from aiohttp import web
 from asyncdb.exceptions import (
     NoDataFound,
-    StatementError
+    StatementError,
+    ConnectionTimeout
 )
 from ..providers import BaseProvider  # renamed to Providers.
 from ..exceptions import (
@@ -203,6 +204,10 @@ class QueryObject(BaseQuery):
                             raise DriverError(str(error))
                     result, error = await self._output_format(result, error)  # pylint: disable=W0150
                     await self._queue.put({self._name: result})
+                except ConnectionTimeout as err:
+                    raise DriverError(
+                        f"Connection Timeout: {err}"
+                    ) from err
                 except (RuntimeError, QueryException) as ex:
                     raise QueryException(
                         f"Error on Query: {ex}"
