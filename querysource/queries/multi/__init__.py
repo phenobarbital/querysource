@@ -29,6 +29,7 @@ class MultiQS(BaseQuery):
     """
     def __init__(
             self,
+            slug: str = None,
             queries: Optional[list] = None,
             files: Optional[list] = None,
             query: Optional[dict] = None,
@@ -38,7 +39,7 @@ class MultiQS(BaseQuery):
             **kwargs
     ):
         super(MultiQS, self).__init__(
-            slug=None,
+            slug=slug,
             conditions=conditions,
             request=request,
             loop=loop,
@@ -58,9 +59,13 @@ class MultiQS(BaseQuery):
             ## Getting data from Queries or Files
             self._queries = query.get('queries', {})
             self._files = query.get('files', {})
-        if not (self._queries or self._files):  # Check if both are effectively empty
+        if not (self.slug or self._queries or self._files):
+            # Check if both are effectively empty
             raise DriverError(
-                'Invalid Option passed to MultiQuery.'
+                (
+                    'Invalid Options passed to MultiQuery. '
+                    'Slug, Queries and Files are all empty.'
+                )
             )
 
     async def query(self):
@@ -68,6 +73,25 @@ class MultiQS(BaseQuery):
         Executing Multiple Queries/Files
         """
         tasks = {}
+        if self.slug:
+            try:
+                query = await self.get_slug(slug=self.slug)
+                try:
+                    slug_data = self._encoder.load(query.query_raw)
+                    if slug_data:
+                        self._options = slug_data
+                        self._queries = slug_data.get('queries', {})
+                        self._files = slug_data.get('files', {})
+                        # TODO: making replacements based on POST data.
+                except Exception as exc:
+                    self.logger.error(
+                        f"Unable to decode JSON from Slug {self.slug}: {exc}"
+                    )
+                    raise DriverError(
+                        f"Unable to decode JSON from Slug {self.slug}: {exc}"
+                    ) from exc
+            except Exception:
+                raise
         if self._queries:
             for name, query in self._queries.items():
                 t = ThreadQuery(
@@ -204,4 +228,4 @@ class MultiQS(BaseQuery):
             raise DataNotFound(
                 "QS Empty Result"
             )
-        return result
+        return result, self._options

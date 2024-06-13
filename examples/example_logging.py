@@ -7,7 +7,7 @@ async def handle(request):
     return await log.audit_log(
         request=request,
         use_geloc=False,
-        event_name='Test Event'
+        event_name='Ticket Registered'
     )
 
 
