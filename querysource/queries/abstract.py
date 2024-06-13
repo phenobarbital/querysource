@@ -62,8 +62,8 @@ class BaseQuery(Connection):
         """
         enable_uvloop()
         __name__ = type(self).__name__
-        Connection.__init__(self, **kwargs)
         self.slug = slug
+        Connection.__init__(self, **kwargs)
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None
         try:

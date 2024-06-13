@@ -21,6 +21,8 @@ class QueryHandler(AbstractHandler):
         options = {}
         params = self.query_parameters(request)
         args = self.match_parameters(request)
+        slug = args.get('slug', None)
+        meta = args.get('meta', None)
         writer_options = {}
         _format: str = 'json'
         try:
@@ -32,13 +34,17 @@ class QueryHandler(AbstractHandler):
         except (TypeError, ValueError):
             options = {}
         ## Getting data from Queries or Files
-        _queries = options.get('queries', {})
-        _files = options.get('files', {})
-        if not (_queries or _files):  # Check if both are effectively empty
-            raise self.Error(
-                message='Invalid POST Option passed to MultiQuery.',
-                code=400
-            )
+        if not slug:
+            _queries = options.get('queries', {})
+            _files = options.get('files', {})
+            if not (_queries or _files):  # Check if both are effectively empty
+                raise self.Error(
+                    message='Invalid POST Option passed to MultiQuery.',
+                    code=400
+                )
+        else:
+            _queries = {}
+            _files = {}
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             if 'queryformat' in params:
@@ -75,12 +81,13 @@ class QueryHandler(AbstractHandler):
         }
         ## Step 1: Running all Queries and Files on QueryObject
         qs = MultiQS(
+            slug=slug,
             queries=_queries,
             files=_files,
             query=options
         )
         try:
-            result = await qs.query()
+            result, options = await qs.query()
         except SlugNotFound as snf:
             raise self.Error(
                 message="Slug Not Found",
@@ -111,14 +118,15 @@ class QueryHandler(AbstractHandler):
             result = list(result.values())[0]
         # TODO: making a melt of all dataframes
         ### Step 5: Passing result to any Processor declared
-        if 'Output' in options:
-            ## Optionally saving result into Database (using Pandas)
-            for step in options['Output']:
-                obj = None
-                for step_name, component in step.items():
-                    if step_name == 'tableOutput':
-                        obj = TableOutput(data=result, **component)
-                        result = await obj.run()
+        if isinstance(options, dict):
+            if 'Output' in options:
+                ## Optionally saving result into Database (using Pandas)
+                for step in options['Output']:
+                    obj = None
+                    for step_name, component in step.items():
+                        if step_name == 'tableOutput':
+                            obj = TableOutput(data=result, **component)
+                            result = await obj.run()
         ### Step 5: passing Result to DataOutput
         try:
             output = DataOutput(

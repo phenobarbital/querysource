@@ -14,13 +14,13 @@ from querysource.utils.functions import cPrint
 import pytest_asyncio
 
 DRIVER = 'postgres'
-DSN = "postgres://troc_pgdata:12345678@127.0.0.1:5432/navigator_dev"
+DSN = "postgres://troc_pgdata:12345678@127.0.0.1:5432/navigator"
 params = {
     "host": '127.0.0.1',
     "port": '5432',
     "user": 'troc_pgdata',
     "password": '12345678',
-    "database": 'navigator_dev'
+    "database": 'navigator'
 }
 
 pytestmark = pytest.mark.asyncio

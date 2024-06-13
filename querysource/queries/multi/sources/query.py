@@ -42,7 +42,7 @@ class ThreadQuery(threading.Thread):
                 self._query.query()
             )
         except Exception as ex:
-            print('ERROR >>>> ', ex)
+            print('ThreadQuery Error: ', ex)
             self.exc = ex
         finally:
             self._loop.close()

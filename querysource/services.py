@@ -156,6 +156,16 @@ class QuerySource(metaclass=Singleton):
         ## Multi-Query:
         mq = QueryHandler()
         r = self.app.router.add_post(
+            r'/api/v3/queries/{slug}{meta:\:?.*}',
+            mq.query
+        )
+        routes.append(r)
+        r = self.app.router.add_get(
+            r'/api/v3/queries/{slug}{meta:\:?.*}',
+            mq.query
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
             r'/api/v3/queries{meta:\:?.*}',
             mq.query
         )
