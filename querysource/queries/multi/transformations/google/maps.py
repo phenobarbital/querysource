@@ -9,6 +9,10 @@ from ..abstract import AbstractTransform
 class GoogleMaps(AbstractTransform):
 
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:
+        self.zoom: int = kwargs.get('zoom', 10)
+        self.map_scale: int = kwargs.get('map_scale', 2)
+        # self.map_size: tuple = kwargs.get('map_size', (800, 800))
+        self.departure_time: str = kwargs.get('departure_time', None)
         super(GoogleMaps, self).__init__(data, **kwargs)
         if not hasattr(self, 'type'):
             self._type = 'get_route'
@@ -29,15 +33,20 @@ class GoogleMaps(AbstractTransform):
             longitude=origin[1]
         )
         destination = origin
+        args = {}
+        if self.departure_time:
+            args = {
+                "departure_time": self.departure_time
+            }
         traveler = TravelerSearch(
             origin=origin,
             destination=destination,  # Get destination from last location
             locations=row['locations'],
             optimal=False,
-            scale=2,
-            zoom=10,
-            map_size=(800, 800)
-            # departure_time=row['departure_time']
+            scale=self.map_scale,
+            zoom=self.zoom,
+            map_size=(800, 800),
+            **args
         )
         try:
             route = Route()
