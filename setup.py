@@ -214,7 +214,15 @@ setup(
             'notebook==7.2.0',
             'nbconvert==7.16.4',
             'nbformat==5.10.4',
+            'mitosheet==0.1.576'
         ],
+        "analytics": [
+            "great_expectations>=0.18.15",
+            "pygwalker>=0.4.8.9",
+            "ydata-profiling>=4.8.3",
+            "sweetviz>=2.1.4",
+            "pandas-eda>=1.2.0"
+        ]
     },
     tests_require=[
         'pytest>=5.4.0',
