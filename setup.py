@@ -211,7 +211,7 @@ setup(
             # 'perspective-python==2.10.0',
             'jupyter_bokeh==4.0.4',
             'jupyter==1.0.0',
-            'notebook==7.2.0',
+            'notebook==7.2.1',
             'nbconvert==7.16.4',
             'nbformat==5.10.4',
             'mitosheet==0.1.576'
