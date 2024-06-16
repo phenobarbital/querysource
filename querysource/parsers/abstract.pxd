@@ -30,6 +30,7 @@ cdef class AbstractParser:
     cdef public dict _conditions
     cdef public int32_t _limit
     cdef public int32_t _offset
+    cdef public dict attributes
     cdef str _distinct
     # Parser Options:
     cdef public dict params
@@ -41,6 +42,7 @@ cdef class AbstractParser:
     # internal:
     cdef public object _redis
     cdef bint _add_fields
+    cdef public bint _safe_substitution
 
     # methods:
     cpdef object sentence(self, str sentence)
