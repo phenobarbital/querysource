@@ -79,6 +79,12 @@ cdef class AbstractParser:
             qobj = conditions
         # Use qobj to set up various attributes
         self.conditions = qobj
+        if self.definition:
+            self.attributes = self.definition.attributes
+        if not self.attributes:
+            self.attributes = {}
+        # save substitution:
+        self._safe_substitution = self.attributes.get('safe_substitution', False)
         if not self.query_raw:
             if self.definition:
                 # Query comes from Definition Database:
@@ -258,6 +264,8 @@ cdef class AbstractParser:
         if not self.filter:
             try:
                 self.filter = self.definition.filtering
+                if self.filter is None:
+                    self.filter = {}
             except (TypeError, AttributeError):
                 self.filter = {}
 

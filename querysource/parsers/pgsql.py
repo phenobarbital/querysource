@@ -2,6 +2,7 @@
 SQL Parser for PostgreSQL.
 """
 import asyncio
+from string import Template
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from ..exceptions import EmptySentence
@@ -192,16 +193,26 @@ class pgSQLParser(SQLParser):
         )
         # check table and schema names:
         if '{schema}' in sql:
-            sql = sql.format_map(SafeDict(schema=self.schema, table=self.tablename))
+            sql = sql.format_map(
+                SafeDict(schema=self.schema, table=self.tablename)
+            )
         elif '{table}' in sql:
-            sql = sql.format_map(SafeDict(table=self.tablename))
+            sql = sql.format_map(
+                SafeDict(table=self.tablename)
+            )
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
         for _, func in self.get_query_filters().items():
             fn, args = func
             result = {}
-            func = partial(fn, args, where=self.filter, program=self.program_slug, hierarchy=self._hierarchy)
+            func = partial(
+                fn,
+                args,
+                where=self.filter,
+                program=self.program_slug,
+                hierarchy=self._hierarchy
+            )
             with ThreadPoolExecutor(max_workers=1) as executor:
                 result, ordering = await asyncio.get_event_loop().run_in_executor(
                     executor, func
@@ -224,11 +235,18 @@ class pgSQLParser(SQLParser):
         else:
             sql = await self.limiting(sql, '')
         if isinstance(self._conditions, dict):
-            try:
-                sql = sql.format_map(SafeDict(**self._conditions))
+            if self._conditions:
+                sql = sql.format_map(
+                    SafeDict(**self._conditions)
+                )
+        try:
+            if self._safe_substitution is True:
+                sql = Template(sql)
+                sql = sql.safe_substitute(NullDefault())
+            else:
                 sql = sql.format_map(NullDefault())
-            except ValueError:
-                pass
+        except ValueError:
+            pass
         self.query_parsed = sql
         self.logger.debug(
             f":: SQL : {sql}"
