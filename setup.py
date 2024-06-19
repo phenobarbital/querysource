@@ -180,7 +180,7 @@ setup(
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
-        'sqlalchemy==2.0.23',
+        'sqlalchemy==2.0.31',
         # 'great_expectations==0.15.48',
         # 'ydata-profiling==4.6.3'
         'statsmodels==0.14.2',
