@@ -28,6 +28,11 @@ class ExcelWriter(AbstractWriter):
 
     async def get_response(self) -> web.StreamResponse:
         output = BytesIO()
+
+        # Ensure all datetime columns are timezone naive
+        for col in self.data.select_dtypes(include=['datetimetz']).columns:
+            self.data[col] = self.data[col].dt.tz_convert(None)
+
         # Engine Output
         if self.extension == '.xlsx':
             engine = 'xlsxwriter'
@@ -39,7 +44,7 @@ class ExcelWriter(AbstractWriter):
             engine = 'xlrd'
         # create the engine
         columns = list(self.data.columns)
-        with pandas.ExcelWriter(output, engine=engine) as writer: # pylint: disable=E0110
+        with pandas.ExcelWriter(output, engine=engine) as writer:  # pylint: disable=E0110
             self.data.to_excel(
                 writer,
                 sheet_name="Sheet1",

@@ -64,7 +64,10 @@ CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')
 CACHE_PORT = config.get('CACHE_PORT', fallback=6379)
 CACHE_DB = config.get('CACHE_DB', fallback=0)
 CACHE_URL = f"redis://{CACHE_HOST}:{CACHE_PORT!s}/{CACHE_DB}"
-DEFAULT_SLUG_CACHE_TTL = config.getint('DEFAULT_SLUG_CACHE_TTL', fallback=3600)
+DEFAULT_SLUG_CACHE_TTL = config.getint(
+    'DEFAULT_SLUG_CACHE_TTL',
+    fallback=3600
+)
 
 ## Redis as Database:
 REDIS_HOST = config.get('REDIS_HOST', fallback='localhost')
