@@ -237,7 +237,7 @@ class Connection:
             _provider = self.load_provider(provider)
             ## TODO: return a QS Provider for REST/External operations
             return [None, _provider]
-        if provider in DATASOURCES:
+        if (await self.get_datasource(provider)):
             source, conn = await self.datasource(provider)
             ### get provider from datasource type:
             provider = source.driver
@@ -253,6 +253,44 @@ class Connection:
                 print(ex)
                 conn = None
             return [conn, _provider]
+
+    async def get_datasource(self, name: str):
+        try:
+            return DATASOURCES[name]
+        except KeyError:
+            pass
+        # getting from database directly:
+        try:
+            db = self.get_connection(driver='pg')
+            async with await db.connection() as conn:
+                sql = f"SELECT * FROM public.datasources WHERE name = '{name}'"
+                row, error = await conn.queryrow(sql)
+                if error:
+                    self.logger.warning(f'DS Error: {error}')
+                    return False
+                try:
+                    driver = self.get_driver(row['driver'])
+                    # TODO: encrypting credentials in database:
+                    if row['dsn']:
+                        data = {
+                            "dsn": row['dsn']
+                        }
+                    else:
+                        try:
+                            data = {
+                                **dict(row['params']),
+                                **dict(row['credentials'])
+                            }
+                        except TypeError:
+                            data = dict(row['params'])
+                    DATASOURCES[name] = driver(**data)
+                    return DATASOURCES[name]
+                except Exception as ex:  # pylint: disable=W0703
+                    self.logger.error(ex)
+                    return False
+        except Exception as exc:
+            self.logger.error(exc)
+            return False
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
