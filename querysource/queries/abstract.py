@@ -15,7 +15,7 @@ from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
-from navigator_session.storages import SessionData
+from navigator_session import SessionData
 from aiohttp import web
 from navconfig.logging import logging
 from ..libs.encoders import DefaultEncoder
