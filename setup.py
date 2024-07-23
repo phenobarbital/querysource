@@ -197,25 +197,6 @@ setup(
         "jinja2-humanize-extension==0.4.0"
     ],
     extras_require={
-        "jupyter": [
-            # Jupyter Netbook:
-            # 'elyra[all]==3.15.0',
-            # 'dask-labextension==7.0.0',
-            'pylantern==0.1.6',
-            'jupyterlab_iframe==0.5.0',
-            'jupyter-fs==0.4.1',
-            'jupyter-server-proxy==4.1.2',
-            'jupyter_contrib_nbextensions==0.7.0',
-            'python-language-server==0.36.2',
-            'ipython==8.24.0',
-            # 'perspective-python==2.10.0',
-            'jupyter_bokeh==4.0.4',
-            'jupyter==1.0.0',
-            'notebook==7.2.0',
-            'nbconvert==7.16.4',
-            'nbformat==5.10.4',
-            'mitosheet==0.1.576'
-        ],
         "analytics": [
             "great_expectations>=0.18.15",
             "pygwalker>=0.4.8.9",
