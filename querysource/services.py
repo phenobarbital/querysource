@@ -6,12 +6,6 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 from aiohttp import web
-try:
-    import nbformat
-    from nbconvert import HTMLExporter
-    JUPYTER_ENABLED = True
-except ImportError:
-    JUPYTER_ENABLED = False
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
@@ -27,14 +21,6 @@ from .handlers import (
     VariablesService,
     LoggingService
 )
-from .conf import (
-    ENABLED_JUPYTER,
-    JUPYTER_PORT,
-    JUPYTER_TOKEN,
-    JUPYTER_CONFIG,
-    JUPYTER_LAB_DIR
-)
-
 try:
     from settings.settings import QUERYSOURCE_FILTERS, QUERYSOURCE_VARIABLES
 except ImportError:
@@ -45,23 +31,6 @@ from .interfaces.connections import PROVIDERS
 from .connections import QueryConnection
 from .parsers import QS_VARIABLES, QS_FILTERS
 
-
-async def notebook_handler(request):
-    notebook_name = request.match_info['name']
-    notebook_path = JUPYTER_LAB_DIR.joinpath(f'{notebook_name}.ipynb')
-
-    if not notebook_path.exists():
-        return web.Response(
-            status=404,
-            text=f"Notebook not found at {notebook_path}"
-        )
-
-    with open(notebook_path) as f:
-        nb = nbformat.read(f, as_version=4)
-        exporter = HTMLExporter()
-        body, resources = exporter.from_notebook_node(nb)
-
-    return web.Response(text=body, content_type='text/html')
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -217,16 +186,6 @@ class QuerySource(metaclass=Singleton):
             "/api/v2/variables/{program}/{variable}", VariablesService
         )
 
-        ## Add Jupyter Notebooks
-        if ENABLED_JUPYTER is True:
-            # Dynamically add routes for each notebook
-            route_path = '/qs/reports/lab/{name}'
-            self.app.router.add_get(
-                route_path,
-                notebook_handler,
-                allow_head=False
-            )
-
         ### Startup Event for QuerySource:
         self.app.on_startup.append(
             self.qs_start
@@ -251,31 +210,9 @@ class QuerySource(metaclass=Singleton):
             )
         return func
 
-    async def jupyter_start(self):
-        if ENABLED_JUPYTER:
-            # Command to start Jupyter
-            command = [
-                sys.executable, '-m', 'notebook', f'--config={JUPYTER_CONFIG}',
-                '--no-browser', '--NotebookApp.allow_origin=https://colab.research.google.com',
-                f'--port={JUPYTER_PORT}', '--NotebookApp.port_retries=0',
-                f"--NotebookApp.token='{JUPYTER_TOKEN}'", "--ServerApp.root_dir=./lab/"
-            ]
-            # Start Jupyter as a subprocess
-            self.jupyter_process = subprocess.Popen(command)
-            print(
-                f"Jupyter Server started with PID: {self.jupyter_process.pid}"
-            )
-
-    async def jupyter_stop(self):
-        if self.jupyter_process:
-            # Terminate the Jupyter process
-            self.jupyter_process.terminate()
-            print("Jupyter Server stopped")
-
     async def qs_start(self, app: WebApp) -> None:
         if not self._loop:
             self._loop = asyncio.get_event_loop()
-        await self.jupyter_start()
 
     async def qs_stop(self, app: WebApp) -> None:
-        await self.jupyter_stop()
+        pass
