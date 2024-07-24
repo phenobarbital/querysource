@@ -336,6 +336,7 @@ class QueryManager(QueryView):
                 except NoDataFound:
                     result = await qry.insert()
                     st = 201
+                # Saving Slug in redis cache:
                 return self.json_response(result, status=st)
         except Exception as err:
             print('ERROR ', err)

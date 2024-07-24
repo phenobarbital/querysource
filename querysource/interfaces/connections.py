@@ -358,16 +358,16 @@ class Connection:
 
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
-        redis = self.get_redis()
-        async with await redis.connection() as r:
-            if (await r.exists(slug)):
-                self.logger.debug(
-                    "Getting Slug from Cache"
-                )
-                try:
-                    return SLUG_CACHE[slug]
-                except KeyError:
-                    pass
+        # redis = self.get_redis()
+        # async with await redis.connection() as r:
+        #     if (await r.exists(slug)):
+        #         self.logger.debug(
+        #             "Getting Slug from Cache"
+        #         )
+        #         try:
+        #             return SLUG_CACHE[slug]
+        #         except KeyError:
+        #             pass
         if hasattr(self, 'lazy') and self.lazy is False:
             try:
                 async with await self._postgres.acquire() as conn:
@@ -394,7 +394,7 @@ class Connection:
                 f'Slug \'{slug}\' not found'
             )
         else:
-            async with await redis.connection() as r:
-                await r.setex(slug, slug, DEFAULT_SLUG_CACHE_TTL)
-                SLUG_CACHE[slug] = obj
+            # async with await redis.connection() as r:
+            #     await r.setex(slug, slug, DEFAULT_SLUG_CACHE_TTL)
+            #     SLUG_CACHE[slug] = obj
             return obj
