@@ -246,10 +246,19 @@ class QueryConnection(Connection, metaclass=Singleton):
                             try:
                                 data = {
                                     **dict(row['params']),
-                                    **dict(row['credentials'])
                                 }
                             except TypeError:
                                 data = dict(row['params'])
+                            for key, val in row.get('credentials', {}).items():
+                                data[key] = await self.get_from_env(
+                                    key_name=val,
+                                    default=val
+                                )
+                            for key, val in row.get('params', {}).items():
+                                data[key] = await self.get_from_env(
+                                    key_name=val,
+                                    default=val
+                                )
                         DATASOURCES[name] = driver(**data)
                     except (ValueError, ValidationError) as ex:
                         self.logger.exception(

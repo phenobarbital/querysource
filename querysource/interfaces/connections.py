@@ -1,7 +1,7 @@
 """""
 Connections Manager.
 """
-from typing import Any
+from typing import Any, Optional, Union
 from collections.abc import Callable
 import asyncio
 from importlib import import_module
@@ -14,6 +14,7 @@ from asyncdb.exceptions import (
     DriverError,
     NoDataFound
 )
+from navconfig import config
 from navconfig.logging import logging
 from ..providers import BaseProvider
 from ..exceptions import (
@@ -254,6 +255,19 @@ class Connection:
                 conn = None
             return [conn, _provider]
 
+    async def get_from_env(
+        self,
+        key_name: str,
+        default: Optional[Union[str, None]] = None
+    ) -> str:
+        """
+        Getting a value from the environment.
+        """
+        try:
+            return config.get(key_name, fallback=default)
+        except (AttributeError, TypeError, KeyError):
+            return default
+
     async def get_datasource(self, name: str):
         try:
             return DATASOURCES[name]
@@ -279,10 +293,19 @@ class Connection:
                         try:
                             data = {
                                 **dict(row['params']),
-                                **dict(row['credentials'])
                             }
                         except TypeError:
                             data = dict(row['params'])
+                        for key, val in row.get('credentials', {}).items():
+                            data[key] = await self.get_from_env(
+                                key_name=val,
+                                default=val
+                            )
+                        for key, val in row.get('params', {}).items():
+                            data[key] = await self.get_from_env(
+                                key_name=val,
+                                default=val
+                            )
                     DATASOURCES[name] = driver(**data)
                     return DATASOURCES[name]
                 except Exception as ex:  # pylint: disable=W0703
