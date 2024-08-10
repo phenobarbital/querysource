@@ -1,9 +1,11 @@
 import sys
 from typing import (
     Any,
-    Union
+    Union,
+    Optional
 )
 from collections.abc import Callable
+from io import BytesIO
 import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +15,7 @@ from functools import partial
 import urllib3
 import requests
 from requests.auth import HTTPBasicAuth
+import httpx
 import aiohttp
 from aiohttp import web
 from bs4 import BeautifulSoup as bs
@@ -41,6 +44,8 @@ P = ParamSpec("P")
 
 urllib3.disable_warnings()
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
 ua = [
@@ -179,6 +184,8 @@ class httpSource(baseSource):
         self._bs: Callable = None
         self._last_execution: dict = None
         # self.kwargs = kwargs
+        # Check if use json as payload:
+        self.use_json: bool = kwargs.pop('use_json', False)
         if self.use_redis is True:
             self._redis = AsyncDB('redis', dsn=CACHE_URL)
 
@@ -250,6 +257,245 @@ class httpSource(baseSource):
                 ) as response:
                     return response
 
+    async def http_request(
+        self,
+        url: str,
+        method: str = 'get',
+        data: dict = None,
+        headers: Optional[dict] = None,
+        use_json: bool = False
+    ):
+        response = None
+        error = None
+        req_args = {
+            "method": method.upper(),
+            "url": url,
+            "follow_redirects": True,
+            "json" if use_json else "data": data
+        }
+        timeout = httpx.Timeout(self.timeout)
+        args = {"timeout": timeout, "headers": headers}
+        try:
+            async with httpx.AsyncClient(**args) as client:
+                response = await client.request(**req_args)
+        except httpx.HTTPError as e:
+            error = str(e)
+        except Exception as exc:
+            self.logger.error(str(exc))
+            error = str(exc)
+        return response, error
+
+    async def async_request(
+        self,
+        url: str,
+        method: str = "get",
+        data: dict = None,
+        cookies: dict = None,
+        headers: dict = None,
+        use_json: bool = False
+    ):
+        """
+        Asynchronously sends an HTTP request using HTTPx.
+
+        :param url: The URL to send the request to.
+        :param method: The HTTP method to use (e.g., 'GET', 'POST').
+        :param data: The data to send in the request body.
+        :param cookies: A dictionary of cookies to send with the request.
+        :param headers: A dictionary of headers to send with the request.
+        :param use_json: Whether to send the data as JSON.
+        :return: A tuple containing the result and any error information.
+        """
+        result = []
+        error = {}
+        auth = None
+        proxies = None
+        if self.use_proxies is True:
+            if self._proxies:
+                proxy = random.choice(self._proxies)
+                proxies = {"http": proxy, "https": proxy, "ftp": proxy}
+        if headers is not None and isinstance(headers, dict):
+            headers = {**self._headers, **headers}
+        if self.auth:
+            if "apikey" in self.auth:
+                self.headers[
+                    "Authorization"
+                ] = f"{self.token_type} {self.auth['apikey']}"
+            elif self.auth_type == "api_key":
+                headers = {**self._headers, **self.auth}
+            elif self.auth_type == 'key':
+                url = self.build_url(
+                    url,
+                    args=self._arguments,
+                    queryparams=urlencode(self.auth)
+                )
+            elif self.auth_type in ["basic", "auth", "user"]:
+                auth = self.auth
+        elif self._user and self.auth_type == "basic":
+            auth = (self._user, self._pwd)
+        cPrint(f"HTTP: Connecting to {url} using {method}", level="DEBUG")
+        timeout = httpx.Timeout(self.timeout)
+        args = {"timeout": timeout, "headers": headers, "cookies": cookies}
+        if auth is not None:
+            args["auth"] = auth
+        if proxies:
+            args["proxies"] = proxies
+        req_args = {
+            "method": method.upper(),
+            "url": url,
+            "follow_redirects": True,
+            "json" if use_json else "data": data
+        }
+        try:
+            async with httpx.AsyncClient(**args) as client:
+                response = await client.request(**req_args)
+                result, error = await self.process_response(response, url)
+        except httpx.HTTPError as e:
+            error = str(e)
+        except Exception as exc:
+            self.logger.error(str(exc))
+            error = str(exc)
+        if error:
+            if isinstance(error, BaseException):
+                raise error
+            elif isinstance(error, bs):
+                return (result, error)
+            else:
+                raise DriverError(str(error))
+        ## saving last execution parameters:
+        self._last_execution = {
+            "url": self.url,
+            "method": method,
+            "data": data,
+            "auth": bool(auth),
+            "proxies": proxies,
+            "ua": self._ua,
+            "headers": headers
+        }
+        return (result, error)
+
+    async def evaluate_error(
+        self,
+        response: Union[str, list],
+        message: Union[str, list, dict]
+    ) -> tuple:
+        """evaluate_response.
+
+        Check Response status and available payloads.
+        Args:
+            response (_type_): _description_
+            url (str): _description_
+
+        Returns:
+            tuple: _description_
+        """
+        if isinstance(response, list):
+            # a list of potential errors:
+            for msg in response:
+                if message in msg:
+                    return True
+        if isinstance(response, dict) and "errors" in response:
+            errors = response["errors"]
+            if isinstance(errors, list):
+                for error in errors:
+                    try:
+                        if message in error:
+                            return True
+                    except TypeError:
+                        if message == error:
+                            return True
+            else:
+                if message == errors:
+                    return True
+        else:
+            if message in response:
+                return True
+        return False
+
+    async def process_response(self, response, url: str) -> tuple:
+        """
+        Processes the response from an HTTPx request.
+
+        :param response: The response object from httpx.
+        :param url: The URL that was requested.
+        :return: A tuple containing the processed result and any error information.
+        """
+        error = None
+        result = None
+        # Process the response
+        status = self.response_status(response)
+
+        if status >= 400:
+            # Evaluate response body and headers.
+            print(" == ERROR Headers == ")
+            print(f"{response.headers}")
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "application/json" in content_type:
+                message = response.json()
+            elif "text/" in content_type:
+                message = response.text
+            elif "X-Error" in response.headers:
+                message = response.headers["X-Error"]
+            else:
+                message = response.reason
+            # Log the error or perform other error handling
+            self.logger.error(
+                f"Error: {message}, status: {status}"
+            )
+            if hasattr(self, 'no_errors'):
+                for key, msg in self.no_errors.items():
+                    if int(key) == status:
+                        if await self.evaluate_error(message, msg):
+                            return (response, status)
+            # Raise an exception
+            raise ConnectionError(
+                f"HTTP Error {status}: {message}"
+            )
+        else:
+            if self.accept == "application/json":
+                try:
+                    result = response.json()
+                except Exception as e:
+                    logging.error(e)
+                    # is not an json, try first with beautiful soup:
+                    try:
+                        self._bs = bs(response.text, "html.parser")
+                        result = self._bs
+                    except Exception:
+                        error = e
+            elif getattr(self, 'download', None) is False:
+                data = await response.aread()
+                buffer = BytesIO(data)
+                buffer.seek(0)
+                result = buffer
+            elif self.accept in ('text/html'):
+                result = await response.aread()
+                try:
+                    # html parser for lxml
+                    self._parser = html.fromstring(result)
+                    # BeautifulSoup parser
+                    self._bs = bs(response.text, "html.parser")
+                    result = self._bs
+                except Exception as e:
+                    error = e
+            elif self.accept in ('application/xhtml+xml', 'application/xml'):
+                result = await response.aread()
+                try:
+                    self._parser = etree.fromstring(result)
+                except etree.XMLSyntaxError:
+                    self._parser = html.fromstring(result)
+                except Exception as e:
+                    error = e
+            else:
+                result = await response.text()
+        return result, error
+
+    @staticmethod
+    def response_status(response):
+        if hasattr(response, 'status_code'):
+            return response.status_code
+
+        return response.status
+
     async def request(
         self,
         url,
@@ -274,13 +520,14 @@ class httpSource(baseSource):
                 "https": proxy,
                 "ftp": proxy
             }
+
         if headers is not None and isinstance(headers, dict):
-            self._headers = {**self._headers, **headers}
+            headers = {**self.headers, **headers}
         if self.auth:
             if 'apikey' in self.auth:
-                self._headers['Authorization'] = f"{self.token_type} {self.auth['apikey']}"
+                headers['Authorization'] = f"{self.token_type} {self.auth['apikey']}"
             elif self.auth_type == 'api_key':
-                self._headers = {**self._headers, **self.auth}
+                headers = {**self._headers, **self.auth}
             elif self.auth_type == 'key':
                 url = self.build_url(
                     url,
@@ -299,7 +546,7 @@ class httpSource(baseSource):
         if method == 'get':
             my_request = partial(
                 requests.get,
-                headers=self._headers,
+                headers=headers,
                 verify=False,
                 auth=auth,
                 params=data,
@@ -311,7 +558,7 @@ class httpSource(baseSource):
             if self.data_format == 'json':
                 my_request = partial(
                     requests.post,
-                    headers=self._headers,
+                    headers=headers,
                     json={"query": data},
                     verify=False,
                     auth=auth,
@@ -322,7 +569,7 @@ class httpSource(baseSource):
             else:
                 my_request = partial(
                     requests.post,
-                    headers=self._headers,
+                    headers=headers,
                     data=data,
                     verify=False,
                     auth=auth,
@@ -332,7 +579,7 @@ class httpSource(baseSource):
         elif method == 'put':
             my_request = partial(
                 requests.put,
-                headers=self._headers,
+                headers=headers,
                 data=data,
                 verify=False,
                 auth=auth,
@@ -342,7 +589,7 @@ class httpSource(baseSource):
         elif method == 'delete':
             my_request = partial(
                 requests.delete,
-                headers=self._headers,
+                headers=headers,
                 data=data,
                 verify=False,
                 auth=auth,
@@ -352,7 +599,7 @@ class httpSource(baseSource):
         elif method == 'patch':
             my_request = partial(
                 requests.patch,
-                headers=self._headers,
+                headers=headers,
                 data=data,
                 verify=False,
                 auth=auth,
@@ -362,7 +609,7 @@ class httpSource(baseSource):
         else:
             my_request = partial(
                 requests.post,
-                headers=self._headers,
+                headers=headers,
                 data=data,
                 verify=False,
                 auth=auth,
@@ -392,7 +639,7 @@ class httpSource(baseSource):
                 "auth": bool(auth),
                 "proxies": proxies,
                 "ua": self._ua,
-                "headers": self._headers
+                "headers": headers
             }
             return (result, error)
         except Exception as err:
@@ -466,6 +713,52 @@ class httpSource(baseSource):
             raise DriverError(
                 f"HTTP Connection Error: {e!r}"
             ) from e
+
+    async def aquery(
+        self,
+        data: Optional[dict] = None,
+        headers: Optional[dict] = None
+    ):
+        """Run an async query on the Data Provider.
+        """
+        try:
+            if self.use_proxies is True:
+                self._proxies = await self.get_proxies()
+        except AttributeError:
+            pass
+        # credentials calculation
+        self.processing_credentials()
+        # create URL
+        self.url = self.build_url(
+            self.url,
+            args=self._args,
+            queryparams=urlencode(self._conditions)
+        )
+        try:
+            use_json = True if self.content_type == 'application/json' else self.use_json
+            result, error = await self.async_request(
+                self.url, self.method, data=data, use_json=use_json
+            )
+            if check_empty(result):
+                raise DataNotFound(
+                    message="No Data was found"
+                )
+            elif error:
+                raise DriverError(
+                    str(error)
+                )
+        except DataNotFound:
+            raise
+        except QueryException:
+            raise
+        except Exception as err:
+            print(err)
+            raise QueryException(
+                f"Uncaught Error on HTTP: {err}"
+            ) from err
+        # if result then
+        self._result = result
+        return result
 
     async def query(self, data: dict = None):
         """Run a query on the Data Provider.
