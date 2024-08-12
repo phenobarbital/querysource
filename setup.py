@@ -222,7 +222,8 @@ setup(
             'selenium==4.18.1',
             'sentence-transformers==2.6.1',
             'tensorflow==2.17.0',
-            'spacy==3.7.5'
+            'spacy==3.7.5',
+            'pydqc==0.1.0'
         ]
     },
     tests_require=[
