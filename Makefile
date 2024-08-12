@@ -3,12 +3,12 @@ venv:
 	echo 'run `source .venv/bin/activate` to start develop QuerySource'
 
 install:
-	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
+	pip install --upgrade git+https://github.com/GrocerCheck/LivePopularTimes
 	pip install --upgrade asyncdb[all]
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth
 	pip install --upgrade navigator-api
-	pip install -e .
+	pip install -e .[analytics]
 	echo 'start using QuerySource'
 
 jupyter:
