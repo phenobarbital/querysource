@@ -3,6 +3,7 @@ import re
 import urllib
 import orjson
 import json
+from livepopulartimes.crawler import get_populartimes_from_search
 from .rest import restSource
 from ...exceptions import ConfigError, DriverError
 
@@ -79,13 +80,17 @@ class populartimes(restSource):
         # Places by ID
         self.url = self.base_url + 'details/json?placeid={place_id}&key={api_key}'
         try:
-            result = await self.aquery()
-            self.check_response_code(result)
+            query = await self.aquery()
+            self.check_response_code(query)
+            result = query.get('result')
             address = result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
             pdata = await self.make_google_search(address)
+            result = get_populartimes_from_search(address, get_detail=True, proxy=False)
+            print('RESULT > ', result)
             print('SEARCH > ', pdata)
             data = self.get_populartimes(result, pdata)
-            self._result = result.get('result')
+            print('DATA > ', data)
+            self._result = result
             return self._result
         except Exception as err:
             self.logger.error(err)
