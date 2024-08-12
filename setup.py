@@ -141,7 +141,19 @@ setup(
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
     packages=find_packages(
-        exclude=['contrib', 'docs', 'plugins', 'examples', 'samples', 'settings']
+        exclude=[
+            'contrib',
+            'google',
+            'docs',
+            'plugins',
+            'lab',
+            'examples',
+            'samples',
+            'settings',
+            'etc',
+            'bin',
+            'build'
+        ]
     ),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
@@ -155,6 +167,7 @@ setup(
     install_requires=[
         "aiodns==3.0.0",
         'LivePopularTimes==1.3',
+        'httpx==0.26.0',
         'hubspot-api-client==7.5.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.16.2',
@@ -167,24 +180,15 @@ setup(
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
-        'pandas_bokeh==0.5.5',
-        'plotly==5.22.0',
-        'sweetviz==2.1.4',
-        'pygal==3.0.0',
         'reportlab==4.1.0',
         'WeasyPrint==61.2',
         'APScheduler==3.10.4',
-        'scikit-learn==1.4.2',
         'elasticsearch-async==6.2.0',
         'seaborn==0.13.2',
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
         'sqlalchemy==2.0.23',
-        # 'great_expectations==0.15.48',
-        # 'ydata-profiling==4.6.3'
-        'statsmodels==0.14.2',
-        'pmdarima==2.0.4',
         # NAV libraries:
         'asyncdb[all]>=2.6.0',
         'proxylists>=0.12.3',
@@ -202,7 +206,23 @@ setup(
             "pygwalker>=0.4.8.9",
             "ydata-profiling>=4.8.3",
             "sweetviz>=2.1.4",
-            "pandas-eda>=1.2.0"
+            "pandas-eda>=1.2.0",
+            'statsmodels==0.14.2',
+            'pmdarima==2.0.4',
+            'scikit-learn==1.4.2',
+            'scpy==1.1.4',
+            'pandas_bokeh==0.5.5',
+            'plotly==5.22.0',
+            'pygal==3.0.0',
+            'keras-cv==0.9.0',
+            'keras==3.4.1',
+            'tiktoken==0.6.0',
+            'yfinance==0.2.40',
+            'safetensors==0.4.2',
+            'selenium==4.18.1',
+            'sentence-transformers==2.6.1',
+            'tensorflow==2.17.0',
+            'spacy==3.7.5'
         ]
     },
     tests_require=[

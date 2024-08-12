@@ -3,7 +3,7 @@
 __title__ = 'querysource'
 __description__ = ('QuerySource is a Library for Querying Databases. '
                    'QuerySource Query parser and generator.')
-__version__ = '3.11.17'
+__version__ = '3.11.18'
 __author__ = 'Jesus Lara'
 __author_email__ = 'jesuslarag@gmail.com'
 __license__ = 'BSD'
