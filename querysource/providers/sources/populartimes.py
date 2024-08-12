@@ -83,14 +83,14 @@ class populartimes(restSource):
             query = await self.aquery()
             self.check_response_code(query)
             result = query.get('result')
-            address = result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
+            address = result['name'] + ', ' + result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
+
             pdata = await self.make_google_search(address)
-            result = get_populartimes_from_search(address, get_detail=True, proxy=False)
-            print('RESULT > ', result)
-            print('SEARCH > ', pdata)
+            # result = get_populartimes_from_search(address, get_detail=True, proxy=False)
             data = self.get_populartimes(result, pdata)
             print('DATA > ', data)
-            self._result = result
+            self._result = [result]
+            print('RESULT > ', self._result)
             return self._result
         except Exception as err:
             self.logger.error(err)
