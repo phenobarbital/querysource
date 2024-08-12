@@ -141,7 +141,19 @@ setup(
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
     packages=find_packages(
-        exclude=['contrib', 'docs', 'plugins', 'examples', 'samples', 'settings']
+        exclude=[
+            'contrib',
+            'google',
+            'docs',
+            'plugins',
+            'lab',
+            'examples',
+            'samples',
+            'settings',
+            'etc',
+            'bin',
+            'build'
+        ]
     ),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
