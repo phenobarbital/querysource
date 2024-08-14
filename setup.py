@@ -184,7 +184,6 @@ setup(
         'WeasyPrint==61.2',
         'APScheduler==3.10.4',
         'elasticsearch-async==6.2.0',
-        'seaborn==0.13.2',
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
@@ -198,7 +197,15 @@ setup(
         # Jinja2 extensions:
         "jinja2-iso8601==1.0.0",
         "jinja2-time==0.2.0",
-        "jinja2-humanize-extension==0.4.0"
+        "jinja2-humanize-extension==0.4.0",
+        'statsmodels==0.14.2',
+        'pmdarima==2.0.4',
+        'scikit-learn==1.4.2',
+        'pygal==3.0.0',
+        'pandas_bokeh==0.5.5',
+        'plotly==5.22.0',
+        'seaborn==0.13.2',
+        'matplotlib==3.8.3'
     ],
     extras_require={
         "analytics": [
@@ -207,13 +214,7 @@ setup(
             "ydata-profiling>=4.8.3",
             "sweetviz>=2.1.4",
             "pandas-eda>=1.2.0",
-            'statsmodels==0.14.2',
-            'pmdarima==2.0.4',
-            'scikit-learn==1.4.2',
             'scpy==1.1.4',
-            'pandas_bokeh==0.5.5',
-            'plotly==5.22.0',
-            'pygal==3.0.0',
             'keras-cv==0.9.0',
             'keras==3.4.1',
             'tiktoken==0.6.0',
@@ -223,7 +224,8 @@ setup(
             'sentence-transformers==2.6.1',
             'tensorflow==2.17.0',
             'spacy==3.7.5',
-            'pydqc==0.1.0'
+            'pydqc==0.1.0',
+            'prophet==1.1.5'
         ]
     },
     tests_require=[

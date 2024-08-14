@@ -8,7 +8,7 @@ install:
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth
 	pip install --upgrade navigator-api
-	pip install -e .[analytics]
+	pip install -e .
 	echo 'start using QuerySource'
 
 jupyter:
