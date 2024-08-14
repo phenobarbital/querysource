@@ -3,13 +3,14 @@ import re
 import urllib
 import orjson
 import json
+#from livepopulartimes.crawler import get_populartimes_from_search
 from .rest import restSource
 from ...exceptions import ConfigError, DriverError
 
 
 class populartimes(restSource):
     """
-      populartimes.
+        populartimes.
         Using Google API for extracting information about Places atmosphere.
         sends request to Google Maps detail API to get a search string
         and uses standard proto buffer to get additional information
@@ -62,8 +63,6 @@ class populartimes(restSource):
     async def by_placeid(self, place_id: str = None, api_key: str = None, **kwargs):
         """by_placeid.
         get the current status of popular times.
-
-
         :param api_key: api key
         :param place_id: unique place_id from google
         :return: json details
@@ -79,13 +78,30 @@ class populartimes(restSource):
         # Places by ID
         self.url = self.base_url + 'details/json?placeid={place_id}&key={api_key}'
         try:
-            result = await self.aquery()
-            self.check_response_code(result)
-            address = result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
+            query = await self.aquery()
+            self.check_response_code(query)
+            result = query.get('result')
+            address = result['name'] + ', ' + result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
+
             pdata = await self.make_google_search(address)
-            print('SEARCH > ', pdata)
             data = self.get_populartimes(result, pdata)
-            self._result = result.get('result')
+            popular_times = data['popular_times']
+            # Convert popular_times into a dictionary
+            popular_times = {str(item[0]): item[1] for item in popular_times}
+            for k, v in popular_times.items():
+                new_dict = {}
+                for traffic in v:
+                    hour = str(traffic[0])
+                    new_dict[hour] = {
+                        "human_hour": traffic[4],
+                        "traffic": traffic[1],
+                        "traffic_status": traffic[2]
+                    }
+                popular_times[k] = new_dict
+            data['popular_times'] = popular_times
+            # Merge places and popular times
+            result.update(data)
+            self._result = result
             return self._result
         except Exception as err:
             self.logger.error(err)
