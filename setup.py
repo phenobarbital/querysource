@@ -225,7 +225,11 @@ setup(
             'tensorflow==2.17.0',
             'spacy==3.7.5',
             'pydqc==0.1.0',
-            'prophet==1.1.5'
+            'prophet==1.1.5',
+            'dtale==3.13.1',
+            'lux-api==0.5.1',
+            'pomegranate==1.1.0',
+            'autoviz==0.1.905'
         ]
     },
     tests_require=[
