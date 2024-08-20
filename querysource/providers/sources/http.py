@@ -88,16 +88,16 @@ class httpSource(baseSource):
     use_redis: bool = False
 
     def __init__(
-            self,
-            *args: P.args,
-            slug: str = None,
-            query: Any = None,
-            qstype: str = '',  # migrate to Enum
-            definition: Union[QueryModel, dict] = None,
-            conditions: dict = None,
-            request: web.Request = None,
-            loop: asyncio.AbstractEventLoop = None,
-            **kwargs: P.kwargs
+        self,
+        *args: P.args,
+        slug: str = None,
+        query: Any = None,
+        qstype: str = '',  # migrate to Enum
+        definition: Union[QueryModel, dict] = None,
+        conditions: dict = None,
+        request: web.Request = None,
+        loop: asyncio.AbstractEventLoop = None,
+        **kwargs: P.kwargs
     ) -> None:
         """httpSource.
 
@@ -502,7 +502,7 @@ class httpSource(baseSource):
         method: str = 'get',
         data: dict = None,
         cookies: dict = None,
-        headers: dict = None
+        headers: Optional[Union[dict, None]] = None
     ):
         """
         request
@@ -522,7 +522,9 @@ class httpSource(baseSource):
             }
 
         if headers is not None and isinstance(headers, dict):
-            headers = {**self.headers, **headers}
+            headers = {**self._headers, **headers}
+        else:
+            headers = self._headers.copy()
         if self.auth:
             if 'apikey' in self.auth:
                 headers['Authorization'] = f"{self.token_type} {self.auth['apikey']}"
