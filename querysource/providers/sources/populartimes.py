@@ -87,18 +87,19 @@ class populartimes(restSource):
             data = self.get_populartimes(result, pdata)
             popular_times = data['popular_times']
             # Convert popular_times into a dictionary
-            popular_times = {str(item[0]): item[1] for item in popular_times}
-            for k, v in popular_times.items():
-                new_dict = {}
-                for traffic in v:
-                    hour = str(traffic[0])
-                    new_dict[hour] = {
-                        "human_hour": traffic[4],
-                        "traffic": traffic[1],
-                        "traffic_status": traffic[2]
-                    }
-                popular_times[k] = new_dict
-            data['popular_times'] = popular_times
+            if popular_times is not None:
+                popular_times = {str(item[0]): item[1] for item in popular_times}
+                for k, v in popular_times.items():
+                    new_dict = {}
+                    for traffic in v:
+                        hour = str(traffic[0])
+                        new_dict[hour] = {
+                            "human_hour": traffic[4],
+                            "traffic": traffic[1],
+                            "traffic_status": traffic[2]
+                        }
+                    popular_times[k] = new_dict
+                data['popular_times'] = popular_times
             # Merge places and popular times
             result.update(data)
             self._result = result
