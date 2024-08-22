@@ -244,6 +244,8 @@ class uap(restSource):
                 except (TypeError, KeyError):
                     pass
             # processing data:
+            if isinstance(result, list):
+                return result
             pagination = {}
             try:
                 pagination = result['pagination']
