@@ -118,6 +118,9 @@ class uap(restSource):
 
         if self.type in ('adp-workers', 'adp_workers'):
             self.url = 'https://{uap_url}/api/v1/adp-workers'
+        elif self.type == 'assets':
+            self.method = 'get'
+            self.url = 'https://{uap_url}/api/v1/employees/assets/'
         else:
             if not self._program:
                 self.url = 'https://{uap_url}/api/v1/volt/{type}'
@@ -183,6 +186,16 @@ class uap(restSource):
         except Exception as e:  # pylint: disable=W0703
             self.logger.exception(e)
         return False
+
+    async def assets(self):
+        self.type = 'assets'
+        self._args['type'] = self.type
+        try:
+            self._result = await self.query()
+            return self._result
+        except Exception as err:
+            logging.exception(str(err))
+            raise
 
     async def users(self):
         self.type = 'users'
