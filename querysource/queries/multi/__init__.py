@@ -15,7 +15,8 @@ from .transformations import (
     correlation,
     GoogleMaps,
     Forecast,
-    Map
+    Map,
+    pivot
 )
 from .outputs import TableOutput
 from .sources import ThreadQuery, ThreadFile
@@ -94,6 +95,9 @@ class MultiQS(BaseQuery):
                 raise
         if self._queries:
             for name, query in self._queries.items():
+                if self._conditions:
+                    # those conditions be applied to the query
+                    query = {**self._conditions, **query}
                 t = ThreadQuery(
                     name, query, self._request, self._queue
                 )
@@ -201,6 +205,9 @@ class MultiQS(BaseQuery):
                         result = await obj.run()
                     elif step_name == 'Map':
                         obj = Map(data=result, **component)
+                        result = await obj.run()
+                    elif step_name == 'pivot':
+                        obj = pivot(data=result, **component)
                         result = await obj.run()
                 continue
         if 'Processors' in self._options:

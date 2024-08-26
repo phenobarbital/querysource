@@ -35,6 +35,7 @@ class QueryHandler(AbstractHandler):
             options = {}
         ## Getting data from Queries or Files
         if not slug:
+            data = {}
             _queries = options.get('queries', {})
             _files = options.get('files', {})
             if not (_queries or _files):  # Check if both are effectively empty
@@ -45,6 +46,7 @@ class QueryHandler(AbstractHandler):
         else:
             _queries = {}
             _files = {}
+            data = options
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             if 'queryformat' in params:
@@ -80,11 +82,13 @@ class QueryHandler(AbstractHandler):
             "writer_options": writer_options,
         }
         ## Step 1: Running all Queries and Files on QueryObject
+        print('SLUG > ', slug, _queries, _files, options)
         qs = MultiQS(
             slug=slug,
             queries=_queries,
             files=_files,
-            query=options
+            query=options,
+            conditions=data
         )
         try:
             result, options = await qs.query()
