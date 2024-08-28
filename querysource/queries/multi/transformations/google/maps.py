@@ -109,6 +109,5 @@ class GoogleMaps(AbstractTransform):
             await asyncio.sleep(1)
             print('Processed row:', idx)
         df.is_copy = False  # This line might not be necessary
-        print(df)
         self.data = df
         return df
