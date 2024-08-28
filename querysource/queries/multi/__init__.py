@@ -125,9 +125,15 @@ class MultiQS(BaseQuery):
                 if self._conditions:
                     # those conditions be applied to the query
                     query = {**self._conditions, **query}
-                t = ThreadQuery(
-                    name, query, self._request, self._queue
-                )
+                try:
+                    t = ThreadQuery(
+                        name, query, self._request, self._queue
+                    )
+                except Exception as ex:
+                    raise self.Error(
+                        message=f"Error Starting Query {name}: {ex}",
+                        exception=ex
+                    ) from ex
                 t.start()
                 tasks[name] = t
         if self._files:
@@ -142,17 +148,18 @@ class MultiQS(BaseQuery):
         for _, t in tasks.items():
             t.join()
             if t.exc:
-                ## raise exception for this Task
-                if isinstance(t.exc, SlugNotFound):
-                    raise SlugNotFound(
-                        f"Slug Not Found: {t.slug()}"
-                    )
-                elif isinstance(t.exc, ParserError):
+                print('EXCEPTION ', t.exc, type(t.exc))
+                ## raise exception for this Query
+                if isinstance(t.exc, ParserError):
                     raise self.Error(
                         f"Error parsing Query Slug {t.slug()}",
                         exception=t.exc
                     )
-                elif isinstance(t.exc, (QueryException, DriverError)):
+                if isinstance(t.exc, SlugNotFound):
+                    raise SlugNotFound(
+                        f"Slug Not Found: {t.slug()}"
+                    )
+                if isinstance(t.exc, (QueryException, DriverError)):
                     raise self.Error(
                         f"Query Error: {str(t.exc)}",
                         exception=t.exc

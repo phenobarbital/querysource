@@ -251,7 +251,11 @@ QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
-DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
+DEFAULT_QUERY_FORMAT = config.get(
+    'DEFAULT_QUERY_FORMAT',
+    fallback='native'
+)
 
 ## Geoloc Support:
 GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
