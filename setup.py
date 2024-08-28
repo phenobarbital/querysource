@@ -212,7 +212,7 @@ setup(
             "great_expectations>=0.18.15",
             "pygwalker>=0.4.8.9",
             "ydata-profiling>=4.8.3",
-            "sweetviz>=2.1.4",
+            "sweetviz==2.3.1",
             "pandas-eda>=1.2.0",
             'scpy==1.1.4',
             'keras-cv==0.9.0',
