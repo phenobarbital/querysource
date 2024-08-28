@@ -33,6 +33,13 @@ class QueryHandler(AbstractHandler):
             options = await self.json_data(request)
         except (TypeError, ValueError):
             options = {}
+        # if option is None, then no JSON was sent:
+        if options is None:
+            raise self.Error(
+                reason="No JSON Data",
+                message="No valid JSON data was not found in payload.",
+                code=400
+            )
         ## Getting data from Queries or Files
         if not slug:
             data = {}
@@ -82,7 +89,6 @@ class QueryHandler(AbstractHandler):
             "writer_options": writer_options,
         }
         ## Step 1: Running all Queries and Files on QueryObject
-        print('SLUG > ', slug, _queries, _files, options)
         qs = MultiQS(
             slug=slug,
             queries=_queries,
@@ -110,6 +116,11 @@ class QueryHandler(AbstractHandler):
                 exception=qe,
                 code=402
             )
+        except Exception as ex:
+            raise self.Except(
+                message=f"Unknown Error on Query: {ex!s}",
+                exception=ex
+            ) from ex
 
         ### Step 4: Check if result is empty or is a dictionary of dataframes:
         if result is None:
@@ -131,7 +142,7 @@ class QueryHandler(AbstractHandler):
                         if step_name == 'tableOutput':
                             obj = TableOutput(data=result, **component)
                             result = await obj.run()
-        ### Step 5: passing Result to DataOutput
+        ### Step 6: passing Result to DataOutput
         try:
             output = DataOutput(
                 request,

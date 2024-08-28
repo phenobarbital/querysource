@@ -65,13 +65,19 @@ class Connection:
         }
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs):
         self._connection = None
         self._dsmodule = None
-        self._loop: asyncio.AbstractEventLoop = kwargs.get(
-            'loop',
-            asyncio.get_event_loop()
-        )
+        if loop:
+            self._loop = loop
+        else:
+            try:
+                self._loop: asyncio.AbstractEventLoop = kwargs.get(
+                    'loop',
+                    asyncio.get_event_loop()
+                )
+            except RuntimeError:
+                self._loop = asyncio.get_running_loop()
         self._dsn: str = kwargs.get('dsn', asyncpg_url)
         self._default_driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(name='QS.Connection')
@@ -359,13 +365,15 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-    async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
+    async def get_query_slug(self, slug: str) -> BaseModel:
+        db = self.get_connection(driver='pg')
         try:
-            QueryModel.Meta.connection = conn
-            self.logger.debug(
-                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
-            )
-            return await QueryModel.get(query_slug=slug)
+            async with await db.connection() as conn:
+                QueryModel.Meta.connection = conn
+                self.logger.debug(
+                    f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+                )
+                return await QueryModel.get(query_slug=slug)
         except ValidationError as ex:
             raise SlugNotFound(
                 f'Invalid Slug Data {slug!s}: {ex}'
@@ -375,39 +383,40 @@ class Connection:
                 f'Slug not Found {slug!s}'
             ) from ex
         except (ProviderError, DriverError) as ex:
-            raise SlugNotFound(
+            raise DriverError(
+                f"Error getting Slug: {ex}"
+            ) from ex
+        except Exception as ex:
+            raise QueryException(
                 f"Error getting Slug: {ex}"
             ) from ex
 
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
-        # redis = self.get_redis()
-        # async with await redis.connection() as r:
-        #     if (await r.exists(slug)):
-        #         self.logger.debug(
-        #             "Getting Slug from Cache"
-        #         )
-        #         try:
-        #             return SLUG_CACHE[slug]
-        #         except KeyError:
-        #             pass
-        if hasattr(self, 'lazy') and self.lazy is False:
-            try:
-                async with await self._postgres.acquire() as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                QueryModel.Meta.connection = None
-        else:
-            try:
-                db = self.get_connection(driver='pg')
-                async with await db.connection() as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                QueryModel.Meta.connection = None
+        try:
+            obj = await self.get_query_slug(slug)
+        except Exception:  # pylint: disable=W0706
+            raise
+        finally:
+            QueryModel.Meta.connection = None
+
+        # if hasattr(self, 'lazy') and self.lazy is False:
+        #     try:
+        #         async with await self._postgres.acquire() as conn:
+        #             obj = await self.get_query_slug(slug, conn)
+        #     except Exception:  # pylint: disable=W0706
+        #         raise
+        #     finally:
+        #         QueryModel.Meta.connection = None
+        # else:
+        #     try:
+        #         db = self.get_connection(driver='pg')
+        #         async with await db.connection() as conn:
+        #             obj = await self.get_query_slug(slug, conn)
+        #     except Exception:  # pylint: disable=W0706
+        #         raise
+        #     finally:
+        #         QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
@@ -417,7 +426,4 @@ class Connection:
                 f'Slug \'{slug}\' not found'
             )
         else:
-            # async with await redis.connection() as r:
-            #     await r.setex(slug, slug, DEFAULT_SLUG_CACHE_TTL)
-            #     SLUG_CACHE[slug] = obj
             return obj

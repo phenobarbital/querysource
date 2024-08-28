@@ -119,7 +119,8 @@ class AbstractHandler(BaseHandler):
             "text": self._json.dumps(reason),
             "headers": {
                 "X-MESSAGE": str(message),
-                "X-STATUS": str(code)
+                "X-STATUS": str(code),
+                "X-ERROR": str(exception),
             },
             "content_type": "application/json",
         }
@@ -166,6 +167,7 @@ class AbstractHandler(BaseHandler):
             "headers": {
                 "X-MESSAGE": str(message),
                 "X-STATUS": str(code),
+                "X-ERROR": str(exception),
                 **headers
             },
             "content_type": "application/json",

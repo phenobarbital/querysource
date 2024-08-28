@@ -8,18 +8,45 @@ from ...exceptions import (
     DataNotFound,
     ParserError
 )
+from importlib import import_module
 from ..abstract import BaseQuery
-from .operators import Join, Concat, Melt
 from .transformations import (
-    crosstab,
-    correlation,
     GoogleMaps,
-    Forecast,
-    Map,
-    pivot
 )
 from .outputs import TableOutput
 from .sources import ThreadQuery, ThreadFile
+
+
+def get_operator_module(clsname: str):
+    """
+    Get an Operator Module
+    """
+    try:
+        clsobj = import_module(
+            f'.operators.{clsname}',
+            package=__package__
+        )
+        return getattr(clsobj, clsname)
+    except ImportError as exc:
+        raise ImportError(
+            f"Error importing an Operator {clsname}: {exc}"
+        ) from exc
+
+
+def get_transform_module(clsname: str):
+    """
+    Get a Transformation Module
+    """
+    try:
+        clsobj = import_module(
+            f'.transformations.{clsname}',
+            package=__package__
+        )
+        return getattr(clsobj, clsname)
+    except ImportError as exc:
+        raise ImportError(
+            f"Error importing {clsname}: {exc}"
+        ) from exc
 
 
 class MultiQS(BaseQuery):
@@ -98,9 +125,15 @@ class MultiQS(BaseQuery):
                 if self._conditions:
                     # those conditions be applied to the query
                     query = {**self._conditions, **query}
-                t = ThreadQuery(
-                    name, query, self._request, self._queue
-                )
+                try:
+                    t = ThreadQuery(
+                        name, query, self._request, self._queue
+                    )
+                except Exception as ex:
+                    raise self.Error(
+                        message=f"Error Starting Query {name}: {ex}",
+                        exception=ex
+                    ) from ex
                 t.start()
                 tasks[name] = t
         if self._files:
@@ -115,17 +148,18 @@ class MultiQS(BaseQuery):
         for _, t in tasks.items():
             t.join()
             if t.exc:
-                ## raise exception for this Task
-                if isinstance(t.exc, SlugNotFound):
-                    raise SlugNotFound(
-                        f"Slug Not Found: {t.slug()}"
-                    )
-                elif isinstance(t.exc, ParserError):
+                print('EXCEPTION ', t.exc, type(t.exc))
+                ## raise exception for this Query
+                if isinstance(t.exc, ParserError):
                     raise self.Error(
                         f"Error parsing Query Slug {t.slug()}",
                         exception=t.exc
                     )
-                elif isinstance(t.exc, (QueryException, DriverError)):
+                if isinstance(t.exc, SlugNotFound):
+                    raise SlugNotFound(
+                        f"Slug Not Found: {t.slug()}"
+                    )
+                if isinstance(t.exc, (QueryException, DriverError)):
                     raise self.Error(
                         f"Query Error: {str(t.exc)}",
                         exception=t.exc
@@ -138,43 +172,46 @@ class MultiQS(BaseQuery):
         result = {}
         while not self._queue.empty():
             result.update(await self._queue.get())
-        ### Step 2: passing Results to JOIN virtuals
+        ### Step 2: passing Results to virtual JOINs
         if 'Join' in self._options:
+            obj = get_operator_module('Join')
             try:
                 ## making Join of Data
                 _join = self._options.get('Join', {})
                 if isinstance(_join, dict):
-                    join = Join(data=result, **_join)
+                    join = obj(data=result, **_join)
                     result = await join.run()
                 elif isinstance(_join, list):
                     for j in _join:
-                        join = Join(data=result, **j)
+                        join = obj(data=result, **j)
                         result = await join.run()
             except DataNotFound:
                 raise
             except (QueryException, Exception) as ex:
                 raise self.Error(
-                    message="Error on JOIN",
+                    message=f"Error making JOIN: {ex!s}",
                     exception=ex
                 ) from ex
-        if 'Concat' in self._options:
+        elif 'Concat' in self._options:
+            obj = get_operator_module('Concat')
             try:
                 ## making Join of Data
-                concat = Concat(data=result, **self._options['Concat'])
+                concat = obj(data=result, **self._options['Concat'])
                 result = await concat.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
-                    message="Error on Concat",
+                    message=f"Error on Concat: {ex!s}",
                     exception=ex
                 ) from ex
-        if 'Melt' in self._options:
+        elif 'Melt' in self._options:
             try:
+                obj = get_operator_module('Melt')
                 ## making Join of Data
-                melt = Melt(data=result, **self._options['Melt'])
+                melt = obj(data=result, **self._options['Melt'])
                 result = await melt.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
-                    message=f"Error on Melting Data: {ex}",
+                    message=f"Error on Melting Data: {ex!s}",
                     exception=ex
                 ) from ex
         else:
@@ -187,28 +224,24 @@ class MultiQS(BaseQuery):
         ### Step 3: passing result to Transformations
         if 'Transform' in self._options:
             # passing the resultset for several transformation rules.
-            ## TODO: logic for calling components:
             for step in self._options['Transform']:
                 obj = None
                 for step_name, component in step.items():
-                    if step_name == 'crosstab':
-                        obj = crosstab(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'correlation':
-                        obj = correlation(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'GoogleMaps':
+                    if step_name == 'GoogleMaps':
                         obj = GoogleMaps(data=result, **component)
                         result = await obj.run()
-                    elif step_name == 'Forecast':
-                        obj = Forecast(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'Map':
-                        obj = Map(data=result, **component)
-                        result = await obj.run()
-                    elif step_name == 'pivot':
-                        obj = pivot(data=result, **component)
-                        result = await obj.run()
+                    else:
+                        try:
+                            clobj = get_transform_module(step_name)
+                            obj = clobj(data=result, **component)
+                            result = await obj.run()
+                        except ImportError as exc:
+                            raise
+                        except Exception as ex:
+                            raise self.Error(
+                                message=f"Error on Transform {step_name}, error: {ex}",
+                                exception=ex
+                            ) from ex
                 continue
         if 'Processors' in self._options:
             pass
