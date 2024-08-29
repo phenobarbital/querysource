@@ -135,10 +135,7 @@ class QueryConnection(Connection, metaclass=Singleton):
         """
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
-            return super().get_connection(driver=driver)
-        else:
-            ### using current Pool
-            return None
+        return super().get_connection(driver=driver)
 
     def setup(self, app: web.Application) -> web.Application:
         if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
