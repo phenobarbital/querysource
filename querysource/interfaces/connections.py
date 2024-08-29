@@ -367,8 +367,10 @@ class Connection:
 
     async def get_query_slug(self, slug: str) -> BaseModel:
         db = self.get_connection(driver='pg')
+        print('AQUI DB > ', db)
         try:
             async with await db.connection() as conn:
+                print(' MODEL  >> ', QueryModel, QueryModel.Meta)
                 QueryModel.Meta.connection = conn
                 self.logger.debug(
                     f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
@@ -399,24 +401,6 @@ class Connection:
             raise
         finally:
             QueryModel.Meta.connection = None
-
-        # if hasattr(self, 'lazy') and self.lazy is False:
-        #     try:
-        #         async with await self._postgres.acquire() as conn:
-        #             obj = await self.get_query_slug(slug, conn)
-        #     except Exception:  # pylint: disable=W0706
-        #         raise
-        #     finally:
-        #         QueryModel.Meta.connection = None
-        # else:
-        #     try:
-        #         db = self.get_connection(driver='pg')
-        #         async with await db.connection() as conn:
-        #             obj = await self.get_query_slug(slug, conn)
-        #     except Exception:  # pylint: disable=W0706
-        #         raise
-        #     finally:
-        #         QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
