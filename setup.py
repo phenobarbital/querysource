@@ -160,9 +160,9 @@ setup(
     license=__license__,
     license_files='LICENSE',
     setup_requires=[
-        "wheel==0.42.0",
-        "Cython==3.0.6",
-        "asyncio==3.4.3",
+        'setuptools==74.0.0',
+        'Cython==3.0.11',
+        'wheel==0.44.0'
     ],
     install_requires=[
         "aiodns==3.0.0",
@@ -189,10 +189,10 @@ setup(
         'psycopg2-binary==2.9.9',
         'sqlalchemy==2.0.23',
         # NAV libraries:
-        'asyncdb[all]>=2.6.0',
-        'proxylists>=0.12.3',
-        'async-notify>=1.2.1',
-        'navconfig[default]>=1.7.0',
+        'asyncdb[all]>=2.8.1',
+        'proxylists>=0.12.5',
+        'async-notify>=1.3.1',
+        'navconfig[default]>=1.7.2',
         'jsonschema==4.22.0',
         # Jinja2 extensions:
         "jinja2-iso8601==1.0.0",
@@ -248,6 +248,8 @@ setup(
     },
     project_urls={  # Optional
         'Source': 'https://github.com/phenobarbital/querysource/',
+        'Tracker': 'https://github.com/phenobarbital/querysource/issues',
+        'Documentation': 'https://querysource.readthedocs.io/en/latest/',
         'Funding': 'https://paypal.me/phenobarbital',
         'Say Thanks!': 'https://saythanks.io/to/phenobarbital',
     },
