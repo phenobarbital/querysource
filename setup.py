@@ -165,7 +165,6 @@ setup(
         'wheel==0.44.0'
     ],
     install_requires=[
-        "aiodns==3.0.0",
         'LivePopularTimes==1.3',
         'httpx==0.26.0',
         'hubspot-api-client==7.5.0',
