@@ -13,6 +13,7 @@ class GoogleMaps(AbstractTransform):
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:
         self.zoom: int = kwargs.get('zoom', 10)
         self.map_scale: int = kwargs.get('map_scale', 2)
+        self.timestamp_key: str = kwargs.get('timestamp_key', 'timestamp')
         # self.map_size: tuple = kwargs.get('map_size', (800, 800))
         self.departure_time: str = kwargs.get('departure_time', None)
         super(GoogleMaps, self).__init__(data, **kwargs)
@@ -134,7 +135,16 @@ class GoogleMaps(AbstractTransform):
         for col in col_list:
             if col not in df.columns:
                 df[col] = pd.NA
-        # Test
+
+        # First: sort locations by timestamp:
+        def sort_by_timestamp(locations):
+            if isinstance(locations, list):  # Ensure the value is a list
+                return sorted(locations, key=lambda x: x[self.timestamp_key])
+            return locations
+
+        self.data['locations'] = self.data['locations'].apply(
+            sort_by_timestamp
+        )
         for idx, row in self.data.iterrows():
             await self.process_row(row, idx, df)
             await asyncio.sleep(1)
