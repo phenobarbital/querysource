@@ -186,7 +186,7 @@ setup(
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
-        'sqlalchemy==2.0.23',
+        'sqlalchemy==2.0.34',
         # NAV libraries:
         # 'asyncdb[all]>=2.8.1',
         'proxylists>=0.12.5',
