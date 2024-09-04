@@ -1,10 +1,10 @@
 venv:
-	python3.11 -m venv .venv
+	python3.12 -m venv .venv
 	echo 'run `source .venv/bin/activate` to start develop QuerySource'
 
 install:
 	# pip install --upgrade git+https://github.com/GrocerCheck/LivePopularTimes
-	pip install --upgrade asyncdb[all]
+	pip install --upgrade asyncdb[default]==2.8.3
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth[uvloop]
 	pip install --upgrade navigator-api[uvloop,locale]
@@ -14,7 +14,7 @@ install:
 jupyter:
 	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
 	python -m pip install -Ur docs/requirements-dev.txt
-	pip install --upgrade asyncdb[all]
+	pip install --upgrade asyncdb[all]==2.8.3
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth[uvloop]
 	pip install --upgrade navigator-api[uvloop,locale]
