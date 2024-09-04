@@ -160,7 +160,7 @@ setup(
     license=__license__,
     license_files='LICENSE',
     setup_requires=[
-        'setuptools==74.0.0',
+        'setuptools==67.6.1',
         'Cython==3.0.11',
         'wheel==0.44.0'
     ],
@@ -188,7 +188,7 @@ setup(
         'psycopg2-binary==2.9.9',
         'sqlalchemy==2.0.23',
         # NAV libraries:
-        'asyncdb[all]>=2.8.1',
+        # 'asyncdb[all]>=2.8.1',
         'proxylists>=0.12.5',
         'async-notify>=1.3.1',
         'navconfig[default]>=1.7.2',
@@ -204,7 +204,8 @@ setup(
         'pandas_bokeh==0.5.5',
         'plotly==5.22.0',
         'seaborn==0.13.2',
-        'matplotlib==3.8.3'
+        'matplotlib==3.8.3',
+        'prompt_toolkit==3.0.47'
     ],
     extras_require={
         "analytics": [
