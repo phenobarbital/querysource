@@ -24,7 +24,7 @@ class Concat:
                     f'Wrong type of data for Concat, required Pandas dataframe: {type(data)}'
                 )
         self.data = dataset
-        print('dataset', self.data)
+        # print('dataset', self.data)
 
     async def run(self):
         await self.start()

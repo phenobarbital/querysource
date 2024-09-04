@@ -138,7 +138,7 @@ class GoogleMaps(AbstractTransform):
         for idx, row in self.data.iterrows():
             await self.process_row(row, idx, df)
             await asyncio.sleep(1)
-            print('Processed row:', idx)
+            print(':: Processed row:', idx)
         df.is_copy = False  # This line might not be necessary
         self.data = df
         return df
