@@ -100,6 +100,8 @@ class GoogleMaps(AbstractTransform):
     async def run(self):
         await self.start()
         # Calculate the route and optimal route for every row in query:
+        if self.data.empty:
+            return self.data
         df = self.data.copy()
         col_list = [
             "associate_oid",
@@ -141,14 +143,24 @@ class GoogleMaps(AbstractTransform):
             if isinstance(locations, list):  # Ensure the value is a list
                 return sorted(locations, key=lambda x: x[self.timestamp_key])
             return locations
-
-        self.data['locations'] = self.data['locations'].apply(
-            sort_by_timestamp
-        )
+        try:
+            self.data['locations'] = self.data['locations'].apply(
+                sort_by_timestamp
+            )
+        except KeyError as exc:
+            self.logger.error(
+                f"Error on sorting locations: {exc}"
+            )
         for idx, row in self.data.iterrows():
-            await self.process_row(row, idx, df)
-            await asyncio.sleep(1)
-            print(':: Processed row:', idx)
+            try:
+                await self.process_row(row, idx, df)
+                await asyncio.sleep(1)
+                print(':: Processed row:', idx)
+            except Exception as exc:
+                self.logger.error(
+                    f"Error Processing row {idx}: {exc}"
+                )
+                continue
         df.is_copy = False  # This line might not be necessary
         self.data = df
         return df
