@@ -15,14 +15,15 @@ from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
-from navigator_session.storages import SessionData
+from navigator_session import SessionData
 from aiohttp import web
 from navconfig.logging import logging
 from ..libs.encoders import DefaultEncoder
 from ..conf import (
     SEMAPHORE_LIMIT,
     QUERYSET_REDIS,
-    DEFAULT_QUERY_TIMEOUT
+    DEFAULT_QUERY_TIMEOUT,
+    DEFAULT_QUERY_FORMAT
 )
 from ..exceptions import (
     QueryException,
@@ -55,6 +56,7 @@ class BaseQuery(Connection):
             slug: str = None,
             conditions: dict = None,
             request: web.Request = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
             **kwargs
     ):
         """
@@ -62,8 +64,21 @@ class BaseQuery(Connection):
         """
         enable_uvloop()
         __name__ = type(self).__name__
+        self._logger = logging.getLogger(f'QS.{__name__}')
         self.slug = slug
-        Connection.__init__(self, **kwargs)
+        # trying to configure the asyncio loop
+        if loop:
+            self._loop = loop
+        else:
+            try:
+                self._loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self._logger.warning(
+                    "Couldn't get event loop for current thread. Creating a new event loop"
+                )
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+        Connection.__init__(self, loop=self._loop, **kwargs)
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None
         try:
@@ -81,25 +96,20 @@ class BaseQuery(Connection):
         self._request = request
         self._generated: Union[int, datetime] = None
         self._starttime: Union[int, datetime] = self.epoch_time()
-        self._logger = logging.getLogger(f'QS.{__name__}')
         ## set the Output factory for Query:
-        frm = kwargs.pop('output_format', 'native')
+        frm = kwargs.pop('output_format', DEFAULT_QUERY_FORMAT)
         self.output_format(frm)
         # Any other keyword arguments be passed to Provider.
         self.kwargs = kwargs
-        # trying to configure the asyncio loop
-        try:
-            self._loop = kwargs.pop('loop', asyncio.get_running_loop())
-        except RuntimeError:
-            self._logger.error(
-                "Couldn't get event loop for current thread. Creating a new event loop"
-            )
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
         # configuring the encoder:
         self._encoder = DefaultEncoder()
         ## default executor:
         self._executor = ThreadPoolExecutor(max_workers=10)
+
+    def get_event_loop(self) -> asyncio.AbstractEventLoop:
+        if not self._loop:
+            return asyncio.get_running_loop()
+        return self._loop
 
     async def output(self, result, error):
         # return result in default format

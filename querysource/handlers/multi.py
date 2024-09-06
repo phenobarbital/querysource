@@ -33,8 +33,16 @@ class QueryHandler(AbstractHandler):
             options = await self.json_data(request)
         except (TypeError, ValueError):
             options = {}
+        # if option is None, then no JSON was sent:
+        if options is None:
+            raise self.Error(
+                reason="No JSON Data",
+                message="No valid JSON data was not found in payload.",
+                code=400
+            )
         ## Getting data from Queries or Files
         if not slug:
+            data = {}
             _queries = options.get('queries', {})
             _files = options.get('files', {})
             if not (_queries or _files):  # Check if both are effectively empty
@@ -45,6 +53,7 @@ class QueryHandler(AbstractHandler):
         else:
             _queries = {}
             _files = {}
+            data = options
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             if 'queryformat' in params:
@@ -84,7 +93,8 @@ class QueryHandler(AbstractHandler):
             slug=slug,
             queries=_queries,
             files=_files,
-            query=options
+            query=options,
+            conditions=data
         )
         try:
             result, options = await qs.query()
@@ -106,6 +116,11 @@ class QueryHandler(AbstractHandler):
                 exception=qe,
                 code=402
             )
+        except Exception as ex:
+            raise self.Except(
+                message=f"Unknown Error on Query: {ex!s}",
+                exception=ex
+            ) from ex
 
         ### Step 4: Check if result is empty or is a dictionary of dataframes:
         if result is None:
@@ -127,7 +142,7 @@ class QueryHandler(AbstractHandler):
                         if step_name == 'tableOutput':
                             obj = TableOutput(data=result, **component)
                             result = await obj.run()
-        ### Step 5: passing Result to DataOutput
+        ### Step 6: passing Result to DataOutput
         try:
             output = DataOutput(
                 request,

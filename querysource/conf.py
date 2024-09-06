@@ -64,7 +64,10 @@ CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')
 CACHE_PORT = config.get('CACHE_PORT', fallback=6379)
 CACHE_DB = config.get('CACHE_DB', fallback=0)
 CACHE_URL = f"redis://{CACHE_HOST}:{CACHE_PORT!s}/{CACHE_DB}"
-DEFAULT_SLUG_CACHE_TTL = config.getint('DEFAULT_SLUG_CACHE_TTL', fallback=3600)
+DEFAULT_SLUG_CACHE_TTL = config.getint(
+    'DEFAULT_SLUG_CACHE_TTL',
+    fallback=3600
+)
 
 ## Redis as Database:
 REDIS_HOST = config.get('REDIS_HOST', fallback='localhost')
@@ -248,30 +251,14 @@ QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
-DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
+DEFAULT_QUERY_FORMAT = config.get(
+    'DEFAULT_QUERY_FORMAT',
+    fallback='native'
+)
 
 ## Geoloc Support:
 GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
-
-
-# Jupyter Server:
-ENABLED_JUPYTER = config.getboolean('ENABLED_JUPYTER', fallback=False)
-JUPYTER_PORT = config.getint('JUPYTER_PORT', fallback=8888)
-JUPYTER_TOKEN = config.get('JUPYTER_TOKEN', fallback='07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a')
-JUPYTER_CONFIG = config.get('JUPYTER_CONFIG', fallback=BASE_DIR.joinpath('.jupyter', 'jupyter_notebook_config.py'))
-if isinstance(JUPYTER_CONFIG, str):
-    JUPYTER_CONFIG = Path(JUPYTER_CONFIG).resolve()
-jupyter_dir = JUPYTER_CONFIG.parent
-if not jupyter_dir.exists():
-    jupyter_dir.mkdir(parents=True, exist_ok=True)
-    # Copy sample configuration:
-    sample_config = BASE_DIR.joinpath('templates', 'jupyter_notebook_config.py')
-JUPYTER_LAB_DIR = config.get('JUPYTER_LAB_DIR')
-if not JUPYTER_LAB_DIR:
-    JUPYTER_LAB_DIR = BASE_DIR.joinpath('lab')
-    JUPYTER_LAB_DIR.mkdir(parents=True, exist_ok=True)
-elif isinstance(JUPYTER_LAB_DIR, str):
-    JUPYTER_LAB_DIR = Path(JUPYTER_LAB_DIR).resolve()
 
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401

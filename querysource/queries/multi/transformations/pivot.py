@@ -9,11 +9,9 @@ from .abstract import AbstractTransform
 
 class pivot(AbstractTransform):
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
-        try:
-            self.reset_index: bool = kwargs['reset_index']
-            del kwargs['reset_index']
-        except KeyError:
-            self.reset_index: bool = True
+        self.reset_index: bool = kwargs.pop('reset_index', True)
+        self._type = kwargs.pop('type', 'crosstab')
+        self._multilevel = kwargs.pop('multilevel', False)
         super(pivot, self).__init__(data, **kwargs)
         if not hasattr(self, 'index'):
             raise DriverError(
@@ -40,19 +38,30 @@ class pivot(AbstractTransform):
             args['margins'] = True
             args['margins_name'] = tname
         try:
-            df = pd.crosstab(
-                index=[self.data[i] for i in self.index],
-                columns=[self.data[i] for i in self.columns],
-                **args
-            )
-            # df = pd.pivot_table(
-            #     self.data,
-            #     index=self.index,
-            #     columns=self.columns,
-            #     aggfunc='count',
-            #     values=self.values,
-            #     **args
-            # )
+            if self._type == 'crosstab':
+                df = pd.crosstab(
+                    index=[self.data[i] for i in self.index],
+                    columns=[self.data[i] for i in self.columns],
+                    **args
+                )
+            elif self._type == 'pivot':
+                args = {}
+                if hasattr(self, 'aggregate'):
+                    aggfunc = self.aggregate
+                else:
+                    aggfunc = 'first'
+                df = pd.pivot_table(
+                    self.data,
+                    index=self.index,
+                    columns=self.columns,
+                    aggfunc=aggfunc,
+                    values=self.values,
+                    **args
+                )
+            # Flattening the multi-level columns
+            if self._multilevel is False:
+                df.columns = [f'{col[0]}_{col[1].lower()}' for col in df.columns]
+
             if self.reset_index is True:
                 df.reset_index(inplace=True)
             self.colum_info(df)

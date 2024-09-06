@@ -1,7 +1,6 @@
 from typing import Any
 from urllib.parse import urlencode
 from asyncdb.exceptions import NoDataFound, ProviderError
-from navconfig.logging import logging
 from querysource.exceptions import DataNotFound, DriverError, QueryException
 from querysource.providers.sources import restSource
 
@@ -59,7 +58,8 @@ class uap(restSource):
         args['type'] = self.type
 
         # authentication
-        if 'token' not in conditions:
+        self._token = self._conditions.pop('token', None)
+        if not self._token:
             self._token = self._env.get('UAP_TOKEN')
             if not self._token:
                 try:
@@ -68,9 +68,6 @@ class uap(restSource):
                     raise ValueError(
                         "UAP: Token missing"
                     ) from ex
-        else:
-            self._token = self._conditions['token']
-            del self._conditions['token']
 
         try:
             host = definition.params['host']
@@ -106,11 +103,11 @@ class uap(restSource):
             self._pages = None
 
         self._headers = {
-              "Authorization": f"Token {self._token}",
-              "Accept-Encoding": "gzip, deflate, br",
-              "Content-Type": "application/json",
-              "Host": host,
-              **self._headers
+            "Authorization": f"Token {self._token}",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Content-Type": "application/json",
+            "Host": host,
+            **self._headers
         }
 
         try:
@@ -120,7 +117,10 @@ class uap(restSource):
             pass
 
         if self.type in ('adp-workers', 'adp_workers'):
-             self.url = 'https://{uap_url}/api/v1/adp-workers'
+            self.url = 'https://{uap_url}/api/v1/adp-workers'
+        elif self.type == 'assets':
+            self.method = 'get'
+            self.url = 'https://{uap_url}/api/v1/employees/assets/'
         else:
             if not self._program:
                 self.url = 'https://{uap_url}/api/v1/volt/{type}'
@@ -139,9 +139,10 @@ class uap(restSource):
                     # no more pages
                     break
             self._page = self._page + 1
-            url = self.build_url(self.url, queryparams=urlencode(
-                {"page": self._page}
-             )
+            url = self.build_url(
+                self.url, queryparams=urlencode(
+                    {"page": self._page}
+                )
             )
             print(f'Fetching page {self._page}')
             try:
@@ -154,23 +155,26 @@ class uap(restSource):
                     print('Error Continue')
                     print(error)
                     continue
-            except Exception as err: # pylint: disable=W0703
+            except Exception as err:  # pylint: disable=W0703
                 print('Error HERE')
                 print(err)
                 _next = False
-        print('::  Returning Results')
+        print(' ::  Returning Results :: ')
         return r
 
     async def adp_workers(self):
         self.type = 'adp-workers'
         self._args['type'] = self.type
         try:
+            del self._conditions['attribute']
+        except KeyError:
+            pass
+        try:
             self._result = await self.query()
             return self._result
         except Exception as err:
-            logging.exception(str(err))
+            self.logger.exception(str(err))
             raise
-
 
     async def events(self):
         self.type = 'events'
@@ -179,9 +183,19 @@ class uap(restSource):
         try:
             self._result = await self.query()
             return self._result
-        except Exception as e: # pylint: disable=W0703
-            logging.exception(e)
+        except Exception as e:  # pylint: disable=W0703
+            self.logger.exception(e)
         return False
+
+    async def assets(self):
+        self.type = 'assets'
+        self._args['type'] = self.type
+        try:
+            self._result = await self.query()
+            return self._result
+        except Exception as err:
+            logging.exception(str(err))
+            raise
 
     async def users(self):
         self.type = 'users'
@@ -190,12 +204,11 @@ class uap(restSource):
         try:
             self._result = await self.query()
             return self._result
-        except Exception as e: # pylint: disable=W0703
-            logging.exception(e)
+        except Exception as e:  # pylint: disable=W0703
+            self.logger.exception(e)
         return False
 
-
-    async def query(self, url:str = None, params: dict = None, data: dict = None): # pylint: disable=W0237
+    async def query(self, url: str = None, params: dict = None, data: dict = None):  # pylint: disable=W0237
         self._result = None
         if url:
             self._args['program'] = self._program
@@ -231,6 +244,8 @@ class uap(restSource):
                 except (TypeError, KeyError):
                     pass
             # processing data:
+            if isinstance(result, list):
+                return result
             pagination = {}
             try:
                 pagination = result['pagination']
@@ -243,7 +258,7 @@ class uap(restSource):
                     self._result = result['results']
                 except (TypeError, KeyError) as ex:
                     raise DataNotFound(
-                        "Data not found: {ex}"
+                        f"Data not found: {ex}"
                     ) from ex
             return self._result
         except (DataNotFound, NoDataFound) as err:

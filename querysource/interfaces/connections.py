@@ -1,7 +1,7 @@
 """""
 Connections Manager.
 """
-from typing import Any
+from typing import Any, Optional, Union
 from collections.abc import Callable
 import asyncio
 from importlib import import_module
@@ -14,6 +14,7 @@ from asyncdb.exceptions import (
     DriverError,
     NoDataFound
 )
+from navconfig import config
 from navconfig.logging import logging
 from ..providers import BaseProvider
 from ..exceptions import (
@@ -64,13 +65,19 @@ class Connection:
         }
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs):
         self._connection = None
         self._dsmodule = None
-        self._loop: asyncio.AbstractEventLoop = kwargs.get(
-            'loop',
-            asyncio.get_event_loop()
-        )
+        if loop:
+            self._loop = loop
+        else:
+            try:
+                self._loop: asyncio.AbstractEventLoop = kwargs.get(
+                    'loop',
+                    asyncio.get_event_loop()
+                )
+            except RuntimeError:
+                self._loop = asyncio.get_running_loop()
         self._dsn: str = kwargs.get('dsn', asyncpg_url)
         self._default_driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(name='QS.Connection')
@@ -237,7 +244,7 @@ class Connection:
             _provider = self.load_provider(provider)
             ## TODO: return a QS Provider for REST/External operations
             return [None, _provider]
-        if provider in DATASOURCES:
+        if (await self.get_datasource(provider)):
             source, conn = await self.datasource(provider)
             ### get provider from datasource type:
             provider = source.driver
@@ -253,6 +260,76 @@ class Connection:
                 print(ex)
                 conn = None
             return [conn, _provider]
+
+    async def get_from_env(
+        self,
+        key_name: str,
+        default: Optional[Union[str, None]] = None
+    ) -> str:
+        """
+        Getting a value from the environment.
+        """
+        try:
+            return config.get(key_name, fallback=default)
+        except (AttributeError, TypeError, KeyError):
+            return default
+
+    async def get_datasource(self, name: str):
+        try:
+            return DATASOURCES[name]
+        except KeyError:
+            pass
+        # getting from database directly:
+        db = self.get_connection(driver='pg')
+        async with await db.connection() as conn:
+            sql = f"SELECT * FROM public.datasources WHERE name = '{name}'"
+            row, error = await conn.queryrow(sql)
+            if error:
+                self.logger.warning(f'DS Error: {error}')
+                return False
+            try:
+                driver = self.get_driver(row['driver'])
+                # TODO: encrypting credentials in database:
+                if row['dsn']:
+                    data = {
+                        "dsn": row['dsn']
+                    }
+                else:
+                    try:
+                        data = {
+                            **dict(row['params']),
+                        }
+                    except TypeError:
+                        data = dict(row['params'])
+                    for key, val in row.get('credentials', {}).items():
+                        data[key] = await self.get_from_env(
+                            key_name=val,
+                            default=val
+                        )
+                    for key, val in row.get('params', {}).items():
+                        data[key] = await self.get_from_env(
+                            key_name=val,
+                            default=val
+                        )
+                # creating a drv object:
+                drv = driver(**data)
+            except TypeError:
+                # driver doesn't exists:
+                return False
+            except Exception as ex:  # pylint: disable=W0703
+                self.logger.error(ex)
+                return False
+            try:
+                DATASOURCES[name] = drv
+                return DATASOURCES[name]
+            except TypeError:
+                # Datasources as variable doesn't exists
+                if drv:
+                    return drv
+                return False
+            except Exception as ex:  # pylint: disable=W0703
+                self.logger.error(ex)
+                return False
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
@@ -298,13 +375,15 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-    async def get_query_slug(self, slug: str, conn: Any) -> BaseModel:
+    async def get_query_slug(self, slug: str) -> BaseModel:
+        db = self.get_connection(driver='pg')
         try:
-            QueryModel.Meta.connection = conn
-            self.logger.debug(
-                f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
-            )
-            return await QueryModel.get(query_slug=slug)
+            async with await db.connection() as conn:
+                QueryModel.Meta.connection = conn
+                self.logger.debug(
+                    f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+                )
+                return await QueryModel.get(query_slug=slug)
         except ValidationError as ex:
             raise SlugNotFound(
                 f'Invalid Slug Data {slug!s}: {ex}'
@@ -314,39 +393,22 @@ class Connection:
                 f'Slug not Found {slug!s}'
             ) from ex
         except (ProviderError, DriverError) as ex:
-            raise SlugNotFound(
+            raise DriverError(
+                f"Error getting Slug: {ex}"
+            ) from ex
+        except Exception as ex:
+            raise QueryException(
                 f"Error getting Slug: {ex}"
             ) from ex
 
     async def get_slug(self, slug: str, program: str = None):
         start = datetime.now()
-        redis = self.get_redis()
-        async with await redis.connection() as r:
-            if (await r.exists(slug)):
-                self.logger.debug(
-                    "Getting Slug from Cache"
-                )
-                try:
-                    return SLUG_CACHE[slug]
-                except KeyError:
-                    pass
-        if hasattr(self, 'lazy') and self.lazy is False:
-            try:
-                async with await self._postgres.acquire() as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                QueryModel.Meta.connection = None
-        else:
-            try:
-                db = self.get_connection(driver='pg')
-                async with await db.connection() as conn:
-                    obj = await self.get_query_slug(slug, conn)
-            except Exception:  # pylint: disable=W0706
-                raise
-            finally:
-                QueryModel.Meta.connection = None
+        try:
+            obj = await self.get_query_slug(slug)
+        except Exception:  # pylint: disable=W0706
+            raise
+        finally:
+            QueryModel.Meta.connection = None
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
@@ -356,7 +418,4 @@ class Connection:
                 f'Slug \'{slug}\' not found'
             )
         else:
-            async with await redis.connection() as r:
-                await r.setex(slug, slug, DEFAULT_SLUG_CACHE_TTL)
-                SLUG_CACHE[slug] = obj
             return obj
