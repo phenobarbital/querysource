@@ -280,46 +280,56 @@ class Connection:
         except KeyError:
             pass
         # getting from database directly:
-        try:
-            db = self.get_connection(driver='pg')
-            async with await db.connection() as conn:
-                sql = f"SELECT * FROM public.datasources WHERE name = '{name}'"
-                row, error = await conn.queryrow(sql)
-                if error:
-                    self.logger.warning(f'DS Error: {error}')
-                    return False
-                try:
-                    driver = self.get_driver(row['driver'])
-                    # TODO: encrypting credentials in database:
-                    if row['dsn']:
+        db = self.get_connection(driver='pg')
+        async with await db.connection() as conn:
+            sql = f"SELECT * FROM public.datasources WHERE name = '{name}'"
+            row, error = await conn.queryrow(sql)
+            if error:
+                self.logger.warning(f'DS Error: {error}')
+                return False
+            try:
+                driver = self.get_driver(row['driver'])
+                # TODO: encrypting credentials in database:
+                if row['dsn']:
+                    data = {
+                        "dsn": row['dsn']
+                    }
+                else:
+                    try:
                         data = {
-                            "dsn": row['dsn']
+                            **dict(row['params']),
                         }
-                    else:
-                        try:
-                            data = {
-                                **dict(row['params']),
-                            }
-                        except TypeError:
-                            data = dict(row['params'])
-                        for key, val in row.get('credentials', {}).items():
-                            data[key] = await self.get_from_env(
-                                key_name=val,
-                                default=val
-                            )
-                        for key, val in row.get('params', {}).items():
-                            data[key] = await self.get_from_env(
-                                key_name=val,
-                                default=val
-                            )
-                    DATASOURCES[name] = driver(**data)
-                    return DATASOURCES[name]
-                except Exception as ex:  # pylint: disable=W0703
-                    self.logger.error(ex)
-                    return False
-        except Exception as exc:
-            self.logger.error(exc)
-            return False
+                    except TypeError:
+                        data = dict(row['params'])
+                    for key, val in row.get('credentials', {}).items():
+                        data[key] = await self.get_from_env(
+                            key_name=val,
+                            default=val
+                        )
+                    for key, val in row.get('params', {}).items():
+                        data[key] = await self.get_from_env(
+                            key_name=val,
+                            default=val
+                        )
+                # creating a drv object:
+                drv = driver(**data)
+            except TypeError:
+                # driver doesn't exists:
+                return False
+            except Exception as ex:  # pylint: disable=W0703
+                self.logger.error(ex)
+                return False
+            try:
+                DATASOURCES[name] = drv
+                return DATASOURCES[name]
+            except TypeError:
+                # Datasources as variable doesn't exists
+                if drv:
+                    return drv
+                return False
+            except Exception as ex:  # pylint: disable=W0703
+                self.logger.error(ex)
+                return False
 
     def load_provider(self, provider: str) -> BaseProvider:
         """
@@ -367,10 +377,8 @@ class Connection:
 
     async def get_query_slug(self, slug: str) -> BaseModel:
         db = self.get_connection(driver='pg')
-        print('AQUI DB > ', db)
         try:
             async with await db.connection() as conn:
-                print(' MODEL  >> ', QueryModel, QueryModel.Meta)
                 QueryModel.Meta.connection = conn
                 self.logger.debug(
                     f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
