@@ -200,7 +200,7 @@ setup(
         'statsmodels==0.14.2',
         'pmdarima==2.0.4',
         'scikit-learn==1.5.1',
-        'pygal==3.0.0',
+        'pygal==3.0.5',
         'pandas_bokeh==0.5.5',
         'plotly==5.22.0',
         'seaborn==0.13.2',
