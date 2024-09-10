@@ -209,7 +209,7 @@ setup(
     ],
     extras_require={
         "analytics": [
-            "great_expectations>=0.18.15",
+            # "great_expectations>=0.18.15",
             "pygwalker>=0.4.8.9",
             "ydata-profiling>=4.8.3",
             "sweetviz==2.3.1",
