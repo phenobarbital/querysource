@@ -1,9 +1,8 @@
 from typing import Any
+import asyncio
 import re
 import urllib
 import orjson
-import json
-#from livepopulartimes.crawler import get_populartimes_from_search
 from .rest import restSource
 from ...exceptions import ConfigError, DriverError
 
@@ -17,6 +16,8 @@ class populartimes(restSource):
         on the current status of popular times.
     """
     base_url: str = 'https://maps.googleapis.com/maps/api/place/'
+    use_proxies: bool = True
+    rotate_ua: bool = True
 
     def __post_init__(
             self,
@@ -27,6 +28,7 @@ class populartimes(restSource):
     ) -> None:
 
         print('Places > ', conditions, kwargs)
+        self.rotate_ua: bool = True
 
         try:
             self.type = definition.params['type']
@@ -51,7 +53,7 @@ class populartimes(restSource):
                     self._conditions['api_key'] = definition.params['api_key']
                 except (ValueError, AttributeError) as ex:
                     raise ValueError(
-                        "ZipcodeAPI: Missing Credentials"
+                        "Google Populartimes: Missing Credentials"
                     ) from ex
 
         if self.type == 'by_placeid':
@@ -82,10 +84,15 @@ class populartimes(restSource):
             self.check_response_code(query)
             result = query.get('result')
             address = result['name'] + ', ' + result["formatted_address"] if "formatted_address" in result else result.get("vicinity", "")
-
-            pdata = await self.make_google_search(address)
-            data = self.get_populartimes(result, pdata)
-            popular_times = data['popular_times']
+            data = {}
+            popular_times = None
+            try:
+                pdata = await self.make_google_search(address)
+            except ValueError:
+                pdata = None
+            if pdata:
+                data = self.get_populartimes(result, pdata)
+                popular_times = data['popular_times']
             # Convert popular_times into a dictionary
             if popular_times is not None:
                 popular_times = {str(item[0]): item[1] for item in popular_times}
@@ -213,15 +220,61 @@ class populartimes(restSource):
             "1i1125!2i976!1m6!1m2!1i0!2i0!2m2!1i1125!2i20!1m6!1m2!1i0!2i956!2m2!1i1125!2i976!37m1!1e81!42b1!47m0!49m1"
             "!3b1"
         }
-
         search_url = "http://www.google.com/search?" + "&".join(k + "=" + str(v) for k, v in params_url.items())
-        response, _ = await self.http_request(search_url, 'get', use_json=False)
-        result = await response.aread()
-        data = result.decode('utf-8').split('/*""*/')[0]
-        # find eof json
-        jend = data.rfind("}")
-        if jend >= 0:
-            data = data[:jend + 1]
+        self.logger.debug(f':: SEARCH URL {search_url} ')
 
-        jdata = json.loads(data)["d"]
-        return json.loads(jdata[4:])
+        try:
+            response, _ = await self.http_request(search_url, 'get', use_json=False, use_proxies=True)
+            await asyncio.sleep(0.5)
+            if not response:
+                raise ValueError(
+                    "Unable to get Google Search"
+                )
+            if response.status_code == 429:
+                # try to use selenium request:
+                response = await self.selenium_request(search_url, 'get')
+                if response is None:
+                    error = await response.aread()
+                    self.logger.error(
+                        "Google Search: Too many requests"
+                    )
+                    self.logger.error(f"Raw response Error: {error}")
+                    return None
+                result = response
+            elif response.status_code > 299:
+                error = await response.aread()
+                self.logger.error(f"Raw response Error: {error}")
+                return None
+            else:
+                result = await response.aread()
+                result = result.decode('utf-8')
+            # Decode response and ensure it's not empty
+            data = result.split('/*""*/')[0].strip()
+
+            if not data:
+                raise ValueError(
+                    "Empty response from Google Search"
+                )
+        except Exception as e:
+            raise ValueError(e)
+
+        try:
+            # find eof json
+            jend = data.rfind("}")
+            if jend >= 0:
+                data = data[:jend + 1]
+            # Attempt to load the JSON data
+            jdata = orjson.loads(data)["d"]
+            return orjson.loads(jdata[4:])
+
+        except orjson.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse JSON response: {e}")
+            # self.logger.error(f"Raw response data: {data}")
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"An error occurred during Google Search: {e}"
+            )
+            raise DriverError(
+                f"Google Search Error: {e}"
+            ) from e

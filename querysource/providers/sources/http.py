@@ -19,11 +19,16 @@ import httpx
 import aiohttp
 from aiohttp import web
 from bs4 import BeautifulSoup as bs
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from lxml import html, etree
 from asyncdb import AsyncDB
 from asyncdb.utils import cPrint
 from navconfig.logging import logging
-from proxylists.proxies import ProxyDB
+from proxylists.proxies import ProxyWorld
 from proxylists import check_address
 from ...models import QueryModel
 from ...utils.functions import check_empty
@@ -46,6 +51,7 @@ urllib3.disable_warnings()
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger(name='selenium.webdriver').setLevel(logging.WARNING)
 
 
 ua = [
@@ -145,7 +151,7 @@ class httpSource(baseSource):
             pass
         self.use_proxies: bool = kwargs.pop('use_proxy', False)
         self._proxies: list = []
-        self.rotate_ua: bool = kwargs.pop('rotate_ua', False)
+        self.rotate_ua: bool = kwargs.pop('rotate_ua', self.rotate_ua)
         ## User Agent Rotation:
         if self.rotate_ua is True:
             self._ua = random.choice(ua)
@@ -198,11 +204,11 @@ class httpSource(baseSource):
 
     async def get_proxies(self):
         p = []
-        proxies = await ProxyDB().get_list()
+        proxies = await ProxyWorld().get_list()
         for address in proxies:
             host, port = address.split(':')
             if await check_address(host=host, port=port) is True:
-                p.append(address)
+                p.append(f"http://{address}")
         return p
 
     async def refresh_proxies(self):
@@ -263,7 +269,8 @@ class httpSource(baseSource):
         method: str = 'get',
         data: dict = None,
         headers: Optional[dict] = None,
-        use_json: bool = False
+        use_json: bool = False,
+        use_proxies: bool = False
     ):
         response = None
         error = None
@@ -274,7 +281,17 @@ class httpSource(baseSource):
             "json" if use_json else "data": data
         }
         timeout = httpx.Timeout(self.timeout)
+        if isinstance(headers, dict):
+            headers = {**self._headers, **headers}
+        else:
+            headers = {**self._headers}
         args = {"timeout": timeout, "headers": headers}
+        if use_proxies is True:
+            pr = await self.get_proxies()
+            proxy = random.choice(pr)
+            # proxies = {"http://": proxy, "https://": proxy}
+            # args['proxies'] = proxies
+            args['proxy'] = proxy
         try:
             async with httpx.AsyncClient(**args) as client:
                 response = await client.request(**req_args)
@@ -495,6 +512,44 @@ class httpSource(baseSource):
             return response.status_code
 
         return response.status
+
+    async def selenium_request(
+        self,
+        url,
+        method: str = 'get',
+        data: Optional[dict] = None,
+        headers: Optional[Union[dict, None]] = None
+    ) -> Any:
+        # Using Selenium to get information:
+        user_agent = random.choice(ua)
+        chrome_options = [
+            "--headless",
+            "--enable-automation",
+            "--lang=en",
+            "--disable-extensions",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-features=NetworkService",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-dev-shm-usage",
+            f"user-agent={user_agent}"
+        ]
+        options = Options()
+        for option in chrome_options:
+            options.add_argument(option)
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=options
+        )
+        self.logger.info(
+            f'Downloading URL using Selenium: {url}'
+        )
+        page = None
+        if method == 'get':
+            driver.get(url)
+            page = driver.page_source
+        driver.quit()
+        return page
 
     async def request(
         self,
