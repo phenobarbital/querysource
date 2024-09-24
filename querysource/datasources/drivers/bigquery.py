@@ -16,13 +16,13 @@ class bigqueryDriver(BaseModel):
     )
     name: str = Field(required=False, comment='Google BigQuery.')
     description: str = Field(comment='Google Big Query', repr=False)
-    dsn: str = Field(required=False)
-    dsn_format: str = Field(required=False, default=None, repr=False)
     icon: str = Field(required=False, comment='Icon Path for Datasource.', repr=False)
     credentials: str = Field(required=True, comment='env/bigquery.json')
     project_id: str = Field(required=True, comment='Google BigQuery.')
     dataset: str = Field(required=False)
-    required_properties: Optional[tuple] = Field(repr=False, default=('credentials', 'project_id'))
+    required_properties: Optional[tuple] = Field(
+        repr=False, default=('credentials', 'project_id')
+    )
 
     def params(self) -> dict:
         """params
@@ -94,7 +94,6 @@ class bigqueryDriver(BaseModel):
             "driver": cls.driver,
             "name": cls.name,
             "icon": cls.icon,
-            "dsn_format": cls.dsn_format,
             "fields": fields
         }
 try:

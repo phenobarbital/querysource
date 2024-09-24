@@ -24,6 +24,7 @@ jupyter:
 	echo 'start develop QuerySource'
 
 setup:
+	pip install -e .[analytics]
 	python -m pip install -Ur docs/requirements-dev.txt
 
 dev:

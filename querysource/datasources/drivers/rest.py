@@ -1,11 +1,14 @@
 from datamodel import Field
 from .abstract import CloudDriver
 
-def valid_method(field, value): # pylint: disable=W0613
+
+def valid_method(field, value):  # pylint: disable=W0613
     return value in ('get', 'post', 'put', 'delete', 'patch')
 
-def valid_auth_type(field, value): # pylint: disable=W0613
+
+def valid_auth_type(field, value):  # pylint: disable=W0613
     return value in ('key', 'token', 'basic')
+
 
 class restDriver(CloudDriver):
     """restDriver.

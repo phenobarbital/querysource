@@ -1,60 +1,38 @@
 from collections.abc import Callable
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKeyConstraint
-from sqlalchemy.pool import NullPool
-from sqlalchemy import create_engine, MetaData, Table
+from sqlalchemy import MetaData, Table
 from sqlalchemy.inspection import inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
-from navconfig.logging import logging
 from .....conf import sqlalchemy_url
 from .....exceptions import OutputError
+from .abstract import AbstractOutput
 
 
-class PgOutput(object):
+class PgOutput(AbstractOutput):
+    """PgOutput.
 
-    def __init__(self, parent: Callable) -> None:
-        self._engine: Callable = None
-        self._parent = parent
-        self._results: list = []
-        self._columns: list = []
-        try:
-            self._engine = create_engine(
-                sqlalchemy_url, echo=False, poolclass=NullPool
-            )
-        except Exception as err:
-            logging.exception(err, stack_info=True)
-            raise OutputError(
-                message=f"Connection Error: {err}"
-            ) from err
+    Class for writing output to postgresql database.
 
-    def engine(self):
-        return self._engine
-
-    def close(self):
-        """Closing Operations."""
-        try:
-            self._engine.dispose()
-        except Exception as err:
-            logging.error(err)
-
-    @property
-    def columns(self):
-        return self._columns
-
-    @columns.setter
-    def columns(self, columns: list):
-        self._columns = columns
+    Used by Pandas to_sql statement.
+    """
+    def __init__(
+        self, parent: Callable, dsn: str = None, do_update: bool = True
+    ) -> None:
+        if not dsn:
+            dsn = sqlalchemy_url
+        super().__init__(parent, dsn, do_update=do_update)
 
     def db_upsert(self, table, conn, keys, data_iter):
         """
-            Execute SQL statement for upserting data
+        Execute SQL statement for upserting data
 
-            Parameters
-            ----------
-            table : pandas.io.sql.SQLTable
-            conn : sqlalchemy.engine.Engine or sqlalchemy.engine.Connection
-            keys : list of str of Column names
-            data_iter : Iterable that iterates the values to be inserted
+        Parameters
+        ----------
+        table : pandas.io.sql.SQLTable
+        conn : sqlalchemy.engine.Engine or sqlalchemy.engine.Connection
+        keys : list of str of Column names
+        data_iter : Iterable that iterates the values to be inserted
         """
         args = []
         try:
@@ -83,9 +61,13 @@ class PgOutput(object):
         columns = self._columns
         # for column in columns:
         col_instances = [
-            col for col in tbl._columns if col.name not in columns]
+            col for col in tbl._columns if col.name not in columns
+        ]
+        # Removing the columns not involved in query
         for col in col_instances:
             tbl._columns.remove(col)
+
+        primary_keys = []
         try:
             primary_keys = self._parent.primary_keys()
         except AttributeError as err:
@@ -98,20 +80,30 @@ class PgOutput(object):
             row_dict = dict(zip(keys, row))
             insert_stmt = postgresql.insert(tbl).values(**row_dict)
             # define dict of non-primary keys for updating
-            update_dict = {
-                c.name: c
-                for c in insert_stmt.excluded
-                if not c.primary_key and c.name in columns
-            }
-            if constraint is not None:
-                upsert_stmt = insert_stmt.on_conflict_do_update(
-                    constraint=constraint,
-                    set_=update_dict
-                )
+            if self._do_update is True:
+                if len(columns) > 1:
+                    # TODO: add behavior of on_conflict_do_nothing
+                    update_dict = {
+                        c.name: c
+                        for c in insert_stmt.excluded
+                        if not c.primary_key and c.name in columns
+                    }
+                    if constraint is not None:
+                        upsert_stmt = insert_stmt.on_conflict_do_update(
+                            constraint=constraint, set_=update_dict
+                        )
+                    else:
+                        upsert_stmt = insert_stmt.on_conflict_do_update(
+                            index_elements=primary_keys, set_=update_dict
+                        )
+                else:
+                    upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                        index_elements=primary_keys
+                    )
             else:
-                upsert_stmt = insert_stmt.on_conflict_do_update(
-                    index_elements=primary_keys,
-                    set_=update_dict
+                # Do nothing on conflict
+                upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                    index_elements=primary_keys
                 )
             try:
                 conn.execute(upsert_stmt)

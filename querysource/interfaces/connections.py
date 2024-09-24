@@ -23,7 +23,7 @@ from ..exceptions import (
     QueryError,
     SlugNotFound
 )
-from ..datasources.drivers import SUPPORTED, DataDriver
+from ..datasources.drivers import SUPPORTED, BaseDriver
 from ..conf import (
     DB_MAX_WORKERS,
     DB_KEEPALIVE_IDLE,
@@ -150,7 +150,7 @@ class Connection:
                 f"Connection Error: {ex}"
             )
 
-    def get_driver(self, driver) -> DataDriver:
+    def get_driver(self, driver) -> BaseDriver:
         """Getting a Database Driver from Datasource Drivers.
         """
         if not (drv := self.supported_drivers(driver)):

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from asyncdb.models import Model, Field, Column
 from .drivers import SUPPORTED
-from .drivers.abstract import DataDriver
+from .drivers.abstract import BaseDriver
 
 
 def auto_now_add(*args, **kwargs):  # pylint: disable=W0613
@@ -35,7 +35,7 @@ class DataSource(Model):
     credentials: dict = Field(required=False, default_factory=dict)
     dsn: str = Field(required=False)
     program_slug: str = Column(required=True, default=get_default_program)
-    drv: DataDriver = Column(required=False, comment="Serialized version of the Driver.")
+    drv: BaseDriver = Column(required=False, comment="Serialized version of the Driver.")
     created_at: datetime = Column(required=False, default=datetime.now(), db_default='now()')
     updated_at: datetime = Column(required=False)
 

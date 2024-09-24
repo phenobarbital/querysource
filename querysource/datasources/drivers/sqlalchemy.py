@@ -1,4 +1,5 @@
-"""Driver for MySQL database connections, using SQLAlchemy async
+"""
+Driver for Pg database connections, using SQLAlchemy
 """
 from datamodel import Column
 from ...conf import (
@@ -8,9 +9,13 @@ from .abstract import SQLDriver
 
 
 class sqlalchemyDriver(SQLDriver):
-    driver: str = 'sqlalchemy'
-    name: str = 'sa'
-    provider: str = Column(required=False, default='mysql')
+    driver: str = 'sa'
+    name: str = 'SQLAlchemy'
+    provider: str = Column(required=False, default='postgresql')
     dsn_format: str = "{provider}://{username}:{password}@{host}:{port}/{database}"
 
-sqlalchemy_default = sqlalchemyDriver(dsn=SQLALCHEMY_DATABASE_URI)
+
+try:
+    sqlalchemy_default = sqlalchemyDriver(dsn=SQLALCHEMY_DATABASE_URI)
+except ValueError:
+    sqlalchemy_default = None

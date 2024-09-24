@@ -15,12 +15,15 @@ class cassandraDriver(SQLDriver):
     driver: str = CASSANDRA_DRIVER
     name: str = CASSANDRA_DRIVER
     dsn_format: str = None
-    port: int = Column(required=True, default=9042)
+    port: int = Column(required=False, default=9042)
 
-cassandra_default = cassandraDriver(
-    host=CASSANDRA_HOST,
-    port=CASSANDRA_PORT,
-    database=CASSANDRA_DATABASE,
-    username=CASSANDRA_USER,
-    password=CASSANDRA_PWD
-)
+try:
+    cassandra_default = cassandraDriver(
+        host=CASSANDRA_HOST,
+        port=CASSANDRA_PORT,
+        database=CASSANDRA_DATABASE,
+        username=CASSANDRA_USER,
+        password=CASSANDRA_PWD
+    )
+except ValueError:
+    cassandra_default = None

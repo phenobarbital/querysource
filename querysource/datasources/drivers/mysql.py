@@ -42,7 +42,8 @@ class mysqlDriver(SQLDriver):
             "host": self.host,
             "port": self.port,
             "user": self.username,
-            "password": self.password
+            "password": self.password,
+            "database": self.database
         }
 
 try:
