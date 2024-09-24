@@ -9,6 +9,8 @@ from .....exceptions import (
 from .postgres import PgOutput
 from .mysql import MysqlOutput
 from .sa import SaOutput
+from .rethink import RethinkOutput
+from .bigquery import BigQueryOutput
 
 
 class TableOutput:
@@ -49,52 +51,63 @@ class TableOutput:
             schema = elem.schema
         except AttributeError:
             schema = 'public'
-        options['schema'] = schema
-        # starting metric:
-        if hasattr(elem, 'sql_options'):
-            options = {**options, **elem.sql_options}
-        if hasattr(elem, 'pk') or hasattr(elem, 'constraint'):
-            options["index"] = False
-        if hasattr(elem, 'if_exists'):
-            options['if_exists'] = elem.if_exists
-        else:
-            options['if_exists'] = 'append'
-        # define index:
-        try:
-            self._pk = elem.pk
-            options['index_label'] = self._pk
-        except AttributeError:
-            self._pk = []
-        # set the upsert method:
-        options['method'] = self._engine.db_upsert
-        if hasattr(elem, 'foreign_key'):
-            self._fk = elem.foreign_key
-        else:
-            self._fk = None
-        if hasattr(elem, 'constraint'):
-            self._constraint = elem.constraint
-        else:
-            self._constraint = None
-        self._columns = list(datasource.columns)
-        self._engine.columns = self._columns
-        self._schema = schema
-        # add metrics for Table Output
-        u = datasource.select_dtypes(
-            include=['object', 'string']
-        )
-        datasource[u.columns] = u.replace(['<NA>', 'None'], None)
-        try:
-            datasource.to_sql(
-                name=table,
-                con=self._engine.engine(),
-                **options
+        if self._engine.is_external is True:
+            options['schema'] = schema
+            # starting metric:
+            if hasattr(elem, 'sql_options'):
+                options = {**options, **elem.sql_options}
+            if hasattr(elem, 'pk') or hasattr(elem, 'constraint'):
+                options["index"] = False
+            if hasattr(elem, 'if_exists'):
+                options['if_exists'] = elem.if_exists
+            else:
+                options['if_exists'] = 'append'
+            # define index:
+            try:
+                self._pk = elem.pk
+                options['index_label'] = self._pk
+            except AttributeError:
+                self._pk = []
+            # set the upsert method:
+            options['method'] = self._engine.db_upsert
+            if hasattr(elem, 'foreign_key'):
+                self._fk = elem.foreign_key
+            else:
+                self._fk = None
+            if hasattr(elem, 'constraint'):
+                self._constraint = elem.constraint
+            else:
+                self._constraint = None
+            self._columns = list(datasource.columns)
+            self._engine.columns = self._columns
+            self._schema = schema
+            # add metrics for Table Output
+            u = datasource.select_dtypes(
+                include=['object', 'string']
             )
-            logging.debug(
-                f':: Saving Table Data {schema}.{table} ...'
+            datasource[u.columns] = u.replace(['<NA>', 'None'], None)
+            try:
+                datasource.to_sql(
+                    name=table,
+                    con=self._engine.engine(),
+                    **options
+                )
+                logging.debug(
+                    f':: Saving Table Data {schema}.{table} ...'
+                )
+                return True
+            except Exception:
+                raise
+        else:
+            # Using Engine External method write:
+            on_conflict = 'replace'
+            if hasattr(elem, 'if_exists'):
+                on_conflict = elem.if_exists
+            await self._engine.db_upsert(
+                table=table,
+                schema=schema,
+                on_conflict=on_conflict
             )
-            return True
-        except Exception:
-            raise
 
     async def run(self):
         if self.flavor == 'postgresql':
@@ -103,6 +116,10 @@ class TableOutput:
             self._engine = MysqlOutput(parent=self)
         elif self.flavor == 'sqlalchemy':
             self._engine = SaOutput(parent=self)
+        elif self.flavor == 'rethink':
+            self._engine == RethinkOutput(parent=self, external=True)
+        elif self.flavor == 'bigquery':
+            self._engine == BigQueryOutput(parent=self, external=True)
         else:
             raise OutputError(
                 f'TableOutput: unsupported DB flavor: {self.flavor}'

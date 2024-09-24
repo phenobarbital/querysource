@@ -2,16 +2,16 @@ from collections.abc import Callable
 import pandas as pd
 from .....exceptions import OutputError
 from .abstract import AbstractOutput
-from .....interfaces.databases.rethink import RethinkDB
+from .....interfaces.databases.bigquery import BigQuery
 
 
-class RethinkOutput(AbstractOutput, RethinkDB):
+class BigQueryOutput(AbstractOutput, BigQuery):
     """
-    RethinkOutput.
+    BigQueryOutput.
 
-    Class for writing output to rethinkdb database.
+    Class for writing output to BigQuyery database.
 
-    Used by Pandas to_sql statement.
+    Using External.
     """
     def __init__(
         self,

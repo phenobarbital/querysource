@@ -38,6 +38,10 @@ class AbstractOutput(ABC):
     def engine(self):
         return self._engine
 
+    @property
+    def is_external(self) -> bool:
+        return self._external
+
     def close(self):
         """Closing Operations."""
         try:
