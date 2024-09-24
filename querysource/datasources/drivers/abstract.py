@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Union, Optional
 from pathlib import Path
 from dataclasses import asdict, InitVar
@@ -12,8 +13,8 @@ from ...conf import (
 def default_properties() -> tuple:
     return ('host', 'port', 'user', 'username', 'password')
 
-class DataDriver(BaseModel):
-    """DataDriver.
+class BaseDriver(BaseModel):
+    """BaseDriver.
 
     Description: Base class for all required datasources.
     """
@@ -46,9 +47,15 @@ class DataDriver(BaseModel):
         # set DSN (if needed)
         if self.dsn_format is not None and self.dsn is None:
             self.create_dsn()
-        super(DataDriver, self).__post_init__()
+        super(BaseDriver, self).__post_init__()
 
     def create_dsn(self) -> str:
+        """create_dsn.
+
+        Description: creates DSN from DSN Format.
+        Returns:
+            str: DSN.
+        """
         params = asdict(self)
         try:
             self.dsn = self.dsn_format.format(**params)
@@ -56,8 +63,23 @@ class DataDriver(BaseModel):
         except (AttributeError, ValueError):
             return None
 
+    @abstractmethod
+    def params(self) -> dict:
+        """params.
+
+        Returns:
+            dict: params required for AsyncDB.
+        """
+        return {}
+
     def get_credentials(self) -> dict:
-        return self.auth
+        """get_credentials.
+
+        Description: Returns credentials for Datasource.
+        Returns:
+            dict: credentials.
+        """
+        return self.params()
 
     def get_parameters(self) -> dict:
         return {}
@@ -117,7 +139,8 @@ class DataDriver(BaseModel):
 def default_sql_properties() -> tuple:
     return ('host', 'port', 'user', 'username', 'password', 'database', 'dsn')
 
-class SQLDriver(DataDriver):
+
+class SQLDriver(BaseDriver):
     """
     Description: Base Class for all SQL Drivers.
     """
@@ -127,9 +150,18 @@ class SQLDriver(DataDriver):
     username: str = Field(required=False, default=None, repr=True)
     password: str = Field(required=False, default=None, repr=False, is_secret=True)
     database: str
-    required_properties: Optional[tuple] = Field(repr=False, default=default_sql_properties())
+    required_properties: Optional[tuple] = Field(
+        repr=False,
+        default=default_sql_properties()
+    )
 
-    def __post_init__(self, user, hostname: str = None, *args, **kwargs):  # pylint: disable=W0613,W0221
+    def __post_init__(
+        self,
+        user,
+        hostname: str = None,
+        *args,
+        **kwargs
+    ):  # pylint: disable=W0613,W0221
         if hostname:
             self.host = hostname
         super(SQLDriver, self).__post_init__(user, *args, **kwargs)
@@ -155,7 +187,7 @@ class SQLDriver(DataDriver):
         }
 
 
-class NoSQLDriver(DataDriver):
+class NoSQLDriver(BaseDriver):
     host: str = Field(required=False, default='localhost')
     port: Union[int, str] = Field(required=False)
 
@@ -192,7 +224,7 @@ def cloud_properties() -> tuple:
         'protocol',
         'access_token'
     )
-class CloudDriver(DataDriver):
+class CloudDriver(BaseDriver):
     hostname: InitVar = ''
     driver_type: str = Field(required=False, default='external')
     host: str = Field(required=False, default='localhost')
@@ -225,6 +257,7 @@ class CloudDriver(DataDriver):
             "url": self.url,
         }
 
+
 ### Amazon services:
 def aws_properties() -> tuple:
     return ('url', 'region', 'access_key', 'secret_key', 'use_credentials')
@@ -243,6 +276,8 @@ class AWSDriver(CloudDriver):
 ### Google Services:
 def google_properties() -> tuple:
     return ('url', 'json_key', 'service_path')
+
+
 class GoogleDriver(CloudDriver):
     """GoogleDriver
     Abstract base class for all Google-related services.

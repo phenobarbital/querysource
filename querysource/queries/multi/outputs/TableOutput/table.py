@@ -7,6 +7,8 @@ from .....exceptions import (
     OutputError
 )
 from .postgres import PgOutput
+from .mysql import MysqlOutput
+from .sa import SaOutput
 
 
 class TableOutput:
@@ -18,11 +20,7 @@ class TableOutput:
         self._engine = None
         self._columns: list = []
         self._constraint: list = None
-        try:
-            self.flavor = kwargs['flavor']
-            del kwargs['flavor']
-        except KeyError:
-            self.flavor = 'postgresql'
+        self.flavor: str = kwargs.pop('flavor', 'postgresql')
         self.logger = logging.getLogger(
             f'QS.Output.{self.__class__.__name__}'
         )
@@ -101,6 +99,10 @@ class TableOutput:
     async def run(self):
         if self.flavor == 'postgresql':
             self._engine = PgOutput(parent=self)
+        elif self.flavor == 'mysql':
+            self._engine = MysqlOutput(parent=self)
+        elif self.flavor == 'sqlalchemy':
+            self._engine = SaOutput(parent=self)
         else:
             raise OutputError(
                 f'TableOutput: unsupported DB flavor: {self.flavor}'

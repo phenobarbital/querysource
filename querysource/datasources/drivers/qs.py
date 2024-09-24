@@ -1,9 +1,9 @@
 from datamodel import Field
-from .abstract import DataDriver
+from .abstract import BaseDriver
 
 
-class qsDriver(DataDriver):
+class qsDriver(BaseDriver):
     driver: str = 'querysource'
     driver_path: str = 'querysource.drivers.{driver}'
-    slug: str = Field(required=True) # TODO: validate with slugify
-    datasource: str = Field(required=True, default='db') # default database
+    slug: str = Field(required=True)  # TODO: validate with slugify
+    datasource: str = Field(required=True, default='db')  # default datasource

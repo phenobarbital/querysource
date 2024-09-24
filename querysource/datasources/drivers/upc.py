@@ -9,9 +9,9 @@ upc_api_key = config.get('UPC_API_KEY')
 class upcDriver(restDriver):
     base_url: str = 'https://api.upcdatabase.org/'
     api_key: str = Field(required=True, default=upc_api_key)
-    barcode: str = Field(required=False) # TODO: barcode UPC validator
+    barcode: str = Field(required=False)  # TODO: barcode UPC validator
 
-    def product(self)-> dict:
+    def product(self) -> dict:
         self.url = self.base_url + f'product/{self.barcode}'
         return {
             "url": self.url,

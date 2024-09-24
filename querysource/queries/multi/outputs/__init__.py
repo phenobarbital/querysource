@@ -1,4 +1,4 @@
-from .tableOutput import TableOutput
+from .TableOutput import TableOutput
 
 
 __all__ = ('TableOutput',)

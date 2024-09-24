@@ -23,7 +23,12 @@ class mariadbDriver(SQLDriver):
     dsn_format: str = "mysql://{user}:{password}@{host}:{port}/{database}"
     port: int = Column(required=True, default=3306)
 
-    def __post_init__(self, username, hostname: str = None, **kwargs) -> None:  # pylint: disable=W0613,W0221
+    def __post_init__(
+        self,
+        username,
+        hostname: str = None,
+        **kwargs
+    ) -> None:  # pylint: disable=W0613,W0221 # noqa
         super(mariadbDriver, self).__post_init__(hostname, **kwargs)
         if username is not None and self.user is None:
             self.user = username
@@ -42,7 +47,8 @@ class mariadbDriver(SQLDriver):
             "host": self.host,
             "port": self.port,
             "user": self.username,
-            "password": self.password
+            "password": self.password,
+            "database": self.database
         }
 
 try:

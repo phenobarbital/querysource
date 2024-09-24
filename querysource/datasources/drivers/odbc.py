@@ -16,4 +16,7 @@ class odbcDriver(SQLDriver):
         super(odbcDriver, self).__post_init__(user, hostname, *args, **kwargs)
 
 
-odbc_default = odbcDriver(provider="SQLite3", database=":memory:")
+try:
+    odbc_default = odbcDriver(provider="SQLite3", database=":memory:")
+except ValueError:
+    odbc_default = None

@@ -1,7 +1,7 @@
 """
 Source Tree about Data Drivers.
 """
-from .abstract import DataDriver
+from .abstract import BaseDriver
 from .pg import pgDriver
 from .redis import redisDriver
 from .oracle import oracleDriver
@@ -88,4 +88,4 @@ SUPPORTED = {
     }
 }
 
-__all__ = ('DataDriver', 'SUPPORTED', )
+__all__ = ('BaseDriver', 'SUPPORTED', )

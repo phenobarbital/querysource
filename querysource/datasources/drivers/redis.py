@@ -15,8 +15,10 @@ class redisDriver(NoSQLDriver):
     dsn_format: str = "redis://{host}:{port}/{database}"
     defaults: str = REDIS_URL
 
-
-redis_default = redisDriver(
-    host=REDIS_HOST,
-    port=REDIS_PORT
-)
+try:
+    redis_default = redisDriver(
+        host=REDIS_HOST,
+        port=REDIS_PORT
+    )
+except ValueError:
+    redis_default = None

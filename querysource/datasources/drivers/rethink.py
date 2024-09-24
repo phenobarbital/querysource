@@ -1,17 +1,17 @@
 from datamodel import Column
 from ...conf import (
-    rt_driver,
-    rt_host,
-    rt_port,
-    rt_database,
-    rt_user,
-    rt_password,
+    RT_DRIVER,
+    RT_HOST,
+    RT_PORT,
+    RT_DATABASE,
+    RT_USER,
+    RT_PASSWORD,
 )
 from .abstract import NoSQLDriver
 
 class rethinkDriver(NoSQLDriver):
-    driver: str = rt_driver
-    port: int = Column(required=True, default=28015)
+    driver: str = RT_DRIVER
+    port: int = Column(required=True, default=RT_PORT)
     database: str = Column(required=False)
 
     def params(self) -> dict:
@@ -36,9 +36,9 @@ class rethinkDriver(NoSQLDriver):
             }
 
 rethink_default = rethinkDriver(
-    host=rt_host,
-    port=rt_port,
-    database=rt_database,
-    username=rt_user,
-    password=rt_password
+    host=RT_HOST,
+    port=RT_PORT,
+    database=RT_DATABASE,
+    username=RT_USER,
+    password=RT_PASSWORD
 )

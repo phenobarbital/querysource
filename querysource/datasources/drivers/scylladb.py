@@ -17,10 +17,14 @@ class scylladbDriver(SQLDriver):
     dsn_format: str = None
     port: int = Column(required=True, default=9042)
 
-scylladb_default = scylladbDriver(
-    host=SCYLLA_HOST,
-    port=SCYLLA_PORT,
-    database=SCYLLA_DATABASE,
-    username=SCYLLA_USER,
-    password=SCYLLA_PWD
-)
+
+try:
+    scylladb_default = scylladbDriver(
+        host=SCYLLA_HOST,
+        port=SCYLLA_PORT,
+        database=SCYLLA_DATABASE,
+        username=SCYLLA_USER,
+        password=SCYLLA_PWD
+    )
+except (TypeError, ValueError):
+    scylladb_default = None

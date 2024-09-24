@@ -14,7 +14,6 @@ class zipcodeapiDriver(restDriver):
     radius: int
     units: str = Field(default='km')
 
-
     def by_units(self) -> dict:
         params = asdict(self)
         self.url_schema = self.url_schema + 'info.json/{zipcode}/{units}'

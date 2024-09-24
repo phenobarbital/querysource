@@ -18,12 +18,12 @@ class countriesDriver(CloudDriver):
             "url": self.url
         }
 
-    def country(self) -> dict:
+    def get_country(self) -> dict:
         """country.
 
         Get Country Information.
         """
-        self.url = self.base_url +  f'name/{self.country}'
+        self.url = self.base_url + f'name/{self.country}'
         return {
             "url": self.url
         }
