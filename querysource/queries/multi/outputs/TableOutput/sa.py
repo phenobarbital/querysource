@@ -10,9 +10,13 @@ from .abstract import AbstractOutput
 
 class SaOutput(AbstractOutput):
     def __init__(
-        self, parent: Callable, dsn: str = None, do_update: bool = True
+        self,
+        parent: Callable,
+        dsn: str = None,
+        do_update: bool = True,
+        **kwargs
     ) -> None:
-        super(SaOutput, self).__init__(parent, dsn, do_update=do_update)
+        super(SaOutput, self).__init__(parent, dsn, do_update=do_update, **kwargs)
 
     def db_upsert(self, table, conn, keys, data_iter):
         """

@@ -17,11 +17,15 @@ class PgOutput(AbstractOutput):
     Used by Pandas to_sql statement.
     """
     def __init__(
-        self, parent: Callable, dsn: str = None, do_update: bool = True
+        self,
+        parent: Callable,
+        dsn: str = None,
+        do_update: bool = True,
+        **kwargs
     ) -> None:
         if not dsn:
             dsn = sqlalchemy_url
-        super().__init__(parent, dsn, do_update=do_update)
+        super().__init__(parent, dsn, do_update=do_update, **kwargs)
 
     def db_upsert(self, table, conn, keys, data_iter):
         """

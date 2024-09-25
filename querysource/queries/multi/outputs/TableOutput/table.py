@@ -51,7 +51,8 @@ class TableOutput:
             schema = elem.schema
         except AttributeError:
             schema = 'public'
-        if self._engine.is_external is True:
+        if self._engine.is_external is False:
+            # Using Pandas to_sql method:
             options['schema'] = schema
             # starting metric:
             if hasattr(elem, 'sql_options'):
@@ -103,11 +104,11 @@ class TableOutput:
             on_conflict = 'replace'
             if hasattr(elem, 'if_exists'):
                 on_conflict = elem.if_exists
-            await self._engine.db_upsert(
+            await self._engine.db_upsert(  # pylint: disable=E1120,E1123 # noqa
                 table=table,
                 schema=schema,
                 on_conflict=on_conflict
-            )
+            )  # pylint: disable=E1120,E1123 # noqa
 
     async def run(self):
         if self.flavor == 'postgresql':
