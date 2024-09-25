@@ -18,14 +18,16 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         parent: Callable,
         dsn: str = None,
         do_update: bool = True,
-        external: bool = True
+        external: bool = True,
+        **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
         super().__init__(
             parent,
             dsn,
             do_update=do_update,
-            external=external
+            external=external,
+            **kwargs
         )
         self._external: bool = True
 

@@ -17,7 +17,8 @@ class AbstractOutput(ABC):
         parent: Callable,
         dsn: str = None,
         do_update: bool = True,
-        external: bool = False
+        external: bool = False,
+        **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
         self._external: bool = external
