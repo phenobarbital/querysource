@@ -186,6 +186,10 @@ setup(
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
         'sqlalchemy==2.0.23',
+        # Selenium Support:
+        'selenium==4.24.0',
+        'snapshot-selenium==0.0.2',
+        'webdriver-manager==4.0.2',
         # NAV libraries:
         # 'asyncdb[all]>=2.8.1',
         'proxylists>=0.12.5',
