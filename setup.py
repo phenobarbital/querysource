@@ -208,7 +208,9 @@ setup(
         'plotly==5.22.0',
         'seaborn==0.13.2',
         'matplotlib==3.8.3',
-        'prompt_toolkit==3.0.47'
+        'prompt_toolkit==3.0.47',
+        'folium==0.17.0',
+        "geopandas==1.0.1"
     ],
     extras_require={
         "analytics": [
