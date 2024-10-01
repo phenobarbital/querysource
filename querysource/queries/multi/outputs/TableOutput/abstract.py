@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from collections.abc import Callable, Awaitable
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
@@ -6,7 +6,7 @@ from navconfig.logging import logging
 from .....exceptions import OutputError
 
 
-class AbstractOutput(ABC):
+class AbstractOutput(metaclass=ABCMeta):
     """
     AbstractOutput.
 
@@ -28,6 +28,7 @@ class AbstractOutput(ABC):
         self._columns: list = []
         self._do_update: bool = do_update
         self._connection: Awaitable = None
+        self._driver: str = kwargs.get('driver', 'pg')
         if self._external is False:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
