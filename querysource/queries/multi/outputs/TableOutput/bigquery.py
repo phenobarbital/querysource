@@ -22,12 +22,11 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
-        super().__init__(
-            parent,
-            dsn,
-            do_update=do_update,
-            external=external,
-            **kwargs
+        AbstractOutput.__init__(
+            self, parent, dsn, do_update, external, **kwargs
+        )
+        BigQuery.__init__(
+            self, **kwargs
         )
         self._external: bool = True
 

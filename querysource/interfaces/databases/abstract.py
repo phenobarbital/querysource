@@ -1,13 +1,13 @@
 from typing import Optional, Union
 from collections.abc import Awaitable, Iterable
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import asyncio
 import pandas as pd
 from asyncdb import AsyncDB
 from ...exceptions import DriverError
 
 
-class AbstractDB(ABC):
+class AbstractDB(metaclass=ABCMeta):
     """AbstractDriver.
 
     Abstract Database Driver for several operations including TableOutput.
