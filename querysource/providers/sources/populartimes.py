@@ -62,6 +62,33 @@ class populartimes(restSource):
         self._args = self._conditions.copy()
         self._conditions = {}
 
+    async def rating_reviews(self, place_id: str = None, api_key: str = None, **kwargs):
+        """rating_reviews.
+        get the rating and reviews of a place.
+        :param api_key: api key
+        :param place_id: unique place_id from google
+        :return: json details
+        """
+        self._conditions = {}
+        self._args['place_id'] = self.place_id
+        if not self._args['place_id']:
+            raise ConfigError(
+                "Populartimes Error: no placeid provided."
+            )
+        if not api_key:
+            self._args['api_key'] = self._env.get('GOOGLE_PLACES_API_KEY')
+        # Places by ID
+        self.url = self.base_url + 'details/json?fields=rating%2Creviews%2Cuser_ratings_total&placeid={place_id}&key={api_key}'
+        try:
+            query = await self.aquery()
+            self.check_response_code(query)
+            result = query.get('result')
+            self._result = result
+            return self._result
+        except Exception as err:
+            self.logger.error(err)
+            raise
+
     async def by_placeid(self, place_id: str = None, api_key: str = None, **kwargs):
         """by_placeid.
         get the current status of popular times.
