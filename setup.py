@@ -210,7 +210,8 @@ setup(
         'matplotlib==3.8.3',
         'prompt_toolkit==3.0.47',
         'folium==0.17.0',
-        "geopandas==1.0.1"
+        "geopandas==1.0.1",
+        "contextily==1.6.2"
     ],
     extras_require={
         "analytics": [
