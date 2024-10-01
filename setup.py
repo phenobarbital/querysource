@@ -211,7 +211,8 @@ setup(
         'prompt_toolkit==3.0.47',
         'folium==0.17.0',
         "geopandas==1.0.1",
-        "contextily==1.6.2"
+        "contextily==1.6.2",
+        "jenkspy==0.4.1"
     ],
     extras_require={
         "analytics": [
