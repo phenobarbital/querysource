@@ -21,7 +21,7 @@ class RethinkDB(AbstractDB):
     _name: str = "RethinkDB"
 
     def __init__(self, *args, **kwargs):
-        super(RethinkDB, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.db_credentials: dict = {
             "host": RT_HOST,
             "port": int(RT_PORT),
@@ -30,6 +30,7 @@ class RethinkDB(AbstractDB):
             "password": RT_PASSWORD
         }
         self._driver: str = RT_DRIVER
+        self._connection = None
 
     async def write(
         self,

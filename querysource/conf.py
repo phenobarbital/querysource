@@ -3,9 +3,12 @@ import sys
 import os
 from pathlib import Path
 from navconfig import BASE_DIR, config
+from navconfig.logging import logging
 
 
 ### Matplotlib Configuration
+logging.getLogger(name='matplotlib').setLevel(logging.WARNING)
+logging.getLogger(name='matplotlib.font_manager').setLevel(logging.ERROR)
 mpldir = config.get('MPLCONFIGDIR', fallback=BASE_DIR.joinpath('templates'))
 os.environ['MPLCONFIGDIR'] = str(mpldir)
 

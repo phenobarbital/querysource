@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Awaitable
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from navconfig.logging import logging
@@ -27,6 +27,7 @@ class AbstractOutput(ABC):
         self._results: list = []
         self._columns: list = []
         self._do_update: bool = do_update
+        self._connection: Awaitable = None
         if self._external is False:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)

@@ -17,7 +17,7 @@ class BigQuery(AbstractDB):
     _name: str = "BigQuery"
 
     def __init__(self, *args, **kwargs):
-        super(BigQuery, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.db_credentials: dict = {
             "credentials": BIGQUERY_CREDENTIALS,
             "project_id": BIGQUERY_PROJECT_ID
