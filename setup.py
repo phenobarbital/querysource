@@ -207,7 +207,7 @@ setup(
         'pandas_bokeh==0.5.5',
         'plotly==5.22.0',
         'seaborn==0.13.2',
-        'matplotlib==3.8.3',
+        'matplotlib==3.9.2',
         'prompt_toolkit==3.0.47',
         'folium==0.17.0',
         "geopandas==1.0.1",
@@ -237,6 +237,10 @@ setup(
             'lux-api==0.5.1',
             'pomegranate==1.1.0',
             'autoviz==0.1.905'
+        ],
+        "ia": [
+            "spacy[transformers,lookups]==3.8.2",
+            "spacy-llm==0.7.2",
         ]
     },
     tests_require=[
