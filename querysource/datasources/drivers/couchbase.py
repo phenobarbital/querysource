@@ -11,7 +11,7 @@ class couchbaseDriver(NoSQLDriver):
     dsn_format: str = 'couchbase://{host}:{port}/'
     cert_path: str = Column(required=False)
 
-    def __post_init__(self, user, **kwargs) -> None: # pylint: disable=W0613,W0221
+    def __post_init__(self, user, **kwargs) -> None:  # pylint: disable=W0613,W0221
         super(couchbaseDriver, self).__post_init__(user, **kwargs)
         self.auth = {
             "username": self.username,

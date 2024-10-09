@@ -1,7 +1,7 @@
 """
 Source Tree about Data Drivers.
 """
-from .abstract import DataDriver
+from .abstract import BaseDriver
 from .pg import pgDriver
 from .redis import redisDriver
 from .oracle import oracleDriver
@@ -16,6 +16,9 @@ from .mongo import mongoDriver
 from .sqlite import sqliteDriver
 from .hazel import hazelDriver
 from .salesforce import salesforceDriver
+from .scylladb import scylladbDriver
+from .bigquery import bigqueryDriver
+
 
 ## List of Supported Drivers:
 SUPPORTED = {
@@ -74,7 +77,15 @@ SUPPORTED = {
     "salesforce": {
         "name": "SalesForce",
         "driver": salesforceDriver
+    },
+    "scylladb": {
+        "name": "ScyllaDB",
+        "driver": scylladbDriver
+    },
+    "bigquery": {
+        "name": "BigQuery",
+        "driver": bigqueryDriver
     }
 }
 
-__all__ = ('DataDriver', 'SUPPORTED', )
+__all__ = ('BaseDriver', 'SUPPORTED', )

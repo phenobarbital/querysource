@@ -2,6 +2,8 @@
 
 Module for different query-parsers.
 """
-from .abstract import QueryParser
+## list of Variables:
+QS_VARIABLES = {}
 
-__all__ = ('QueryParser', )
+## Filter List:
+QS_FILTERS = {}

@@ -11,7 +11,8 @@ from asyncdb.exceptions import (
     NoDataFound,
     ProviderError,
     StatementError,
-    DriverError
+    DriverError,
+    ConnectionTimeout
 )
 
 from ..connections import QueryConnection
@@ -22,7 +23,7 @@ from ..exceptions import (
     QueryError,
     SlugNotFound,
 )
-from ..providers import BaseProvider  # renamed to Providers.
+from ..providers import BaseProvider
 from ..types.mutables import ClassDict
 from ..types.typedefs import AttrDict
 from ..utils.functions import check_empty
@@ -57,56 +58,42 @@ class QS(BaseQuery):
         self._query: str = None
         self._type: str = ''
         self.is_cached: bool = False
-        if 'dwh' in kwargs:
-            self._dwh = kwargs['dwh']
-            del kwargs['dwh']
-        elif 'dwh' in conditions:
-            self._dwh = conditions['dwh']
-            del conditions['dwh']
+        self._dwh = kwargs.pop('dwh', None)
+        if 'dwh' in conditions:
+            self._dwh = conditions.pop('dwh')
         # if slug:
         if slug:
-            self._logger.debug(f'Initialize Slug: {slug!s}')
             self._query = slug
             self._type = 'slug'
         elif 'query' in self.kwargs:
-            try:
-                self._query = self.kwargs['query']
-                self._type = 'query'
-                del self.kwargs['query']
-            except KeyError as ex:
+            self._query = kwargs.pop('query', None)
+            self._driver = kwargs.pop('driver', 'db')
+            self._type = 'query'
+            if not self._query:
                 raise ValueError(
                     'QuerySource Error: needed *slug*, *query* or *raw query* in arguments'
-                ) from ex
-            try:
-                self._driver = self.kwargs['driver']
-                del self.kwargs['driver']
-            except KeyError:
-                self._driver = 'db'
+                )
         elif 'raw_query' in self.kwargs:
-            try:
-                self._query = self.kwargs['raw_query']
-                self._type = 'raw'
-                del self.kwargs['raw_query']
-            except KeyError as ex:
+            self._query = kwargs.pop('raw_query', None)
+            self._type = 'raw'
+            if not self._query:
                 raise ValueError(
-                    'QuerySource Error: needed *slug* or a *raw_query*'
-                ) from ex
+                    'QuerySource Error: needed *query* or a *raw_query*'
+                )
         elif 'driver' in self.kwargs:
-            self._driver = self.kwargs['driver']
-            self._query = self._driver
-            del self.kwargs['driver']
+            self._driver = self.kwargs.pop('driver')
             self._type = 'driver'
+            self._query = self._driver
         if not self._query:
             raise EmptySentence(
-                "QS Error: Empty Query, Driver or Slug."
+                "QS Error: Empty request."
             )
-        if 'lazy' in kwargs:
-            lazy = kwargs['lazy']
-            del kwargs['lazy']
-        else:
-            lazy = True
+        lazy = kwargs.pop('lazy', True)
         ### Connection is always one single object (singleton)
-        self.connection = QueryConnection(lazy=lazy, loop=self._loop)
+        self.connection = QueryConnection(
+            lazy=lazy,
+            loop=self._loop
+        )
 
     def __repr__(self) -> str:
         return f'<QS: {self._type}:"{self._query}" >'
@@ -142,18 +129,18 @@ class QS(BaseQuery):
                 "QS Error: Cannot run with Empty Query/Sentence."
             )
         if self._type == 'slug':  # query-based provider:
-            self._logger.debug(f'Starting Slug-based Query: {self._query!s}')
+            self._logger.debug(f':: QS Slug: {self._query!s}')
             try:
                 objquery = await self.connection.get_slug(
                     self._query, program=self._program
                 )
-            except (SlugNotFound):
+            except SlugNotFound:
                 raise
             except Exception:
                 raise
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.from_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(objquery)
             except (QueryException, DriverError, ProviderError) as ex:
                 raise QueryException(
                     str(ex)
@@ -208,13 +195,13 @@ class QS(BaseQuery):
         elif self._type == 'query':
             ## Query Object (TBD)
             self._logger.debug(
-                f'Starting Query: {self._query!s} for {self._driver}'
+                f':: Query: {self._query!s} for {self._driver}'
             )
             ### build manually objquery:
             objquery = AttrDict({"provider": self._driver})
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.from_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(objquery)
             except (QueryException, DriverError) as ex:
                 raise QueryError(
                     str(ex)
@@ -248,11 +235,13 @@ class QS(BaseQuery):
                 ) from err
         elif self._type == 'raw':
             ## Raw Query
-            pass
+            self._logger.debug(
+                f':: Raw Query: {self._query!s} for {self._driver}'
+            )
         elif self._type == 'driver':
             ### calling an HTTP, REST or other provider:
             self._logger.debug(
-                f'Starting Driver: {self._driver!s}, ARGS: {self.kwargs!s}'
+                f':: Driver: {self._driver!s}, ARGS: {self.kwargs!s}'
             )
             try:
                 driver = ClassDict(
@@ -265,7 +254,7 @@ class QS(BaseQuery):
                 )
                 driver = 'rest'
             try:
-                self._conn, self._provider = await self.connection.from_provider(driver)
+                self._conn, self._provider = await self.connection.get_provider(driver)
             except (QueryException, DriverError) as ex:
                 raise QueryException(
                     str(ex)
@@ -333,7 +322,7 @@ class QS(BaseQuery):
         if self.is_cached is True and exists is True:
             # cache exists from this query
             try:
-                result = await self.connection.get_from_cache(checksum)
+                result = await self.connection.from_cache(checksum)
             except asyncio.TimeoutError:
                 self._logger.warning(
                     'Querysource: Cache Miss due Timeout'
@@ -389,6 +378,12 @@ class QS(BaseQuery):
                     return await self._output_format(
                         self._result, error
                     )  # pylint: disable=W0150
+            except ConnectionTimeout as err:
+                raise self.Error(
+                    f"QS: {err}",
+                    exception=err,
+                    code=400
+                )
             except (NoDataFound, DataNotFound) as err:
                 raise DataNotFound(
                     f'{self._qs.__name__!s}: {err}'

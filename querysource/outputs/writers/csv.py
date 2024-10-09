@@ -54,7 +54,14 @@ class CSVWriter(AbstractWriter):
                 qt = csv.QUOTE_NONE
             tmp = TmpFile()
             async with tmp.open_buffer() as afp:
-                writer = AsyncDictWriter(afp, self.columns, restval="NULL", quoting=qt, delimiter=delimiter, skipinitialspace=True)
+                writer = AsyncDictWriter(
+                    afp,
+                    self.columns,
+                    restval="NULL",
+                    quoting=qt,
+                    delimiter=delimiter,
+                    skipinitialspace=True
+                )
                 await writer.writeheader()
                 await writer.writerows(self.data)
             buffer = tmp.get()
@@ -68,7 +75,7 @@ class CSVWriter(AbstractWriter):
         content_length = len(buffer)
         response.content_length = content_length
         response.headers['Content-Disposition'] = f"attachment; filename={self.filename}"
-        if self.download is True: # inmediately download response
+        if self.download is True:  # inmediately download response
             await response.prepare(self.request)
             await response.write(bytes(buffer, 'utf-8'))
             await response.write_eof()

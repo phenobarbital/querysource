@@ -20,4 +20,11 @@ class cockroachDBDriver(SQLDriver):
     port: int = Column(required=True, default=5432)
     defaults: str = asyncpg_url
 
-pg_default = cockroachDBDriver(dsn=asyncpg_url, host=PG_HOST, port=PG_PORT, database=PG_DATABASE, username=PG_USER, password=PG_PWD)
+pg_default = cockroachDBDriver(
+    dsn=asyncpg_url,
+    host=PG_HOST,
+    port=PG_PORT,
+    database=PG_DATABASE,
+    username=PG_USER,
+    password=PG_PWD
+)

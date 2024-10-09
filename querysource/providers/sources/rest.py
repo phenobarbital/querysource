@@ -7,6 +7,7 @@ from typing import Any
 import asyncio
 import aiohttp
 import orjson
+from navconfig import config
 from navconfig.logging import logging
 from bs4 import BeautifulSoup as bs
 import requests
@@ -28,6 +29,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 class restSource(httpSource):
     login_url: str = None
     auth_type: str = 'key'
+    api_key_name: str = 'API_NAME'
     accept: str = 'application/json'
     content_type: str = 'application/json'
     method: str = 'post'

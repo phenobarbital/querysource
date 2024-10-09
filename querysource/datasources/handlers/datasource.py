@@ -16,6 +16,8 @@ from ...utils.parseqs import ParseDict
 from ...exceptions import ParserError
 from ..models import DataSource
 from ..drivers import SUPPORTED
+from ...interfaces.connections import DATASOURCES
+
 
 class DatasourceView(BaseView):
     """API View for managing datasources.
@@ -224,18 +226,18 @@ class DatasourceView(BaseView):
             )
         except ValidationError as ex:
             return self.error(
-                response= {
-                  "error": f"There are errors on Driver information: {ex!s}",
-                  "payload": str(ex.payload),
+                response={
+                    "error": f"There are errors on Driver information: {ex!s}",
+                    "payload": str(ex.payload),
                 },
-                status = 400
+                status=400
             )
         except RuntimeError as ex:
             return self.error(
-                response= {
-                  "error": f"{ex!s}"
+                response={
+                    "error": f"{ex!s}"
                 },
-                status = 400
+                status=400
             )
         # getting datasource
         try:
@@ -255,7 +257,7 @@ class DatasourceView(BaseView):
             datasource = DataSource(**attributes)
         except ValidationError as ex:
             return self.error(
-                response = {
+                response={
                     "message": f'Invalid dataSource using {attributes!s}',
                     "payload": str(ex.payload),
                 },
@@ -264,7 +266,7 @@ class DatasourceView(BaseView):
             )
         except Exception as err:
             return self.error(
-                response = {
+                response={
                     "error": f'Datasouce exception using: {attributes!s}'
                 },
                 exception=err,
@@ -288,6 +290,13 @@ class DatasourceView(BaseView):
                     'X-STATUS': 'OK',
                     'X-MESSAGE': f'{drvname} Information'
                 }
+                # if was inserted, then datasource will be updated:
+                try:
+                    DATASOURCES[datasource.name] = driver
+                except (ValueError, AttributeError):
+                    self._logger.warning(
+                        f"We cannot update DATASOURCES list with {datasource.name} datasource."
+                    )
                 return self.json_response(
                     response=datasource,
                     headers=headers,
@@ -296,7 +305,7 @@ class DatasourceView(BaseView):
         except Exception as err:
             if 'duplicate key' in str(err):
                 return self.error(
-                    response = {
+                    response={
                         "error": f'Duplicate Datasource: {err!s}',
                     },
                     exception=err,
@@ -304,7 +313,7 @@ class DatasourceView(BaseView):
                 )
             else:
                 return self.error(
-                    response = {
+                    response={
                         f'Error Inserting Datasource: {err!s}',
                     },
                     exception=err,
@@ -371,6 +380,10 @@ class DatasourceView(BaseView):
                         'X-MESSAGE': f'{datasource.name} Information'
                     }
                     await datasource.delete()
+                    try:
+                        del DATASOURCES[datasource.name]
+                    except KeyError:
+                        pass
                     return self.json_response(
                         response={"message": "Datasource Deleted", "filter": ds},
                         headers=headers,
@@ -423,30 +436,30 @@ class DatasourceView(BaseView):
                 description: Conflict, a constraint was violated
         """
         data = await self.json_data()
-            ## first, getting the driver:
+        ## first, getting the driver:
         try:
             driver, drvname = self.get_driver(data)
         except ValueError as ex:
             return self.error(
-                response= {
-                  "error": f"{ex!s}"
+                response={
+                    "error": f"{ex!s}"
                 },
-                status = 400
+                status=400
             )
         except ValidationError as ex:
             return self.error(
-                response= {
-                  "error": f"There are errors on Driver information: {ex!s}",
-                  "payload": str(ex.payload),
+                response={
+                    "error": f"There are errors on Driver information: {ex!s}",
+                    "payload": str(ex.payload),
                 },
-                status = 400
+                status=400
             )
         except RuntimeError as ex:
             return self.error(
-                response= {
-                  "error": f"{ex!s}"
+                response={
+                    "error": f"{ex!s}"
                 },
-                status = 400
+                status=400
             )
         args = self.get_arguments(request=self.request)
         name = None
@@ -510,9 +523,9 @@ class DatasourceView(BaseView):
                         }
                         datasource = DataSource(**attributes)
                         print(datasource)
-                    except ValueError  as ex:
+                    except ValueError as ex:
                         return self.error(
-                            response = {
+                            response={
                                 "message": f'Invalid dataSource using {attributes!s}',
                                 "error": str(ex),
                             },
@@ -520,7 +533,7 @@ class DatasourceView(BaseView):
                         )
                     except ValidationError as ex:
                         return self.error(
-                            response = {
+                            response={
                                 "message": f'Invalid dataSource using {attributes!s}',
                                 "payload": str(ex.payload),
                             },
@@ -535,10 +548,17 @@ class DatasourceView(BaseView):
                     else:
                         result = await datasource.insert()
                         status = 201
-                    return self.json_response(
-                            response=result,
-                            status=status
+                    # if was inserted, then datasource will be updated:
+                    try:
+                        DATASOURCES[datasource.name] = driver
+                    except (ValueError, AttributeError):
+                        self._logger.warning(
+                            f"We cannot update DATASOURCES list with {datasource.name} datasource."
                         )
+                    return self.json_response(
+                        response=result,
+                        status=status
+                    )
                 except (ProviderError, DriverError, StatementError) as ex:
                     return self.error(
                         response={
@@ -550,36 +570,34 @@ class DatasourceView(BaseView):
         finally:
             await db.close()
 
-    # async def patch(self):
-    #     """
-    #     PATCH Method.
-    #     description: updating partially info about a Datasource
-    #     tags:
-    #     - Datasource
-    #     - datasources
-    #     - Database connections
-    #     consumes:
-    #     - application/merge-patch+json
-    #     produces:
-    #     - application/json
-    #     responses:
-    #         "200":
-    #             description: Existing Datasource was updated.
-    #         "201":
-    #             description: New Datasource was inserted
-    #         "304":
-    #             description: Datasource not modified, its currently the actual version
-    #         "403":
-    #             description: Forbidden Call
-    #         "404":
-    #             description: No Data was found
-    #         "406":
-    #             description: Query Error
-    #         "409":
-    #             description: Conflict, a constraint was violated
-    #     """
-    #     headers = {
-    #         'X-STATUS': 'EMPTY',
-    #         'X-MESSAGE': 'Data not Found'
-    #     }
-    #     return self.no_content(headers=headers)
+    async def patch(self):
+        """
+        PATCH Method.
+        description: updating partially info about a Datasource
+        tags:
+        - Datasource
+        - datasources
+        - Database connections
+        consumes:
+        - application/merge-patch+json
+        produces:
+        - application/json
+        responses:
+            "200":
+                description: Existing Datasource was updated.
+            "201":
+                description: New Datasource was inserted
+            "304":
+                description: Datasource not modified, its currently the actual version
+            "403":
+                description: Forbidden Call
+            "404":
+                description: No Data was found
+            "406":
+                description: Query Error
+            "409":
+                description: Conflict, a constraint was violated
+        """
+        raise NotImplementedError(
+            f"Datasource patch method is not implemented Yet."
+        )

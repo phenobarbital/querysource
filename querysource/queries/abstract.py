@@ -3,7 +3,7 @@
 Base Class for all Query-objects in QuerySource.
 """
 import asyncio
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Union, Optional
 from collections.abc import Callable
 import time
@@ -11,29 +11,29 @@ from datetime import datetime
 import traceback
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from importlib import import_module
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
-from asyncdb.exceptions import DriverError, ProviderError
+from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
-from navigator_session.storages import SessionData
+from navigator_session import SessionData
 from aiohttp import web
 from navconfig.logging import logging
 from ..libs.encoders import DefaultEncoder
 from ..conf import (
     SEMAPHORE_LIMIT,
     QUERYSET_REDIS,
-    DEFAULT_QUERY_TIMEOUT
+    DEFAULT_QUERY_TIMEOUT,
+    DEFAULT_QUERY_FORMAT
 )
 from ..exceptions import (
     QueryException,
     CacheException,
     DataNotFound
 )
-from ..connections import DATASOURCES
+from ..interfaces.connections import Connection
 from ..events import LogEvent
 from .outputs import OutputFactory
-from .models import Query, QueryResult, supported_drivers
+from .models import Query, QueryResult
 from ..utils.events import enable_uvloop
 
 
@@ -44,7 +44,7 @@ vs.setLevel(logging.WARNING)
 matlog = logging.getLogger('matplotlib')
 matlog.setLevel(logging.WARNING)
 
-class BaseQuery(ABC):
+class BaseQuery(Connection):
 
     post_cache: Callable = None
     _timeout: int = 3600
@@ -56,23 +56,39 @@ class BaseQuery(ABC):
             slug: str = None,
             conditions: dict = None,
             request: web.Request = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None,
             **kwargs
     ):
         """
         Initialize the Query Object
         """
         enable_uvloop()
+        __name__ = type(self).__name__
+        self._logger = logging.getLogger(f'QS.{__name__}')
         self.slug = slug
+        # trying to configure the asyncio loop
+        if loop:
+            self._loop = loop
+        else:
+            try:
+                self._loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self._logger.warning(
+                    "Couldn't get event loop for current thread. Creating a new event loop"
+                )
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+        Connection.__init__(self, loop=self._loop, **kwargs)
         self._result: Union[dict, list] = None
         self._output_format: OutputFactory = None
         try:
-            self._program = conditions['program']
-        except (TypeError, KeyError):
-            self._program: str = 'public'  # TODO: changing to public schema.
+            self._program = conditions.get('program', 'public')
+        except (TypeError, AttributeError):
+            self._program: str = 'public'
+        # default Provider:
         try:
-            self._provider = conditions['provider']
-            del conditions['provider']
-        except (TypeError, KeyError):
+            self._provider = conditions.pop('provider', 'db')
+        except (TypeError, AttributeError):
             self._provider: str = 'db'
         # defining conditions
         self._conditions = conditions if conditions else {}
@@ -80,39 +96,32 @@ class BaseQuery(ABC):
         self._request = request
         self._generated: Union[int, datetime] = None
         self._starttime: Union[int, datetime] = self.epoch_time()
-        self._logger = logging.getLogger('QuerySource')
         ## set the Output factory for Query:
-        try:
-            self.output_format(kwargs['output_format'])
-            del kwargs['output_format']
-        except KeyError:
-            self.output_format('native')
+        frm = kwargs.pop('output_format', DEFAULT_QUERY_FORMAT)
+        self.output_format(frm)
+        # Any other keyword arguments be passed to Provider.
         self.kwargs = kwargs
-        # trying to configure the asyncio loop
-        try:
-            if 'loop' in kwargs:
-                self._loop = kwargs['loop']
-                del kwargs['loop']
-            else:
-                self._loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._logger.error(
-                "Couldn't get event loop for current thread. Creating a new event loop"
-            )
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
         # configuring the encoder:
         self._encoder = DefaultEncoder()
         ## default executor:
-        self._executor = ThreadPoolExecutor(max_workers=4)
+        self._executor = ThreadPoolExecutor(max_workers=10)
+
+    def get_event_loop(self) -> asyncio.AbstractEventLoop:
+        if not self._loop:
+            return asyncio.get_running_loop()
+        return self._loop
 
     async def output(self, result, error):
         # return result in default format
         self._result = result
         return [result, error]
 
-    def output_format(self, frmt: str = 'native', *args, **kwargs):  # pylint: disable=W1113
-        self._output_format = OutputFactory(self, frmt=frmt, *args, **kwargs)
+    def output_format(self, frmt: str = 'native', **kwargs):  # pylint: disable=W1113
+        self._output_format = OutputFactory(
+            self,
+            frmt=frmt,
+            **kwargs
+        )
 
     @property
     def provider(self):
@@ -244,56 +253,6 @@ class BaseQuery(ABC):
             raise
         finally:
             loop.close()
-
-    #### Datasources and drivers:
-    async def get_datasource(self, datasource: str) -> Any:
-        try:
-            source = DATASOURCES[datasource]
-        except KeyError:
-            return None
-        if source.driver_type == 'asyncdb':
-            ### making an AsyncDB connection:
-            driver = source.driver
-            try:
-                return AsyncDB(driver, dsn=source.dsn, params=source.params())
-            except (DriverError, ProviderError) as ex:
-                raise QueryException(
-                    f"Error creating AsyncDB instance: {ex}"
-                ) from ex
-        else:
-            raise DriverError(
-                f'Invalid Datasource type {source.driver_type} for {datasource}'
-            )
-
-    async def default_driver(self, driver: str) -> Any:
-        if not supported_drivers(None, driver=driver):
-            raise TypeError(
-                f"QS: Invalid Database Driver: {driver}"
-            )
-        clspath = f'querysource.datasources.drivers.{driver}'
-        default = None
-        try:
-            cls = import_module(clspath)
-            clsname = f'{driver}_default'
-            default = getattr(cls, clsname)
-        except (AttributeError, ImportError) as ex:
-            # No module for driver exists.
-            raise RuntimeError(
-                f"QS: There is no default connection for Driver {driver}: {ex}"
-            ) from ex
-        ### creating a connector for this driver:
-        if default.driver_type == 'asyncdb':
-            try:
-                return AsyncDB(
-                    driver,
-                    dsn=default.dsn,
-                    params=default.params(),
-                    loop=self._loop
-                )
-            except (DriverError, ProviderError) as ex:
-                raise QueryException(
-                    f"Error creating AsyncDB instance: {ex}"
-                ) from ex
 
     #### Caching facilities
     def save_cache(self, checksum, result, **kwargs):

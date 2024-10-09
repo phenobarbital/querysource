@@ -1,10 +1,14 @@
 # Import Config Class
 import sys
 import os
+from pathlib import Path
 from navconfig import BASE_DIR, config
+from navconfig.logging import logging
 
 
 ### Matplotlib Configuration
+logging.getLogger(name='matplotlib').setLevel(logging.WARNING)
+logging.getLogger(name='matplotlib.font_manager').setLevel(logging.ERROR)
 mpldir = config.get('MPLCONFIGDIR', fallback=BASE_DIR.joinpath('templates'))
 os.environ['MPLCONFIGDIR'] = str(mpldir)
 
@@ -63,6 +67,10 @@ CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')
 CACHE_PORT = config.get('CACHE_PORT', fallback=6379)
 CACHE_DB = config.get('CACHE_DB', fallback=0)
 CACHE_URL = f"redis://{CACHE_HOST}:{CACHE_PORT!s}/{CACHE_DB}"
+DEFAULT_SLUG_CACHE_TTL = config.getint(
+    'DEFAULT_SLUG_CACHE_TTL',
+    fallback=3600
+)
 
 ## Redis as Database:
 REDIS_HOST = config.get('REDIS_HOST', fallback='localhost')
@@ -76,8 +84,13 @@ QUERYSET_REDIS = f"redis://{REDIS_HOST}:{REDIS_PORT}/{QUERYSET_DB}"
 DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
 
 ### Memcache
-MEMCACHE_HOST = config.get('MEMCACHE_HOST', 'localhost')
-MEMCACHE_PORT = config.get('MEMCACHE_PORT', 11211)
+MEMCACHE_DRIVER = config.get('MEMCACHE_DRIVER', fallback='memcache')
+MEMCACHE_HOST = config.get('MEMCACHE_HOST', fallback='localhost')
+MEMCACHE_PORT = config.getint('MEMCACHE_PORT', fallback=11211)
+MEMCACHE_SERVICE = {
+    'host': MEMCACHE_HOST,
+    'port': MEMCACHE_PORT,
+}
 
 ### Redash System
 REDASH_HOST = config.get('REDASH_HOST')
@@ -146,6 +159,14 @@ CASSANDRA_USER = config.get('CASSANDRA_USER')
 CASSANDRA_PWD = config.get('CASSANDRA_PWD')
 CASSANDRA_DATABASE = config.get('CASSANDRA_DATABASE')
 
+## SCYLLADB
+SCYLLA_DRIVER = config.get('SCYLLA_DRIVER', fallback='scylladb')
+SCYLLA_HOST = config.get('SCYLLA_HOST', fallback='127.0.0.1')
+SCYLLA_PORT = config.get('SCYLLA_PORT', fallback='9042')
+SCYLLA_USER = config.get('SCYLLA_USER')
+SCYLLA_PWD = config.get('SCYLLA_PWD')
+SCYLLA_DATABASE = config.get('SCYLLA_DATABASE')
+
 ## INFLUXDB
 INFLUX_DRIVER = config.get('INFLUX_DRIVER', fallback='influx')
 INFLUX_HOST = config.get('INFLUX_HOST', fallback='127.0.0.1')
@@ -155,6 +176,16 @@ INFLUX_PWD = config.get('INFLUX_PWD')
 INFLUX_DATABASE = config.get('INFLUX_DATABASE')
 INFLUX_ORG = config.get('INFLUX_ORG', fallback='navigator')
 INFLUX_TOKEN = config.get('INFLUX_TOKEN')
+INFLUX_LOGGING = config.get('INFLUX_LOGGING', fallback='navigator_logs')
+
+# BigQuery Service:
+bq_file = config.get('BIGQUERY_CREDENTIALS', fallback='env/bigquery.json')
+bq_file = Path(bq_file).resolve()
+BIGQUERY_CREDENTIALS = config.get('BIGQUERY_CREDENTIALS', fallback=bq_file)
+if isinstance(BIGQUERY_CREDENTIALS, str):
+    BIGQUERY_CREDENTIALS = Path(BIGQUERY_CREDENTIALS).resolve()
+
+BIGQUERY_PROJECT_ID = config.get('BIGQUERY_PROJECT_ID')
 
 # this is the backend for saving Query Execution
 ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')
@@ -170,21 +201,20 @@ QS_EVENT_CREDENTIALS = {
 }
 
 # RETHINKDB
-rt_driver = config.get('RT_DRIVER', fallback='rethink')
-rt_host = config.get('RT_HOST', fallback='localhost')
-rt_port = config.get('RT_PORT', fallback=28015)
-rt_database = config.get('RT_DATABASE', fallback='navigator')
-rt_user = config.get('RT_USER')
-rt_password = config.get('RT_PWD')
+RT_DRIVER = config.get('RT_DRIVER', fallback='rethink')
+RT_HOST = config.get('RT_HOST', fallback='localhost')
+RT_PORT = config.get('RT_PORT', fallback=28015)
+RT_DATABASE = config.get('RT_DATABASE', fallback='navigator')
+RT_USER = config.get('RT_USER', fallback=None)
+RT_PASSWORD = config.get('RT_PWD', fallback=None)
 
 # MongoDB
-mongo_driver = config.get('MONGO_DRIVER', fallback='mongo')
-mongo_host = config.get('MONGO_HOST', fallback='localhost')
-mongo_port = config.get('MONGO_PORT', fallback=27017)
-mongo_database = config.get('MONGO_DATABASE', fallback='navigator')
-mongo_user = config.get('MONGO_USER')
-mongo_password = config.get('MONGO_PWD')
-
+MONGO_DRIVER = config.get('MONGO_DRIVER', fallback='mongo')
+MONGO_HOST = config.get('MONGO_HOST', fallback='localhost')
+MONGO_PORT = config.get('MONGO_PORT', fallback=27017)
+MONGO_DATABASE = config.get('MONGO_DATABASE', fallback='navigator')
+MONGO_USER = config.get('MONGO_USER')
+MONGO_PASSWORD = config.get('MONGO_PWD')
 
 # Amazon AWS services:
 DEFAULT_AWS_REGION = config.get('DEFAULT_AWS_REGION', fallback='us-east-1')
@@ -205,6 +235,8 @@ ATHENA_SCHEMA = config.get('ATHENA_SCHEMA')
 JIRA_HOST = config.get('JIRA_HOST')
 JIRA_USERNAME = config.get('JIRA_USERNAME')
 JIRA_PASSWORD = config.get('JIRA_PASSWORD')
+JIRA_TOKEN = config.get('JIRA_TOKEN')
+JIRA_CERT = config.get('JIRA_CERT')
 
 # Google Analytics
 GOOGLE_SERVICE_FILE = config.get('GA_SERVICE_ACCOUNT_NAME', fallback="ga-api-a78f7d886a47.json")
@@ -220,6 +252,17 @@ SALESFORCE_DOMAIN = config.get('SALESFORCE_DOMAIN', fallback="test")
 SALESFORCE_USERNAME = config.get('SALESFORCE_USERNAME')
 SALESFORCE_PASSWORD = config.get('SALESFORCE_PASSWORD')
 
+## ClickHouse:
+CLICKHOUSE_DRIVER = config.get('CLICKHOUSE_DRIVER', fallback='clickhouse')
+CLICKHOUSE_HOST = config.get('CLICKHOUSE_HOST', fallback='localhost')
+CLICKHOUSE_PORT = config.getint('CLICKHOUSE_PORT', fallback=9000)
+CLICKHOUSE_USER = config.get('CLICKHOUSE_USER')
+CLICKHOUSE_PASSWORD = config.get('CLICKHOUSE_PASSWORD')
+CLICKHOUSE_DATABASE = config.get('CLICKHOUSE_DATABASE', fallback='default')
+CLICKHOUSE_SECURE = config.getboolean('CLICKHOUSE_SECURE', fallback=False)
+CLICKHOUSE_CLIENT_NAME = config.get('CLICKHOUSE_CLIENT_NAME', fallback='Navigator')
+
+
 ## Export Options (Output):
 CSV_DEFAULT_DELIMITER = config.get('CSV_DEFAULT_DELIMITER', fallback=',')
 CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
@@ -229,9 +272,16 @@ QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
 ## QuerySource Query Timeout:
-DEFAULT_QUERY_TIMEOUT = config.get('DEFAULT_QUERY_TIMEOUT', fallback=600)
+DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
+DEFAULT_QUERY_FORMAT = config.get(
+    'DEFAULT_QUERY_FORMAT',
+    fallback='native'
+)
+
+## Geoloc Support:
+GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
 
 try:
-    from settings.settings import *  # pylint: disable=W0614,W0401
+    from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:
     pass

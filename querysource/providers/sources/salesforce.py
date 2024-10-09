@@ -150,6 +150,7 @@ class salesforce(restSource):
         self._args = {}
         self.url = f"{self.instance}/{self.report_id}?isdtp=p1&export=1&enc=UTF-8&xf=csv"
         self.accept = 'text/csv'
+        # self.accept = 'application/json'
         try:
             self._result = await self.query()
             return self._result
@@ -255,7 +256,9 @@ class salesforce(restSource):
                 )
                 if self.type == 'report':
                     result = pd.read_csv(
-                        StringIO(result)
+                        StringIO(result),
+                        sep=',',
+                        low_memory=False
                     )
                 if isinstance(error, bs):
                     raise DataNotFound(
@@ -276,7 +279,6 @@ class salesforce(restSource):
             except QueryException:
                 raise
             except Exception as err:
-                print(err)
                 raise QueryException(
                     f"Uncaught Error on HTTP: {err}"
                 ) from err

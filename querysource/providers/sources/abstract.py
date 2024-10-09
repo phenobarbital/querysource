@@ -33,19 +33,19 @@ class baseSource(ABC):
     __parser__ = None
 
     def __init__(
-            self,
-            *args: P.args,
-            slug: str = None,
-            query: Any = None,
-            qstype: str = '', # migrate to Enum
-            definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
-            conditions: dict = None,
-            request: web.Request = None,
-            loop: asyncio.AbstractEventLoop = None,
-            **kwargs: P.kwargs
-        ) -> None:
-        self.logger = logging.getLogger('QS.Source')
-        self._definition = definition # definition Object
+        self,
+        *args: P.args,
+        slug: str = None,
+        query: Any = None,
+        qstype: str = '',  # migrate to Enum
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
+        conditions: dict = None,
+        request: web.Request = None,
+        loop: asyncio.AbstractEventLoop = None,
+        **kwargs: P.kwargs
+    ) -> None:
+        self.logger = logging.getLogger(f'QS.Source.{__name__}')
+        self._definition = definition  # definition Object
         self._conditions: dict = copy.deepcopy(conditions)
         if not conditions:
             self._conditions = {}
@@ -55,34 +55,30 @@ class baseSource(ABC):
         self._slug: str = slug
         self._type: str = qstype
         if self._slug:
-            self._query = definition.query_raw
-        else: # is a raw query
+            try:
+                self._query = definition.query_raw
+            except AttributeError:
+                self._query = None
+        else:  # is a raw query
             self._query: str = query
         # origin:
         self._origin = query
         if hasattr(self, 'method'):
             self.method = self.method.lower()
         else:
-            try:
-                self.method = kwargs['method'].lower()
-                del kwargs['method']
-            except KeyError:
-                self.method = 'get'
+            self.method = kwargs.pop('method', 'get')
         # Event Loop.
         if loop:
             self._loop = loop
         else:
             self._loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(self._loop)
+        # asyncio.set_event_loop(self._loop)
         ## Timeout:
         try:
-            if 'timeout' in kwargs:
-                self.timeout = kwargs['timeout']
-                del kwargs['timeout']
-            elif 'timeout' in definition.params:
-                self.timeout = definition.params['timeout']
-        except (ValueError, AttributeError, KeyError):
-            pass
+            ts = definition.params.get('timeout', 60)
+        except AttributeError:
+            ts = 60
+        self.timeout = kwargs.pop('timeout', ts)
         self.args = args
         self.kwargs = kwargs
         self._encoder = DefaultEncoder()
@@ -90,9 +86,11 @@ class baseSource(ABC):
         self._env = config
         self._parser: Callable = None
         if self.__parser__:
-            self.logger.debug(f"Loading Parser: {self.__parser__}")
+            self.logger.debug(
+                f"Loading Parser: {self.__parser__}"
+            )
             try:
-                self._parser = self.__parser__( # pylint: disable=E1102
+                self._parser = self.__parser__(  # pylint: disable=E1102
                     query=self._query,
                     definition=definition,
                     conditions=conditions

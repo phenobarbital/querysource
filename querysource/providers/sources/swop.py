@@ -23,7 +23,6 @@ class swop(graphqlSource):
             request=request,
             **kwargs
         )
-
         try:
             self.amount = self._conditions['amount']
         except KeyError:
@@ -52,7 +51,6 @@ class swop(graphqlSource):
                 quote
             """
             self._query = self.gql.format(operation=self.operation, fields=self.fields)
-
 
     async def latest(self):
         try:

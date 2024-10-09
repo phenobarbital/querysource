@@ -1,3 +1,5 @@
+import sys
+import subprocess
 import asyncio
 from collections.abc import Callable
 from importlib import import_module
@@ -16,22 +18,19 @@ from .handlers import (
     QueryHandler,
     QueryExecutor,
     QueryManager,
-    VariablesService
+    VariablesService,
+    LoggingService
 )
-
 try:
     from settings.settings import QUERYSOURCE_FILTERS, QUERYSOURCE_VARIABLES
 except ImportError:
     QUERYSOURCE_FILTERS = {}
     QUERYSOURCE_VARIABLES = {}
 
-from .connections import PROVIDERS, QueryConnection
+from .interfaces.connections import PROVIDERS
+from .connections import QueryConnection
+from .parsers import QS_VARIABLES, QS_FILTERS
 
-## list of Variables:
-QS_VARIABLES = {}
-
-## Filter List:
-QS_FILTERS = {}
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -46,17 +45,14 @@ class QuerySource(metaclass=Singleton):
     - Hypertext-Queries: making queries directly in the URL.
     - GrapQL Provider (minimal support for making graphQL queries to different backends - using datasources -)
     """
+    jupyter_process = None
+
     def __init__(self, **kwargs):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:
                 return  # already configured.
-        if 'lazy' in kwargs:
-            self.lazy = kwargs['lazy']
-        else:
-            self.lazy: bool = False
-        self._loop: asyncio.AbstractEventLoop = None
-        if 'loop' in kwargs:
-            self._loop = kwargs['loop']
+        self.lazy: bool = kwargs.get('lazy', False)
+        self._loop: asyncio.AbstractEventLoop = kwargs.get('loop', asyncio.get_event_loop())
         ### Connection Object:
         self.connection = QueryConnection(loop=self._loop, lazy=self.lazy)
         ### Loading all providers when started:
@@ -111,15 +107,37 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_post('/api/v1/queries/run', ds.query)
         routes.append(r)
 
-        ### Query Manager ###
-        r = self.app.router.add_view('/api/v1/management/queries/{slug}', QueryManager)
+        ### Logging Service:
+        lg = LoggingService()
+        r = self.app.router.add_get('/api/v1/audit_log', lg.audit_log)
         routes.append(r)
-        r = self.app.router.add_view('/api/v1/management/queries{meta:\:?.*}', QueryManager)
+
+        ### Query Manager ###
+        r = self.app.router.add_view(
+            r'/api/v1/management/queries/{slug}', QueryManager
+        )
+        routes.append(r)
+        r = self.app.router.add_view(
+            r'/api/v1/management/queries{meta:\:?.*}', QueryManager
+        )
         routes.append(r)
 
         ## Multi-Query:
         mq = QueryHandler()
-        r = self.app.router.add_post('/api/v3/queries{meta:\:?.*}', mq.query)
+        r = self.app.router.add_post(
+            r'/api/v3/queries/{slug}{meta:\:?.*}',
+            mq.query
+        )
+        routes.append(r)
+        r = self.app.router.add_get(
+            r'/api/v3/queries/{slug}{meta:\:?.*}',
+            mq.query
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            r'/api/v3/queries{meta:\:?.*}',
+            mq.query
+        )
         routes.append(r)
 
         # querying directly to drivers
@@ -172,6 +190,9 @@ class QuerySource(metaclass=Singleton):
         self.app.on_startup.append(
             self.qs_start
         )
+        self.app.on_shutdown.append(
+            self.qs_stop
+        )
 
     def event_loop(self):
         return self._loop
@@ -192,3 +213,6 @@ class QuerySource(metaclass=Singleton):
     async def qs_start(self, app: WebApp) -> None:
         if not self._loop:
             self._loop = asyncio.get_event_loop()
+
+    async def qs_stop(self, app: WebApp) -> None:
+        pass

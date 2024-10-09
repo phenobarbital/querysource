@@ -25,7 +25,7 @@ class influxProvider(BaseProvider):
         query: Any = None,
         qstype: str = '',
         connection: Callable = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -44,7 +44,7 @@ class influxProvider(BaseProvider):
         self.is_raw = False
         if qstype == 'slug':
             if self._definition.is_raw is True:
-                self.is_raw = True # calling without passing the parser:
+                self.is_raw = True  # calling without passing the parser:
             else:
                 try:
                     if not self._parser.bucket:
@@ -57,8 +57,7 @@ class influxProvider(BaseProvider):
                         f"Exception InfluxDB: {err}"
                     ) from err
         elif qstype == 'raw':
-            self.is_raw = True # calling without passing the parser:
-
+            self.is_raw = True  # calling without passing the parser:
 
     def checksum(self):
         name = f'{self._slug}:{self._conditions!s}'
@@ -84,7 +83,7 @@ class influxProvider(BaseProvider):
         if self._connection:
             try:
                 self._columns = await self._parser.columns()
-            except Exception as err: # pylint: disable=W0703
+            except Exception as err:  # pylint: disable=W0703
                 print(
                     f"Empty Result: {err}"
                 )

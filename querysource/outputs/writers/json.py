@@ -1,4 +1,4 @@
-from io import BytesIO
+from io import BytesIO, StringIO
 import pandas as pd
 from aiohttp import web
 from .abstract import AbstractWriter
@@ -12,7 +12,8 @@ class jsonWriter(AbstractWriter):
 
     async def get_response(self) -> web.StreamResponse:
         if isinstance(self.data, pd.DataFrame):
-            buffer = BytesIO()
+            # buffer = BytesIO()
+            buffer = StringIO()
             self.data.to_json(buffer, orient='records')
             buffer.seek(0)
             data = buffer.getvalue()

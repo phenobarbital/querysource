@@ -7,7 +7,8 @@ from .sql import SQLParser
 
 
 class CQLParser(SQLParser):
-    _tablename = '{schema}.{table}'
+    _tablename: str = '{schema}.{table}'
+    schema_based: bool = True
 
     def set_cql(self, cql: str):
         self.query_raw = cql
@@ -24,12 +25,10 @@ class CQLParser(SQLParser):
         """
         cql = self.query_raw
         self.logger.debug(f":: RAW CQL: {cql}")
-        # self.logger.debug(f"FIELDS ARE {self.fields}")
-        # self.logger.debug(f'Conditions ARE: {self.filter}')
         cql = await self.process_fields(cql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
-        for _, func in self._query_filters.items():
+        for _, func in self.get_query_filters().items():
             fn, args = func
             func = partial(fn, args, where=self.filter, program=self.program_slug)
             result, ordering = await asyncio.get_event_loop().run_in_executor(
@@ -39,7 +38,7 @@ class CQLParser(SQLParser):
             if ordering:
                 self.ordering = self.ordering + ordering
         # add filtering conditions
-        cql = await self.filtering_options(cql)
+        cql = self.filtering_options(cql)
         # processing filter options
         cql = await self.filter_conditions(cql)
         # processing conditions

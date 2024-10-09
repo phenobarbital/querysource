@@ -7,4 +7,7 @@ class sqliteDriver(SQLDriver):
     password: str = Field(required=False, default=None, repr=False, is_secret=True)
     dsn_format: str = "{database}"
 
-sqlite_default = sqliteDriver(database=":memory:")
+try:
+    sqlite_default = sqliteDriver(database=":memory:")
+except ValueError:
+    sqlite_default = None

@@ -78,7 +78,7 @@ class QueryManager(QueryView):
             query_slug = params['slug']
             try:
                 query_slug, meta = query_slug.split(':')
-            except (TypeError, AttributeError):
+            except (TypeError, AttributeError, ValueError):
                 pass
         except KeyError:
             query_slug = None
@@ -336,6 +336,7 @@ class QueryManager(QueryView):
                 except NoDataFound:
                     result = await qry.insert()
                     st = 201
+                # Saving Slug in redis cache:
                 return self.json_response(result, status=st)
         except Exception as err:
             print('ERROR ', err)

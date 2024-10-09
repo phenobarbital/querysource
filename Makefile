@@ -1,17 +1,30 @@
 venv:
-	python3.10 -m venv .venv
+	python3.12 -m venv .venv
 	echo 'run `source .venv/bin/activate` to start develop QuerySource'
 
-develop:
-	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
-	pip install navigator-session==0.5.1
-	pip install --upgrade navigator-auth
-	pip install --upgrade navigator-api
+install:
+	# pip install --upgrade git+https://github.com/GrocerCheck/LivePopularTimes
+	pip install --upgrade asyncdb[default]
+	pip install --upgrade navigator-session
+	pip install --upgrade navigator-auth[uvloop]
+	pip install --upgrade navigator-api[uvloop,locale]
 	pip install -e .
+	echo 'start using QuerySource'
+
+jupyter:
+	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
 	python -m pip install -Ur docs/requirements-dev.txt
+	pip install --upgrade asyncdb[all]
+	pip install --upgrade navigator-session
+	pip install --upgrade navigator-auth[uvloop]
+	pip install --upgrade navigator-api[uvloop,locale]
+	pip install elyra[all]==3.15.0
+	pip install jupyterlab-code-snippets
+	pip install -e .[jupyter]
 	echo 'start develop QuerySource'
 
 setup:
+	pip install -e .[analytics]
 	python -m pip install -Ur docs/requirements-dev.txt
 
 dev:

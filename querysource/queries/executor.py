@@ -28,11 +28,12 @@ class Executor(BaseQuery):
         state = None
         started = self.start_timing(self._query.retrieved)
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
+            _, db = await self.datasource(datasource)
+            drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:
             try:
-                db = await self.default_driver(driver)
+                drv_type, db = await self.default_driver(driver)
                 async with await db.connection() as conn:
                     state = f'Connected: {conn.is_connected()}'
             except (RuntimeError, QueryException) as ex:
@@ -74,12 +75,13 @@ class Executor(BaseQuery):
         state = None
         result = []
         started = self.start_timing(self._query.retrieved)
+        driver = 'default'
         if datasource := self._query.datasource:
-            db = await self.get_datasource(datasource)
-            driver = 'default'
+            _, db = await self.datasource(datasource)
+            drv_type = 'asyncdb'
         elif driver := self._query.driver:
             ## using a default driver:
-            db = await self.default_driver(driver)
+            drv_type, db = await self.default_driver(driver)
         else:
             raise QueryError(
                 message=f'QS: Invalid Query Type {self._query!s}',
@@ -92,22 +94,33 @@ class Executor(BaseQuery):
             )
         try:
             error = None
-            async with await db.connection() as conn:
-                state = f'Connected: {conn.is_connected()}'
-                conn.output_format('iterable')
-                try:
-                    kwargs = self._query.parameters
-                    if not kwargs:
-                        kwargs = {}
-                    # TODO: add support for selecting returning options
-                    if driver == 'influx':
-                        result, error = await db.query(self._query.query, frmt='recordset', **kwargs)
-                    else:
-                        result, error = await db.query(self._query.query, **kwargs)
-                except (TypeError, ValueError):
-                    result = await db.query(self._query.query)
-                if error:
-                    state = f'With Errors: {error}'
+            if drv_type == 'asyncdb':
+                async with await db.connection() as conn:
+                    state = f'Connected: {conn.is_connected()}'
+                    conn.output_format('iterable')
+                    try:
+                        kwargs = self._query.parameters
+                        if not kwargs:
+                            kwargs = {}
+                        # TODO: add support for selecting returning options
+                        if driver == 'influx':
+                            result, error = await db.query(
+                                self._query.query,
+                                frmt='recordset',
+                                **kwargs
+                            )
+                        else:
+                            result, error = await db.query(
+                                self._query.query,
+                                **kwargs
+                            )
+                    except (TypeError, ValueError):
+                        result = await db.query(self._query.query)
+                    if error:
+                        state = f'With Errors: {error}'
+            elif drv_type == 'external':
+                ## query DB external object.
+                pass
         except (RuntimeError, QueryException) as ex:
             raise QueryError(
                 message=str(ex),
@@ -116,7 +129,13 @@ class Executor(BaseQuery):
         # finish: calculate duration and return result:
         duration = (self.generated_at(started).total_seconds() / 1000)
         try:
-            obj = self.get_result(self._query, data=result, duration=duration, errors=error, state=state)
+            obj = self.get_result(
+                self._query,
+                data=result,
+                duration=duration,
+                errors=error,
+                state=state
+            )
             return obj
         except TypeError as ex:
             raise QueryError(

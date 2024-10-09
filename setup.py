@@ -50,6 +50,30 @@ COMPILE_ARGS = ["-O2"]
 
 extensions = [
     Extension(
+        name='querysource.types.mapping',
+        sources=['querysource/types/mapping.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.abstract',
+        sources=['querysource/parsers/abstract.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.parser',
+        sources=['querysource/parsers/parser.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.sql',
+        sources=['querysource/parsers/sql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.exceptions',
         sources=['querysource/exceptions.pyx'],
         extra_compile_args=COMPILE_ARGS,
@@ -116,53 +140,109 @@ setup(
     ],
     author='Jesus Lara',
     author_email='jesuslarag@gmail.com',
-    packages=find_packages(exclude=['contrib', 'docs', 'tests', 'plugins', 'examples', 'samples', 'settings']),
+    packages=find_packages(
+        exclude=[
+            'contrib',
+            'google',
+            'docs',
+            'plugins',
+            'lab',
+            'examples',
+            'samples',
+            'settings',
+            'etc',
+            'bin',
+            'build'
+        ]
+    ),
     include_package_data=True,
     package_data={"querysource": ["py.typed"]},
     license=__license__,
     license_files='LICENSE',
     setup_requires=[
-        "wheel==0.42.0",
-        "Cython==3.0.6",
-        "asyncio==3.4.3",
+        'setuptools==67.6.1',
+        'Cython==3.0.11',
+        'wheel==0.44.0'
     ],
     install_requires=[
-        "aiodns==3.0.0",
         'LivePopularTimes==1.3',
         'hubspot-api-client==9.0.0',
+        'httpx>=0.25.0,<=0.27.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.16.2',
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
-        'aiocsv==1.2.4',
+        'aiocsv==1.3.2',
         'lxml==4.9.3',
-        'xlsxwriter==3.1.2',
+        'xlsxwriter==3.2.0',
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
-        'pandas_bokeh==0.5.5',
-        'plotly==5.15.0',
-        'sweetviz==2.1.4',
-        'pygal==3.0.0',
         'reportlab==4.1.0',
-        'WeasyPrint==58.1',
+        'WeasyPrint==61.2',
         'APScheduler==3.10.4',
-        'scikit-learn==1.2.2',
-        'elasticsearch-async==6.2.0',
-        'seaborn==0.13.0',
         'bs4==0.0.1',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.9',
         'sqlalchemy==2.0.23',
-        # 'great_expectations==0.15.48',
-        # 'ydata-profiling==4.6.3'
-        'proxylists>=0.12.3',
-        'async-notify>=1.2.1',
-        'navconfig[default]>=1.5.0',
-        'asyncdb[default]>=2.6.0',
-        'navigator-session>=0.5.2',
+        # Selenium Support:
+        'selenium==4.24.0',
+        'snapshot-selenium==0.0.2',
+        'webdriver-manager==4.0.2',
+        # NAV libraries:
+        # 'asyncdb[all]>=2.8.1',
+        'proxylists>=0.12.5',
+        'async-notify>=1.3.1',
+        'navconfig[default]>=1.7.2',
+        'jsonschema==4.22.0',
+        # Jinja2 extensions:
+        "jinja2-iso8601==1.0.0",
+        "jinja2-time==0.2.0",
+        "jinja2-humanize-extension==0.4.0",
+        'statsmodels==0.14.2',
+        'pmdarima==2.0.4',
+        'scikit-learn==1.5.1',
+        'pygal==3.0.0',
+        'pandas_bokeh==0.5.5',
+        'plotly==5.22.0',
+        'seaborn==0.13.2',
+        'matplotlib==3.9.2',
+        'prompt_toolkit==3.0.47',
+        'folium==0.17.0',
+        "geopandas==1.0.1",
+        "contextily==1.6.2",
+        "jenkspy==0.4.1"
     ],
+    extras_require={
+        "analytics": [
+            "great_expectations>=0.18.21",
+            "pygwalker>=0.4.8.9",
+            "ydata-profiling>=4.8.3",
+            "sweetviz==2.3.1",
+            "pandas-eda>=1.2.0",
+            'scpy==1.1.4',
+            'keras-cv==0.9.0',
+            'keras==3.4.1',
+            'tiktoken==0.6.0',
+            'yfinance==0.2.40',
+            'safetensors==0.4.2',
+            'selenium==4.18.1',
+            'sentence-transformers==2.6.1',
+            'tensorflow==2.17.0',
+            'spacy==3.7.6',
+            'pydqc==0.1.0',
+            'prophet==1.1.5',
+            'dtale==3.13.1',
+            'lux-api==0.5.1',
+            'pomegranate==1.1.0',
+            'autoviz==0.1.905'
+        ],
+        "ia": [
+            "spacy[transformers,lookups]==3.8.2",
+            "spacy-llm==0.7.2",
+        ]
+    },
     tests_require=[
         'pytest>=5.4.0',
         'coverage',
@@ -171,6 +251,7 @@ setup(
         'pytest-assume'
     ],
     ext_modules=cythonize(extensions),
+    zip_safe=False,
     entry_points={
         'console_scripts': [
             'query = querysource.__cli__:main',
@@ -178,6 +259,8 @@ setup(
     },
     project_urls={  # Optional
         'Source': 'https://github.com/phenobarbital/querysource/',
+        'Tracker': 'https://github.com/phenobarbital/querysource/issues',
+        'Documentation': 'https://querysource.readthedocs.io/en/latest/',
         'Funding': 'https://paypal.me/phenobarbital',
         'Say Thanks!': 'https://saythanks.io/to/phenobarbital',
     },

@@ -28,3 +28,14 @@ class arangodbDriver(NoSQLDriver):
             "username": self.username,
             "password": self.password,
         }
+
+
+try:
+    arangodb_default = arangodbDriver(
+        host='localhost',
+        port=8529,
+        username='root',
+        password='password'
+    )
+except Exception:
+    arangodb_default = None

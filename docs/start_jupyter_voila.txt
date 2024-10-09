@@ -1,0 +1,46 @@
+# Install:
+
+pip install querysource[jupyter]
+
+# Install jupyter_http_over_ws
+pip install jupyter_http_over_ws
+
+# Enable the extension
+jupyter server extension enable --py jupyter_http_over_ws
+
+jupyter labextension install @jupyter-widgets/jupyterlab-manager
+jupyter labextension install plotlywidget
+jupyter labextension install @jupyterlab/plotly-extension
+jupyter labextension install jupyterlab_bokeh
+jupyter labextension install qgrid
+jupyter labextension install @finos/perspective-jupyterlab
+jupyter labextension install ipysheet
+jupyter labextension install lineup_widget
+
+jupyter server extension enable elyra
+
+Token=07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a
+
+# Starting jupyter Server:
+
+jupyter notebook --config=/home/jesuslara/proyectos/parallel/querysource/.jupyter/jupyter_notebook_config.py --no-browser --NotebookApp.allow_origin='https://colab.research.google.com' --port=8888 --NotebookApp.port_retries=0  --NotebookApp.token='07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a'
+
+# Starting Voila Service:
+voila /home/jesuslara/proyectos/parallel/querysource/lab/ --no-browser --port=8866
+
+# Calling a Report from Voila:
+http://localhost:8866/voila/render/test.ipynb?
+
+
+## Connecting to Google Colab:
+http://127.0.0.1:8888/tree?token=07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a
+
+
+# New Notebook on Google Colab:
+on Google Colab:
+https://colab.research.google.com
+
+On Connect (right upper button) Select:
+   Connect to local runtime…. Enter the URL from the previous step in the dialog that appears and click the Connect button
+
+URL: http://127.0.0.1:8888?token=07aca163617f24031752aa53c01087b1b0cbb97ea5e6a32a

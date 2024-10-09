@@ -21,7 +21,7 @@ class restProvider(httpProvider):
         query: Any = None,
         qstype: str = '',
         connection: Any = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -81,7 +81,6 @@ class restProvider(httpProvider):
                 definition=self._definition,
                 conditions=self._conditions,
                 request=self._request,
-                # loop=self._loop,
                 **self.kwargs
             )
         except Exception as err:
@@ -89,16 +88,13 @@ class restProvider(httpProvider):
                 f'Exception calling {self.dialect}, error: {str(err)}'
             ) from err
 
-    async def result(self): # pylint: disable=W0236
+    async def result(self):  # pylint: disable=W0236
         """result.
            get the result from the Source REST.
         """
         # preparing any connection (if needed)
         result = None
-        try:
-            attr = self.kwargs['attribute']
-        except KeyError:
-            attr = 'query'
+        attr = self.kwargs.get('attribute', 'query')
         try:
             query = getattr(self._source, attr)
         except AttributeError as ex:

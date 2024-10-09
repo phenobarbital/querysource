@@ -40,7 +40,7 @@ class QueryExecutor(AbstractHandler):
         try:
             query = Executor(request=request)
         except Exception as ex:
-            print(ex)
+            print(f'Error Loading Executor : {ex}')
             raise
         query.start(data)
         return query

@@ -1,33 +1,24 @@
-from collections.abc import Callable
 import iso8601
 from rethinkdb.errors import (
     ReqlDriverError,
     ReqlRuntimeError,
     # ReqlNonExistenceError
 )
-from ..models import QueryObject
-from ..providers import BaseProvider
 from ..exceptions import (
     ParserError,
     EmptySentence
 )
-from .abstract import QueryParser
+from .parser import QueryParser
 
 
 class RethinkParser(QueryParser):
     def __init__(
         self,
-        query: str = None,
-        options: BaseProvider = None,
-        connection: Callable = None,
-        conditions: QueryObject = None,
+        *args,
         **kwargs
     ):
         super(RethinkParser, self).__init__(
-            query=query,
-            options=options,
-            conditions=conditions,
-            connection=connection,
+            *args,
             **kwargs
         )
         self._join_field = None
@@ -252,7 +243,7 @@ class RethinkParser(QueryParser):
             exp = None
             _filter = {}
             for key, value in scalar_fields.items():
-                #TODO: add field_definition to know escape characters or other conditions
+                #  TODO: add field_definition to know escape characters or other conditions
                 if key in self.cond_definition:
                     _type = self.cond_definition[key]
                     if _type == 'date':
@@ -264,7 +255,7 @@ class RethinkParser(QueryParser):
                         # exp = exp.and_(row.eq(dval))
                         _filter[key] = dval
                     else:
-                        #TODO: cover other conversions of data
+                        #  TODO: cover other conversions of data
                         # row = self._engine.row[key]
                         # exp = exp.and_(row.eq(value))
                         _filter[key] = value
@@ -274,7 +265,7 @@ class RethinkParser(QueryParser):
                     _filter[key] = value
                 # simplify exact matches
             query = query.filter(_filter)
-            #query options
+            #  query options
             if self.qry_options:
                 exp = self.query_options(self._engine.expr(True))
             # add search criteria

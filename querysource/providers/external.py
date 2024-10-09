@@ -26,7 +26,7 @@ class externalProvider(BaseProvider, ABC):
         query: Any = None,
         qstype: str = '',
         connection: Callable = None,
-        definition: Union[QueryModel, dict] = None, # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -37,10 +37,10 @@ class externalProvider(BaseProvider, ABC):
         self._parser_args: list = []
         if qstype == 'slug':
             if self._definition.is_raw is True:
-                self.is_raw = True # calling without passing the parser:
+                self.is_raw = True  # calling without passing the parser:
             self._query = self._definition.query_raw
         elif qstype == 'raw':
-            self.is_raw = True # calling without passing the parser:
+            self.is_raw = True  # calling without passing the parser:
             self._query = self.raw_query(self._query)
         elif qstype == 'query':
             try:
@@ -98,7 +98,7 @@ class externalProvider(BaseProvider, ABC):
         if self._connection:
             try:
                 self._columns = await self._parser.columns()
-            except Exception as err: # pylint: disable=W0703
+            except Exception as err:  # pylint: disable=W0703
                 print(
                     f"Empty Result: {err}"
                 )

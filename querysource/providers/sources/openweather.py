@@ -12,14 +12,19 @@ class openweather(restSource):
     units: str = 'metric'
     days: int = 5
 
-    def __init__(
-        self,
-        definition: dict = None,
-        conditions: dict = None,
-        request: Any = None,
-        **kwargs
-    ):
-        super(openweather, self).__init__(definition, conditions, request, **kwargs)
+    def __post_init__(
+            self,
+            definition: dict = None,
+            conditions: dict = None,
+            request: Any = None,
+            **kwargs
+    ) -> None:
+        super(openweather, self).__post_init__(
+            definition=definition,
+            conditions=conditions,
+            request=request,
+            **kwargs
+        )
 
         self._conditions = conditions
 

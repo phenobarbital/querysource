@@ -30,7 +30,7 @@ downloads/
 eggs/
 .eggs/
 etc/
-google/
+google/*.json
 great_expetations/
 #lib/
 lib64/
@@ -246,8 +246,6 @@ querysource/utils/functions.cpp
 
 
 ### Temp ignoring tests and examples
-tests/
-examples/
 great_expectations/
 querysource/handlers/variables.py
 resources/
