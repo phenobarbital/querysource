@@ -1,5 +1,6 @@
 """Driver for pg (asyncPG) database connections.
 """
+from dataclasses import InitVar
 from datamodel import Column
 from ...conf import (
     # postgres read-only
@@ -16,11 +17,41 @@ from .abstract import SQLDriver
 class pgDriver(SQLDriver):
     driver: str = 'pg'
     name: str = 'PostgreSQL (using asyncpg)'
+    user: str = Column(required=True)
+    username: InitVar
+    hostname: InitVar
     dsn_format: str = Column(
-        default="postgres://{username}:{password}@{host}:{port}/{database}",
+        default="postgres://{user}:{password}@{host}:{port}/{database}",
         repr=False
     )
     port: int = Column(required=True, default=5432)
+
+    def __post_init__(
+        self,
+        username: str = None,
+        hostname: str = None,
+        *args,
+        **kwargs
+    ):  # pylint: disable=W0613,W0221
+        if hostname:
+            self.host = hostname
+        if username:
+            self.user = username
+        super().__post_init__(username, *args, **kwargs)
+
+    def params(self) -> dict:
+        """params
+
+        Returns:
+            dict: params required for AsyncDB.
+        """
+        return {
+            "host": self.host,
+            "port": self.port,
+            "username": self.user,
+            "password": self.password,
+            "database": self.database
+        }
 
 try:
     pg_default = pgDriver(
@@ -28,7 +59,7 @@ try:
         host=PG_HOST,
         port=PG_PORT,
         database=PG_DATABASE,
-        username=PG_USER,
+        user=PG_USER,
         password=PG_PWD
     )
 except ValueError:

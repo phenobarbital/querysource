@@ -1,6 +1,5 @@
 """Driver for pg (asyncPG) database connections.
 """
-from datamodel import Column
 from ...conf import (
     # postgres read-only
     asyncpg_url,
@@ -10,13 +9,11 @@ from ...conf import (
     PG_PWD,
     PG_DATABASE
 )
-from .abstract import SQLDriver
+from .pg import pgDriver
 
-class postgresDriver(SQLDriver):
+class postgresDriver(pgDriver):
     driver: str = 'postgres'
     name: str = 'postgres'
-    dsn_format: str = "postgres://{username}:{password}@{host}:{port}/{database}"
-    port: int = Column(required=True, default=5432)
     defaults: str = asyncpg_url
 
 try:
@@ -25,7 +22,7 @@ try:
         host=PG_HOST,
         port=PG_PORT,
         database=PG_DATABASE,
-        username=PG_USER,
+        user=PG_USER,
         password=PG_PWD
     )
 except ValueError:
