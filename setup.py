@@ -173,7 +173,7 @@ setup(
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
-        'aiocsv==1.3.2',
+        'aiocsv>=1.3.2',
         'lxml==4.9.3',
         'xlsxwriter==3.2.0',
         'odswriter==0.4.0',
