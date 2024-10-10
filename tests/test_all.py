@@ -5,7 +5,7 @@ Testing QuerySource.
 import asyncio
 from datetime import datetime
 import pytest
-from asyncdb.drivers.abstract import BaseDriver
+from asyncdb.drivers.base import BaseDriver
 from asyncdb.exceptions import default_exception_handler
 from navigator import Application
 from querysource.queries.qs import QS
