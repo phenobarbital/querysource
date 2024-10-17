@@ -1,13 +1,10 @@
 import logging
-import rapidjson
-from time import sleep
-from .rest import restSource
+from typing import Any
 from hubspot import HubSpot
 from urllib.parse import urlencode
-from querysource.exceptions import *
+#from querysource.exceptions import *
+from querysource.providers.sources import restSource
 from asyncdb.exceptions import ProviderError, NoDataFound
-from querysource.exceptions import DriverError
-from urllib.parse import urlencode
 
 class hubspot(restSource):
     """
@@ -15,7 +12,7 @@ class hubspot(restSource):
         API for integration with CRM HubSpot
     """
     base_url: str = 'https://api.hubapi.com'
-    method: str = 'GET'
+    method: str = 'get'
     timeout: int = 30
     type: str = None
     auth_type: str = 'api_key'
@@ -23,56 +20,64 @@ class hubspot(restSource):
         "API-Key": None
     }
 
-    def __init__(self, definition=None, params: dict = {}, **kwargs):
-        super(hubspot, self).__init__(definition, params, **kwargs)
+    #def __init__(self, definition=None, params: dict = {}, **kwargs):
+    #    super(hubspot, self).__init__(definition, params, **kwargs)
+    def __post_init__(
+            self,
+            definition: dict = None,
+            conditions: dict = None,
+            request: Any = None,
+            **kwargs
+    ) -> None:
 
         try:
             self.type = definition.params['type']
         except (ValueError, AttributeError):
             self.type = None
 
-        if 'type' in self._params:
-            self.type = self._params['type']
-            del self._params['type']
+        if 'type' in self._conditions:
+            self.type = self._conditions['type']
+            del self._conditions['type']
 
-        if 'api_key' in self._params:
-            self._params['hapikey'] = self._params['api_key']
-            del self._params['api_key']
+        if 'api_key' in self._conditions:
+            api_token = self._conditions['api_key']
+            del self._conditions['api_key']
         else:
-            self._params['hapikey'] = self._env.get('HUBSPOT_API_KEY')
-            if not self._params['hapikey']:
+            api_token = self._env.get('HUBSPOT_API_KEY')
+            if not api_token:
                 try:
-                    self._params['hapikey'] = definition.params['api_key']
+                    api_token = definition.params['api_key']
                 except (ValueError, AttributeError):
                     raise ValueError("HubSpot: Missing API Key")
-
-        # self._params = params
+        self._headers['Authorization'] = f'Bearer {api_token}'
+        
+        # self._conditions = params
         self._args = kwargs
 
         if self.type == 'campaigns':
             self.url = self.base_url + '/email/public/v1/campaigns/by-id'
         elif self.type == 'campaign':
             try:
-                self._args['campaign_id'] = self._params['campaign_id']
-                del self._params['campaign_id']
+                self._args['campaign_id'] = self._conditions['campaign_id']
+                del self._conditions['campaign_id']
             except (KeyError, AttributeError):
                 raise ValueError("HubSpot: Missing Email Campaign ID")
             self.url = self.base_url + '/email/public/v1/campaigns/{campaign_id}'
         elif self.type == 'active_campaigns':
-             self.url = self.base_url + '/email/public/v1/campaigns'
+            self.url = self.base_url + '/email/public/v1/campaigns'
         elif self.type == 'marketing_email_stats':
-            self._params['limit'] = 100
+            self._conditions['limit'] = 100
             self.url = self.base_url + '/marketing-emails/v1/emails/with-statistics'
         elif self.type == 'engagements':
-            self._params['limit'] = 250
+            self._conditions['limit'] = 250
             self.url = self.base_url + '/engagements/v1/engagements/paged'
         elif self.type == 'active_engagements':
-            self._params['limit'] = 250
+            self._conditions['limit'] = 250
             self.url = self.base_url + '/engagements/v1/engagements/recent/modified'
         elif self.type == 'engagement':
             try:
-                self._args['engagement_id'] = self._params['engagement_id']
-                del self._params['engagement_id']
+                self._args['engagement_id'] = self._conditions['engagement_id']
+                del self._conditions['engagement_id']
             except (KeyError, AttributeError):
                 raise ValueError("HubSpot: Missing Engagement ID")
             self.url = self.base_url + '/engagements/v1/engagements/{engagement_id}'
@@ -83,28 +88,28 @@ class hubspot(restSource):
         elif self.type == 'company':
             self.url = self.base_url + '/companies/v2/companies/{companyId}'
             try:
-                self._args['companyId'] = self._params['companyId']
-                del self._params['companyId']
+                self._args['companyId'] = self._conditions['companyId']
+                del self._conditions['companyId']
             except (KeyError, AttributeError):
                 raise ValueError("HubSpot: Missing Company ID")
         elif self.type == 'contacts':
             self.url = self.base_url + '/contacts/v1/lists/all/contacts/all'
-            self._params['count'] = 100
-            self._params['showListMemberships'] = True
+            self._conditions['count'] = 100
+            self._conditions['showListMemberships'] = True
         elif self.type == 'contact':
             self.url = self.base_url + '/contacts/v1/contact/vid/{vid}/profile'
-            self._params['showListMemberships'] = True
+            self._conditions['showListMemberships'] = True
             try:
-                self._args['vid'] = self._params['vid']
-                del self._params['vid']
+                self._args['vid'] = self._conditions['vid']
+                del self._conditions['vid']
             except (KeyError, AttributeError):
                 raise ValueError("HubSpot: Missing User VID ID")
         elif self.type == 'company_contacts':
             self.url = self.base_url + '/companies/v2/companies/{companyId}/contacts'
-            self._params['count'] = 100
+            self._conditions['count'] = 100
             try:
-                self._args['companyId'] = self._params['companyId']
-                del self._params['companyId']
+                self._args['companyId'] = self._conditions['companyId']
+                del self._conditions['companyId']
             except (KeyError, AttributeError):
                 raise ValueError("HubSpot: Missing Company ID")
         elif self.type == 'contact_by_email':
@@ -112,18 +117,18 @@ class hubspot(restSource):
             self.type = 'contact'
         elif self.type == 'companies_list':
             self.url = self.base_url + '/crm/v3/objects/companies'
-            self._params['limit'] = 100
+            self._conditions['limit'] = 100
         elif self.type == 'contacts_list':
             self.url = self.base_url + '/crm/v3/objects/contacts'
-            self._params['limit'] = 100
+            self._conditions['limit'] = 100
 
     async def marketing_email_stats(self):
         """marketing_email_stats.
 
         Get the statistics for all marketing emails.
         """
-        self.method = 'GET'
-        self._params['limit'] = 100
+        self.method = 'get'
+        self._conditions['limit'] = 100
         self.url = self.base_url + '/marketing-emails/v1/emails/with-statistics'
         self.type = 'marketing_email_stats'
         try:
@@ -138,7 +143,7 @@ class hubspot(restSource):
 
         Get Publishing channels.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/broadcast/v1/channels/setting/publish/current'
         self.type = 'social_media'
         try:
@@ -149,7 +154,7 @@ class hubspot(restSource):
             raise
 
     async def broadcasts(self):
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/broadcast/v1/broadcasts'
         self.type = 'social_media'
         try:
@@ -164,8 +169,8 @@ class hubspot(restSource):
 
         get all engagements in an account.
         """
-        self.method = 'GET'
-        self._params['limit'] = 250
+        self.method = 'get'
+        self._conditions['limit'] = 250
         self.url = self.base_url + '/engagements/v1/engagements/paged'
         self.type = 'engagements'
         try:
@@ -180,8 +185,8 @@ class hubspot(restSource):
 
         get all engagements in an account.
         """
-        self.method = 'GET'
-        self._params['limit'] = 250
+        self.method = 'get'
+        self._conditions['limit'] = 250
         self.url = self.base_url + '/engagements/v1/engagements/recent/modified'
         self.type = 'engagements'
         try:
@@ -196,11 +201,11 @@ class hubspot(restSource):
 
         get an engagement (a task or activity) for a CRM record in HubSpot.
         """
-        self.method = 'GET'
+        self.method = 'get'
         try:
             if 'engagement_id' not in self._args:
-                self._args['engagement_id'] = self._params['engagement_id']
-                del self._params['engagement_id']
+                self._args['engagement_id'] = self._conditions['engagement_id']
+                del self._conditions['engagement_id']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Engagement ID")
         self.url = self.base_url + '/engagements/v1/engagements/{engagement_id}'
@@ -217,13 +222,13 @@ class hubspot(restSource):
 
         Get information about a Campaign
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/owners/v2/owners/{ownerId}'
         self.type = 'owner'
         try:
             if 'ownerId' not in self._args:
-                self._args['ownerId'] = self._params['ownerId']
-                del self._params['ownerId']
+                self._args['ownerId'] = self._conditions['ownerId']
+                del self._conditions['ownerId']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Owner ID")
         try:
@@ -238,13 +243,13 @@ class hubspot(restSource):
 
         Get information about a Campaign
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/email/public/v1/campaigns/{campaign_id}'
         self.type = 'campaign'
         try:
             if 'campaign_id' not in self._args:
-                self._args['campaign_id'] = self._params['campaign_id']
-                del self._params['campaign_id']
+                self._args['campaign_id'] = self._conditions['campaign_id']
+                del self._conditions['campaign_id']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Email Campaign ID")
         try:
@@ -259,7 +264,7 @@ class hubspot(restSource):
 
         Get all the campaigns in a given portal.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/email/public/v1/campaigns/by-id'
         self.type = 'active_campaigns'
         try:
@@ -274,12 +279,12 @@ class hubspot(restSource):
 
         query the event log for events.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/email/public/v1/events'
         self.type = 'email_events'
         try:
-            self._params['campaignId'] = self._params['campaign_id']
-            del self._params['campaign_id']
+            self._conditions['campaignId'] = self._conditions['campaign_id']
+            del self._conditions['campaign_id']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Email Campaign ID")
         try:
@@ -294,7 +299,7 @@ class hubspot(restSource):
 
         Get all the active campaigns in a given portal.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/email/public/v1/campaigns'
         self.type = 'active_campaigns'
         try:
@@ -309,10 +314,10 @@ class hubspot(restSource):
 
         Get all companies in the HubSpot account.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/companies/v2/companies/paged'
         self.type = 'companies'
-        self._params['limit'] = 100
+        self._conditions['limit'] = 100
         try:
             self._result = await self.query()
             return self._result
@@ -325,10 +330,10 @@ class hubspot(restSource):
 
         Get all companies in the HubSpot account (api v3).
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/crm/v3/objects/companies'
         self.type = 'companies_list'
-        self._params['limit'] = 100
+        self._conditions['limit'] = 100
         try:
             self._result = await self.query()
             return self._result
@@ -341,13 +346,13 @@ class hubspot(restSource):
 
         Get all information about a Company
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/companies/v2/companies/{companyId}'
         self.type = 'company'
         try:
             if 'company' not in self._args:
-                self._args['companyId'] = self._params['companyId']
-                del self._params['companyId']
+                self._args['companyId'] = self._conditions['companyId']
+                del self._conditions['companyId']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Company ID")
         try:
@@ -362,7 +367,7 @@ class hubspot(restSource):
 
         Get all events on a given portal.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/reports/v2/events'
         self.type = 'events'
         try:
@@ -377,12 +382,12 @@ class hubspot(restSource):
 
         Given an event, returns a specific event definition in a given portal.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/reports/v2/events/{event_id}'
         self.type = 'event'
         try:
-            self._args['event_id'] = self._params['event_id']
-            del self._params['event_id']
+            self._args['event_id'] = self._conditions['event_id']
+            del self._conditions['event_id']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Event ID")
         try:
@@ -397,11 +402,11 @@ class hubspot(restSource):
 
         Get all contacts in the HubSpot account.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/contacts/v1/lists/all/contacts/all'
         self.type = 'contacts'
-        self._params['count'] = 100
-        self._params['showListMemberships'] = True
+        self._conditions['count'] = 100
+        self._conditions['showListMemberships'] = True
         try:
             self._result = await self.query()
             return self._result
@@ -414,10 +419,10 @@ class hubspot(restSource):
 
         Get all contacts in the HubSpot account (v3 api).
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/crm/v3/objects/contacts'
         self.type = 'contacts_list'
-        self._params['limit'] = 100
+        self._conditions['limit'] = 100
         try:
             self._result = await self.query()
             return self._result
@@ -430,12 +435,12 @@ class hubspot(restSource):
 
         Given an User Id (vid), returns the contact.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/contacts/v1/contact/email/{email}/profile'
         self.type = 'contact'
         try:
-            self._args['email'] = self._params['email']
-            del self._params['email']
+            self._args['email'] = self._conditions['email']
+            del self._conditions['email']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing User Email for Search")
         try:
@@ -450,13 +455,13 @@ class hubspot(restSource):
 
         Given an User Id (vid), returns the contact.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/contacts/v1/contact/vid/{vid}/profile'
         self.type = 'contact'
-        self._params['showListMemberships'] = True
+        self._conditions['showListMemberships'] = True
         try:
-            self._args['vid'] = self._params['vid']
-            del self._params['vid']
+            self._args['vid'] = self._conditions['vid']
+            del self._conditions['vid']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing User VID ID")
         try:
@@ -471,15 +476,47 @@ class hubspot(restSource):
 
         Get all contacts in the HubSpot account.
         """
-        self.method = 'GET'
+        self.method = 'get'
         self.url = self.base_url + '/companies/v2/companies/{companyId}/contacts'
         self.type = 'company_contacts'
-        self._params['count'] = 100
+        self._conditions['count'] = 100
         try:
-            self._args['companyId'] = self._params['companyId']
-            del self._params['companyId']
+            self._args['companyId'] = self._conditions['companyId']
+            del self._conditions['companyId']
         except (KeyError, AttributeError):
             raise ValueError("HubSpot: Missing Company ID")
+        try:
+            self._result = await self.query()
+            return self._result
+        except Exception as err:
+            logging.exception(err)
+            raise
+
+    async def deals(self):
+        """deals.
+
+        Get all deals in the HubSpot account (v3 api).
+        """
+        self.method = 'get'
+        self.url = self.base_url + '/crm/v3/objects/deals'
+        self.type = 'deals'
+        self._conditions['limit'] = 100
+        try:
+            self._result = await self.query()
+            return self._result
+        except Exception as err:
+            logging.exception(err)
+            raise
+
+    async def leads(self):
+        """leads.
+
+        Get all leads in the HubSpot account (v3 api).
+        """
+        self.method = 'get'
+        self.url = self.base_url + '/crm/v3/objects/leads'
+        self.type = 'leads'
+        self._conditions['limit'] = 100
         try:
             self._result = await self.query()
             return self._result
@@ -569,6 +606,8 @@ class hubspot(restSource):
         event: str = ''
     ):
         r = result[event]
+        if 'paging' not in result:
+            return r
         next = True
         paging = result['paging']
         page = 1
@@ -604,6 +643,7 @@ class hubspot(restSource):
                 print(err)
                 next = False
         print('::  Returning Results')
+        print('result...', r)
         return r
 
     async def query(self):
@@ -616,14 +656,18 @@ class hubspot(restSource):
         self.url = self.build_url(
             self.url,
             args=self._args,
-            queryparams=urlencode(self._params)
+            queryparams=urlencode(self._conditions)
         )
         try:
             result, error = await self.request(
                 self.url, self.method
             )
+            #self._result = result
+            #return self._result
             if not result:
                 raise NoDataFound('HubSpot: No data was found')
+            elif 'status' in result and result['status'] == 'error':
+                raise ProviderError(result['message'])
             if error:
                 print(err)
                 raise ProviderError(str(error))
@@ -656,7 +700,7 @@ class hubspot(restSource):
                     self._result = await self.get_next_result_v2(result, 'objects')
                 except Exception as err:
                     logging.error(err)
-            elif self.type in ['companies_list', 'contacts_list', 'deals']:
+            elif self.type in ['companies_list', 'contacts_list', 'deals', 'leads']:
                 # version 3 of API
                 try:
                     self._result = await self.get_next_result_v3(result, 'results')
