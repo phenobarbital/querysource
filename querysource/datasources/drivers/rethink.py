@@ -20,11 +20,11 @@ class rethinkDriver(NoSQLDriver):
         Returns:
             dict: params required for AsyncDB.
         """
-        if self.user:
+        if self.username:
             return {
                 "host": self.host,
                 "port": self.port,
-                "username": self.username,
+                "user": self.username,
                 "password": self.password,
                 "db": self.database,
             }
