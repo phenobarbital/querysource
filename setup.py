@@ -169,7 +169,7 @@ setup(
         'hubspot-api-client==9.0.0',
         'httpx>=0.25.0,<=0.27.0',
         'oauth2client==4.1.3',
-        'google-analytics-data==0.16.2',
+        'google-analytics-data==0.18.14',
         'google-api-python-client==2.86.0',
         'google-auth-oauthlib==1.0.0',
         'sqloxide==0.1.39',
