@@ -9,7 +9,7 @@ install:
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth[uvloop]
 	pip install --upgrade navigator-api[uvloop,locale]
-	# pip install -e .
+	pip install -e .
 	echo 'start using QuerySource'
 
 jupyter:
