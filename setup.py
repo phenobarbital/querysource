@@ -185,7 +185,7 @@ setup(
         'bs4==0.0.2',
         'simple_salesforce==1.12.3',
         'psycopg2-binary==2.9.10',
-        'sqlalchemy==2.0.23',
+        'sqlalchemy==2.0.36',
         # Selenium Support:
         'selenium>=4.24.0',
         'snapshot-selenium>=0.0.2',
