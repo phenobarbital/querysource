@@ -166,7 +166,7 @@ setup(
     ],
     install_requires=[
         'LivePopularTimes==1.3',
-        'hubspot-api-client==9.0.0',
+        'hubspot-api-client==10.0.0',
         'httpx>=0.25.0,<=0.27.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.18.15',
