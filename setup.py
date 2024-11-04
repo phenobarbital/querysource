@@ -240,7 +240,7 @@ setup(
             'keras==3.4.1',
             'tiktoken==0.6.0',
             'yfinance==0.2.40',
-            'safetensors==0.4.2',
+            'safetensors==0.4.5',
         ]
     },
     tests_require=[
