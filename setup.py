@@ -209,7 +209,7 @@ setup(
         'seaborn==0.13.2',
         'matplotlib==3.9.2',
         'prompt_toolkit==3.0.47',
-        'folium==0.17.0',
+        'folium==0.18.0',
         "geopandas==1.0.1",
         "contextily==1.6.2",
         "jenkspy==0.4.1"
