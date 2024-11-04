@@ -120,6 +120,15 @@ class PgOutput(AbstractOutput):
                     f"Statement Error: {err}"
                 ) from err
             except Exception as err:
+                if 'Unconsumed' in str(err):
+                    error = f"""
+                    There are missing columns on Table {tablename}.
+
+                    Error was: {err}
+                    """
+                    raise OutputError(
+                        error
+                    ) from err
                 raise OutputError(
                     f"Error on PG UPSERT: {err}"
                 ) from err
