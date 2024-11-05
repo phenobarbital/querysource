@@ -233,7 +233,7 @@ setup(
             "spacy[transformers,lookups]==3.8.2",
             "spacy-llm==0.7.2",
             'sentence-transformers==2.6.1',
-            'tensorflow==2.17.0',
+            'tensorflow==2.18.0',
             'spacy==3.7.6',
             'scpy==1.1.4',
             'keras-cv==0.9.0',
