@@ -237,7 +237,7 @@ setup(
             'spacy==3.7.6',
             'scpy==1.1.4',
             'keras-cv==0.9.0',
-            'keras==3.4.1',
+            'keras==3.6.0',
             'tiktoken==0.6.0',
             'yfinance==0.2.40',
             'safetensors==0.4.2',
