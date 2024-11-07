@@ -72,7 +72,10 @@ class QueryObject(BaseQuery):
                 f'Starting Slug-based Query: {self._query!s}'
             )
             try:
-                objquery = await self.get_slug(self._query)
+                objquery = await self.get_slug(
+                    self._query,
+                    evt=self._loop
+                )
             except (SlugNotFound):
                 raise
             except Exception:

@@ -100,13 +100,18 @@ class Connection:
     def set_connection(self, conn):
         self._connection = conn
 
-    def get_connection(self, driver: str = 'pg') -> Callable:
+    def get_connection(self, driver: str = 'pg', evt: asyncio.AbstractEventLoop = None) -> Callable:
         """Useful for internal connections of QS.
         """
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.get_running_loop()
+        if evt:
+            loop = evt
+        else:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                raise RuntimeError(
+                    "No Event Loop available"
+                )
         return AsyncDB(
             driver,
             dsn=asyncpg_url,
@@ -375,8 +380,8 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-    async def get_query_slug(self, slug: str) -> BaseModel:
-        db = self.get_connection(driver='pg')
+    async def get_query_slug(self, slug: str, evt: asyncio.AbstractEventLoop = None) -> BaseModel:
+        db = self.get_connection(driver='pg', evt=evt)
         try:
             async with await db.connection() as conn:
                 QueryModel.Meta.connection = conn
@@ -401,10 +406,10 @@ class Connection:
                 f"Error getting Slug: {ex}"
             ) from ex
 
-    async def get_slug(self, slug: str, program: str = None):
+    async def get_slug(self, slug: str, program: str = None, evt: asyncio.AbstractEventLoop = None):
         start = datetime.now()
         try:
-            obj = await self.get_query_slug(slug)
+            obj = await self.get_query_slug(slug, evt=evt)
         except Exception:  # pylint: disable=W0706
             raise
         finally:

@@ -130,12 +130,12 @@ class QueryConnection(Connection, metaclass=Singleton):
         """
         return await self._postgres.acquire()
 
-    def get_connection(self, driver: str = 'pg'):
+    def get_connection(self, driver: str = 'pg', evt: asyncio.AbstractEventLoop = None) -> AsyncDB:
         """Useful for internal connections of QS.
         """
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
-        return super().get_connection(driver=driver)
+        return super().get_connection(driver=driver, evt=evt)
 
     def setup(self, app: web.Application) -> web.Application:
         if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
