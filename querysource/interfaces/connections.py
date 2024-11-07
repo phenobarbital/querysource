@@ -3,6 +3,7 @@ Connections Manager.
 """
 from typing import Any, Optional, Union
 from collections.abc import Callable
+import random
 import asyncio
 from importlib import import_module
 from datetime import datetime
@@ -380,31 +381,42 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-    async def get_query_slug(self, slug: str, evt: asyncio.AbstractEventLoop = None) -> BaseModel:
+    async def get_query_slug(self, slug: str, evt: asyncio.AbstractEventLoop = None, max_retries: int = 3) -> BaseModel:
         db = self.get_connection(driver='pg', evt=evt)
-        try:
-            async with await db.connection() as conn:
-                QueryModel.Meta.connection = conn
-                self.logger.debug(
-                    f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
-                )
-                return await QueryModel.get(query_slug=slug)
-        except ValidationError as ex:
-            raise SlugNotFound(
-                f'Invalid Slug Data {slug!s}: {ex}'
-            ) from ex
-        except NoDataFound as ex:
-            raise SlugNotFound(
-                f'Slug not Found {slug!s}'
-            ) from ex
-        except (ProviderError, DriverError) as ex:
-            raise DriverError(
-                f"Error getting Slug: {ex}"
-            ) from ex
-        except Exception as ex:
-            raise QueryException(
-                f"Error getting Slug: {ex}"
-            ) from ex
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                async with await db.connection() as conn:
+                    QueryModel.Meta.connection = conn
+                    self.logger.debug(
+                        f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
+                    )
+                    return await QueryModel.get(query_slug=slug)
+            except DriverError as ex:
+                if attempt < max_retries - 1:
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0, 1)
+                    self.logger.warning(
+                        f"Attempt {attempt + 1} failed, retrying in {delay:.2f} seconds..."
+                    )
+                    await asyncio.sleep(delay)
+                    attempt += 1
+                else:
+                    raise QueryException(
+                        f"DB Error getting Slug: {ex} after {max_retries} attempts"
+                    ) from ex
+            except ValidationError as ex:
+                raise SlugNotFound(
+                    f'Invalid Slug Data {slug!s}: {ex}'
+                ) from ex
+            except NoDataFound as ex:
+                raise SlugNotFound(
+                    f'Slug not Found {slug!s}'
+                ) from ex
+            except Exception as ex:
+                raise QueryException(
+                    f"Error getting Slug: {ex}"
+                ) from ex
 
     async def get_slug(self, slug: str, program: str = None, evt: asyncio.AbstractEventLoop = None):
         start = datetime.now()

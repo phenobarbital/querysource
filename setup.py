@@ -184,8 +184,8 @@ setup(
         'APScheduler==3.10.4',
         'bs4==0.0.2',
         'simple_salesforce==1.12.3',
-        'psycopg2-binary==2.9.10',
-        'sqlalchemy==2.0.23',
+        'psycopg2-binary>=2.9.10',
+        'sqlalchemy>=2.0.23',
         # Selenium Support:
         'selenium>=4.24.0',
         'snapshot-selenium>=0.0.2',
@@ -227,20 +227,6 @@ setup(
             'lux-api==0.5.1',
             'pomegranate==1.1.0',
             'autoviz==0.1.905'
-        ],
-        "ia": [
-            "ai-parrot[chatbots,google,milvus,groq]>=0.4.7",
-            "spacy[transformers,lookups]==3.8.2",
-            "spacy-llm==0.7.2",
-            'sentence-transformers==2.6.1',
-            'tensorflow==2.17.0',
-            'spacy==3.7.6',
-            'scpy==1.1.4',
-            'keras-cv==0.9.0',
-            'keras==3.4.1',
-            'tiktoken==0.6.0',
-            'yfinance==0.2.40',
-            'safetensors==0.4.2',
         ]
     },
     tests_require=[
