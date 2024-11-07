@@ -157,7 +157,7 @@ class MultiQS(BaseQuery):
                     )
                 if isinstance(t.exc, SlugNotFound):
                     raise SlugNotFound(
-                        f"Slug Not Found: {t.slug()}"
+                        f"Slug Not Found: {t.slug}"
                     )
                 if isinstance(t.exc, (QueryException, DriverError)):
                     raise self.Error(
