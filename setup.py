@@ -195,7 +195,7 @@ setup(
         'proxylists>=0.12.5',
         'async-notify>=1.3.1',
         'navconfig[uvloop,default]>=1.7.9',
-        'jsonschema==4.22.0',
+        'jsonschema==4.23.0',
         # Jinja2 extensions:
         "jinja2-iso8601==1.0.0",
         "jinja2-time==0.2.0",
