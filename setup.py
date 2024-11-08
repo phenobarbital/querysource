@@ -179,7 +179,7 @@ setup(
         'odswriter==0.4.0',
         'odfpy==1.4.1',
         'xlrd==2.0.1',
-        'reportlab==4.1.0',
+        'reportlab==4.2.5',
         'WeasyPrint==61.2',
         'APScheduler==3.10.4',
         'bs4==0.0.2',
