@@ -18,9 +18,9 @@ from .abstract import SQLDriver
 class sqlserverDriver(SQLDriver):
     driver: str = SQLSERVER_DRIVER
     name: str = 'MS SQL Server'
-    user: str = Column(required=True)
-    username: InitVar = ''
-    hostname: InitVar = ''
+    user: str
+    username: InitVar
+    hostname: InitVar
     dsn_format: str = None
     server: str
     port: int = Column(required=True, default=1433)
@@ -28,7 +28,9 @@ class sqlserverDriver(SQLDriver):
 
     def __post_init__(self, username, hostname=None, **kwargs) -> None:  # pylint: disable=W0613,W0221
         super(sqlserverDriver, self).__post_init__(hostname, **kwargs)
-        if username is not None and self.user is None:
+        if hostname:
+            self.host = hostname
+        if username:
             self.user = username
         self.server = f"{self.host}:{self.port}"
         self.auth = {

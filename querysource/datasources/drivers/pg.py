@@ -17,7 +17,7 @@ from .abstract import SQLDriver
 class pgDriver(SQLDriver):
     driver: str = 'pg'
     name: str = 'PostgreSQL (using asyncpg)'
-    user: str = Column(required=True)
+    user: str
     username: InitVar
     hostname: InitVar
     dsn_format: str = Column(
