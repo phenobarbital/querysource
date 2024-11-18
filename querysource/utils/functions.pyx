@@ -118,6 +118,34 @@ cpdef datetime.datetime first_day_of_month(object value = None, str zone = None)
 cpdef str fdom(object value = None, str mask = "%Y-%m-%d", str zone = None):
     return first_day_of_month(value, zone=zone).strftime(mask)
 
+cdef inline datetime.datetime first_day_of_week(object value=None, str zone=None):
+    cdef datetime.datetime date_value = datetime.datetime.now() if value is None else value
+    cdef int days_since_start_of_week = date_value.weekday()  # Monday is 0
+    return date_value - datetime.timedelta(days=days_since_start_of_week)
+
+cdef inline datetime.datetime last_day_of_week(object value=None, str zone=None):
+    """Function to calculate the last day of the week"""
+    cdef datetime.datetime date_value = datetime.datetime.now() if value is None else value
+    cdef int days_until_end_of_week = 6 - date_value.weekday()  # Sunday is 6
+    return date_value + datetime.timedelta(days=days_until_end_of_week)
+
+cpdef str fdow(object value=None, str mask="%Y-%m-%d", str zone=None):
+    return first_day_of_week(value, zone=zone).strftime(mask)
+
+cpdef str ldow(object value=None, str mask="%Y-%m-%d", str zone=None):
+    return last_day_of_week(value, zone=zone).strftime(mask)
+
+cdef inline datetime.datetime last_year_date(object value=None, str zone=None):
+    """Function to calculate the same date last year"""
+    cdef datetime.datetime date_value = datetime.datetime.now() if value is None else value
+    try:
+        return date_value.replace(year=date_value.year - 1)
+    except ValueError:
+        # Handle leap year edge cases (e.g., Feb 29 → Feb 28)
+        return date_value.replace(year=date_value.year - 1, day=28)
+
+cpdef str last_year(object value=None, str mask="%Y-%m-%d", str zone=None):
+    return last_year_date(value, zone=zone).strftime(mask)
 
 cpdef datetime.datetime last_day_of_month(object value = None, str zone = None):
     if zone is not None:
