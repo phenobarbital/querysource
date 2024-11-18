@@ -71,7 +71,7 @@ def is_pgconstant(value):
     return value in PG_CONSTANTS
 
 
-# TODO: get the current list of supported UDF dynamic.
+# TODO: get the current list of supported UDF dynamically.
 UDF = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "FDOM", "LDOM"]
 def is_an_udf(value):
     return value in UDF

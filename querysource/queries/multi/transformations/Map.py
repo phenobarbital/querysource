@@ -59,10 +59,7 @@ class Map(AbstractTransform):
                     self.logger.debug(
                         f"Calling Function: {fname!s} with args: {args}"
                     )
-                    if args:
-                        it = func(df=it, field=field, **args)
-                    else:
-                        it = func(df=it, field=field)
+                    it = func(df=it, field=field, **args)
                     it = it.copy()
                 except AttributeError:
                     self.logger.error(f"Function not found: {fname!s}")

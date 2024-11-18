@@ -25,9 +25,12 @@ import orjson
 from numpy import int64, ndarray
 
 
-cdef list udf = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "FDOM", "LDOM"]
+cdef list udf = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "LAST_YEAR", "FDOM", "LDOM"]
 cdef list UDF_LIST = os.environ.get('UDF_LIST', udf)
-cdef list PG_CONSTANTS = os.environ.get('PG_CONSTANTS', ["CURRENT_DATE", "CURRENT_TIMESTAMP"])
+cdef list PG_CONSTANTS = os.environ.get(
+    'PG_CONSTANTS',
+     ["CURRENT_DATE", "CURRENT_TIMESTAMP"]
+)
 cdef list PG_UDF = os.environ.get('PG_UDF', ["now()"])
 
 cdef object eval_field = re.compile(r'^(?:(\@|!|#|~|\:|))(\w*)(?:(\||\&|\!|\~|\#)|)+$')
