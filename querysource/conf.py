@@ -281,6 +281,31 @@ DEFAULT_QUERY_FORMAT = config.get(
 ## Geoloc Support:
 GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
 
+### Query Cache functionality:
+"""
+RabbitMQ Configuration.
+"""
+USE_RABBITMQ = config.getboolean('USE_RABBITMQ', fallback=False)
+RABBITMQ_HOST = config.get("RABBITMQ_HOST", fallback="localhost")
+RABBITMQ_PORT = config.get("RABBITMQ_PORT", fallback=5672)
+RABBITMQ_USER = config.get("RABBITMQ_USER", fallback="guest")
+RABBITMQ_PASS = config.get("RABBITMQ_PASS", fallback="guest")
+RABBITMQ_VHOST = config.get("RABBITMQ_VHOST", fallback="navigator")
+# DSN
+rabbitmq_dsn = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/{RABBITMQ_VHOST}"
+BROKER_MANAGER_QUEUE_SIZE = config.getint(
+    "BROKER_MANAGER_QUEUE_SIZE",
+    fallback=4
+)
+
+# Dask Cluster:
+USE_DASK = config.getboolean("USE_DASK", fallback=False)
+DASK_SCHEDULER = config.get("DASK_SCHEDULER", fallback="tcp://127.0.0.1:8786")
+DASK_SCHEDULER_PORT = config.get(
+    "DASK_SCHEDULER_PORT",
+    fallback=8786
+)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:
