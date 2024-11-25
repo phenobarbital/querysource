@@ -34,7 +34,7 @@ class QueryHandler(AbstractHandler):
         except (TypeError, ValueError):
             options = {}
         # if option is None, then no JSON was sent:
-        if options is None:
+        if options is None and slug is None:
             raise self.Error(
                 reason="No JSON Data",
                 message="No valid JSON data was not found in payload.",

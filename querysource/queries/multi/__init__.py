@@ -123,9 +123,11 @@ class MultiQS(BaseQuery):
                 raise
         if self._queries:
             for name, query in self._queries.items():
-                if self._conditions:
-                    # those conditions be applied to the query
-                    query = {**self._conditions, **query}
+                print('NAME > ', name, query)
+                print('CONDITIONS > ', self._conditions)
+                conditions = self._conditions.pop(name, {})
+                # those conditions be applied to the query
+                query = {**conditions, **query}
                 try:
                     t = ThreadQuery(
                         name, query, self._request, self._queue
@@ -265,6 +267,17 @@ class MultiQS(BaseQuery):
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Filtering: {ex!s}",
+                    exception=ex
+                ) from ex
+        if 'GroupBy' in self._options:
+            try:
+                obj = get_operator_module('GroupBy')
+                ## Group By of Data:
+                groupby = obj(data=result, **self._options['GroupBy'])
+                result = await groupby.run()
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error on GroupBy: {ex!s}",
                     exception=ex
                 ) from ex
         ### Step 7: Optionally saving result into Database (using Pandas)

@@ -1,12 +1,12 @@
 from typing import Optional, Union, Any
 import numpy as np
-import pandas
+import pandas as pd
 from ....utils.getfunc import getFunction
 
 
-def to_timestamp(df: pandas.DataFrame, field: str, remove_nat: bool = False):
+def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):
     try:
-        df[field] = pandas.to_datetime(df[field], errors="coerce")
+        df[field] = pd.to_datetime(df[field], errors="coerce")
         df[field] = df[field].where(df[field].notnull(), None)
         df[field] = df[field].astype("datetime64[ns]")
     except Exception as err:
@@ -14,7 +14,7 @@ def to_timestamp(df: pandas.DataFrame, field: str, remove_nat: bool = False):
     return df
 
 
-def from_currency(df: pandas.DataFrame, field: str, symbol="$", remove_nan: bool = True):
+def from_currency(df: pd.DataFrame, field: str, symbol="$", remove_nan: bool = True):
     df[field] = (
         df[field]
         .replace(f"[\\{symbol},) ]", "", regex=True)
@@ -24,7 +24,7 @@ def from_currency(df: pandas.DataFrame, field: str, symbol="$", remove_nan: bool
     )
     if remove_nan is True:
         df[field] = df[field].fillna(0)
-    df[field] = pandas.to_numeric(df[field], errors="coerce")
+    df[field] = pd.to_numeric(df[field], errors="coerce")
     df[field] = df[field].replace([-np.inf, np.inf], np.nan)
     return df
 
@@ -45,7 +45,7 @@ def num_formatter(n: Union[int, Any]):
         return n
 
 def convert_to_integer(
-    df: pandas.DataFrame, field: str, not_null: bool = False, fix_negatives: bool = False
+    df: pd.DataFrame, field: str, not_null: bool = False, fix_negatives: bool = False
 ):
     """
     Converts the values in a specified column of a pandas DataFrame to integers,
@@ -60,7 +60,7 @@ def convert_to_integer(
     try:
         if fix_negatives is True:
             df[field] = df[field].apply(num_formatter)  # .astype('float')
-        df[field] = pandas.to_numeric(df[field], errors="coerce")
+        df[field] = pd.to_numeric(df[field], errors="coerce")
         df[field] = df[field].astype("Int64", copy=False)
     except Exception as err:
         print(field, "->", err)
@@ -70,12 +70,12 @@ def convert_to_integer(
 
 
 def apply_function(
-    df: pandas.DataFrame,
+    df: pd.DataFrame,
     field: str,
     fname: str,
     column: Optional[str] = None,
     **kwargs
-) -> pandas.DataFrame:
+) -> pd.DataFrame:
     """
     Apply any scalar function to a column in the DataFrame.
 
@@ -107,5 +107,44 @@ def apply_function(
     except Exception as err:
         print(
             f"Error in apply_function for field {field}:", err
+        )
+    return df
+
+def math_operation(df: pd.DataFrame, field: str, columns: list, operation: str):
+    """
+    Apply a mathematical operation between columns in a DataFrame and store the result in a new column.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame to operate on.
+    field (str): The name of the new column to store the result.
+    columns (list): A list of two column names to perform the operation on.
+    operation (str): The operation to perform ('add', 'subtract', 'multiply', 'divide').
+
+    Returns:
+    pd.DataFrame: The modified DataFrame with the new column added.
+    """
+    if len(columns) != 2:
+        raise ValueError("The 'columns' parameter must contain exactly two column names.")
+
+    col1, col2 = columns
+
+    if col1 not in df.columns or col2 not in df.columns:
+        raise KeyError(f"One or both columns {col1}, {col2} not found in the DataFrame.")
+
+    if operation in ('add', 'sum', ):
+        df[field] = df[col1] + df[col2]
+    elif operation == 'subtract':
+        df[field] = df[col1] - df[col2]
+    elif operation == 'multiply':
+        df[field] = df[col1] * df[col2]
+    elif operation == 'divide':
+        # Handle division safely, avoiding division by zero
+        df[field] = df[col1] / df[col2].replace(0, float('nan'))
+    else:
+        raise ValueError(
+            (
+                f"Unsupported operation: {operation}. Supported operations are 'add'"
+                " 'subtract', 'multiply', 'divide'."
+            )
         )
     return df

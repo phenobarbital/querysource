@@ -40,7 +40,6 @@ class Melt(AbstractOperator):
             ) from ex
 
     async def run(self):
-        await self.start()
         args = {}
         if hasattr(self, 'args') and isinstance(self.args, dict):
             args = {**args, **self.args}
