@@ -1,38 +1,30 @@
-import pandas as pd
+from pandas import DataFrame
 from ....exceptions import (
-    DataNotFound,
     DriverError,
     QueryException
 )
+from .abstract import AbstractOperator
 
-class Concat:
-    def __init__(self, data: dict, **kwargs) -> None:
-        self._backend = 'pandas'
-        self.data = data
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
+class Concat(AbstractOperator):
+    """
+    Concat to Dataframes in one.
+    """
     async def start(self):
         dataset = []
         for _, data in self.data.items():
-            ## TODO: add support for polars and datatables
-            if isinstance(data, pd.DataFrame):
+            if isinstance(data, DataFrame):
                 self._backend = 'pandas'
                 dataset.append(data)
             else:
                 raise DriverError(
-                    f'Wrong type of data for Concat, required Pandas dataframe: {type(data)}'
+                    f'Wrong type of data for Concat, required a Pandas dataframe: {type(data)}'
                 )
         self.data = dataset
-        # print('dataset', self.data)
 
     async def run(self):
-        await self.start()
         try:
-            df = pd.concat(self.data, ignore_index=True)
-            print('::: Printing CONCAT Information === ')
-            for column, t in df.dtypes.items():
-                print(column, '->', t, '->', df[column].iloc[0])
+            df = self._pd.concat(self.data, ignore_index=True)
+            self._print_info(df)
             return df
         except (ValueError, KeyError) as err:
             raise QueryException(

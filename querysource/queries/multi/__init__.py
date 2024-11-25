@@ -243,8 +243,6 @@ class MultiQS(BaseQuery):
                                 exception=ex
                             ) from ex
                 continue
-        if 'Processors' in self._options:
-            pass
         ### Step 4: Check if result is empty or is a dictionary of dataframes:
         if result is None:
             raise self.Error(
@@ -254,16 +252,23 @@ class MultiQS(BaseQuery):
         # reduce to one single Dataframe:
         if isinstance(result, dict) and len(result) == 1:
             result = list(result.values())[0]
-        # TODO: making a melt of all dataframes
         ### Step 5: Passing result to any Processor declared
+        if 'Processors' in self._options:
+            pass
+        ### Step 6: Applying Filters to result
+        if 'Filter' in self._options:
+            pass
+        ### Step 7: Optionally saving result into Database (using Pandas)
         if 'Output' in self._options:
-            ## Optionally saving result into Database (using Pandas)
             for step in self._options['Output']:
                 obj = None
                 for step_name, component in step.items():
-                    if step_name == 'tableOutput':
+                    if step_name in ('tableOutput', 'TableOutput'):
                         obj = TableOutput(data=result, **component)
                         result = await obj.run()
+                    else:
+                        # Saving into a DWH selected.
+                        pass
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"

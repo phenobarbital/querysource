@@ -1,8 +1,9 @@
+from typing import Union, Any
 import numpy as np
 import pandas
 
 
-def to_timestamp(df: pandas.DataFrame, field: str, remove_nat=False):
+def to_timestamp(df: pandas.DataFrame, field: str, remove_nat: bool = False):
     try:
         df[field] = pandas.to_datetime(df[field], errors="coerce")
         df[field] = df[field].where(df[field].notnull(), None)
@@ -12,10 +13,10 @@ def to_timestamp(df: pandas.DataFrame, field: str, remove_nat=False):
     return df
 
 
-def from_currency(df, field: str, symbol="$", remove_nan=True):
+def from_currency(df: pandas.DataFrame, field: str, symbol="$", remove_nan: bool = True):
     df[field] = (
         df[field]
-        .replace("[\\{},) ]".format(symbol), "", regex=True)
+        .replace(f"[\\{symbol},) ]", "", regex=True)
         .replace("[(]", "-", regex=True)
         .replace("[ ]+", np.nan, regex=True)
         .str.strip(",")
@@ -26,7 +27,7 @@ def from_currency(df, field: str, symbol="$", remove_nan=True):
     df[field] = df[field].replace([-np.inf, np.inf], np.nan)
     return df
 
-def num_formatter(n):
+def num_formatter(n: Union[int, Any]):
     """
     Formats a string representing a number, handling negative signs and commas.
 
@@ -43,7 +44,7 @@ def num_formatter(n):
         return n
 
 def convert_to_integer(
-    df: pandas.DataFrame, field: str, not_null=False, fix_negatives: bool = False
+    df: pandas.DataFrame, field: str, not_null: bool = False, fix_negatives: bool = False
 ):
     """
     Converts the values in a specified column of a pandas DataFrame to integers,

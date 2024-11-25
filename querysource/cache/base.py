@@ -1,5 +1,10 @@
 class QueryCache:
-    """QueryCache class."""
+    """QueryCache.
+
+    QueryCache saves the results of the queries in a backend service.
+    Can use Redis, BigQuery or RethinkDB as backend.
+    Can dispatch cache operations to RabbitMQ workers.
+    """
 
     def __init__(self, backend, **kwargs):
         """QueryCache constructor."""
