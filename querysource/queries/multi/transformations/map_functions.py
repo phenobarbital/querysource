@@ -1,6 +1,7 @@
-from typing import Union, Any
+from typing import Optional, Union, Any
 import numpy as np
 import pandas
+from ....utils.getfunc import getFunction
 
 
 def to_timestamp(df: pandas.DataFrame, field: str, remove_nat: bool = False):
@@ -65,4 +66,46 @@ def convert_to_integer(
         print(field, "->", err)
     if not_null is True:
         df[field] = df[field].fillna(0)
+    return df
+
+
+def apply_function(
+    df: pandas.DataFrame,
+    field: str,
+    fname: str,
+    column: Optional[str] = None,
+    **kwargs
+) -> pandas.DataFrame:
+    """
+    Apply any scalar function to a column in the DataFrame.
+
+    Parameters:
+    - df: pandas DataFrame
+    - field: The column where the result will be stored.
+    - fname: The name of the function to apply.
+    - column: The column to which the function is applied (if None, apply to `field` column).
+    - **kwargs: Additional arguments to pass to the function.
+    """
+
+    # Retrieve the scalar function using getFunc
+    try:
+        func = getFunction(fname)
+    except Exception:
+        raise
+
+    # If a different column is specified, apply the function to it,
+    # but save result in `field`
+    try:
+        if column is not None:
+            df[field] = df[column].apply(lambda x: func(x, **kwargs))
+        else:
+            if field not in df.columns:
+                # column doesn't exist
+                df[field] = None
+            # Apply the function to the field itself
+            df[field] = df[field].apply(lambda x: func(x, **kwargs))
+    except Exception as err:
+        print(
+            f"Error in apply_function for field {field}:", err
+        )
     return df

@@ -13,6 +13,7 @@ from ..abstract import BaseQuery
 from .transformations import (
     GoogleMaps,
 )
+from .operators.filter import Filter
 from .outputs import TableOutput
 from .sources import ThreadQuery, ThreadFile
 
@@ -257,7 +258,15 @@ class MultiQS(BaseQuery):
             pass
         ### Step 6: Applying Filters to result
         if 'Filter' in self._options:
-            pass
+            try:
+                ## making Join of Data
+                concat = Filter(data=result, **self._options['Filter'])
+                result = await concat.run()
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error on Filtering: {ex!s}",
+                    exception=ex
+                ) from ex
         ### Step 7: Optionally saving result into Database (using Pandas)
         if 'Output' in self._options:
             for step in self._options['Output']:
