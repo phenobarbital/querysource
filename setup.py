@@ -212,7 +212,8 @@ setup(
         'folium==0.18.0',
         "geopandas==1.0.1",
         "contextily==1.6.2",
-        "jenkspy==0.4.1"
+        "jenkspy==0.4.1",
+        "timezonefinder==6.5.5"
     ],
     extras_require={
         "analytics": [

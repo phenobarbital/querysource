@@ -21,6 +21,7 @@ from pandas.tseries.offsets import MonthEnd
 from navconfig.logging import logging
 from .....types import strtobool
 from .....utils.getfunc import getFunction
+from .....conf import DEFAULT_TIMEZONE
 
 
 def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):
@@ -258,7 +259,7 @@ def sum(df: pd.DataFrame, field: str = "", columns: list = []):
         return df
 
 
-def div(df, field: str, numerator: str, denominator: str):
+def div(df: pd.DataFrame, field: str, numerator: str, denominator: str):
     """
     Takes a pandas DataFrame and divides the values in one column by the values in another column,
     storing the result in a new column.
@@ -278,7 +279,7 @@ def div(df, field: str, numerator: str, denominator: str):
 
 
 def to_time(
-    df,
+    df: pd.DataFrame,
     field: str,
     replace_nulls: bool = False,
     value: str = "00:00:00",
@@ -546,7 +547,7 @@ def concat_column_values(df: pd.DataFrame, field: str, column: str, separator=",
     return df
 
 
-def _apply_affix(df, field: str, column: str, prefix: str = "", suffix: str = ""):
+def _apply_affix(df: pd.DataFrame, field: str, column: str, prefix: str = "", suffix: str = ""):
     """Helper function to apply a prefix or suffix to a column."""
     if not column:
         column = field
@@ -557,7 +558,7 @@ def _apply_affix(df, field: str, column: str, prefix: str = "", suffix: str = ""
         print("Affix Error ", err)
         return df
 
-def prefix(df, field: str, column: str = None, prefix: str = ""):
+def prefix(df: pd.DataFrame, field: str, column: str = None, prefix: str = ""):
     """
     Takes a pandas DataFrame and adds a specified string prefix to the values in a given column,
     storing the result in a new column.
@@ -570,7 +571,7 @@ def prefix(df, field: str, column: str = None, prefix: str = ""):
     """  # noqa
     return _apply_affix(df, field, column, prefix=prefix)
 
-def suffix(df, field: str, column: str = None, suffix: str = ""):
+def suffix(df: pd.DataFrame, field: str, column: str = None, suffix: str = ""):
     """Adding a string suffix to a Column."""
     return _apply_affix(df, field, column, suffix=suffix)
 
@@ -727,7 +728,7 @@ def split(
         return df
 
 
-def split_to_columns(df, field: str, columns: list, regex: str = "\s+", expand: bool = True):
+def split_to_columns(df: pd.DataFrame, field: str, columns: list, regex: str = "\s+", expand: bool = True):
     """
     Takes a pandas DataFrame and splits the values in a specified column into multiple columns based on a given regex pattern.
 
@@ -833,7 +834,7 @@ def nullif(df: pd.DataFrame, field: str, chars=[]):
     return df
 
 
-def to_null(df, field: str, words: list):
+def to_null(df: pd.DataFrame, field: str, words: list):
     """
     Takes a pandas DataFrame and replaces specified words in a given column with NaN.
 
@@ -861,7 +862,7 @@ def capitalize(df: pd.DataFrame, field: str):
     return df
 
 
-def to_round(df, field: str, ndecimals: int = 2):
+def to_round(df: pd.DataFrame, field: str, ndecimals: int = 2):
     """
     Takes a pandas DataFrame and rounds the values in a specified column to a given number of decimal places.
 
@@ -946,7 +947,7 @@ def trim(df: pd.DataFrame, field: str, characters=" ", remove_empty: bool = Fals
     return df
 
 
-def ltrim(df, field: str, characters=" "):
+def ltrim(df: pd.DataFrame, field: str, characters=" "):
     """
     Takes a pandas DataFrame and trims the specified characters from the left end of the values in a given column.
 
@@ -963,7 +964,7 @@ def ltrim(df, field: str, characters=" "):
     return df
 
 
-def ltrip(df, field: str, nchars: int = 0):
+def ltrip(df: pd.DataFrame, field: str, nchars: int = 0):
     """
     Takes a pandas DataFrame and removes a specified number of characters from the left end of the values in a given column.
 
@@ -976,7 +977,7 @@ def ltrip(df, field: str, nchars: int = 0):
     return df
 
 
-def rtrip(df, field: str, nchars: int = 0):
+def rtrip(df: pd.DataFrame, field: str, nchars: int = 0):
     """
     Takes a pandas DataFrame and removes a specified number of characters from the right end of the values in a given column.
 
@@ -989,7 +990,7 @@ def rtrip(df, field: str, nchars: int = 0):
     return df
 
 
-def left_strip(df, field: str, column: str = None, character=" "):
+def left_strip(df: pd.DataFrame, field: str, column: str = None, character=" "):
     """
     Removes leading characters from the values in a specified column of a pandas DataFrame.
 
@@ -1453,7 +1454,7 @@ def epoch_to_date(
 
 
 def convert_to_numeric(
-    df, field: str, remove_nan: bool = True, fix_negatives: bool = False
+    df: pd.DataFrame, field: str, remove_nan: bool = True, fix_negatives: bool = False
 ):
     """
     Converts the values in a specified column of a pandas DataFrame to numeric format,
@@ -1478,7 +1479,7 @@ def convert_to_numeric(
     return df
 
 
-def to_integer(df, field: str):
+def to_integer(df: pd.DataFrame, field: str):
     """
     Converts the values in a specified column of a pandas DataFrame to integers, handling various exceptions.
 
@@ -1568,7 +1569,7 @@ def string_to_bool(df: pd.DataFrame, field: str) -> pd.DataFrame:
     return df
 
 
-def replace_args(df, field: str, column: str, args: Union[List, Dict] = None):
+def replace_args(df: pd.DataFrame, field: str, column: str, args: Union[List, Dict] = None):
     """
     Replaces values in a specified field based on a list or dictionary of arguments.
 
@@ -1586,7 +1587,7 @@ def replace_args(df, field: str, column: str, args: Union[List, Dict] = None):
     return df
 
 
-def replace(df, field: str, args: List = None, is_regex: bool = False):
+def replace(df: pd.DataFrame, field: str, args: List = None, is_regex: bool = False):
     """
     Replaces values in a specified field based on a list of arguments, with optional regex support.
 
@@ -1607,7 +1608,7 @@ def replace(df, field: str, args: List = None, is_regex: bool = False):
     return df
 
 
-def to_percentile(df, field: str, symbol="%", divisor=None, remove_nan=True):
+def to_percentile(df: pd.DataFrame, field: str, symbol="%", divisor=None, remove_nan=True):
     """
     Converts a specified field in a DataFrame to percentile values, handling symbols and NaNs.
 
@@ -1636,7 +1637,7 @@ def to_percentile(df, field: str, symbol="%", divisor=None, remove_nan=True):
     return df
 
 
-def split_cols(df, field: str, separator=",", columns=[], numcols=2):
+def split_cols(df: pd.DataFrame, field: str, separator=",", columns=[], numcols=2):
     """
     Splits a specified field in a DataFrame into multiple columns based on a separator.
 
@@ -1667,7 +1668,7 @@ def split_cols(df, field: str, separator=",", columns=[], numcols=2):
     return df
 
 
-def startofweek(df, field: str, column=""):
+def startofweek(df: pd.DataFrame, field: str, column=""):
     """
     Calculates the start of the week for a specified date field in a DataFrame.
 
@@ -1683,7 +1684,7 @@ def startofweek(df, field: str, column=""):
     return df
 
 
-def endofweek(df, field: str, column=""):
+def endofweek(df: pd.DataFrame, field: str, column=""):
     """
     Calculates the end of the week for a specified date field in a DataFrame.
 
@@ -1714,6 +1715,33 @@ def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
     df[field] = df[column].dt.tz_localize(None)
     return df
 
+
+def to_rethink_date(df: pd.DataFrame, field: str, column: str = None, tz: str = 'UTC'):
+    """to_rethink_date.
+
+    Add Timezone information to a Datetime Column.
+
+    Useful to be saved into RethinkDB.
+
+    Args:
+        :param df: The DataFrame containing the date field.
+        :param field: The name of the new field to store the formatted datetime.
+        :param column: The name of the date field to be used.
+        :param tz: The timezone to apply if the column does not have one.
+        :return: The DataFrame with the formatted datetime field.
+    """
+    if not column:
+        column = field
+
+    # Check if the column has a timezone, and localize if not
+    if df[column].dt.tz is None:
+        df[column] = df[column].dt.tz_localize(tz)
+
+    # Format the datetime to ISO 8601 string
+    df[field] = df[column].dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    return df
+
+
 def xlsdate(excel_time):
     """
     Converts an Excel date serial number to a pandas datetime object.
@@ -1727,7 +1755,7 @@ def xlsdate(excel_time):
         return pd.NaT
 
 
-def excel_to_date(df, field: str):
+def excel_to_date(df: pd.DataFrame, field: str):
     """
     Converts a specified field in a DataFrame from Excel date serial numbers to pandas datetime objects.
 
@@ -1762,7 +1790,7 @@ def is_time_column(column) -> bool:
     return pd.api.types.is_datetime64_any_dtype(column) and not pd.api.types.is_timedelta64_dtype(column)
 
 
-def extract(df, field: str, column="", to_date=None, value="day"):
+def extract(df: pd.DataFrame, field: str, column="", to_date=None, value="day"):
     """
     Extracts a specified date component from a datetime field in a DataFrame.
 
@@ -1818,7 +1846,7 @@ def extract(df, field: str, column="", to_date=None, value="day"):
     return df
 
 
-def date_trunc(df, field: str, column: str, value: str = "dow", iso: bool = True):
+def date_trunc(df: pd.DataFrame, field: str, column: str, value: str = "dow", iso: bool = True):
     """
     Truncates a datetime field in a DataFrame to the start of a specified time unit.
 
@@ -1842,7 +1870,7 @@ def date_trunc(df, field: str, column: str, value: str = "dow", iso: bool = True
     return df
 
 
-def date_diff(df, field: str, end: str, start: str, unit: str = "s"):
+def date_diff(df: pd.DataFrame, field: str, end: str, start: str, unit: str = "s"):
     """
     Calculates the difference between two date fields in a DataFrame.
 
@@ -1857,7 +1885,7 @@ def date_diff(df, field: str, end: str, start: str, unit: str = "s"):
     return df
 
 
-def replace_nulls(df, field: str = "", value: Any = None):
+def replace_nulls(df: pd.DataFrame, field: str = "", value: Any = None):
     """
     Replaces null values in a specified field with a given value.
 
@@ -1910,7 +1938,7 @@ def fill_nulls(df: pd.DataFrame, field: str, column: str):
     return df
 
 
-def fill_column(df, field: str, value: Any, variables: Any = None):
+def fill_column(df: pd.DataFrame, field: str, value: Any, variables: Any = None):
     """
     Fills a specified field with a given value, optionally using a dictionary of variables.
 
@@ -1930,7 +1958,51 @@ def fill_column(df, field: str, value: Any, variables: Any = None):
     return df
 
 
-def split_into_series(df, field: str):
+def fn_get_timezone(latitudes, longitudes):
+    """
+    Determines the timezone for given latitudes and longitudes.
+
+    :param latitudes: Array of latitude values.
+    :param longitudes: Array of longitude values.
+    :return: Array of timezone names.
+    """
+    tz = timezonefinder.TimezoneFinder()
+    zones = np.full_like(latitudes, DEFAULT_TIMEZONE, dtype=object)
+    mask = ~np.isnan(latitudes) & ~np.isnan(longitudes)
+    latitudes = latitudes[mask]
+    longitudes = longitudes[mask]
+    if len(latitudes) > 0:
+        zones[mask] = [tz.timezone_at(lng=long, lat=lat) for lat, long in zip(latitudes, longitudes)]
+        zones[zones == "uninhabited"] = DEFAULT_TIMEZONE
+        zones[zones is None] = DEFAULT_TIMEZONE
+    return zones
+
+
+def get_timezone(df: pd.DataFrame, field: str, lat: str, long: str) -> pd.DataFrame:
+    """
+    Adds a timezone field to a DataFrame based on latitude and longitude columns.
+
+    :param df: The DataFrame containing the latitude and longitude columns.
+    :param field: The name of the new field to store the timezone.
+    :param lat: The name of the latitude column.
+    :param long: The name of the longitude column.
+    :return: The DataFrame with the timezone field.
+    """
+    if not set([lat, long]).issubset(df.columns):
+        df[field] = None
+    try:
+        df[lat] = pd.to_numeric(df[lat], errors='coerce')
+        df[long] = pd.to_numeric(df[long], errors='coerce')
+    except Exception as err:
+        print("Failed to convert Lat/Long to Float: ", err)
+    try:
+        df[field] = fn_get_timezone(df[lat].values, df[long].values)
+    except Exception as err:
+        print("GET TIMEZONE ERROR: ", err)
+    return df
+
+
+def split_into_series(df: pd.DataFrame, field: str):
     """
     Splits a specified field in a DataFrame into a series of columns.
 
@@ -1946,7 +2018,7 @@ def split_into_series(df, field: str):
         return df
 
 
-def change_timezone(df, field: str, from_tz: str = None, to_tz: str = "UTC"):
+def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: str = "UTC"):
     """
     Changes the timezone of a datetime field in a DataFrame.
 
@@ -1968,7 +2040,7 @@ def change_timezone(df, field: str, from_tz: str = None, to_tz: str = "UTC"):
         return df
 
 
-def to_numeric(df, field: str, remove_alpha: bool = True, to_integer: bool = False):
+def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):
     """
     Converts a column of a pandas DataFrame to numeric values, optionally removing
     non-numeric characters and converting to integer.
@@ -2160,7 +2232,7 @@ def datetime_to_string(df: pd.DataFrame, field: str, mask: str, column: str = No
     return df
 
 
-def flatten_array_row(row, field, attribute=None, prefix=""):
+def flatten_array_row(row, field: str, attribute=None, prefix=""):
     """
     Flattens a dictionary or nested dictionary in a specified field of a DataFrame row.
 
