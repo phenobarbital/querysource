@@ -10,7 +10,9 @@ from ..exceptions import (
 )
 from .abstract import AbstractHandler
 from ..queries import MultiQS
-from .outputs import TableOutput
+from ..queries.multi.outputs import TableOutput
+from ..queries.multi.operators import Filter, GroupBy
+# from .outputs import TableOutput
 
 
 class QueryHandler(AbstractHandler):
@@ -122,24 +124,63 @@ class QueryHandler(AbstractHandler):
                 exception=ex
             ) from ex
 
-        ### Step 4: Check if result is empty or is a dictionary of dataframes:
+        ### Step 2: Check if result is empty or is a dictionary of dataframes:
         if result is None:
             raise self.Error(
                 message="Empty Result",
                 code=404
             )
-        # reduce to one single Dataframe:
+        # Step 3: reduce to one single Dataframe:
         if isinstance(result, dict) and len(result) == 1:
+            # TODO: making a melt or concat of all dataframes
             result = list(result.values())[0]
-        # TODO: making a melt of all dataframes
-        ### Step 5: Passing result to any Processor declared
-        if isinstance(options, dict):
-            if 'Output' in options:
+        ### Step 4: applying some Filter or GroupBy Transformations:
+        # remove the grouping option from data, rest, is passed to filter:
+        try:
+            _grouping = data.pop('grouping', None)
+        except TypeError:
+            _grouping = None
+        if data:  # already have information to be passed to data
+            _filter = {}
+            try:
+                ## making Join of Data
+                _filter = data.pop('filter', {})
+                if not _filter:
+                    f = data.pop('where_cond', {})
+                    if f:
+                        _filter['filter'] = f.pop('where_cond')
+                if data is not None:
+                    ft = {
+                        "filter": {
+                            **data
+                        }
+                    }
+                    _filter = {**_filter, **ft}
+                f = Filter(data=result, **_filter)
+                result = await f.run()
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error on Filtering: {ex!s}",
+                    exception=ex
+                ) from ex
+        if _grouping:
+            try:
+                ## Group By of Data:
+                groupby = GroupBy(data=result, **_grouping)
+                result = await groupby.run()
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error on GroupBy: {ex!s}",
+                    exception=ex
+                ) from ex
+        ### Step 5: Passing result to TableOutput
+        if isinstance(data, dict):
+            if 'Output' in data:
                 ## Optionally saving result into Database (using Pandas)
                 for step in options['Output']:
                     obj = None
                     for step_name, component in step.items():
-                        if step_name == 'tableOutput':
+                        if step_name in ('tableOutput', 'TableOutput'):
                             obj = TableOutput(data=result, **component)
                             result = await obj.run()
         ### Step 6: passing Result to DataOutput

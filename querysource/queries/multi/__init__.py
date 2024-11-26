@@ -123,8 +123,7 @@ class MultiQS(BaseQuery):
                 raise
         if self._queries:
             for name, query in self._queries.items():
-                print('NAME > ', name, query)
-                print('CONDITIONS > ', self._conditions)
+                print('NAME > ', name, query, 'CONDITIONS > ', self._conditions)
                 conditions = self._conditions.pop(name, {})
                 # those conditions be applied to the query
                 query = {**conditions, **query}
