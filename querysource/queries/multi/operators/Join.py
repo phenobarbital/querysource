@@ -1,4 +1,4 @@
-import pandas as pd
+from pandas import DataFrame
 from uuid import uuid4
 from navconfig.logging import logging
 from ....exceptions import (
@@ -6,23 +6,22 @@ from ....exceptions import (
     DriverError,
     QueryException
 )
+from .abstract import AbstractOperator
 
-class Join:
+
+class Join(AbstractOperator):
     def __init__(self, data: dict, **kwargs) -> None:
         self._type: str = kwargs.get('type', 'inner')
-        self._backend = 'pandas'
-        self.data = data
         # Left Operator
         self._left = kwargs.pop('left', None)
         # Right Operator
         self._right = kwargs.pop('right', None)
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        super(Join, self).__init__(data, **kwargs)
 
     async def start(self):
-        for name, data in self.data.items():
+        for _, data in self.data.items():
             ## TODO: add support for polars and datatables
-            if isinstance(data, pd.DataFrame):
+            if isinstance(data, DataFrame):
                 self._backend = 'pandas'
             else:
                 raise DriverError(
@@ -30,7 +29,6 @@ class Join:
                 )
 
     async def run(self):
-        await self.start()
         args = {}
         if hasattr(self, 'no_copy'):
             args['copy'] = self.no_copy
@@ -113,8 +111,8 @@ class Join:
                 # return the last one:
                 return list(self.data.values())[0]
 
-    def _join(self, df1: pd.DataFrame, df2: pd.DataFrame, **kwargs):
-        df = pd.merge(
+    def _join(self, df1: DataFrame, df2: DataFrame, **kwargs):
+        df = self._pd.merge(
             df1,
             df2,
             how=self._type,
@@ -135,9 +133,5 @@ class Join:
             inplace=True
         )
         df.reset_index(drop=True)
-        print(
-            '::: Printing Column Information === '
-        )
-        for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
+        self._print_info(df)
         return df

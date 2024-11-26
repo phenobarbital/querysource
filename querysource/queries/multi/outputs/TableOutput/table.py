@@ -23,6 +23,7 @@ class TableOutput:
         self._columns: list = []
         self._constraint: list = None
         self.flavor: str = kwargs.pop('flavor', 'postgresql')
+        self._truncate: bool = kwargs.get('truncate', False)
         self.logger = logging.getLogger(
             f'QS.Output.{self.__class__.__name__}'
         )
@@ -111,6 +112,7 @@ class TableOutput:
             )  # pylint: disable=E1120,E1123 # noqa
 
     async def run(self):
+        # TODO: add a Truncate Method to every Engine
         if self.flavor == 'postgresql':
             self._engine = PgOutput(parent=self)
         elif self.flavor == 'mysql':

@@ -1,27 +1,21 @@
-import pandas as pd
-from navconfig.logging import logging
+from pandas import DataFrame
 from ....exceptions import (
     DataNotFound,
     DriverError,
     QueryException
 )
+from .abstract import AbstractOperator
 
-class Melt:
+class Melt(AbstractOperator):
     def __init__(self, data: dict, **kwargs) -> None:
-        try:
-            self._id_vars = kwargs['id']
-            del kwargs['id']
-        except KeyError:
-            pass
-        self._backend = 'pandas'
-        self.data = data
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        self._id_vars = kwargs.pop('id', None)
+        self._na_cols = kwargs.pop('na_cols', None)
+        super(Melt, self).__init__(data, **kwargs)
 
     async def start(self):
         for _, data in self.data.items():
             ## TODO: add support for polars and datatables
-            if isinstance(data, pd.DataFrame):
+            if isinstance(data, DataFrame):
                 self._backend = 'pandas'
             else:
                 raise DriverError(
@@ -33,7 +27,7 @@ class Melt:
             raise DriverError(
                 f"Missing LEFT Dataframe on Data: {self.data[self.using]}"
             ) from ex
-        ### check for empty
+        ### check for emptiness
         if self.df1.empty:
             raise DataNotFound(
                 f"Empty Main {self.using} Dataframe"
@@ -46,7 +40,6 @@ class Melt:
             ) from ex
 
     async def run(self):
-        await self.start()
         args = {}
         if hasattr(self, 'args') and isinstance(self.args, dict):
             args = {**args, **self.args}
@@ -56,15 +49,16 @@ class Melt:
                 id_vars=self._id_vars,
                 **args
             )
-            # Join the melted DataFrame with the courses DataFrame
+            # Join the melted DataFrame with the first DataFrame
             df_joined = df_melt.join(
                 self.df2.set_index('column_name'), on='column_name'
             )
-            # Drop rows where course_date is null
-            df = df_joined.dropna(subset=['course_date'])
-            print('::: Printing Column Information === ')
-            for column, t in df.dtypes.items():
-                print(column, '->', t, '->', df[column].iloc[0])
+            # Drop rows where drop_cols is null
+            if self._na_cols:
+                df = df_joined.dropna(subset=self._na_cols)
+            else:
+                df = df_joined
+            self._print_info(df)
             return df
         except DataNotFound:
             raise

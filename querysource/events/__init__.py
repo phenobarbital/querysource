@@ -33,6 +33,7 @@ async def LogEvent(
             **kwargs
         }
     )
+    # TODO: migrate to a worker task to avoid blocking the main thread.
     # _new = False
     # if USE_INFLUX is True:
     #     try:

@@ -6,7 +6,7 @@ from ....exceptions import (
     QueryException
 )
 from .abstract import AbstractTransform
-from . import map_functions as dffunctions
+from .transforms import functions as dffunctions
 
 
 class Map(AbstractTransform):
