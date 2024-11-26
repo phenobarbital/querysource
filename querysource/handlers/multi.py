@@ -138,7 +138,7 @@ class QueryHandler(AbstractHandler):
         # remove the grouping option from data, rest, is passed to filter:
         try:
             _grouping = data.pop('grouping', None)
-        except TypeError:
+        except (AttributeError, TypeError):
             _grouping = None
         if data:  # already have information to be passed to data
             _filter = {}
