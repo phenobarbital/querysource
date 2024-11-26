@@ -61,6 +61,14 @@ POSTGRES_SSL_CA = config.get('POSTGRES_SSL_CA')
 POSTGRES_SSL_CERT = config.get('POSTGRES_SSL_CERT')
 POSTGRES_SSL_KEY = config.get('POSTGRES_SSL_KEY')
 
+# Timezone (For parsedate)
+TIMEZONE = config.get("timezone", section="l18n", fallback="UTC")
+USE_TIMEZONE = config.getboolean("USE_TIMEZONE", fallback=True)
+
+DEFAULT_TIMEZONE = config.get(
+    "default_timezone", section="l18n", fallback="America/New_York"
+)
+SYSTEM_LOCALE = config.get("locale", section="l18n", fallback="en_US.UTF-8")
 
 ### QuerySet (for QuerySource)
 CACHE_HOST = config.get('CACHE_HOST', fallback='localhost')

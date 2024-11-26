@@ -142,13 +142,16 @@ class QueryHandler(AbstractHandler):
             _grouping = None
         if data:  # already have information to be passed to data
             _filter = {}
+            print('DATA >>> ', data)
             try:
                 ## making Join of Data
                 _filter = data.pop('filter', {})
+                print("TEST >>>> ", _filter)
                 if not _filter:
                     f = data.pop('where_cond', {})
+                    print('F > ', f)
                     if f:
-                        _filter['filter'] = f.pop('where_cond')
+                        _filter['filter'] = f
                 if data is not None:
                     ft = {
                         "filter": {
