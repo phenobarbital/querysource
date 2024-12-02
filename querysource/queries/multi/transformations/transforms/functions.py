@@ -1700,19 +1700,34 @@ def endofweek(df: pd.DataFrame, field: str, column=""):
     return df
 
 def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
-    """to_excel_date.
-
-    Removes the Locatization and Timezone of a Datetime Column.
+    """
+    Converts a datetime column to a naive datetime suitable for Excel.
 
     Args:
         :param df: The DataFrame containing the date field.
-        :param field: The name of the new field to store the end of the week.
+        :param field: The name of the new field to store the converted datetime.
         :param column: The name of the date field to be used.
-        :return: The DataFrame with the end of the week field.
+        :return: The DataFrame with the converted datetime field.
     """
     if not column:
         column = field
-    df[field] = df[column].dt.tz_localize(None)
+
+    try:
+        # Ensure the column is converted to datetime
+        df[column] = pd.to_datetime(df[column], errors='coerce')
+
+        # Handle timezone-aware datetimes
+        if df[column].dt.tz is not None:
+            # Convert to UTC and then remove the timezone
+            df[field] = df[column].dt.tz_convert('UTC').dt.tz_localize(None)
+        else:
+            # Already naive, no tz conversion needed
+            df[field] = df[column].dt.tz_localize(None)
+
+    except Exception as e:
+        print('Error on to_excel_date: ', e)
+        raise e  # Re-raise the exception after logging it
+
     return df
 
 
