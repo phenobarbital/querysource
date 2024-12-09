@@ -200,10 +200,18 @@ cdef class AbstractParser:
         group2: list = []
         try:
             group1 = self.conditions.pop('group_by', [])
+        except TypeError:
+            # group is an string:
+            g = self.conditions.pop('group_by')
+            group1 = [a.strip() for a in g.split(',')]
         except AttributeError:
             pass
         try:
             group2 = self.conditions.pop('grouping', [])
+        except TypeError:
+            # group is an string:
+            g = self.conditions.pop('grouping')
+            group2 = [a.strip() for a in g.split(',')]
         except AttributeError:
             pass
         if isinstance(group1, str):
@@ -358,7 +366,7 @@ cdef class AbstractParser:
             return fn(key, val)
         return None
 
-    async def _get_operational_value(self, value: object, connection: Any) -> Any:
+    async def _get_operational_value(self, value: object, connection: object) -> object:
         try:
             if isinstance(value, str):
                 result = await connection.get(value)
@@ -421,7 +429,7 @@ cdef class AbstractParser:
             return False
         return False
 
-    async def _process_element(self, name: str, value: Any, connection: Callable):
+    async def _process_element(self, name: str, value: object, connection: object):
         """Process a single element and return the key-value pair to be added to the filter."""
         _, key, _ = field_components(name)[0]
         if key in self.cond_definition:
@@ -445,7 +453,7 @@ cdef class AbstractParser:
         else:
             return name, value
 
-    async def set_conditions(self, conditions: dict, connection: Callable) -> dict:
+    async def set_conditions(self, conditions: dict, connection: object) -> dict:
         """Check if all conditions are valid and return the value."""
         elements = self._merge_conditions_and_filters(conditions)
 
@@ -505,7 +513,7 @@ cdef class AbstractParser:
 
         return key, result
 
-    async def set_where(self, _filter: dict, connection: Callable) -> object:
+    async def set_where(self, _filter: dict, connection: object) -> object:
         """Set the WHERE clause conditions in parallel."""
         tasks = [self._where_element(key, value, connection) for key, value in _filter.items()]
         results = await asyncio.gather(*tasks)
