@@ -38,14 +38,18 @@ class Map(AbstractTransform):
                 # simple column replacement:
                 try:
                     it[val] = it[field]
-                    if self.replace_columns is True:
-                        it.drop(field, axis="columns", inplace=True)
+                    # if self.replace_columns is True:
+                    it.drop(field, axis="columns", inplace=True)
                     continue
                 except KeyError:
-                    self._logger.error(f"Column doesn't exists: {val}")
+                    self._logger.error(
+                        f"Column doesn't exists: {val}"
+                    )
                     continue
                 except Exception as e:
-                    self._logger.error(f"Error dropping Column: {val}, {e}")
+                    self._logger.error(
+                        f"Error dropping Column: {val}, {e}"
+                    )
                     continue
             elif isinstance(val, list):
                 # value is a function to be called:
