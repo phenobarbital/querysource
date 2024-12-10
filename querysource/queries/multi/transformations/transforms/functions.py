@@ -809,21 +809,25 @@ def divide(
     df: pd.DataFrame,
     field: str,
     columns: Optional[list] = None,
-    divisor: Union[int, float] = 100
+    divisor: Union[int, float] = 100,
+    not_null: bool = False
 ):
     """
-    Takes a pandas DataFrame and divides the values in a specified column by a given divisor.
+    Takes a pandas DataFrame and divides the values in a specified column by a given divisor or columns.
 
     :param df: pandas DataFrame to be modified.
     :param field: Name of the column in the df DataFrame to be divided.
+    :param columns: Optional list of columns for division logic.
     :param divisor: The value by which to divide the column values. Defaults to 100.
+    :param not_null: If True, replace NaN resulting from division by zero with 0. Defaults to False.
     :return: Modified pandas DataFrame with the divided values.
     """
     if columns is not None:
-        # divide first column by second column
+        # Ensure numeric and clean columns
         for col in columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
             df[col] = df[col].replace([-np.inf, np.inf], np.nan)
+
         if len(columns) == 2:
             df[field] = df[columns[0]] / df[columns[1]]
         elif len(columns) == 1:
@@ -833,6 +837,44 @@ def divide(
         df[field] = pd.to_numeric(df[field], errors="coerce")
         df[field] = df[field].replace([-np.inf, np.inf], np.nan)
         df[field] = df[field].apply(lambda x: x / divisor)
+
+    # Handle not_null flag
+    if not_null:
+        df[field] = df[field].fillna(0)
+
+    return df
+
+def multiply(
+    df: pd.DataFrame,
+    field: str,
+    columns: Optional[list] = None,
+    multiplier: Union[int, float] = 1
+):
+    """
+    Takes a pandas DataFrame and multiplies the values in a specified column by a given multiplier or columns.
+
+    :param df: pandas DataFrame to be modified.
+    :param field: Name of the column in the df DataFrame to be multiplied.
+    :param columns: Optional list of columns for multiplication logic.
+    :param multiplier: The value by which to multiply the column values. Defaults to 1.
+    :return: Modified pandas DataFrame with the multiplied values.
+    """
+    if columns is not None:
+        # Ensure numeric and clean columns
+        for col in columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = df[col].replace([-np.inf, np.inf], np.nan)
+
+        if len(columns) == 2:
+            df[field] = df[columns[0]] * df[columns[1]]
+        elif len(columns) == 1:
+            column = columns[0]
+            df[field] = df.apply(lambda row: row[field] * row[column] if pd.notna(row[column]) else np.nan, axis=1)
+    else:
+        df[field] = pd.to_numeric(df[field], errors="coerce")
+        df[field] = df[field].replace([-np.inf, np.inf], np.nan)
+        df[field] = df[field].apply(lambda x: x * multiplier)
+
     return df
 
 

@@ -213,7 +213,8 @@ setup(
         "geopandas==1.0.1",
         "contextily==1.6.2",
         "jenkspy==0.4.1",
-        "timezonefinder==6.5.5"
+        "timezonefinder==6.5.5",
+        "ipyleaflet==0.19.2"
     ],
     extras_require={
         "analytics": [
