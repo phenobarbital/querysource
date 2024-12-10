@@ -805,7 +805,12 @@ def case(
     return df
 
 
-def divide(df: pd.DataFrame, field: str, divisor=100):
+def divide(
+    df: pd.DataFrame,
+    field: str,
+    columns: Optional[list] = None,
+    divisor: Union[int, float] = 100
+):
     """
     Takes a pandas DataFrame and divides the values in a specified column by a given divisor.
 
@@ -814,9 +819,20 @@ def divide(df: pd.DataFrame, field: str, divisor=100):
     :param divisor: The value by which to divide the column values. Defaults to 100.
     :return: Modified pandas DataFrame with the divided values.
     """
-    df[field] = pd.to_numeric(df[field], errors="coerce")
-    df[field] = df[field].replace([-np.inf, np.inf], np.nan)
-    df[field] = df[field].apply(lambda x: x / divisor)
+    if columns is not None:
+        # divide first column by second column
+        for col in columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = df[col].replace([-np.inf, np.inf], np.nan)
+        if len(columns) == 2:
+            df[field] = df[columns[0]] / df[columns[1]]
+        elif len(columns) == 1:
+            column = columns[0]
+            df[field] = df.apply(lambda row: row[field] / row[column] if pd.notna(row[column]) else np.nan, axis=1)
+    else:
+        df[field] = pd.to_numeric(df[field], errors="coerce")
+        df[field] = df[field].replace([-np.inf, np.inf], np.nan)
+        df[field] = df[field].apply(lambda x: x / divisor)
     return df
 
 
