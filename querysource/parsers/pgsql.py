@@ -87,7 +87,13 @@ class pgSQLParser(SQLParser):
                         else:
                             where_cond.append(f"{key} IN {val}")
                 elif isinstance(value, (str, int)):
-                    if "BETWEEN" in str(value):
+                    if end == '~':
+                        val = value[:-1] + "%'"
+                        where_cond.append(f"{name} ILIKE {val}")
+                    elif end == '!~':
+                        val = value[:-1] + "%'"
+                        where_cond.append(f"{name} NOT ILIKE {val}")
+                    elif "BETWEEN" in str(value):
                         if isinstance(value, str) and "'" not in value:
                             where_cond.append(
                                 f"({key} {value})"

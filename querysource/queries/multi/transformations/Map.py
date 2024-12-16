@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Union
 import inspect
 import pandas as pd
@@ -52,14 +53,22 @@ class Map(AbstractTransform):
                         f"Error dropping Column: {val}, {e}"
                     )
                     continue
+            elif isinstance(val, dict):
+                # multiple functions to be called at once
+                for fname, args in val.items():
+                    it = self._call_fn(field, fname, args, it)
+                continue
             elif isinstance(val, list):
+                print('FIELD > ', field, val, len(val))
                 if len(val) > 1:
                     # multiple functions to be called at once
                     for v in val:
-                        it = self._run_fn(v, it, field)
+                        print('WHICH VAL > ', v)
+                        it = self._run_one(v, it, field)
                 else:
-                    it = self._run_fn(val, it, field)
-
+                    it = self._run_one(val, it, field)
+                print(it)
+                continue
         # at the end
         self.data = it
         if hasattr(self, 'drop_columns'):
@@ -67,20 +76,17 @@ class Map(AbstractTransform):
         self.colum_info(self.data)
         return self.data
 
-    def _run_fn(self, val: list, it: pd.DataFrame, field: str) -> pd.DataFrame:
-        # value is a function to be called:
-        fname = val.pop(0)
-        try:
-            args = val[0]
-        except IndexError:
-            args = {}
+    def _call_fn(self, field: str, fname: Callable, args: dict, it: pd.DataFrame) -> pd.DataFrame:
+        """
+        Call a function.
+        """
         try:
             func = getattr(dffunctions, fname)
             self.logger.debug(
                 f"Calling Function: {fname!s} with args: {args}"
             )
             it = func(df=it, field=field, **args)
-            it = it.copy()
+            # it = it.copy()
             return it
         except AttributeError:
             pass
@@ -104,7 +110,39 @@ class Map(AbstractTransform):
                 it[field] = func(**args)
             return it
         except Exception as e:
-            self.logger.error(f"Error applying function: {fname!s}, {e}")
+            self.logger.error(
+                f"Error applying function: {fname!s}, {e}"
+            )
+            return it
+
+    def _run_one(self, val: list, it: pd.DataFrame, field: str) -> pd.DataFrame:
+        """
+        Run a single function on the data.
+        val is a list of arguments to be passed to the function:
+        """
+        print('RUN VAL > ', val)
+        element = val.pop(0)
+        if isinstance(element, list):
+            # split into function and arguments:
+            fname = element.pop(0)
+            try:
+                args = element[0]
+            except IndexError:
+                args = {}
+            print('FNAME > ', fname, args)
+        else:
+            fname = element
+            try:
+                args = val[0]
+            except IndexError:
+                args = {}
+        try:
+            it = self._call_fn(field, fname, args, it)
+            return it
+        except Exception as e:
+            self.logger.error(
+                f"Error applying function: {fname!s}, {e}"
+            )
             return it
 
     def is_series_function(self, func, args):
