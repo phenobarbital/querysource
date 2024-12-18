@@ -46,7 +46,6 @@ class ThreadQuery(threading.Thread):
             )
         except Exception as ex:
             self.exc = ex
-            print('QueryObj Error: ', ex)
             return
         try:
             self._loop.run_until_complete(
@@ -54,18 +53,15 @@ class ThreadQuery(threading.Thread):
             )
         except QueryException as ex:
             self.exc = ex
-            print('Query Error: ', ex)
             return
         except Exception as ex:
             self.exc = ex
-            print('Build Error: ', ex)
             return
         try:
             self._loop.run_until_complete(
                 self._query.query()
             )
         except Exception as ex:
-            print('ThreadQuery Error: ', ex)
             self.exc = ex
         finally:
             try:

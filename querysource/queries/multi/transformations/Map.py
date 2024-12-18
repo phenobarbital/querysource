@@ -165,7 +165,6 @@ class Map(AbstractTransform):
             func(**args)
             return False
         except Exception as e:
-            print('EXCEPTION ', e)
             raise ValueError(
-                "Function cannot handle scalar or Series input with given arguments."
+                f"Map: cannot handle scalar or Series input with given arguments: {e}"
             )

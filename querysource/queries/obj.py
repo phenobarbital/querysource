@@ -65,7 +65,8 @@ class QueryObject(BaseQuery):
     async def build_provider(self):
         """
         build_provider.
-           create queries based on a query_slug, a raw query or an Object Query.
+           create queries based on a query_slug,
+           a raw query or an Object Query.
         """
         if self._type == 'slug':  # slug-based provider:
             self._logger.debug(
@@ -197,8 +198,9 @@ class QueryObject(BaseQuery):
         elif self._type == 'query':
             async with await self._qs.connection.connection() as conn:
                 try:
-                    # conn.output_format('polars')
-                    self._logger.debug(f'Connected: {conn.is_connected()}')
+                    self._logger.debug(
+                        f'Connected: {conn.is_connected()}'
+                    )
                     result, error = await conn.query(self._qs.query)
                     if error:
                         if isinstance(error, (DataNotFound, NoDataFound)):
