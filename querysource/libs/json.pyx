@@ -13,6 +13,7 @@ from psycopg2 import Binary  # Import Binary from psycopg2
 from typing import Any, Union
 from pathlib import PosixPath, PurePath, Path
 from decimal import Decimal
+from enum import Enum, EnumType
 from ..exceptions cimport ParserError
 import orjson
 
@@ -56,6 +57,13 @@ cdef class JSONContent:
             return None
         elif obj == MISSING:
             return None
+        elif isinstance(obj, (Enum, EnumType)):
+            if obj is None:
+                return None
+            if hasattr(obj, 'value'):
+                return obj.value
+            else:
+                return obj.name
         elif isinstance(obj, Binary):  # Handle bytea column from PostgreSQL
             return str(obj)  # Convert Binary object to string
         logging.error(f'{obj!r} of Type {type(obj)} is not JSON serializable')

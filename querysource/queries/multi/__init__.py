@@ -147,31 +147,38 @@ class MultiQS(BaseQuery):
                 tasks[name] = t
 
         ## then, run all jobs:
-        for _, t in tasks.items():
-            t.join()
-            if t.exc:
-                print('EXCEPTION ', t.exc, type(t.exc))
-                ## raise exception for this Query
-                if isinstance(t.exc, ParserError):
-                    raise self.Error(
-                        f"Error parsing Query Slug {t.slug()}",
-                        exception=t.exc
-                    )
-                if isinstance(t.exc, SlugNotFound):
-                    raise SlugNotFound(
-                        f"Slug Not Found: {t.slug}"
-                    )
-                if isinstance(t.exc, (QueryException, DriverError)):
-                    raise self.Error(
-                        f"Query Error: {str(t.exc)}",
-                        exception=t.exc
-                    )
-                else:
-                    raise self.Error(
-                        f"Error on Query: {t!s}",
-                        exception=t.exc
-                    )
-        result = {}
+        try:
+            for _, t in tasks.items():
+                t.join()
+                if t.exc:
+                    ## raise exception for this Query
+                    if isinstance(t.exc, ParserError):
+                        raise self.Error(
+                            f"Error parsing Query Slug {t.slug()}",
+                            exception=t.exc
+                        )
+                    if isinstance(t.exc, SlugNotFound):
+                        raise SlugNotFound(
+                            f"Slug Not Found: {t.slug}"
+                        )
+                    if isinstance(t.exc, (QueryException, DriverError)):
+                        raise self.Error(
+                            f"Query Error: {str(t.exc)}",
+                            exception=t.exc
+                        )
+                    else:
+                        raise self.Error(
+                            f"Error on Query: {t!s}",
+                            exception=t.exc
+                        )
+            result = {}
+        except (QueryException, DriverError) as ex:
+            raise
+        except Exception as ex:
+            raise self.Error(
+                message=f"Error on Query: {ex!s}",
+                exception=ex
+            ) from ex
         while not self._queue.empty():
             result.update(await self._queue.get())
         ### Step 2: passing Results to virtual JOINs

@@ -109,10 +109,14 @@ class AbstractHandler(BaseHandler):
             code (int, optional): Error Code. Defaults to 500.
         """
         # message = f"{message}: {exception!s}"
+        try:
+            reason_exception = f"{exception.decode()!s}"
+        except Exception:
+            reason_exception = str(exception)
         if not reason:
             reason = {
                 "error": message,
-                "reason": str(exception)
+                "reason": reason_exception
             }
         args = {
             "reason": message,
@@ -120,7 +124,6 @@ class AbstractHandler(BaseHandler):
             "headers": {
                 "X-MESSAGE": str(message),
                 "X-STATUS": str(code),
-                "X-ERROR": str(exception),
             },
             "content_type": "application/json",
         }

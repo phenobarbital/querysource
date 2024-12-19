@@ -388,7 +388,7 @@ class Connection:
             try:
                 async with await db.connection() as conn:
                     QueryModel.Meta.connection = conn
-                    self.logger.debug(
+                    self.logger.notice(
                         f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
                     )
                     return await QueryModel.get(query_slug=slug)
