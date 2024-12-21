@@ -214,7 +214,8 @@ setup(
         "contextily==1.6.2",
         "jenkspy==0.4.1",
         "timezonefinder==6.5.5",
-        "ipyleaflet==0.19.2"
+        "ipyleaflet==0.19.2",
+        'rapidfuzz==3.11.0'
     ],
     extras_require={
         "analytics": [
