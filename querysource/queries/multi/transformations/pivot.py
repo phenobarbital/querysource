@@ -39,10 +39,8 @@ class pivot(AbstractTransform):
             tname = self.totals['name']
             args['margins'] = True
             args['margins_name'] = tname
-        if self._fill_value:
-            args['fill_value'] = self._fill_value
         if self._pd_args:
-            args |= self._pd_args
+            args = {**args, **self._pd_args}
         try:
             if self._type == 'crosstab':
                 df = pd.crosstab(
@@ -51,7 +49,9 @@ class pivot(AbstractTransform):
                     **args
                 )
             elif self._type == 'pivot':
-                args = {}
+                args = {'fill_value': self._fill_value}
+                if self._pd_args:
+                    args |= self._pd_args
                 aggfunc = self.aggregate if hasattr(self, 'aggregate') else 'first'
                 df = pd.pivot_table(
                     self.data,
