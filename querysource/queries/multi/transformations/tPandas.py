@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any, Union
 from collections.abc import Callable
+from abc import abstractmethod
 import pandas as pd
 from pandas import DataFrame
 from ....exceptions import (
@@ -33,6 +34,15 @@ class tPandas(AbstractTransform):
         # Pandas Arguments:
         self.pd_args = kwargs.pop("pd_args", {})
         super(tPandas, self).__init__(data, **kwargs)
+
+    @abstractmethod
+    async def _run(self) -> DataFrame:
+        """
+        Abstract method to run the transformation.
+        Returns:
+            DataFrame: The transformed DataFrame.
+        """
+        pass  # pragma: no cover"""
 
     async def run(self):
         await self.start()
