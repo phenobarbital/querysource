@@ -1,7 +1,8 @@
 """Driver for MySQL database connections.
 """
 from dataclasses import InitVar
-from datamodel import Column
+from datamodel import Field
+from datamodel.exceptions import ValidationError
 from ...conf import (
     # MySQL Server
     MYSQL_DRIVER,
@@ -17,11 +18,11 @@ from .abstract import SQLDriver
 class mysqlDriver(SQLDriver):
     driver: str = MYSQL_DRIVER
     name: str = MYSQL_DRIVER
-    user: str = Column(required=True)
+    user: str
     username: InitVar = ''
     hostname: InitVar = ''
     dsn_format: str = "mysql://{user}:{password}@{host}:{port}/{database}"
-    port: int = Column(required=True, default=3306)
+    port: int = Field(required=True, default=3306)
 
     def __post_init__(self, username, hostname: str = None, **kwargs) -> None:  # pylint: disable=W0613,W0221
         super(mysqlDriver, self).__post_init__(hostname, **kwargs)
@@ -54,5 +55,7 @@ try:
         user=MYSQL_USER,
         password=MYSQL_PWD
     )
+except ValidationError as e:
+    print(e.payload)
 except ValueError:
     mysql_default = None
