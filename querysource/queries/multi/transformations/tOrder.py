@@ -38,7 +38,7 @@ class tOrder(tPandas):
         """Init Method."""
         self._column: Union[str, list] = kwargs.pop("columns", None)
         if isinstance(self._column, list):
-            ascending = [True for x in self._column]
+            ascending = [True for _ in self._column]
         elif isinstance(self._column, str):
             ascending = [True]
             self._column = [self._column]
@@ -67,13 +67,12 @@ class tOrder(tPandas):
                     )
                     return self.data
             # Sort the DataFrame by the specified column
-            df = self.data.sort_values(
+            return self.data.sort_values(
                 by=self._column,
                 ascending=self._ascending,
                 na_position=self._na_position,
                 **self.pd_args
             ).reset_index(drop=True)
-            return df
         except Exception as err:
             raise QueryException(
                 f"Generic Error on Data: error: {err}"

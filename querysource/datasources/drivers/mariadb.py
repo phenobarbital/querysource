@@ -17,7 +17,7 @@ from .abstract import SQLDriver
 class mariadbDriver(SQLDriver):
     driver: str = MYSQL_DRIVER
     name: str = MYSQL_DRIVER
-    user: str = Column(required=True)
+    user: str
     username: InitVar = ''
     hostname: InitVar = ''
     dsn_format: str = "mysql://{user}:{password}@{host}:{port}/{database}"

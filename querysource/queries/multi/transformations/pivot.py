@@ -12,6 +12,8 @@ class pivot(AbstractTransform):
         self.reset_index: bool = kwargs.pop('reset_index', True)
         self._type = kwargs.pop('type', 'crosstab')
         self._multilevel = kwargs.pop('multilevel', False)
+        self._pd_args = kwargs.pop('pd_args', {})
+        self._fill_value = kwargs.pop('fill_value', None)
         super(pivot, self).__init__(data, **kwargs)
         if not hasattr(self, 'index'):
             raise DriverError(
@@ -37,6 +39,10 @@ class pivot(AbstractTransform):
             tname = self.totals['name']
             args['margins'] = True
             args['margins_name'] = tname
+        if self._fill_value:
+            args['fill_value'] = self._fill_value
+        if self._pd_args:
+            args |= self._pd_args
         try:
             if self._type == 'crosstab':
                 df = pd.crosstab(
@@ -46,10 +52,7 @@ class pivot(AbstractTransform):
                 )
             elif self._type == 'pivot':
                 args = {}
-                if hasattr(self, 'aggregate'):
-                    aggfunc = self.aggregate
-                else:
-                    aggfunc = 'first'
+                aggfunc = self.aggregate if hasattr(self, 'aggregate') else 'first'
                 df = pd.pivot_table(
                     self.data,
                     index=self.index,

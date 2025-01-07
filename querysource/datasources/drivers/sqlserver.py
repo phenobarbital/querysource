@@ -2,6 +2,7 @@
 """
 from dataclasses import InitVar
 from datamodel import Column
+from datamodel.exceptions import ValidationError
 from ...conf import (
     # SQL Server
     SQLSERVER_DRIVER,
@@ -54,13 +55,17 @@ class sqlserverDriver(SQLDriver):
         }
 
 if SQLSERVER_USER:
-    sqlserver_default = sqlserverDriver(
-        host=SQLSERVER_HOST,
-        port=SQLSERVER_PORT,
-        database=SQLSERVER_DATABASE,
-        user=SQLSERVER_USER,
-        password=SQLSERVER_PWD,
-        tds_version=SQLSERVER_TDS_VERSION
-    )
+    try:
+        sqlserver_default = sqlserverDriver(
+            host=SQLSERVER_HOST,
+            port=SQLSERVER_PORT or 1433,
+            database=SQLSERVER_DATABASE,
+            user=SQLSERVER_USER,
+            password=SQLSERVER_PWD,
+            tds_version=SQLSERVER_TDS_VERSION
+        )
+    except ValidationError as e:
+        print(e.payload)
+        sqlserver_default = None
 else:
     sqlserver_default = None
