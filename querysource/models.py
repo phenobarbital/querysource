@@ -2,7 +2,7 @@
 
 Models for querysource structure.
 """
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 from asyncdb.models import Model, Field
 from .types.mapping import ClassDict
@@ -64,11 +64,11 @@ class QueryModel(Model):
     conditions: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     cond_definition: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     ## filter and grouping options
-    fields: Optional[list] = Field(required=False, db_type='array')
+    fields: List[str] = Field(required=False, db_type='array', default_factory=list)
     filtering: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
-    ordering: Optional[list] = Field(required=False, db_type='array')
-    grouping: Optional[list] = Field(required=False, db_type='array')
-    qry_options: Optional[dict] = Field(required=False, db_type='jsonb')
+    ordering: List[str] = Field(required=False, db_type='array', default_factory=list)
+    grouping: List[str] = Field(required=False, db_type='array', default_factory=list)
+    qry_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     h_filtering: bool = Field(required=False, default=False, comment="filtering based on Hierarchical rules.")
     ### Query Information:
     query_raw: str = Field(required=False)
