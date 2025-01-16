@@ -215,7 +215,9 @@ setup(
         "jenkspy==0.4.1",
         "timezonefinder==6.5.5",
         "ipyleaflet==0.19.2",
-        'rapidfuzz==3.11.0'
+        'rapidfuzz==3.11.0',
+        'nltk==3.9.1',
+        'wordcloud==1.9.4'
     ],
     extras_require={
         "analytics": [

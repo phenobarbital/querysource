@@ -28,6 +28,8 @@ class uap(restSource):
         args = {}
 
         print('UAP CONDITIONS> ', conditions)
+        if 'conditions' in self._conditions:
+            self._conditions = self._conditions.pop('conditions')
         try:
             self._program = self._conditions['var']
             del self._conditions['var']
@@ -79,28 +81,19 @@ class uap(restSource):
             fallback=host
         )
 
-        try:
-            self._page_size = self._conditions['pagesize']
-            del self._conditions['pagesize']
-        except (ValueError, KeyError):
+        self._page_size = self._conditions.pop('pagesize', None)
+        if not self._page_size:
             try:
                 self._page_size = definition.params['pagesize']
             except (AttributeError, KeyError):
-                pass
+                self._page_size = 1000
 
         self._conditions['page_size'] = self._page_size
 
-        try:
-            self._more_results = self._conditions['more_results']
-            del self._conditions['more_results']
-        except (ValueError, KeyError):
-            self._more_results = True
-
-        try:
-            self._pages = self._conditions['pages']
-            del self._conditions['pages']
-        except (ValueError, KeyError):
-            self._pages = None
+        self._more_results = self._conditions.pop('more_results', True)
+        self._conditions['more_results'] = self._more_results
+        # number of pages:
+        self._pages = conditions.pop('pages', None)
 
         self._headers = {
             "Authorization": f"Token {self._token}",
@@ -129,6 +122,9 @@ class uap(restSource):
 
         ## URL parameters
         self._args = args
+
+    async def close(self):
+        pass
 
     async def get_next_result(self, result):
         r = result['results']
