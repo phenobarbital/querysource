@@ -6,7 +6,7 @@ import numpy as np
 from navconfig.logging import logging
 
 
-def drop_columns(df: pd.DataFrame, columns: list = [], endswith: list = [], startswith: list = []):
+def drop_columns(df: pd.DataFrame, columns: list = None, endswith: list = None, startswith: list = None):
     """
     This function drops specified columns from a DataFrame based on exact names, suffixes, or prefixes.
 

@@ -252,6 +252,12 @@ class MultiQS(BaseQuery):
                                 result = await o.run()
                         except ImportError as exc:
                             raise
+                        except DataNotFound as ex:
+                            raise self.Error(
+                                message=f"No Data was Found after Transform {step_name}.",
+                                exception=ex,
+                                code=404
+                            ) from ex
                         except Exception as ex:
                             raise self.Error(
                                 message=f"Error on Transform {step_name}, error: {ex}",
@@ -277,6 +283,12 @@ class MultiQS(BaseQuery):
                 _filter = Filter(data=result, **self._options['Filter'])
                 async with _filter as f:
                     result = await f.run()
+            except DataNotFound as ex:
+                raise self.Error(
+                    message="No Data was Found after Filtering.",
+                    exception=ex,
+                    code=404
+                )
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Filtering: {ex!s}",
@@ -289,6 +301,12 @@ class MultiQS(BaseQuery):
                 groupby = obj(data=result, **self._options['GroupBy'])
                 async with groupby as g:
                     result = await g.run()
+            except DataNotFound as ex:
+                raise self.Error(
+                    message="No Data was Found after GroupBy.",
+                    exception=ex,
+                    code=404
+                )
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on GroupBy: {ex!s}",

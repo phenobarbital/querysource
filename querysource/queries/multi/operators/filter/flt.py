@@ -10,31 +10,46 @@ from ..abstract import AbstractOperator
 from . import functions as dffunctions
 
 
+valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']
+
 class Filter(AbstractOperator):
     def __init__(self, data: dict, **kwargs) -> None:
         self.conditions = kwargs.pop('conditions', None)
         self.fields: dict = kwargs.pop('fields', {})
-        self._filter = kwargs.pop('filter', {})
+        self._filter = kwargs.pop('filter', [])
         self.filter_conditions: dict = {}
         self._applied: list = []
         self._operator: str = kwargs.get('operator', '&')
         super(Filter, self).__init__(data, **kwargs)
 
     async def start(self):
-        for _, data in self.data.items():
-            ## TODO: add support for polars and datatables
-            if not isinstance(data, DataFrame):
-                raise DriverError(
-                    f'Wrong type of data for JOIN, required Pandas dataframe: {type(data)}'
-                )
+        if isinstance(self.data, dict):
+            for _, data in self.data.items():
+                ## TODO: add support for polars and datatables
+                if not isinstance(data, DataFrame):
+                    raise DriverError(
+                        f'Wrong type of data for JOIN, required Pandas dataframe: {type(data)}'
+                    )
 
     def _create_filter(self, df: DataFrame) -> list:
         conditions = []
-        for column, value in self.fields.items():
-            print('COLUMN > ', column, value)
-            value = value.get('value', None)
-            expression = value.get('expression', '==')
-            if isinstance(value, str):
+        for condition in self._filter:
+            column = condition.get('column')
+            if not column:
+                raise QueryException(
+                    "Column name is required for filtering."
+                )
+            expression = condition.get('expression', '==')
+            value = condition.get('value', None)
+            if isinstance(value, (int, float)):
+                condition['value'] = value
+                conditions.append(
+                    "(df['{column}'] {expression} {value})".format_map(
+                        condition
+                    )
+                )
+            elif isinstance(value, str):
+                condition['value'] = f"'{value}'"
                 if expression == 'regex':
                     conditions.append(
                         f"df['{column}'].str.match(r'{value}')"
@@ -49,23 +64,35 @@ class Filter(AbstractOperator):
                     )
                 elif expression == '==':
                     conditions.append(
-                        "(df['{column}'].isin({value}))".format_map(
-                            value
+                        "(df['{column}'] {expression} {value})".format_map(
+                            condition
                         )
                     )
                 elif expression == '!=':
                     conditions.append(
-                        "(~df['{column}'].isin({value}))".format_map(
-                            value
+                        "(df['{column}'] {expression} {value})".format_map(
+                            condition
                         )
                     )
                 else:
-                    value = "'{}'".format(value)
-                    conditions.append(
-                        "(df['{column}'] {expression} {value})".format_map(
-                            value
+                    # first: validate "expression" to be valid expression on Pandas.
+                    if expression in valid_operators:
+                        conditions.append(
+                            "(df['{column}'] {expression} {value})".format_map(
+                                condition
+                            )
                         )
+                    else:
+                        raise QueryException(
+                            f"Invalid expression: {expression}"
+                        )
+            elif isinstance(value, (np.datetime64, np.timedelta64)):
+                condition['value'] = value
+                conditions.append(
+                    "(df['{column}'] {expression} {value})".format_map(
+                        condition
                     )
+                )
             elif isinstance(value, list):
                 if expression == 'startswith':
                     # Use tuple directly with str.startswith
@@ -155,6 +182,14 @@ class Filter(AbstractOperator):
             )
         # Applying filter expressions by Column:
         if self.fields:
+            for column, value in self.fields.items():
+                if column in df.columns:
+                    if isinstance(value, list):
+                        for v in value:
+                            df = df[df[column] == v]
+                    else:
+                        df = df[df[column] == value]
+        if self._filter:
             conditions = self._create_filter(df)
             # Joining all conditions
             self.condition = f" {self._operator} ".join(conditions)
@@ -162,9 +197,9 @@ class Filter(AbstractOperator):
             df = df.loc[
                 eval(self.condition)
             ]  # pylint: disable=W0123
-        elif self._filter:
-            for column, value in self._filter.items():
-                if column in df.columns:
-                    df = df[df[column] == value]
+        if df is None or df.empty:
+            raise DataNotFound(
+                "No Data was Found after Filtering."
+            )
         self._print_info(df)
         return df
