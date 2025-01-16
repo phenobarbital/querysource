@@ -29,13 +29,11 @@ from .conf import (
     QUERYSET_REDIS,
     MEMCACHE_SERVICE
 )
-from .models import QueryModel
 from .types import Singleton
 from .libs.json import JSONContent
 import jsonpickle
 from .exceptions import (
-    ConfigError,
-    SlugNotFound
+    ConfigError
 )
 from .interfaces.connections import (
     Connection,

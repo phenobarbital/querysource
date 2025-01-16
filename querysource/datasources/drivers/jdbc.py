@@ -3,7 +3,7 @@
 from typing import Union, Optional
 from pathlib import Path
 from dataclasses import InitVar
-from datamodel import Column
+from datamodel import Field
 from datamodel.exceptions import ValidationError
 from ...conf import (
     JDBC_DRIVER,
@@ -23,15 +23,15 @@ def jdbc_properties() -> tuple:
 class jdbcDriver(SQLDriver):
     driver: str = 'jdbc'
     name: str
-    provider: str = Column(required=False, default='oracle')
+    provider: str = Field(required=False, default='oracle')
     hostname: InitVar = ''
     username: InitVar = ''
-    user: str = Column(required=False, default=None, repr=True)
-    password: str = Column(required=False, default=None, repr=False)
+    user: str = Field(required=False, default=None, repr=True)
+    password: str = Field(required=False, default=None, repr=False)
     dsn_format: str = None
-    jar: Union[list, str] = Column(Required=True)
-    classpath: Path = Column(Required=False)
-    required_properties: Optional[Union[list, tuple]] = Column(
+    jar: Union[list, str] = Field(Required=True)
+    classpath: Path = Field(Required=False)
+    required_properties: Optional[Union[list, tuple]] = Field(
         repr=False, default=jdbc_properties()
     )
 
@@ -71,6 +71,6 @@ try:
         )
     except ValidationError as exc:
         jdbc_default = None
-        print(exc.payload)
+        print('JDBC >', exc.payload)
 except ValueError:
     jdbc_default = None
