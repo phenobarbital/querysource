@@ -97,6 +97,7 @@ class AbstractHandler(BaseHandler):
         reason: dict = None,
         message: str = None,
         exception: BaseException = None,
+        stacktrace: str = None,
         code: int = 400
     ) -> HTTPException:
         """Error.
@@ -118,6 +119,8 @@ class AbstractHandler(BaseHandler):
                 "error": message,
                 "reason": reason_exception
             }
+        if stacktrace:
+            reason["trace"] = stacktrace
         args = {
             "reason": message,
             "text": self._json.dumps(reason),
@@ -150,6 +153,7 @@ class AbstractHandler(BaseHandler):
         reason: dict = None,
         message: str = None,
         exception: BaseException = None,
+        stacktrace: str = None,
         headers: dict = None,
         code: int = 500
     ) -> HTTPException:
@@ -164,6 +168,8 @@ class AbstractHandler(BaseHandler):
                 "reason": str(exception),
                 "trace": self._json.dumps(trace)
             }
+        if stacktrace:
+            reason["trace"] = stacktrace
         args = {
             "reason": message,
             "text": self._json.dumps(reason),

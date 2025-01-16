@@ -123,7 +123,7 @@ class MultiQS(BaseQuery):
                 raise
         if self._queries:
             for name, query in self._queries.items():
-                print('NAME > ', name, query, 'CONDITIONS > ', self._conditions)
+                # print('NAME > ', name, query, 'CONDITIONS > ', self._conditions)
                 conditions = self._conditions.pop(name, {})
                 # those conditions be applied to the query
                 query = {**conditions, **query}
@@ -189,11 +189,13 @@ class MultiQS(BaseQuery):
                 _join = self._options.get('Join', {})
                 if isinstance(_join, dict):
                     join = obj(data=result, **_join)
-                    result = await join.run()
+                    async with join as j:
+                        result = await j.run()
                 elif isinstance(_join, list):
                     for j in _join:
                         join = obj(data=result, **j)
-                        result = await join.run()
+                        async with join as jo:
+                            result = await jo.run()
             except DataNotFound:
                 raise
             except (QueryException, Exception) as ex:
@@ -206,7 +208,8 @@ class MultiQS(BaseQuery):
             try:
                 ## making Join of Data
                 concat = obj(data=result, **self._options['Concat'])
-                result = await concat.run()
+                async with concat as c:
+                    result = await c.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Concat: {ex!s}",
@@ -217,7 +220,8 @@ class MultiQS(BaseQuery):
                 obj = get_operator_module('Melt')
                 ## making Join of Data
                 melt = obj(data=result, **self._options['Melt'])
-                result = await melt.run()
+                async with melt as mt:
+                    result = await mt.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Melting Data: {ex!s}",
@@ -238,12 +242,14 @@ class MultiQS(BaseQuery):
                 for step_name, component in step.items():
                     if step_name == 'GoogleMaps':
                         obj = GoogleMaps(data=result, **component)
-                        result = await obj.run()
+                        async with obj as google:
+                            result = await google.run()
                     else:
                         try:
                             clobj = get_transform_module(step_name)
                             obj = clobj(data=result, **component)
-                            result = await obj.run()
+                            async with obj as o:
+                                result = await o.run()
                         except ImportError as exc:
                             raise
                         except Exception as ex:
@@ -268,8 +274,9 @@ class MultiQS(BaseQuery):
         if 'Filter' in self._options:
             try:
                 ## making Join of Data
-                concat = Filter(data=result, **self._options['Filter'])
-                result = await concat.run()
+                _filter = Filter(data=result, **self._options['Filter'])
+                async with _filter as f:
+                    result = await f.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Filtering: {ex!s}",
@@ -280,7 +287,8 @@ class MultiQS(BaseQuery):
                 obj = get_operator_module('GroupBy')
                 ## Group By of Data:
                 groupby = obj(data=result, **self._options['GroupBy'])
-                result = await groupby.run()
+                async with groupby as g:
+                    result = await g.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on GroupBy: {ex!s}",

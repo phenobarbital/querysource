@@ -129,7 +129,6 @@ class Map(AbstractTransform):
                 args = element[0]
             except IndexError:
                 args = {}
-            print('FNAME > ', fname, args)
         else:
             fname = element
             try:

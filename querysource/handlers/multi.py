@@ -1,4 +1,5 @@
 import time
+import traceback
 from aiohttp import web
 from ..outputs import DataOutput
 from ..exceptions import (
@@ -113,15 +114,21 @@ class QueryHandler(AbstractHandler):
                 code=401
             )
         except (QueryException, DriverError) as qe:
+            trace = traceback.format_exc()
+            self.logger.exception(qe, stack_info=True)
             raise self.Error(
                 message="Query Error",
                 exception=qe,
+                stacktrace=trace,
                 code=402
             )
         except Exception as ex:
+            trace = traceback.format_exc()
+            self.logger.exception(ex, stack_info=True)
             raise self.Except(
                 message=f"Unknown Error on Query: {ex!s}",
-                exception=ex
+                exception=ex,
+                stacktrace=trace,
             ) from ex
 
         ### Step 2: Check if result is empty or is a dictionary of dataframes:

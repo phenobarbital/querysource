@@ -17,6 +17,7 @@ class Join(AbstractOperator):
         # Right Operator
         self._right = kwargs.pop('right', None)
         super(Join, self).__init__(data, **kwargs)
+        self.data = data
 
     async def start(self):
         for _, data in self.data.items():
@@ -58,8 +59,8 @@ class Join(AbstractOperator):
                                 f'Empty Dataframe: {self._right}'
                             )
                         df = self._join(df1=df1, df2=df2, **args)
-                        self.data[f"{self._left}.{self._right}"] = df
-                        return self.data
+                        _key = f"{self._left}.{self._right}"
+                        self.data[_key] = df
                     finally:
                         del df1
                         del df2
@@ -70,33 +71,38 @@ class Join(AbstractOperator):
                     try:
                         df = self._join(df1=df1, df2=df2, **args)
                         self.data[f"{key}.{self._right}"] = df
-                        return self.data
                     finally:
                         del df1
                         del df2
-                elif self._left:
-                    # if left, will be joined with all dataframes on data:
-                    df1 = self.data.pop(self._left)
                 else:
-                    df1 = list(self.data.values())[0]
-                # on both cases, iterate over all dataframes:
-                ldf = None
-                for name, data in list(self.data.items()):
-                    if data.empty:
-                        logging.warning(
-                            f'Empty Dataframe: {name}'
-                        )
-                        continue
-                    if ldf is None:
-                        ldf = df1
-                    ldf = self._join(df1=ldf, df2=data, **args)
-                    self.data.pop(name)
-                df = ldf
-                self.data[f"{uuid4()!s}"] = df
-                return self.data
+                    df1 = None
+                    if self._left:
+                        # if left, will be joined with all dataframes on data:
+                        df1 = self.data.pop(self._left)
+                    else:
+                        df1 = list(self.data.values())[0]
+                    # on both cases, iterate over all dataframes:
+                    ldf = None
+                    for name, data in list(self.data.items()):
+                        if data.empty:
+                            logging.warning(
+                                f'Empty Dataframe: {name}'
+                            )
+                            continue
+                        if ldf is None:
+                            ldf = df1
+                        ldf = self._join(df1=ldf, df2=data, **args)
+                        self.data.pop(name)
+                    df = ldf
+                    self.data[f"{uuid4()!s}"] = df
             else:
-                return None
+                raise QueryException(
+                    f"Unsupported Operator: {operator}"
+                )
+            return list(self.data.values())[0] if len(self.data) == 1 else self.data
         except DataNotFound:
+            raise
+        except QueryException:
             raise
         except (ValueError, KeyError) as err:
             raise QueryException(
@@ -106,27 +112,28 @@ class Join(AbstractOperator):
             raise QueryException(
                 f"Unknown JOIN error {err!s}"
             ) from err
-        finally:
-            if len(self.data) == 1:
-                # return the last one:
-                return list(self.data.values())[0]
 
     def _join(self, df1: DataFrame, df2: DataFrame, **kwargs):
-        df = self._pd.merge(
-            df1,
-            df2,
-            how=self._type,
-            suffixes=('_left', '_right'),
-            **kwargs
-        )
-        if df is None:
-            raise DataNotFound(
-                "Empty Result Dataframe"
+        try:
+            df = self._pd.merge(
+                df1,
+                df2,
+                how=self._type,
+                suffixes=('_left', '_right'),
+                **kwargs
             )
-        elif df.empty:
-            raise DataNotFound(
-                "Empty Result Dataframe"
-            )
+            if df is None or df.empty:
+                raise DataNotFound(
+                    "Empty Result Dataframe"
+                )
+        except DataNotFound:
+            raise
+        except Exception as err:
+            print('Error on Join > ', err)
+            raise QueryException(
+                f"Error on Join: {err!s}"
+            ) from err
+        # remove the _left and _right
         df.drop(
             df.columns[df.columns.str.contains('_left')],
             axis=1,
