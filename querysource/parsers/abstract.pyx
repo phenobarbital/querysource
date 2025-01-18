@@ -314,9 +314,12 @@ cdef class AbstractParser:
 
         Set the options for the query.
         """
-        self.tablename = self.conditions.pop('tablename', None)
-        self.schema = self.conditions.pop('schema', None)
-        self.database = self.conditions.pop('database', None)
+        if not self.tablename:
+            self.tablename = self.conditions.pop('tablename', None)
+        if not self.schema:
+            self.schema = self.conditions.pop('schema', None)
+        if not self.database:
+            self.database = self.conditions.pop('database', None)
         self._distinct = self.conditions.pop('distinct', None)
         self._add_fields: bool = self.conditions.pop('add_fields', False)
         # Data Type: Definition of columns
@@ -436,7 +439,7 @@ cdef class AbstractParser:
             if self._handle_keys(key, value, {}):
                 return None
             _type = self.cond_definition.get(key, None)
-            # self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
+            self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
             if new_val := await self._get_operational_value(value, connection):
                 result = new_val
             else:

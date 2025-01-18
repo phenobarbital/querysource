@@ -8,10 +8,10 @@ from ..exceptions import (
     ParserError,
     EmptySentence
 )
-from .parser import QueryParser
+from .abstract import AbstractParser
 
 
-class RethinkParser(QueryParser):
+class RethinkParser(AbstractParser):
     def __init__(
         self,
         *args,
@@ -22,6 +22,11 @@ class RethinkParser(QueryParser):
             **kwargs
         )
         self._join_field = None
+        self._engine = None
+        self._connection = None
+
+    def set_connection(self, connection):
+        self._connection = connection
         self._engine = self._connection.engine()
 
     async def filtering_conditions(self, query):
@@ -60,7 +65,6 @@ class RethinkParser(QueryParser):
                 )
         except Exception as err:  # pylint: disable=W0703
             self.logger.exception(err, stack_info=True)
-
         try:
             keys = list(conditions.keys())
             self._has_fields = self._has_fields + keys
@@ -110,7 +114,7 @@ class RethinkParser(QueryParser):
                     query = self.get_datefilter(query, conditions, field)
                 elif self.cond_definition[field] == 'epoch':
                     query = self.get_datefilter(query, conditions, field, dtype='epoch')
-            elif field == 'date' or field == 'filterdate' or field == 'inserted_at':
+            elif field in ['date', 'filterdate', 'inserted_at']:
                 query = self.get_datefilter(query, conditions, field)
         return query
 
@@ -297,7 +301,7 @@ class RethinkParser(QueryParser):
 
     def inner_join(self, query, join):
         try:
-            #return query.inner_join(join, lambda doc1, doc2: doc1[self._join_field] == doc2[self._join_field]).zip()
+            # return query.inner_join(join, lambda doc1, doc2: doc1[self._join_field] == doc2[self._join_field]).zip()
             query = query.eq_join(self._join_field, join, index=self._join_field)
             if query:
                 query = query.zip()
@@ -322,33 +326,24 @@ class RethinkParser(QueryParser):
         self._columns = await self._engine.table(self.table).nth(0).default(None).keys().run(conn)
         return self._columns
 
-    async def build_query(self, run=True, querylimit: int = None):
+    async def build_query(self, connection: callable, run=True, querylimit: int = None):
         '''
-        Build a SQL Query.
+        Build a RethinkDB Query.
         '''
         self.logger.debug(
             f"RT FIELDS ARE {self.fields}"
         )
-        conn = await self._connection.connection()
+        # set Engine:
+        conn = connection.raw_connection
+        print('CONN > ', conn)
         if self.database:
-            await conn.use(self.database)
-        try:
-            if not conn.is_open():
-                await conn.reconnect(noreply_wait=False)
-        except (ReqlDriverError, ReqlRuntimeError) as err:
-            raise (
-                f"Error on RethinkDB connection: {err}"
-            ) from err
-        if not conn or not conn.is_open():
-            raise Exception(
-                'RethinkDB error on parsing Query, impossible to restablish a connection'
-            )
+            await connection.use(self.database)
         # most basic query
         eq_table = None
         try:
             if isinstance(self.table, list):
                 # I need to optimize by creating index on pivot field
-                #big TODO: need to wait until index will ready to use
+                # big TODO: need to wait until index will ready to use
                 search = self._engine.table(self.table[0])
                 eq_table = self._engine.table(self.table[1])
                 search = self.inner_join(search, eq_table)
@@ -359,29 +354,30 @@ class RethinkParser(QueryParser):
                 raise EmptySentence(
                     "Missing RethinkDB Query"
                 )
-            # query filter:
-            search = await self.filtering_conditions(search)
-            # has fields is the first option
-            search = await self.has_fields(search)
-            # during - between
-            search = await self.between(search)
-            # filter:
-            search = await self.query_filter(search)
-            # field options
-            search = await self.field_options(search)
-            # Group By
-            search = await self.group_by(search)
-            # ordering
-            search = await self.orderby(search)
-            # adding distinct
-            if self._distinct:
-                search = self.distinct(search)
-            if self._offset:
-                search = search.nth(self._offset).default(None)
-            if querylimit is not None:
-                search = search.limit(querylimit)
-            elif self._limit:
-                search = search.limit(self._limit)
+            # # query filter:
+            # search = await self.filtering_conditions(search)
+            # # has fields is the first option
+            # search = await self.has_fields(search)
+            # # during - between
+            # search = await self.between(search)
+            # # filter:
+            # search = await self.query_filter(search)
+            # # field options
+            # search = await self.field_options(search)
+            # # Group By
+            # search = await self.group_by(search)
+            # # ordering
+            # search = await self.orderby(search)
+            # # adding distinct
+            # if self._distinct:
+            #     search = self.distinct(search)
+            # if self._offset:
+            #     search = search.nth(self._offset).default(None)
+            # if querylimit is not None:
+            #     search = search.limit(querylimit)
+            # elif self._limit:
+            #     search = search.limit(self._limit)
+            search = search.limit(10)
         except Exception as err:
             self.logger.exception(err, stack_info=True)
         try:
@@ -389,227 +385,39 @@ class RethinkParser(QueryParser):
             self.logger.debug(search)
         except RuntimeError as err:
             self.logger.exception(err, stack_info=True)
-        if run is True:
+        if run is not True:
+            # to add more complex queries to Rethink Engine Search Object
+            return search
+        try:
+            return await self.result_from_cursor(search, conn)
+        except ReqlDriverError:
+            # connection was closed, we need to reconnect:
             try:
+                await conn.reconnect(noreply_wait=False)
                 return await self.result_from_cursor(search, conn)
-            except ReqlDriverError:
-                # connection was closed, we need to reconnect:
-                try:
-                    await conn.reconnect(noreply_wait=False)
-                    return await self.result_from_cursor(search, conn)
-                except Exception as err:
-                    raise ParserError(
-                        'RethinkDB exception: impossible to reach a reconnection: {err}'
-                    ) from err
             except Exception as err:
-                self.logger.exception(err, stack_info=True)
                 raise ParserError(
                     'RethinkDB exception: impossible to reach a reconnection: {err}'
                 ) from err
-        else:
-            # to add more complex queries to Rethink Engine Search Object
-            return search
+        except Exception as err:
+            self.logger.exception(err, stack_info=True)
+            raise ParserError(
+                'RethinkDB exception: impossible to reach a reconnection: {err}'
+            ) from err
 
     async def result_from_cursor(self, search, conn):
         try:
             cursor = await search.run(conn)
             if isinstance(cursor, list):
                 return cursor
-            else:
-                result = []
-                while (await cursor.fetch_next()):
-                    row = await cursor.next()
-                    result.append(row)
-                return result
+            result = []
+            while (await cursor.fetch_next()):
+                row = await cursor.next()
+                result.append(row)
+            return result
         except ReqlDriverError:
             raise
         except Exception as err:
             raise ParserError(
                 f"Error parsing Data using RethinkDB: {err}"
             ) from err
-
-    # async def run(self, table):
-    #     """run.
-    #         Run a filter based on where_cond and conditions
-    #     """
-    #     conditions = {}
-    #     result = []
-
-    #     if self.conditions:
-    #         conditions = { **self.conditions }
-
-    #     if self.filter:
-    #         conditions.update(self.filter)
-
-    #     conditions.update((x, None)
-    #                       for (x, y) in conditions.items() if y == "null")
-
-    #     print("RT CONDITIONS {}".format(conditions))
-
-    #     # mapping fields with new names
-    #     map = {}
-    #     has_fields = []
-
-    #     try:
-    #         if self.fields:
-    #             for field in self.fields:
-    #                 name = ""
-    #                 alias = ""
-    #                 if " as " in field:
-    #                     el = field.split(" as ")
-    #                     print(el)
-    #                     name = el[0]
-    #                     alias = el[1].replace('"', "")
-    #                     map[alias] = self._engine.row[name]
-    #                     self.fields.remove(field)
-    #                     self.fields.append(name)
-    #                 else:
-    #                     map[field] = self._engine.row[field]
-    #             print("RT FIELDS {}".format(self.fields))
-    #             has_fields = self.fields.copy()
-
-    #             print("RT MAP IS {}".format(map))
-    #     except Exception as err:
-    #         print("FIELD ERROR {}".format(err))
-
-    #     try:
-    #         if conditions["filterdate"] == "CURRENT_DATE":
-    #             conditions["filterdate"] = today(mask="%Y-%m-%d")
-    #     except (KeyError, ValueError):
-    #         pass
-
-    #     filters = []
-    #     try:
-    #         keys = list(conditions.keys())
-    #         has_fields = has_fields + keys
-    #     except (KeyError, ValueError):
-    #         pass
-
-    #     # build the search element
-    #     search = self._engine.db(self.database).table(table).has_fields(has_fields)
-
-    #     result = self._engine.expr(True)
-
-    #     ### build FILTER based on rethink logic
-    #     for key, value in conditions.items():
-    #         print(key, value)
-    #         if type(value) is list:
-    #             # print(value)
-    #             search = search.filter(
-    #                 (
-    #                     lambda exp: self._engine.expr(value)
-    #                     .coerce_to("array")
-    #                     .contains(exp[key])
-    #                 )
-    #             )
-    #         else:
-    #             if type(value) is str:
-    #                 if value.startswith("!"):
-    #                     # not null
-    #                     result = result.and_(
-    #                         self._engine.row[key].ne(value.replace("!", ""))
-    #                     )
-    #                 elif value.startswith("["):
-    #                     # between
-    #                     result = result.and_(
-    #                         self._engine.row[key].between(10, 20))
-    #                 else:
-    #                     result = result.and_(self._engine.row[key].eq(value))
-    #             else:
-    #                 result = result.and_(self._engine.row[key].eq(value))
-
-    #     # query options
-    #     if self.qry_options:
-    #         result = self.query_options(result, conditions)
-
-    #     print("RESULT IS")
-    #     print(result)
-
-    #     # add search criteria
-    #     search = search.filter(result)
-
-    #     # fields and mapping
-    #     if self.fields:
-    #         if map:
-    #             search = search.pluck(self.fields).map(map)
-    #         else:
-    #             search = search.pluck(self.fields)
-
-    #     # ordering
-    #     order = None
-    #     if self.ordering:
-    #         if type(self.ordering) is list:
-    #             orderby = self.ordering[0].split(" ")
-    #         else:
-    #             orderby = self.ordering.split(" ")
-    #         if orderby[1] == "DESC":
-    #             order = self._engine.desc(orderby[0])
-    #         else:
-    #             order = orderby[0]
-    #         # add ordering
-    #         search = search.order_by(order)
-
-    #     # adding distinct
-    #     if self.distinct:
-    #         search = search.distinct()
-
-
-    #     data = []
-    #     self._result = None
-    #     conn = self._connection.get_connection()
-    #     try:
-    #         try:
-    #             cursor = await search.run(conn)
-    #         except (ReqlRuntimeError, ReqlRuntimeError) as err:
-    #             print("Error on rql query is %s" % err.message)
-    #             raise Exception("Error on RQL query is %s" % err.message)
-    #             return False
-    #         if order or self.distinct:
-    #             self._result = cursor
-    #             return self._result
-    #         else:
-    #             while await cursor.fetch_next():
-    #                 row = await cursor.next()
-    #                 data.append(row)
-    #             self._result = data
-    #     finally:
-    #         return self._result
-
-    # async def get_one(self, table: str, idx: int = 0):
-    #     """
-    #     Functions for Query API
-    #     """
-    #     conditions = {}
-    #     result = []
-
-    #     if self.conditions:
-    #         conditions = { **self.conditions }
-
-    #     if self.filter:
-    #         conditions.update(self.filter)
-
-    #     conditions.update((x, None)
-    #                       for (x, y) in conditions.items() if y == "null")
-
-    #     try:
-    #         if conditions["filterdate"] == "CURRENT_DATE":
-    #             conditions["filterdate"] = today(mask="%Y-%m-%d")
-    #     except (KeyError, ValueError):
-    #         pass
-
-    #     print("RT CONDITIONS {}".format(conditions))
-
-    #     try:
-    #         conn = self._connection.get_connection()
-    #         result = await self._engine.db(self.database).table(table).filter(conditions).nth(idx).run(conn)
-    #     except (ReqlRuntimeError, ReqlNonExistenceError) as err:
-    #         raise Exception(
-    #             f"RethinkParser: Error on Query One: {err}"
-    #         )
-    #     except Exception as err:
-    #         self.logger.exception(err)
-    #         raise
-    #     if result:
-    #         return result
-    #     else:
-    #         return []

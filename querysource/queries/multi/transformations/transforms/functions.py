@@ -2668,3 +2668,65 @@ def into_columns(
             f"Error on into_columns function: {e}"
         )
     return df
+
+
+def flatten_column(row, field: str, column: str, agg_column: str = None, agg_func: str = None):
+    _data = row[column]
+    flattened_data = []
+    for key, val in _data.items():
+        if agg_func and agg_func == 'sum':
+            total_data = sum(data[agg_column] for data in val.values())
+            flattened_data.append({field: key, column: total_data})
+    return pd.DataFrame(flattened_data)
+
+
+def flatten(
+    df: pd.DataFrame,
+    field: str,
+    column: str = None,
+    flatten_func: callable = None,
+    agg_column: str = None,
+    agg_func: callable = None,
+) -> pd.DataFrame:
+    """
+    Flattens a DataFrame by applying a row-wise transformation function.
+    Optionally applies an aggregation function to a specified column.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        field (str): The result column name.
+        column (str): Column containing nested data to be flattened.
+        flatten_func (callable): A function to transform a single row into a new DataFrame.
+        agg_column (str, optional): Column name to apply the aggregation function.
+        agg_func (callable, optional): Aggregation function to apply to the specified column.
+
+    Returns:
+        pd.DataFrame: Flattened and optionally aggregated DataFrame.
+    """
+    try:
+        if not flatten_func:
+            flatten_func = flatten_column
+        if not column:
+            column = field
+        # Apply the flatten_row_func to each row
+        args = {
+            "field": field,
+            "column": column,
+            "flatten_func": flatten_func,
+            "agg_column": agg_column,
+            "agg_func": agg_func,
+        }
+        flattened_rows = df.apply(flatten_func, axis=1, **args).to_list()
+
+        # Combine the resulting DataFrames
+        flattened_df = pd.concat(flattened_rows, ignore_index=True)
+
+        # If an aggregation is specified
+        if agg_column and agg_func:
+            grouped = flattened_df.groupby(list(flattened_df.columns.difference([agg_column])))
+            flattened_df = grouped[agg_column].agg(agg_func).reset_index()
+
+        return flattened_df
+    except Exception as e:
+        print(f"Error in flatten function: {e}")
+        raise
