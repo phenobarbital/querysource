@@ -35,7 +35,9 @@ cdef class AbstractParser:
         self.query_parsed: str = None
         self.schema_based = kwargs.pop('schema_based', False)
         self._limit = kwargs.pop('max_limit', 0)
+        self.string_literal = kwargs.pop('string_literal', False)
         self.definition: QueryModel = definition if definition else None
+        self._distinct: bool = False
         self.set_attributes()
         self.define_conditions(conditions)
         ## redis connection:
@@ -289,10 +291,12 @@ cdef class AbstractParser:
 
     async def _col_definition(self):
         # Data Type: Definition of columns
-        try:
-            self.cond_definition = self.definition.cond_definition
-        except (KeyError, AttributeError):
-            self.cond_definition: dict = {}
+        self.cond_definition = self.conditions.pop('cond_definition', {})
+        if self.definition.cond_definition:
+            self.cond_definition = {
+                **self.cond_definition,
+                **self.definition.cond_definition
+            }
         try:
             if self.conditions.coldef:
                 self.cond_definition = {
@@ -314,16 +318,15 @@ cdef class AbstractParser:
 
         Set the options for the query.
         """
-        self.tablename = self.conditions.pop('tablename', None)
-        self.schema = self.conditions.pop('schema', None)
-        self.database = self.conditions.pop('database', None)
+        if not self.tablename:
+            self.tablename = self.conditions.pop('tablename', None)
+        if not self.schema:
+            self.schema = self.conditions.pop('schema', None)
+        if not self.database:
+            self.database = self.conditions.pop('database', None)
         self._distinct = self.conditions.pop('distinct', None)
         self._add_fields: bool = self.conditions.pop('add_fields', False)
         # Data Type: Definition of columns
-        try:
-            self.cond_definition = self.definition.cond_definition
-        except (KeyError, AttributeError):
-            self.cond_definition: dict = {}
         await asyncio.gather(
             self._parse_hierarchy(),
             self._program_slug(),
@@ -436,7 +439,7 @@ cdef class AbstractParser:
             if self._handle_keys(key, value, {}):
                 return None
             _type = self.cond_definition.get(key, None)
-            # self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
+            self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
             if new_val := await self._get_operational_value(value, connection):
                 result = new_val
             else:
@@ -482,7 +485,7 @@ cdef class AbstractParser:
         # )
         if isinstance(value, dict):  # its a comparison operator
             op, v = value.popitem()
-            result = is_valid(key, v)
+            result = is_valid(key, v, noquote=self.string_literal)
             return key, {op: result}
 
         if isinstance(value, str):
@@ -497,7 +500,7 @@ cdef class AbstractParser:
             prefix, fn, _ = field_components(str(value))[0]
             if prefix == '@':
                 result = self._get_function_replacement(fn, key, value)
-                result = is_valid(key, result)
+                result = is_valid(key, result, noquote=self.string_literal)
                 return key, result
             elif prefix in ('|', '!', '&', '>', '<'):
                 # Leave as-is because we use it in WHERE
@@ -509,7 +512,7 @@ cdef class AbstractParser:
         if new_val:
             result = new_val
         else:
-            result = is_valid(key, value)
+            result = is_valid(key, value, noquote=self.string_literal)
 
         return key, result
 
