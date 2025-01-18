@@ -503,7 +503,7 @@ cdef class Entity:
         return f'"{value}"'
 
 ### Validation of conditions:
-cpdef object is_valid(object key, object value, str T = None):
+cpdef object is_valid(object key, object value, str T = None, bint noquote = False):
     """is_valid.
 
     Check if a type is a valid Condition for a Query.
@@ -526,7 +526,6 @@ cpdef object is_valid(object key, object value, str T = None):
                     return conv(value)
         except KeyError:
             pass
-    # print('::: VALUE ::: ', value,  list(re.findall(eval_field, value)))
     if value == 'null' or value == 'NULL' or value == None or value == 'None':
         return 'null'
     elif is_boolean(value):
@@ -553,9 +552,13 @@ cpdef object is_valid(object key, object value, str T = None):
             pass
         try:
             val = to_udf(value)
+            if noquote:
+                return val
             return quoteString(val)
         except KeyError:
-            print(f'Valid: There is no Key {key}')
+            pass
         except Exception as ex:
             print(f'Valid Error on {key}:{value}, error: {ex}')
+        if noquote:
+            return value
         return quoteString(value)

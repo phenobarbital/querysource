@@ -6,7 +6,7 @@ from collections.abc import Callable
 import contextlib
 import hashlib
 from aiohttp import web
-from asyncdb.exceptions import ProviderError
+from asyncdb.exceptions import ProviderError, NoDataFound
 from querysource.models import QueryModel
 from querysource.exceptions import (
     QueryError,
@@ -21,6 +21,28 @@ from .abstract import BaseProvider
 
 
 class rethinkProvider(BaseProvider):
+    """Initialize a rethinkProvider instance.
+
+    This provider handles RethinkDB queries, extracting database and table
+    information from the query definition.
+
+    Args:
+        slug (str): The name of the query.
+        query (Any): The query to be executed.
+        qstype (str): The type of query.
+        connection (Callable): The connection object to be used.
+        definition (Union[QueryModel, dict]): The query definition.
+        conditions (dict): The query conditions.
+        request (web.Request): The request object.
+        **kwargs: Additional keyword arguments.
+
+    Raises:
+        QueryException: If the connection object is missing.
+        ParserError: If the query cannot be parsed.
+
+    Returns:
+        rethinkProvider: A rethinkProvider instance.
+    """
     __parser__ = RethinkParser
 
     def __init__(
@@ -29,7 +51,7 @@ class rethinkProvider(BaseProvider):
         query: Any = None,
         qstype: str = '',
         connection: Callable = None,
-        definition: Union[QueryModel, dict] = None,  # Model Object or a dictionary defining a Query.
+        definition: Union[QueryModel, dict] = None,
         conditions: dict = None,
         request: web.Request = None,
         **kwargs
@@ -61,8 +83,6 @@ class rethinkProvider(BaseProvider):
                 self._parser.database = self._program
             if not self._parser.table:
                 self._parser.table = self._definition.source or slug
-        print('DB > ', self._parser.database)
-        print('TABLE > ', self._parser.table)
 
     def checksum(self):
         name = f'{self._slug}:{self._conditions!s}'
@@ -116,17 +136,21 @@ class rethinkProvider(BaseProvider):
                     run=True
                 )
             if not result:
-                error = "No data was found"
-                return [None, error]
+                raise DataNotFound(
+                    "No data was found"
+                )
             self._result = result
             return [result, error]
-        except DataNotFound:
-            raise
+        except (NoDataFound, DataNotFound) as exc:
+            raise DataNotFound(
+                "No data was found"
+            ) from exc
         except (ParserError, TypeError) as exc:
             raise QueryError(
                 f"Error parsing Query: {exc}"
             ) from exc
         except (RuntimeError, ParserError) as err:
+            print(err, type(err))
             raise QueryException(
                 f"Querysource RT Error: {err}"
             ) from err

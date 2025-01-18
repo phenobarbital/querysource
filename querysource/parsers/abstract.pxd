@@ -43,6 +43,7 @@ cdef class AbstractParser:
     cdef public object _redis
     cdef bint _add_fields
     cdef public bint _safe_substitution
+    cdef public bint string_literal
 
     # methods:
     cpdef object sentence(self, str sentence)
