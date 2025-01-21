@@ -53,6 +53,7 @@ extensions = [
         name='querysource.parsers.abstract',
         sources=['querysource/parsers/abstract.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        language="c"
     ),
     Extension(
         name='querysource.parsers.parser',

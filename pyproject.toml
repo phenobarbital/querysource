@@ -25,7 +25,15 @@ classifiers=[
   "Topic :: Software Development :: Build Tools",
   "License :: OSI Approved :: BSD License",
 ]
-dynamic = ["version", "description", "urls", "dependencies", "license"]
+dynamic = [
+    "version",
+    "description",
+    "urls",
+    "dependencies",
+    "license",
+    "entry-points",
+    "optional-dependencies",
+]
 
 [options]
 python_requires = ">=3.9.16"

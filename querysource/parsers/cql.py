@@ -1,8 +1,7 @@
 import asyncio
 from functools import partial
-
+from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence
-from ..types.typedefs import NullDefault, SafeDict
 from .sql import SQLParser
 
 

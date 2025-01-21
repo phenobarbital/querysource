@@ -10,11 +10,11 @@ from typing import (
 from collections.abc import Callable
 from collections import defaultdict
 from aiohttp import web
+from datamodel.typedefs import SafeDict
 from asyncdb.exceptions import ProviderError, DriverError, NoDataFound
-from querysource.models import QueryModel
-from querysource.exceptions import QueryException, ParserError
-from querysource.types import SafeDict
-from querysource.parsers.sql import SQLParser
+from ..models import QueryModel
+from ..exceptions import QueryException, ParserError
+from ..parsers.sql import SQLParser
 from .abstract import BaseProvider
 
 

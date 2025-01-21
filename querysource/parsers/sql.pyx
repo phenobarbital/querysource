@@ -1,3 +1,7 @@
+# cython: language_level=3, embedsignature=True
+# Copyright (C) 2018-present Jesus Lara
+#
+# file: abstract.pyx
 """
 Basic SQL Parser.
 """
@@ -5,9 +9,8 @@ import asyncio
 import re
 from typing import Union
 from functools import partial
-from cpython cimport list, dict, tuple
-from ..exceptions import EmptySentence
-from ..types.typedefs import NullDefault, SafeDict
+from datamodel.typedefs import NullDefault, SafeDict
+from ..exceptions cimport EmptySentence
 from ..types.validators import Entity, field_components
 from .abstract cimport AbstractParser
 

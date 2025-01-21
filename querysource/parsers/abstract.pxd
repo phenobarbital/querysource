@@ -1,8 +1,7 @@
-# cython: language_level=3, embedsignature=True, boundscheck=False, wraparound=True, initializedcheck=False
+# cython: language_level=3, embedsignature=True
 # Copyright (C) 2018-present Jesus Lara
 #
-# abstract.pxd
-from cpython cimport list, dict, tuple
+# file: abstract.pxd
 from libc.stdint cimport int32_t
 from ..models import QueryObject
 
@@ -56,5 +55,5 @@ cdef class AbstractParser:
     cpdef str query(self)
     cpdef str filtering_options(self, str sentence)
     cdef object _get_function_replacement(self, object function, str key, object val)
-    cdef dict _merge_conditions_and_filters(self, dict conditions)
+    cdef object _merge_conditions_and_filters(self, dict conditions)
     cdef bint _handle_keys(self, str key, object val, dict _filter)

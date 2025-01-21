@@ -9,11 +9,11 @@ from typing import (
 from collections import defaultdict
 from functools import partial
 from aiohttp import web
+from datamodel.typedefs import SafeDict
 from asyncdb.exceptions import StatementError, ProviderError, NoDataFound
-from querysource.exceptions import DriverError, ParserError, DataNotFound
-from querysource.types import SafeDict
-from querysource.models import QueryModel
-from querysource.parsers.sqlserver import msSQLParser
+from ..exceptions import DriverError, ParserError, DataNotFound
+from ..models import QueryModel
+from ..parsers.sqlserver import msSQLParser
 from .abstract import BaseProvider
 
 

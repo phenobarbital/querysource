@@ -1,7 +1,7 @@
 from collections.abc import Callable
+from datamodel.typedefs import NullDefault, SafeDict
 from ..models import QueryObject
 from ..types.validators import Entity
-from ..types.typedefs import NullDefault, SafeDict
 from ..providers import BaseProvider
 from ..exceptions import (
     EmptySentence

@@ -7,20 +7,19 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any, Union
 from aiohttp import web
+from datamodel.typedefs import SafeDict
 from asyncdb.exceptions import (
     DriverError,
     NoDataFound,
     ProviderError
 )
-from querysource.exceptions import (
+from ..exceptions import (
     DataNotFound,
     ParserError,
     QueryException
 )
-from querysource.models import QueryModel
-from querysource.parsers.sql import SQLParser
-from querysource.types import SafeDict
-
+from ..models import QueryModel
+from ..parsers.sql import SQLParser
 from .abstract import BaseProvider
 
 

@@ -8,8 +8,7 @@ from cpython cimport datetime
 from dataclasses import _MISSING_TYPE
 from numpy import int64, ndarray
 from decimal import Decimal
-from .validators import is_udf
-from .typedefs import strtobool
+from .validators import is_udf, strtobool
 
 
 # cpdef object to_uuid(object obj):

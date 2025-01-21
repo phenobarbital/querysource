@@ -7,7 +7,7 @@ import asyncio
 from collections.abc import Callable
 import re
 from functools import partial
-from ..types.typedefs import NullDefault, SafeDict
+from datamodel.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
 from ..exceptions import EmptySentence, ParserError
 from .sql import SQLParser

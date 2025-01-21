@@ -1,14 +1,14 @@
-# cython: language_level=3, embedsignature=True, boundscheck=False, wraparound=True, initializedcheck=False
+# cython: language_level=3, embedsignature=True
 # Copyright (C) 2018-present Jesus Lara
 #
+# file: parser.pyx
 """
 Base Query Parser.
 """
 from abc import ABC, abstractmethod
 import asyncio
-from cpython cimport list, dict, tuple
-from ..exceptions import EmptySentence
 from ..models import QueryObject
+from ..exceptions cimport EmptySentence
 from .abstract cimport AbstractParser
 
 

@@ -60,11 +60,9 @@ class Map(AbstractTransform):
                     it = self._call_fn(field, fname, args, it)
                 continue
             elif isinstance(val, list):
-                print('FIELD > ', field, val, len(val))
                 if len(val) > 1:
                     # multiple functions to be called at once
                     for v in val:
-                        print('WHICH VAL > ', v)
                         it = self._run_one(v, it, field)
                 else:
                     it = self._run_one(val, it, field)
@@ -121,7 +119,6 @@ class Map(AbstractTransform):
         Run a single function on the data.
         val is a list of arguments to be passed to the function:
         """
-        print('RUN VAL > ', val)
         element = val.pop(0)
         if isinstance(element, list):
             # split into function and arguments:
