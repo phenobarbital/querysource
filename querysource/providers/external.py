@@ -7,8 +7,8 @@ from abc import ABC, abstractmethod
 import hashlib
 from aiohttp import web
 from navconfig.logging import logger
-from querysource.models import QueryModel
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..exceptions import (
     DriverError,
     ParserError
 )

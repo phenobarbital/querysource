@@ -8,9 +8,9 @@ import urllib3
 from aiohttp import web
 from navconfig.logging import logging
 from asyncdb.exceptions import ProviderError, NoDataFound
-from querysource.models import QueryModel
-from querysource.utils.functions import check_empty
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..utils.functions import check_empty
+from ..exceptions import (
     DataNotFound,
     QueryException,
     DriverError

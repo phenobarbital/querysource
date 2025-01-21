@@ -2,8 +2,8 @@ from aiohttp import web
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError, DriverError
 from navigator.views import BaseHandler
-from querysource.datasources.drivers import SUPPORTED
-from querysource.exceptions import DriverException
+from ..drivers import SUPPORTED
+from ...exceptions import DriverException
 
 
 class DatasourceDrivers(BaseHandler):

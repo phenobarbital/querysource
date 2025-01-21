@@ -5,12 +5,14 @@ import asyncio
 from string import Template
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence
-from ..types.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
 from .sql import SQLParser
 
+
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
+
 
 class pgSQLParser(SQLParser):
     schema_based: bool = True

@@ -8,8 +8,9 @@ from ....exceptions import (
     QueryException
 )
 from .abstract import AbstractTransform
-from .transforms import functions as dffunctions
-from .fn import getFunction
+from ....types.dt import transforms as dffunctions
+from ....utils.getfunc import getFunction
+
 
 class Map(AbstractTransform):
     """Map Transform: changing the shape of the data."""
@@ -30,10 +31,10 @@ class Map(AbstractTransform):
         await self.start()
         try:
             fields = copy.deepcopy(self.fields)
-        except AttributeError:
+        except AttributeError as e:
             raise QueryException(
                 "Map Transform: Missing Fields for transformation."
-            )
+            ) from e
         it = self.data.copy()
         for field, val in fields.items():
             if isinstance(val, str):
@@ -59,11 +60,9 @@ class Map(AbstractTransform):
                     it = self._call_fn(field, fname, args, it)
                 continue
             elif isinstance(val, list):
-                print('FIELD > ', field, val, len(val))
                 if len(val) > 1:
                     # multiple functions to be called at once
                     for v in val:
-                        print('WHICH VAL > ', v)
                         it = self._run_one(v, it, field)
                 else:
                     it = self._run_one(val, it, field)
@@ -120,7 +119,6 @@ class Map(AbstractTransform):
         Run a single function on the data.
         val is a list of arguments to be passed to the function:
         """
-        print('RUN VAL > ', val)
         element = val.pop(0)
         if isinstance(element, list):
             # split into function and arguments:

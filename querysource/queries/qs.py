@@ -24,8 +24,8 @@ from ..exceptions import (
     SlugNotFound,
 )
 from ..providers import BaseProvider
-from ..types.mutables import ClassDict
-from ..types.typedefs import AttrDict
+from datamodel.libs.mapping import ClassDict
+from datamodel.typedefs import AttrDict
 from ..utils.functions import check_empty
 from .abstract import BaseQuery
 
@@ -34,7 +34,7 @@ class QS(BaseQuery):
     """
     QS.
 
-       Query multiple data-origins for Navigator.
+    Query multiple data-origins for Navigator.
     """
     def __init__(
             self,

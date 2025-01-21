@@ -1,7 +1,8 @@
-# abstract.pxd
-from cpython cimport list, dict, tuple
+# cython: language_level=3, embedsignature=True
+# Copyright (C) 2018-present Jesus Lara
+#
+# file: abstract.pxd
 from libc.stdint cimport int32_t
-from ..types.mapping cimport ClassDict
 from ..models import QueryObject
 
 
@@ -10,7 +11,7 @@ cdef class AbstractParser:
     cdef public object logger
     cdef public str query_raw
     cdef public object definition
-    cdef public ClassDict conditions
+    cdef public object conditions
     cdef public str query_parsed
     cdef public dict filter
     cdef public dict filter_options
@@ -54,5 +55,5 @@ cdef class AbstractParser:
     cpdef str query(self)
     cpdef str filtering_options(self, str sentence)
     cdef object _get_function_replacement(self, object function, str key, object val)
-    cdef dict _merge_conditions_and_filters(self, dict conditions)
+    cdef object _merge_conditions_and_filters(self, dict conditions)
     cdef bint _handle_keys(self, str key, object val, dict _filter)

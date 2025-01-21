@@ -6,13 +6,13 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 from aiohttp import web
+from datamodel.typedefs import Singleton
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
 # QS
 from .datasources.handlers import DatasourceDrivers, DatasourceView
 from .template import TemplateParser
-from .types import Singleton
 from .handlers import (
     QueryService,
     QueryHandler,

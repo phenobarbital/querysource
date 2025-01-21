@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any, Union
 
 from aiohttp import web
+from datamodel.typedefs import SafeDict
 from asyncdb.exceptions import (
     DriverError,
     NoDataFound,
@@ -20,7 +21,6 @@ from ..exceptions import (
 )
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
-from ..types import SafeDict
 from ..types.validators import is_empty
 from .abstract import BaseProvider
 

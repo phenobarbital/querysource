@@ -3,8 +3,8 @@ SalesForce Provider.
 """
 from simple_salesforce import Salesforce, SalesforceLogin
 from simple_salesforce.exceptions import SalesforceMalformedRequest
-from querysource.parsers.sosql import SOQLParser
-from querysource.exceptions import DriverError, ParserError
+from ..parsers.sosql import SOQLParser
+from ..exceptions import DriverError, ParserError
 from .external import externalProvider
 
 

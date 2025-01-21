@@ -6,17 +6,17 @@ from collections.abc import Callable
 import contextlib
 import hashlib
 from aiohttp import web
+from datamodel.parsers.json import json_decoder
 from asyncdb.exceptions import ProviderError, NoDataFound
-from querysource.models import QueryModel
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..exceptions import (
     QueryError,
     QueryException,
     ParserError,
     DriverError,
     DataNotFound
 )
-from ..libs.json import json_decoder
-from querysource.parsers.rethink import RethinkParser
+from ..parsers.rethink import RethinkParser
 from .abstract import BaseProvider
 
 

@@ -1,14 +1,15 @@
+# cython: language_level=3, embedsignature=True
+# Copyright (C) 2018-present Jesus Lara
+#
 # file: abstract.pyx
 from abc import abstractmethod
 import asyncio
-from cpython cimport list, dict, tuple
 from navconfig.logging import logging
 from asyncdb import AsyncDB
 from . import QS_FILTERS, QS_VARIABLES
-from ..types.mapping cimport ClassDict
 from ..types import strtobool, is_boolean
 from ..models import QueryObject, QueryModel
-from ..exceptions import EmptySentence
+from ..exceptions cimport EmptySentence
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
 from ..utils.parseqs import is_parseable
@@ -371,9 +372,9 @@ cdef class AbstractParser:
 
     async def _get_operational_value(self, value: object, connection: object) -> object:
         try:
-            if isinstance(value, str):
-                result = await connection.get(value)
-                return Entity.quoteString(result)
+            # if isinstance(value, str):
+            #     result = await connection.get(value)
+            #     return Entity.quoteString(result)
             return None
         except Exception:
             return None
@@ -405,7 +406,7 @@ cdef class AbstractParser:
             # print(' :: FILTER OPTIONS > ', self.filter)
         return self
 
-    cdef dict _merge_conditions_and_filters(self, dict conditions):
+    cdef object _merge_conditions_and_filters(self, dict conditions):
         """Merge conditions with filters, handling potential TypeError."""
         try:
             return {**conditions, **self.filter}
@@ -439,7 +440,9 @@ cdef class AbstractParser:
             if self._handle_keys(key, value, {}):
                 return None
             _type = self.cond_definition.get(key, None)
-            self.logger.debug(f'SET conditions: {key} = {value} with type {_type}')
+            self.logger.debug(
+                f'SET conditions: {key} = {value} with type {_type}'
+            )
             if new_val := await self._get_operational_value(value, connection):
                 result = new_val
             else:
@@ -460,8 +463,14 @@ cdef class AbstractParser:
         """Check if all conditions are valid and return the value."""
         elements = self._merge_conditions_and_filters(conditions)
 
-        tasks = [self._process_element(name, val, connection) for name, val in elements.items()]
+        print('ENTERING HERE > ')
+        tasks = []
+        for name, val in elements.items():
+            print('ELEMENTS > ', name, val)
+            tasks.append(self._process_element(name, val, connection))
+        # tasks = [self._process_element(name, val, connection) for name, val in elements.items()]
         results = await asyncio.gather(*tasks)
+        print('RESULTS > ', results)
 
         _filter = {}
         for result in results:
@@ -471,7 +480,7 @@ cdef class AbstractParser:
                     self._conditions[key] = value
                 else:
                     _filter[key] = value
-
+        print('FILTER > ', _filter)
         return _filter
 
     cpdef object where_cond(self, dict where):

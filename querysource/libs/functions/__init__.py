@@ -50,8 +50,10 @@ def query_options(options: dict, where: dict = None, program: str = 'default', h
             hierarchy = get_hierarchy(program)
         if hierarchy:
             try:
-                get_filter = [ k.replace('!', '') for k in _where if k.replace('!', '') in hierarchy]
-                filter_sorted = sorted(get_filter,key=hierarchy.index)
+                get_filter = [
+                    k.replace('!', '') for k in _where if k.replace('!', '') in hierarchy
+                ]
+                filter_sorted = sorted(get_filter, key=hierarchy.index)
             except (TypeError, ValueError, KeyError):
                 return _where
             ## processing different types of query option
@@ -138,8 +140,8 @@ def group_by_child(options: dict, where: dict, **kwargs): # pylint: disable=W061
     """
 
 
-def first_day(*args, **kwargs) -> str: # pylint: disable=W0613
+def first_day(*args, **kwargs) -> str:  # pylint: disable=W0613
     return fdom()
 
-def last_day(*args, **kwargs)-> str: # pylint: disable=W0613
+def last_day(*args, **kwargs) -> str:  # pylint: disable=W0613
     return ldom()

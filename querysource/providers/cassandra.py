@@ -8,11 +8,15 @@ from typing import (
 )
 from collections import defaultdict
 from aiohttp import web
-from asyncdb.exceptions import StatementError, ProviderError, NoDataFound
-from querysource.exceptions import DriverError, ParserError, DataNotFound
-from querysource.types import SafeDict
-from querysource.models import QueryModel
-from querysource.parsers.cql import CQLParser
+from datamodel.typedefs import SafeDict
+from asyncdb.exceptions import (
+    StatementError,
+    ProviderError,
+    NoDataFound
+)
+from ..exceptions import DriverError, ParserError, DataNotFound
+from ..models import QueryModel
+from ..parsers.cql import CQLParser
 from .abstract import BaseProvider
 
 

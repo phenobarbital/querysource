@@ -20,7 +20,6 @@ from decimal import Decimal
 from dateutil import parser
 from uuid import UUID
 from ..utils.functions import *
-from .typedefs import strtobool
 import orjson
 from numpy import int64, ndarray
 
@@ -34,6 +33,24 @@ cdef list PG_CONSTANTS = os.environ.get(
 cdef list PG_UDF = os.environ.get('PG_UDF', ["now()"])
 
 cdef object eval_field = re.compile(r'^(?:(\@|!|#|~|\:|))(\w*)(?:(\||\&|\!|\~|\#)|)+$')
+
+
+cpdef object strtobool(str val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0', 'null'):
+        return False
+    else:
+        raise ValueError(
+            f"invalid truth value for {val}"
+        )
 
 cpdef list field_components(str field):
     try:

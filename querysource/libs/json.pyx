@@ -66,7 +66,9 @@ cdef class JSONContent:
                 return obj.name
         elif isinstance(obj, Binary):  # Handle bytea column from PostgreSQL
             return str(obj)  # Convert Binary object to string
-        logging.error(f'{obj!r} of Type {type(obj)} is not JSON serializable')
+        logging.error(
+            f'{obj!r} of Type {type(obj)} with value {value!s} is not JSON serializable'
+        )
         raise TypeError(
             f'{obj!r} of Type {type(obj)} is not JSON serializable'
         )

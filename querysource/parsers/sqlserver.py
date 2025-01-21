@@ -3,7 +3,7 @@ MS SQL Server Parser.
 
 Build SQL-Queries for MS SQL Server, validation and parsing.
 """
-from ..types.typedefs import SafeDict
+from datamodel.typedefs import SafeDict
 from ..types.validators import Entity, field_components
 from .sql import SQLParser
 

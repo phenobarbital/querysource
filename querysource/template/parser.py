@@ -18,7 +18,7 @@ from jinja2 import (
 from aiohttp import web
 from navconfig import config, BASE_DIR
 from navconfig.logging import logging
-from ..libs.json import json_encoder
+from datamodel.parsers.json import json_encoder
 
 
 jinja_config = {

@@ -2,9 +2,9 @@ import logging
 from typing import Any
 from hubspot import HubSpot
 from urllib.parse import urlencode
-#from querysource.exceptions import *
-from querysource.providers.sources import restSource
 from asyncdb.exceptions import ProviderError, NoDataFound
+from ...providers.sources import restSource
+
 
 class hubspot(restSource):
     """
@@ -50,7 +50,7 @@ class hubspot(restSource):
                 except (ValueError, AttributeError):
                     raise ValueError("HubSpot: Missing API Key")
         self._headers['Authorization'] = f'Bearer {api_token}'
-        
+
         # self._conditions = params
         self._args = kwargs
 

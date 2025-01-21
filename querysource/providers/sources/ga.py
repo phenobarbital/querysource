@@ -17,9 +17,9 @@ from google.analytics.data_v1beta.types import (
 )
 # google analytics ga4
 from google.api_core.exceptions import PermissionDenied, ServiceUnavailable
+from datamodel.parsers.json import json_encoder
 from ...conf import GA_SERVICE_ACCOUNT_NAME, GA_SERVICE_PATH
 from ...exceptions import QueryError, ConfigError
-from ...libs.json import json_encoder
 from .rest import restSource
 
 

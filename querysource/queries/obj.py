@@ -21,7 +21,7 @@ class QueryObject(BaseQuery):
     """
     QueryObject.
 
-       Query multiple data-origins for Navigator.
+    Query multiple data-origins for QuerySource.
     """
     def __init__(
             self,
@@ -54,7 +54,7 @@ class QueryObject(BaseQuery):
             self._query = slug
             self._type = 'slug'
             # defining conditions
-            self._conditions = query if query else {}
+            self._conditions = query or {}
         elif 'query' in query:
             self._logger.debug(
                 ':: Initialize Query ::'
@@ -65,8 +65,9 @@ class QueryObject(BaseQuery):
     async def build_provider(self):
         """
         build_provider.
-           create queries based on a query_slug,
-           a raw query or an Object Query.
+
+        create queries based on a query_slug,
+        a raw query or an Object Query.
         """
         if self._type == 'slug':  # slug-based provider:
             self._logger.debug(
@@ -102,9 +103,8 @@ class QueryObject(BaseQuery):
                     conditions = {**objquery.conditions, **self._conditions}
                 except (AttributeError, TypeError):
                     conditions = {**self._conditions}
-            else:
-                if objquery.conditions:
-                    conditions = {**objquery.conditions}
+            elif objquery.conditions:
+                conditions = {**objquery.conditions}
             # TODO: try to discovering the type of conditions
             self._logger.debug(
                 f":: = SLUG {self._query}, provider: {provider!s}"
