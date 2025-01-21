@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from pandas.tseries.offsets import MonthEnd
 from navconfig.logging import logging
-from ..typedefs import strtobool
+from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
 from ...conf import DEFAULT_TIMEZONE
 
