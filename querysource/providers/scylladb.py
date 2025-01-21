@@ -2,7 +2,7 @@
 
 Data Provider for ScyllaDB.
 """
-from querysource.parsers.cql import CQLParser
+from ..parsers.cql import CQLParser
 from .sql import sqlProvider
 
 

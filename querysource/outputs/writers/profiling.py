@@ -2,7 +2,7 @@ import time
 import logging
 from pandas_profiling import ProfileReport
 from aiohttp import web
-from querysource.conf import URL_PROFILING
+from ...conf import URL_PROFILING
 from .abstract import AbstractWriter
 
 matlog = logging.getLogger('matplotlib.font_manager')

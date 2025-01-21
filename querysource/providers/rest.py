@@ -2,9 +2,9 @@ from typing import Any, Union
 from importlib import import_module
 from aiohttp import web
 from asyncdb.exceptions import ProviderError, NoDataFound
-from querysource.models import QueryModel
-from querysource.utils.functions import check_empty
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..utils.functions import check_empty
+from ..exceptions import (
     DataNotFound,
     DriverError,
     QueryException

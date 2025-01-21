@@ -2,7 +2,7 @@ import csv
 from io import StringIO
 from aiocsv import AsyncDictWriter
 from aiohttp import web
-from querysource.conf import (
+from ...conf import (
     CSV_DEFAULT_DELIMITER,
     CSV_DEFAULT_QUOTING
 )

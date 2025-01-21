@@ -1,8 +1,8 @@
 from typing import Any
 from urllib.parse import urlencode
 from asyncdb.exceptions import NoDataFound, ProviderError
-from querysource.exceptions import DataNotFound, DriverError, QueryException
-from querysource.providers.sources import restSource
+from ...exceptions import DataNotFound, DriverError, QueryException
+from ..sources import restSource
 
 
 class uap(restSource):

@@ -6,13 +6,13 @@ from collections.abc import Callable
 import hashlib
 from aiohttp import web
 from asyncdb.exceptions import ProviderError, DriverError, NoDataFound
-from querysource.models import QueryModel
-from querysource.exceptions import (
+from ..models import QueryModel
+from ..exceptions import (
     DataNotFound,
     QueryException,
     ParserError
 )
-from querysource.parsers.influx import InfluxParser
+from ..parsers.influx import InfluxParser
 from .abstract import BaseProvider
 
 

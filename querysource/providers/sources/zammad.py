@@ -5,8 +5,8 @@ import pytz
 import urllib3
 from navconfig.logging import logging
 from asyncdb.exceptions import ProviderError, NoDataFound
-from querysource.providers.sources import restSource
-from querysource.exceptions import DataNotFound
+from ..sources import restSource
+from ...exceptions import DataNotFound
 
 urllib3.disable_warnings()
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -16,10 +16,8 @@ class zammad(restSource):
         Zammad
         Get all tickets from Zammad API
     """
-    
-    method:str = 'GET'
+    method: str = 'GET'
     timeout: int = 60
-    
 
     def __post_init__(
         self,
@@ -45,7 +43,7 @@ class zammad(restSource):
         self._args['api_url'] = self._env.get(self._args['api_url'], fallback=self._args['api_url'])
         self.base_url = '{api_url}/api/v1/tickets/?per_page=100&page={page}'
         self._args['page'] = 1
-        
+
         # Get API Token
         if 'api_token' in self._conditions:
             api_token = self._conditions['api_token']
@@ -59,7 +57,7 @@ class zammad(restSource):
                 raise ValueError("Zammad: Missing API Token") from err
         api_token = self._env.get(api_token, fallback=api_token)
         self._headers['Authorization'] = f'Bearer {api_token}'
-        
+
     async def tickets(self):
         self._result = await self.query()
         return self._result
