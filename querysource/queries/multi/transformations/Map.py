@@ -8,8 +8,9 @@ from ....exceptions import (
     QueryException
 )
 from .abstract import AbstractTransform
-from .transforms import functions as dffunctions
-from .fn import getFunction
+from ....types.dt import transforms as dffunctions
+from ....utils.getfunc import getFunction
+
 
 class Map(AbstractTransform):
     """Map Transform: changing the shape of the data."""
@@ -30,10 +31,10 @@ class Map(AbstractTransform):
         await self.start()
         try:
             fields = copy.deepcopy(self.fields)
-        except AttributeError:
+        except AttributeError as e:
             raise QueryException(
                 "Map Transform: Missing Fields for transformation."
-            )
+            ) from e
         it = self.data.copy()
         for field, val in fields.items():
             if isinstance(val, str):

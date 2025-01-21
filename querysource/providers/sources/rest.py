@@ -12,7 +12,7 @@ from navconfig.logging import logging
 from bs4 import BeautifulSoup as bs
 import requests
 import urllib3
-from ...libs.json import json_decoder, json_encoder
+from datamodel.parsers.json import json_decoder, json_encoder
 from ...exceptions import DriverError, ParserError
 from .http import httpSource
 

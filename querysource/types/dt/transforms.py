@@ -1,7 +1,6 @@
 """
 Function Tree for Pandas-related row/column transformations.
 
-
 """
 from typing import Any, Dict, List, Optional, Union
 import ast
@@ -19,7 +18,7 @@ import numpy as np
 import pandas as pd
 from pandas.tseries.offsets import MonthEnd
 from navconfig.logging import logging
-from .....types import strtobool
+from ..typedefs import strtobool
 from .....utils.getfunc import getFunction
 from .....conf import DEFAULT_TIMEZONE
 
@@ -151,7 +150,7 @@ def math_operation(df: pd.DataFrame, field: str, columns: list, operation: str):
     if col1 not in df.columns or col2 not in df.columns:
         raise KeyError(f"One or both columns {col1}, {col2} not found in the DataFrame.")
 
-    if operation in ('add', 'sum', ):
+    if operation in {'add', 'sum'}:
         df[field] = df[col1] + df[col2]
     elif operation == 'subtract':
         df[field] = df[col1] - df[col2]
@@ -221,9 +220,9 @@ def explode(
     """
     splitcols = [field]
     if columns is not None:
-        splitcols = splitcols + columns
+        splitcols += columns
     ### first: convert all colums to list:
-    if is_string is True:
+    if is_string:
         for col in splitcols:
             try:
                 df[col] = [x.strip("()").split(delimiter) for x in df[col]]
@@ -596,14 +595,14 @@ def normalize_strings(
     :return: Modified pandas DataFrame with the normalized strings.
     """  # noqa
     try:
-        col = column if column else field
+        col = col = column or field
         df[field] = df[col]
-        if clean_strings is True:
+        if clean_strings:
             charsToRemove = [",", ".", r"\.", r"\'"]
             df[field] = df[field].str.replace(
                 r"{}".format(charsToRemove), replacement, regex=True
             )
-        if lowercase is True:
+        if lowercase:
             df[field] = df[field].str.lower()
         df[field] = df[field].str.replace(" ", replacement, regex=True)
         return df

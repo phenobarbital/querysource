@@ -5,7 +5,7 @@ Models for querysource structure.
 from typing import List, Optional
 from datetime import datetime
 from asyncdb.models import Model, Field
-from .types.mapping import ClassDict
+from datamodel.libs.mapping import ClassDict
 from .utils.functions import empty_dict
 from .conf import (
     QS_QUERIES_SCHEMA,
@@ -18,14 +18,8 @@ def rigth_now(obj) -> datetime:
 def to_field_list(obj) -> list:
     if obj is None:
         return []
-    if isinstance(obj, str):
-        return [x.strip() for x in obj.split(',')]
-    return obj
+    return [x.strip() for x in obj.split(',')] if isinstance(obj, str) else obj
 
-# def empty_dict(obj) -> dict:
-#     if obj is None:
-#         return {}
-#     return obj
 
 class QueryObject(ClassDict):
     """Base Class for all options passed to Parsers.

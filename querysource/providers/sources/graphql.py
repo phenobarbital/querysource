@@ -1,6 +1,6 @@
 from abc import ABC
 from typing import Any
-from ...libs.json import json_encoder
+from datamodel.parsers.json import json_encoder
 from ...exceptions import (
     DriverError,
     QueryError,
@@ -12,7 +12,7 @@ from .rest import restSource
 
 class graphqlSource(restSource, ABC):
     """
-      Abstract Class for creating GraphQL-based APIs.
+    Abstract Class for creating GraphQL-based APIs.
     """
     url: str = ''
     api_name: str = 'GraphQL'

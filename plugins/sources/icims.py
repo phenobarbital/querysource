@@ -2,7 +2,8 @@ from typing import Any
 from urllib.parse import urlencode
 import aiohttp
 from navconfig.logging import logging
-from querysource.libs.json import json_encoder, json_decoder
+from datamodel.parsers.json import json_encoder, json_decoder
+from datamodel.parsers.encoders import DefaultEncoder
 from querysource.exceptions import DataNotFound, ConfigError
 from querysource.providers.sources import restSource
 

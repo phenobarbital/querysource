@@ -1,7 +1,6 @@
 # abstract.pxd
 from cpython cimport list, dict, tuple
 from libc.stdint cimport int32_t
-from ..types.mapping cimport ClassDict
 from ..models import QueryObject
 
 
@@ -10,7 +9,7 @@ cdef class AbstractParser:
     cdef public object logger
     cdef public str query_raw
     cdef public object definition
-    cdef public ClassDict conditions
+    cdef public dict conditions
     cdef public str query_parsed
     cdef public dict filter
     cdef public dict filter_options

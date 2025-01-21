@@ -7,7 +7,7 @@ from .....exceptions import (
 )
 from .....types import is_empty
 from ..abstract import AbstractOperator
-from . import functions as dffunctions
+from .....types.dt import filters as dffunctions
 
 
 valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']

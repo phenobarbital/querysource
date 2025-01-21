@@ -1,4 +1,5 @@
 import importlib
+import contextlib
 import builtins
 from navconfig.logging import logging
 from . import functions as qsfunctions
@@ -6,12 +7,19 @@ from . import functions as qsfunctions
 
 def getFunction(fname: str) -> callable:
     """
-    Get any function using name.
+    Get a function from a predefined whitelist of allowed functions.
+
+    Args:
+        fname (str): Name of the function to retrieve.
+
+    Returns:
+        callable: The requested function.
+
+    Raises:
+        ValueError: If the requested function is not in the whitelist.
     """
-    try:
+    with contextlib.suppress(TypeError, AttributeError):
         return getattr(qsfunctions, fname)
-    except (TypeError, AttributeError):
-        pass
     try:
         func = globals().get(fname)
         if func:
