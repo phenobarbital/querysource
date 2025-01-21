@@ -6,8 +6,8 @@ from .....exceptions import (
     QueryException
 )
 from .....types import is_empty
-from ..abstract import AbstractOperator
 from .....types.dt import filters as dffunctions
+from ..abstract import AbstractOperator
 
 
 valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']

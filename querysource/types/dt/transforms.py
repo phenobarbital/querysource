@@ -19,8 +19,8 @@ import pandas as pd
 from pandas.tseries.offsets import MonthEnd
 from navconfig.logging import logging
 from ..typedefs import strtobool
-from .....utils.getfunc import getFunction
-from .....conf import DEFAULT_TIMEZONE
+from ...utils.getfunc import getFunction
+from ...conf import DEFAULT_TIMEZONE
 
 
 def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):

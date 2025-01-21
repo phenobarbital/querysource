@@ -1,3 +1,6 @@
+# cython: language_level=3, embedsignature=True, boundscheck=False, wraparound=False, initializedcheck=False
+# Copyright (C) 2018-present Jesus Lara
+#
 # file: abstract.pyx
 from abc import abstractmethod
 import asyncio
@@ -5,7 +8,7 @@ from cpython cimport list, dict, tuple
 from navconfig.logging import logging
 from asyncdb import AsyncDB
 from . import QS_FILTERS, QS_VARIABLES
-from datamodel.libs.mapping cimport ClassDict
+# from datamodel.libs.mapping cimport ClassDict
 from ..types import strtobool, is_boolean
 from ..models import QueryObject, QueryModel
 from ..exceptions import EmptySentence

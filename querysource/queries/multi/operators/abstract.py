@@ -20,10 +20,7 @@ class AbstractOperator(ABC):
     def __init__(self, data: dict, **kwargs) -> None:
         self._backend = kwargs.get('backend', 'pandas')
         # Use Modin as backend if available
-        if self._backend == 'modin':
-            self._pd = mpd  # pylint: disable=C0415  # noqa
-        else:
-            self._pd = pd
+        self._pd = mpd if self._backend == 'modin' else pd
         self.data = data
         for k, v in kwargs.items():
             setattr(self, k, v)

@@ -1,3 +1,6 @@
+# cython: language_level=3, embedsignature=True, boundscheck=False, wraparound=True, initializedcheck=False
+# Copyright (C) 2018-present Jesus Lara
+#
 # abstract.pxd
 from cpython cimport list, dict, tuple
 from libc.stdint cimport int32_t
@@ -9,7 +12,7 @@ cdef class AbstractParser:
     cdef public object logger
     cdef public str query_raw
     cdef public object definition
-    cdef public dict conditions
+    cdef public object conditions
     cdef public str query_parsed
     cdef public dict filter
     cdef public dict filter_options
