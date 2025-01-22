@@ -22,7 +22,10 @@ class Main(AppHandler):
         super(Main, self).configure()
         # version
         # Loading QUerySource
-        qry = QuerySource(lazy=False, loop=self.event_loop())
+        qry = QuerySource(
+            lazy=False,
+            loop=self.event_loop()
+        )
         qry.setup(self.app)
 
     @classmethod

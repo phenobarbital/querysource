@@ -2,7 +2,7 @@
 JSON Encoders.
 """
 import sys
-from .json import JSONContent
+from datamodel.parsers.json import JSONContent
 
 DefaultEncoder = JSONContent
 
