@@ -8,6 +8,7 @@ from typing import Any, Union
 
 from aiohttp import web
 from datamodel import BaseModel
+from datamodel.parsers.json import JSONContent
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB, AsyncPool
 from asyncdb.exceptions import (
@@ -30,7 +31,6 @@ from .conf import (
     MEMCACHE_SERVICE
 )
 from .types import Singleton
-from .libs.json import JSONContent
 import jsonpickle
 from .exceptions import (
     ConfigError

@@ -3,8 +3,9 @@ import traceback
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 from navconfig.logging import logging
+from datamodel.parsers.encoders import DefaultEncoder
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
-from ..libs.encoders import DefaultEncoder
+# from ..libs.encoders import DefaultEncoder
 from ..queries.abstract import BaseQuery
 from ..exceptions import (
     DataNotFound,
