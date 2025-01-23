@@ -9,6 +9,8 @@ from navconfig.logging import logging
 ### Matplotlib Configuration
 logging.getLogger(name='matplotlib').setLevel(logging.WARNING)
 logging.getLogger(name='matplotlib.font_manager').setLevel(logging.ERROR)
+logging.getLogger(name='PIL').setLevel(logging.ERROR)
+logging.getLogger(name='PIL.PngImagePlugin').setLevel(logging.ERROR)
 mpldir = config.get('MPLCONFIGDIR', fallback=BASE_DIR.joinpath('templates'))
 os.environ['MPLCONFIGDIR'] = str(mpldir)
 
@@ -313,6 +315,14 @@ DASK_SCHEDULER_PORT = config.get(
     "DASK_SCHEDULER_PORT",
     fallback=8786
 )
+
+# Modin Cluster:
+USE_MODIN = config.getboolean("USE_MODIN", fallback=False)
+MODIN_CLUSTER_CONFIG = config.get(
+    "MODIN_CLUSTER_CONFIG",
+    fallback="local"
+)
+MODIN_SERVER = config.get("MODIN_SERVER", fallback="tcp://127.0.0.1:8786")
 
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa

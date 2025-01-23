@@ -1,7 +1,7 @@
 from typing import Union
 import pandas as pd
 from navconfig.logging import logging
-from .....exceptions import (
+from ....exceptions import (
     DataNotFound,
     DriverError,
     OutputError
@@ -72,14 +72,8 @@ class TableOutput:
                 self._pk = []
             # set the upsert method:
             options['method'] = self._engine.db_upsert
-            if hasattr(elem, 'foreign_key'):
-                self._fk = elem.foreign_key
-            else:
-                self._fk = None
-            if hasattr(elem, 'constraint'):
-                self._constraint = elem.constraint
-            else:
-                self._constraint = None
+            self._fk = elem.foreign_key if hasattr(elem, 'foreign_key') else None
+            self._constraint = elem.constraint if hasattr(elem, 'constraint') else None
             self._columns = list(datasource.columns)
             self._engine.columns = self._columns
             self._schema = schema

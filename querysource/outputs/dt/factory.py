@@ -14,7 +14,7 @@ class OutputFactory:
                 try:
                     # dynamically load format:
                     module_name = f"{frmt}Format"
-                    classpath = f'querysource.queries.outputs.{frmt}'
+                    classpath = f'querysource.outputs.dt.{frmt}'
                     mdl = import_module(classpath, package=frmt)
                     obj = getattr(mdl, module_name)
                     cls._format[frmt] = obj

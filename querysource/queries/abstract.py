@@ -32,7 +32,7 @@ from ..exceptions import (
 )
 from ..interfaces.connections import Connection
 from ..events import LogEvent
-from .outputs import OutputFactory
+from ..outputs.dt import OutputFactory
 from .models import Query, QueryResult
 from ..utils.events import enable_uvloop
 
