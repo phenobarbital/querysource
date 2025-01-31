@@ -168,7 +168,7 @@ setup(
         'odfpy==1.4.1',
         'xlrd==2.0.1',
         'reportlab==4.1.0',
-        'WeasyPrint==61.2',
+        'WeasyPrint==64.0',
         'APScheduler==3.10.4',
         'bs4==0.0.2',
         'simple_salesforce==1.12.3',
