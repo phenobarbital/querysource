@@ -4,6 +4,7 @@ from typing import (
     Union
 )
 import importlib
+from importlib import import_module
 import urllib3
 from aiohttp import web
 from navconfig.logging import logging
@@ -35,6 +36,7 @@ class httpProvider(BaseProvider):
         request: web.Request = None,
         **kwargs
     ):
+        self._url = kwargs.pop('url', '')
         super(httpProvider, self).__init__(
             slug=slug,
             query=query,
@@ -45,43 +47,52 @@ class httpProvider(BaseProvider):
             request=request,
             **kwargs
         )
-        try:
-            self._url = kwargs['url']
-            del kwargs['url']
-        except KeyError:
-            self._url: str = ''
+        ## getting dialect:
+        self.dialect: str = None
+        if definition:
+            self.dialect = definition.params['dialect']
+        else:
+            try:
+                self.dialect = kwargs['source']
+                del kwargs['source']
+            except (KeyError, AttributeError) as ex:
+                raise DriverError(
+                    f"HTTP Error, no dialect was found: {ex}"
+                ) from ex
 
     async def prepare_connection(self):
         await super(httpProvider, self).prepare_connection()
-        module_name = 'querysource.providers.sources.http'
+        module_name = f'querysource.providers.sources.{self.dialect}'
         try:
-            module = importlib.import_module(module_name, package='sources')
+            module = import_module(module_name, package='sources')
         except SyntaxError as err:
-            raise QueryException(
-                f"Error: Syntax Error on HTTPSource: {err}"
+            raise DriverError(
+                f"Syntax Error over {self.dialect}: {err}"
             ) from err
         except ModuleNotFoundError:
-            ### try to find Module in plugins folder:
             try:
                 module_name = f'querysource.plugins.sources.{self.dialect}'
-                module = importlib.import_module(module_name, package='sources')
+                module = import_module(module_name, package='sources')
             except ModuleNotFoundError as err:
-                raise QueryException(
-                    f'Error importing {module_name} module, error: {str(err)}'
-                ) from err
-        except ImportError as err:
-            print(
-                f'Error importing HTTP Dialect {module_name}'
-            )
-            raise QueryException(
-                f"Error importing HTTP Dialect httpSource: {err}"
-            ) from err
-        except Exception as err:
-            raise QueryException(
-                f'Error: Unknown Error, error: {str(err)}'
-            ) from err
+                # Use base HTTP Source instead.
+                module_name = 'querysource.providers.sources.http'
+                try:
+                    module = importlib.import_module(module_name, package='sources')
+                except SyntaxError as err:
+                    raise QueryException(
+                        f"Error: Syntax Error on HTTPSource: {err}"
+                    ) from err
+                except ModuleNotFoundError:
+                    ### try to find Module in plugins folder:
+                    try:
+                        module_name = f'querysource.plugins.sources.{self.dialect}'
+                        module = importlib.import_module(module_name, package='sources')
+                    except ModuleNotFoundError as err:
+                        raise QueryException(
+                            f'Error importing {module_name} module, error: {str(err)}'
+                        ) from err
         try:
-            class_name = getattr(module, 'httpSource')
+            class_name = getattr(module, self.dialect, 'httpSource')
             self._source = class_name(
                 definition=self._definition,
                 conditions=self._conditions,
@@ -95,17 +106,20 @@ class httpProvider(BaseProvider):
         # refresh proxies
         await self._source.refresh_proxies()
 
+    def accepts(self) -> str:
+        """accepts.
+        Check the Mime Type of response to be returned by OutputFactory.
+        """
+        return self._source.accepts()
+
     async def result(self):  # pylint: disable=W0236
         """result.
-           get the result from the Provider Source.
+        get the result from the Provider Source.
         """
         # preparing any connection (if needed)
         await self.prepare_connection()
         result = None
-        try:
-            attr = self._conditions['attribute']
-        except KeyError:
-            attr = 'query'
+        attr = self.kwargs.get('attribute', 'query')
         try:
             query = getattr(self._source, attr)
         except AttributeError as ex:
@@ -127,13 +141,13 @@ class httpProvider(BaseProvider):
     async def columns(self):
         """
         columns.
-           get the columns of result
+        Get the columns of result
         """
         raise NotImplementedError("Columns is not implemented on HTTP Source.")
 
     async def query(self):
         """query.
-           get data from HTTP API
+        Get data from HTTP API
         """
         result = []
         error = None
@@ -160,9 +174,9 @@ class httpProvider(BaseProvider):
 
     async def close(self):
         """close.
-           close connection to HTTP API
+        Close connection to HTTP API
         """
         try:
             await self._source.close()
         except (ProviderError, DriverError, RuntimeError) as err:
-            logging.exception(err, stack_info=True)
+            self._logger.exception(err, stack_info=True)

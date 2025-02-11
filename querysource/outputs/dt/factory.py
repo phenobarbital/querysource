@@ -7,7 +7,7 @@ class OutputFactory:
     _format: dict = {}
 
     def __new__(cls, provider, frmt: str, *args, **kwargs):
-        if frmt is None or frmt == 'native':
+        if frmt is None or frmt == 'native' or frmt == 'raw':
             return provider.output
         else:
             if frmt not in cls._format:

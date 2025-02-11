@@ -12,7 +12,7 @@ from asyncdb.exceptions import (
 )  # QuerySource Query, Executor, etc
 # Output
 from ..outputs import DataOutput
-from ..outputs.writers import graph_ouputs
+from ..outputs.writers import graph_ouputs, mime_supported
 from ..exceptions import (
     ParserError,
     QueryException,
@@ -184,9 +184,8 @@ class QueryService(AbstractHandler):
             )
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
-            if 'queryformat' in params:
-                _format = params['queryformat']
-                del params['queryformat']
+            _format = params['queryformat']
+            del params['queryformat']
         except KeyError:
             pass
         # extracting params from FORMAT:
@@ -253,7 +252,9 @@ class QueryService(AbstractHandler):
             options = {}
         # get conditions
         conditions = {**options, **params}
-        self.logger.debug(f'Slug: {slug}, format: {queryformat}, conditions: {conditions}')
+        self.logger.debug(
+            f'Slug: {slug}, format: {queryformat}, conditions: {conditions}'
+        )
         try:
             if query := await self.get_source(request, slug, conditions, driver=args):
                 try:
@@ -275,8 +276,16 @@ class QueryService(AbstractHandler):
                         exception=err
                     )
                 # query columns
+                if ctype := query.accepts():
+                    queryformat = mime_supported[ctype]
                 try:
-                    output = DataOutput(request, query=query, ctype=queryformat, slug=slug, **output_args)
+                    output = DataOutput(
+                        request,
+                        query=query,
+                        ctype=queryformat,
+                        slug=slug,
+                        **output_args
+                    )
                     return await output.response()
                 except ConnectionTimeout as err:
                     raise DriverError(

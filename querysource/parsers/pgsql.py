@@ -6,6 +6,7 @@ from string import Template
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
+from datamodel.parsers.json import json_encoder
 from ..exceptions import EmptySentence
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
 from .sql import SQLParser
@@ -153,6 +154,25 @@ class pgSQLParser(SQLParser):
                             where_cond.append(
                                 f"{key}={Entity.quoteString(value)}"
                             )
+                elif isinstance(value, dict):
+                    # making a JSONB search:
+                    # check first if dictionary have only one key:
+                    if len(value) == 1:
+                        v = json_encoder(value)
+                        where_cond.append(
+                            f"{key} @> {v}"
+                        )
+                    else:
+                        op, v = value.popitem()
+                        if op in ('->', '->>', '@>', '@>', '<@', '<@'):
+                            if isinstance(v, (str, int)):
+                                where_cond.append(
+                                    f"{key} {op} {Entity.quoteString(v)}"
+                                )
+                            else:
+                                where_cond.append(
+                                    f"{key} {op} {v}"
+                                )
                 elif isinstance(value, bool):
                     where_cond.append(
                         f"{key} = {value}"

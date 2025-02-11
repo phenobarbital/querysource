@@ -44,6 +44,8 @@ if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
 else:
     from typing import ParamSpec
+
+
 P = ParamSpec("P")
 
 
@@ -53,18 +55,44 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 logging.getLogger(name='selenium.webdriver').setLevel(logging.WARNING)
 
+xml_types = ['application/xhtml+xml', 'application/xml']
 
 ua = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.33",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.1 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.10240",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:104.0) Gecko/20100101 Firefox/104.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:105.0) Gecko/20100101 Firefox/105.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+    # Chrome - Desktop (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    # Chrome - Desktop (Mac)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",  # noqa
+    # Safari - Desktop (Mac)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",  # noqa
+    # Firefox - Desktop (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
+    # Edge - Desktop (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Edg/118.0.2088.46",  # noqa
+    # Chrome - Mobile (Android)
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36",  # noqa
+    # Safari - Mobile (iOS)
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",  # noqa
+    # Samsung Internet - Mobile (Android)
+    "Mozilla/5.0 (Linux; Android 13; SAMSUNG SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/21.0 Chrome/118.0.0.0 Mobile Safari/537.36",  # noqa
+    # Firefox - Mobile (Android)
+    "Mozilla/5.0 (Android 13; Mobile; rv:118.0) Gecko/118.0 Firefox/118.0",
+    # Opera - Desktop (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 OPR/104.0.0.0"  # noqa
+    # Firefox - Desktop (Linux)
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    # Chrome - Desktop (Linux)
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+    # Other:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",  # noqa
+]
+
+mobile_ua = [
+    "Mozilla/5.0 (Linux; Android 4.2.1; en-us; Nexus 5 Build/JOP40D) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.166 Mobile Safari/535.19",  # noqa
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 12_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0 Mobile/15E148 Safari/604.1',  # noqa
+    'Mozilla/5.0 (Linux; Android 9; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',  # noqa
+    'Mozilla/5.0 (Linux; Android 8.0.0; Pixel 2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.93 Mobile Safari/537.36',  # noqa
+    'Mozilla/5.0 (Linux; Android 10; HUAWEI VOG-L29) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36',  # noqa
+    'Mozilla/5.0 (iPad; CPU OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0 Mobile/15E148 Safari/604.1',  # noqa
 ]
 
 class httpSource(baseSource):
@@ -73,7 +101,7 @@ class httpSource(baseSource):
     Origin of all HTTP-based Data Sources.
     """
     __parser__ = None
-
+    url: str = None
     accept: str = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
     content_type: str = 'application/xhtml+xml'
     use_proxies: bool = False
@@ -117,8 +145,6 @@ class httpSource(baseSource):
             request (web.Request, optional): _description_. Defaults to None.
         """
         ## URL:
-        if not hasattr(self, 'url'):
-            self.url: str = None
         self.url: str = kwargs.pop('url', self.url)
         if not self.url:
             try:
@@ -144,7 +170,7 @@ class httpSource(baseSource):
             loop=loop,
             **kwargs
         )
-        self._redis = None
+        self._redis: Callable = None
         try:
             del kwargs['loop']
         except KeyError:
@@ -156,7 +182,7 @@ class httpSource(baseSource):
         if self.rotate_ua is True:
             self._ua = random.choice(ua)
         else:
-            self._ua: str = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
+            self._ua: str = ua[0]
         ## Headers
         headers = kwargs.pop('headers', {})
         self._headers = {
@@ -330,7 +356,7 @@ class httpSource(baseSource):
             if self._proxies:
                 proxy = random.choice(self._proxies)
                 proxies = {"http": proxy, "https": proxy, "ftp": proxy}
-        if headers is not None and isinstance(headers, dict):
+        if isinstance(headers, dict):
             headers = {**self._headers, **headers}
         if self.auth:
             if "apikey" in self.auth:
@@ -349,7 +375,9 @@ class httpSource(baseSource):
                 auth = self.auth
         elif self._user and self.auth_type == "basic":
             auth = (self._user, self._pwd)
-        cPrint(f"HTTP: Connecting to {url} using {method}", level="DEBUG")
+        cPrint(
+            f"HTTP: Connecting to {url} using {method.upper()}", level="DEBUG"
+        )
         timeout = httpx.Timeout(self.timeout)
         args = {"timeout": timeout, "headers": headers, "cookies": cookies}
         if auth is not None:
@@ -377,6 +405,7 @@ class httpSource(baseSource):
             elif isinstance(error, bs):
                 return (result, error)
             else:
+                print('ERROR > ', error)
                 raise DriverError(str(error))
         ## saving last execution parameters:
         self._last_execution = {
@@ -484,7 +513,7 @@ class httpSource(baseSource):
                 buffer = BytesIO(data)
                 buffer.seek(0)
                 result = buffer
-            elif self.accept in ('text/html'):
+            elif self.accept in ('text/html', 'application/xhtml+xml'):
                 result = await response.aread()
                 try:
                     # html parser for lxml
@@ -494,7 +523,7 @@ class httpSource(baseSource):
                     result = self._bs
                 except Exception as e:
                     error = e
-            elif self.accept in ('application/xhtml+xml', 'application/xml'):
+            elif any(mime in self.accept for mime in xml_types):
                 result = await response.aread()
                 try:
                     self._parser = etree.fromstring(result)
@@ -503,7 +532,8 @@ class httpSource(baseSource):
                 except Exception as e:
                     error = e
             else:
-                result = await response.text()
+                # return the response as is as Text:
+                result = await response.text
         return result, error
 
     @staticmethod
@@ -794,7 +824,11 @@ class httpSource(baseSource):
         try:
             use_json = True if self.content_type == 'application/json' else self.use_json
             result, error = await self.async_request(
-                self.url, self.method, data=data, use_json=use_json
+                self.url,
+                method=self.method,
+                data=data,
+                use_json=use_json,
+                headers=headers
             )
             if check_empty(result):
                 raise DataNotFound(

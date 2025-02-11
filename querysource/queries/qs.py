@@ -113,7 +113,7 @@ class QS(BaseQuery):
     async def columns(self):
         """
         columns
-           prepare the sentence and return the columns
+        Prepare the sentence and return the columns
         """
         if self._qs:
             self._columns = await self._qs.columns()
@@ -122,7 +122,7 @@ class QS(BaseQuery):
     async def build_provider(self):
         """
         build_provider.
-           create a query based on a query_slug, a raw query or an Object Query.
+        Create a query based on a query_slug, a raw query or an Object Query.
         """
         if not self._query:
             raise EmptySentence(
@@ -170,7 +170,9 @@ class QS(BaseQuery):
             ## if self._request is not None:
             ## user = await get_session(self._request, new=False)
             # TODO: try to discovering the type of conditions
-            self._logger.debug(f":: = SLUG {self._query}, provider: {self._provider!s}")
+            self._logger.debug(
+                f":: = SLUG {self._query}, provider: {self._provider!s}"
+            )
             try:
                 args = {
                     "slug": self._query,
@@ -249,7 +251,7 @@ class QS(BaseQuery):
                 )
                 del self._driver['driver']
             except KeyError:
-                self._logger.error(
+                self._logger.warning(
                     'QS: Missing Driver declaration on Request.'
                 )
                 driver = 'rest'
@@ -286,6 +288,33 @@ class QS(BaseQuery):
                 f"Invalid type of Query: {self._query}"
             )
 
+    def format_from_accepts(self, accepts: str) -> str:
+        """
+        format_from_accepts
+        Format the output from accepts.
+
+        TODO: add support for other formats.
+        """
+        if 'json' in accepts:
+            return 'iter'
+        if 'xml' in accepts:
+            return 'raw'
+        if 'csv' in accepts:
+            return 'raw'
+        if 'html' in accepts:
+            return 'raw'
+        return 'iter'
+
+    def accepts(self) -> str:
+        """accepts
+
+        Returns:
+            str: The Mime type of the output.
+        """
+        if self._qs:
+            return self._qs.accepts()
+        return None
+
     async def query(self, output_format: str = None):
         result = []
         error = None
@@ -295,6 +324,10 @@ class QS(BaseQuery):
             await self.build_provider()
         refresh = self._qs.refresh()
         ## check the provider:
+        if hasattr(self._qs, 'accepts'):
+            # get the output format from the provider:
+            accepts = self._qs.accepts()
+            output_format = self.format_from_accepts(accepts)
         if output_format is not None:
             self.output_format(output_format)
         self._logger.debug(f"= Refresh status: {refresh}")
