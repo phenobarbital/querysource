@@ -70,6 +70,9 @@ mime_supported = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'excel',
     'application/vnd.ms-excel.sheet.macroEnabled.12': 'excel',
     'application/xml': 'xml',
+    'application/atom+xml': 'xml',
+    'application/rss+xml': 'xml',
+    'application/rdf+xml': 'xml',
     'text/html': 'html',
     'video/x-msvideo': 'avi'
 }
