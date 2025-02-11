@@ -133,12 +133,12 @@ class QueryService(AbstractHandler):
     async def query(self, request):
         """
         ---
-        description: Allow make Database Queries to Navigator or any external database
+        description: Allow make Database Queries to Navigator or any external database or source.
         summary: get a Query by Slug (Named Queries)
         tags:
         - QuerySource
         produces:
-        - application/json
+        - application/json + application/xml + application/html
         parameters:
         - name: slug
           description: slug Id of Query
@@ -275,6 +275,11 @@ class QueryService(AbstractHandler):
                         message="Connection Error",
                         exception=err
                     )
+                except Exception as ex:
+                    raise self.Except(
+                        message="Unknown Error on Query",
+                        exception=ex
+                    ) from ex
                 # query columns
                 if ctype := query.accepts():
                     queryformat = mime_supported[ctype]
