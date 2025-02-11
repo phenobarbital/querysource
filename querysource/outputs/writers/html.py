@@ -1,5 +1,6 @@
 import time
 from io import StringIO
+from pandas import DataFrame
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -21,24 +22,28 @@ class HTMLWriter(AbstractWriter):
         return f"{dt}-{filename}{self.extension}"
 
     async def get_response(self) -> web.StreamResponse:
-        output = StringIO()
-        # create the HTML file:
-        columns = list(self.data.columns)
-        dimensions = self.kwargs.get('show_dimensions', False)
-        self.data.to_html(
-            output,
-            columns=columns,
-            header=True,
-            index=False,
-            classes='table table-stripped',
-            bold_rows=True,
-            # escape=True,
-            border=1,
-            show_dimensions=dimensions,
-            table_id="qs_table"
-        )
-        output.seek(0)
-        buffer = output.getvalue()
+        if isinstance(self.data, DataFrame):
+            output = StringIO()
+            # create the HTML file:
+            columns = list(self.data.columns)
+            dimensions = self.kwargs.get('show_dimensions', False)
+            self.data.to_html(
+                output,
+                columns=columns,
+                header=True,
+                index=False,
+                classes='table table-stripped',
+                bold_rows=True,
+                # escape=True,
+                border=1,
+                show_dimensions=dimensions,
+                table_id="qs_table"
+            )
+            output.seek(0)
+            buffer = output.getvalue()
+        elif isinstance(self.data, str):
+            # returning as-is
+            buffer = self.data
         response = await self.response(self.response_type)
         # if self.download is True: # inmediately download response
         content_length = len(buffer)

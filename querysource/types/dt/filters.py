@@ -27,7 +27,7 @@ def drop_columns(df: pd.DataFrame, columns: list = None, endswith: list = None, 
     return df
 
 
-def drop_rows(df, **kwargs):
+def drop_rows(df: pd.DataFrame, **kwargs):
     """
     This function drops rows from a DataFrame based on specified column values.
 
@@ -42,8 +42,7 @@ def drop_rows(df, **kwargs):
             df.head()
     return df
 
-
-def drop_duplicates(df: pd.DataFrame, columns=[], **kwargs):
+def drop_duplicates(df: pd.DataFrame, columns: Optional[list] = None, **kwargs):
     """
     This function drops duplicate rows from a DataFrame based on specified columns.
 
@@ -54,12 +53,12 @@ def drop_duplicates(df: pd.DataFrame, columns=[], **kwargs):
     """
     if columns and isinstance(columns, list):
         df.set_index(columns, inplace=True, drop=False)
-        df.sort_values(by=columns, inplace=True)
-        df.drop_duplicates(subset=columns, inplace=True, **kwargs)
+        df = df.sort_values(by=columns)
+        df = df.drop_duplicates(subset=columns, **kwargs)
     return df
 
 
-def clean_empty(df: pd.DataFrame, columns=[]):
+def clean_empty(df: pd.DataFrame, columns: Optional[list] = None):
     """
     This function drops rows from a DataFrame where specified columns are empty, NaN, or contain empty strings.
 
@@ -70,15 +69,13 @@ def clean_empty(df: pd.DataFrame, columns=[]):
     if columns and isinstance(columns, list):
         for column in columns:
             condition = df[
-                (df[column].empty)
-                | (df[column] == "")
-                | (df[column].isna())
+                (df[column].empty) | (df[column] == "") | (df[column].isna())
             ].index
             df.drop(condition, inplace=True)
     return df
 
 
-def suppress(df: pd.DataFrame, columns=[], **kwargs):
+def suppress(df: pd.DataFrame, columns: Optional[list] = None, **kwargs):
     """
     This function suppresses parts of string values in specified columns based on a regex pattern.
 
@@ -95,7 +92,8 @@ def suppress(df: pd.DataFrame, columns=[], **kwargs):
             return name
         if re.search(pattern, name):
             pos = re.search(pattern, name).start()
-            return str(name)[:pos]
+            # return str(name)[:pos]
+            return name[:pos]
         else:
             return name
 
@@ -106,7 +104,7 @@ def suppress(df: pd.DataFrame, columns=[], **kwargs):
     return df
 
 
-def fill_na(df: pd.DataFrame, columns: list = [], fill_value="", **kwargs):
+def fill_na(df: pd.DataFrame, columns: Optional[list] = None, fill_value="", **kwargs):
     """
     This function fills NaN values in specified columns with a given fill value.
 
@@ -168,7 +166,7 @@ def drop_na(df: pd.DataFrame, field: str, columns: Optional[list] = None) -> pd.
     :return: The DataFrame with NaN values dropped.
     """
     if field in df.columns:
-        df.dropna(subset=[field], inplace=True)
+        df = df.dropna(subset=[field])
     elif columns:
         df.dropna(subset=columns, inplace=True)
     return df

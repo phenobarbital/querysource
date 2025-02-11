@@ -46,7 +46,7 @@ class mariadbDriver(SQLDriver):
         return {
             "host": self.host,
             "port": self.port,
-            "user": self.username,
+            "user": self.user,
             "password": self.password,
             "database": self.database
         }

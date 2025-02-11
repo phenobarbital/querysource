@@ -3,7 +3,7 @@ from collections.abc import Callable, Awaitable
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from navconfig.logging import logging
-from .....exceptions import OutputError
+from ....exceptions import OutputError
 
 
 class AbstractOutput(metaclass=ABCMeta):
@@ -29,7 +29,7 @@ class AbstractOutput(metaclass=ABCMeta):
         self._do_update: bool = do_update
         self._connection: Awaitable = None
         self._driver: str = kwargs.get('driver', 'pg')
-        if self._external is False:
+        if not self._external:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
             except Exception as err:

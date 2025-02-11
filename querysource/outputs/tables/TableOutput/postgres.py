@@ -4,8 +4,8 @@ from sqlalchemy.schema import ForeignKeyConstraint
 from sqlalchemy import MetaData, Table
 from sqlalchemy.inspection import inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
-from .....conf import sqlalchemy_url
-from .....exceptions import OutputError
+from ....conf import sqlalchemy_url
+from ....exceptions import OutputError
 from .abstract import AbstractOutput
 
 
@@ -84,7 +84,7 @@ class PgOutput(AbstractOutput):
             row_dict = dict(zip(keys, row))
             insert_stmt = postgresql.insert(tbl).values(**row_dict)
             # define dict of non-primary keys for updating
-            if self._do_update is True:
+            if self._do_update:
                 if len(columns) > 1:
                     # TODO: add behavior of on_conflict_do_nothing
                     update_dict = {

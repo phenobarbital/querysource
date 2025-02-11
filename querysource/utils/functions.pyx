@@ -266,6 +266,7 @@ cpdef object year(str value, str mask = "%Y-%m-%d %H:%M:%S"):
     else:
         return None
 
+
 cpdef str first_dow(object value = None, str mask = '%Y-%m-%d'):
     if not value:
         value = dt.now()
@@ -277,6 +278,32 @@ cpdef str first_dow(object value = None, str mask = '%Y-%m-%d'):
         value = dt.now() + datetime.timedelta(days=1)
     fdow = (value - datetime.timedelta(value.weekday()))
     return fdow.strftime(mask)
+
+
+cpdef str last_dow(object value = None, str mask = '%Y-%m-%d'):
+    """
+    Get the last day of the week (Sunday) for the given date or reference point.
+
+    Parameters:
+        value: Input date or reference keyword ('current_date', 'now', 'yesterday', 'tomorrow').
+        Defaults to 'now' if None.
+        mask: The output format for the date as a string (default is '%Y-%m-%d').
+
+    Returns:
+        str: The last day of the week formatted as per the given mask.
+    """
+    if not value:
+        value = dt.now()
+    elif value == 'current_date' or value == 'now':
+        value = dt.now()
+    elif value == 'yesterday':
+        value = dt.now() - datetime.timedelta(days=1)
+    elif value == 'tomorrow':
+        value = dt.now() + datetime.timedelta(days=1)
+
+    # Calculate last day of the week
+    ldow = value + datetime.timedelta(days=(6 - value.weekday()))
+    return ldow.strftime(mask)
 
 
 cpdef object month(str value, str mask = "%Y-%m-%d %H:%M:%S"):
@@ -600,7 +627,6 @@ cpdef str file_extension(object path):
         return os.path.splitext(os.path.basename(path))[1][1:].strip().lower()
 
 
-## UDF parser
 def to_udf(str value, *args, **kwargs):
     """Executes an UDF function and returns result.
     """
@@ -625,6 +651,7 @@ def to_udf(str value, *args, **kwargs):
                 f"to_udf Error: There is no Function called {fn!r}"
             )
     return fn
+
 
 cpdef bool_t check_empty(object obj):
     """check_empty.

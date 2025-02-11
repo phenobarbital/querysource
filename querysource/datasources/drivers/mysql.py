@@ -24,10 +24,12 @@ class mysqlDriver(SQLDriver):
     dsn_format: str = "mysql://{user}:{password}@{host}:{port}/{database}"
     port: int = Field(required=True, default=3306)
 
-    def __post_init__(self, username, hostname: str = None, **kwargs) -> None:  # pylint: disable=W0613,W0221
-        super(mysqlDriver, self).__post_init__(hostname, **kwargs)
+    def __post_init__(self, username: str = None, hostname: str = None, **kwargs) -> None:  # pylint: disable=W0613,W0221
+        if hostname:
+            self.host = hostname
         if username is not None and self.user is None:
             self.user = username
+        super(mysqlDriver, self).__post_init__(hostname, **kwargs)
         self.auth = {
             "user": self.user,
             "password": self.password
@@ -42,7 +44,7 @@ class mysqlDriver(SQLDriver):
         return {
             "host": self.host,
             "port": self.port,
-            "user": self.username,
+            "user": self.user,
             "password": self.password,
             "database": self.database
         }

@@ -4,7 +4,8 @@ import os
 import sys
 from typing import (
     Any,
-    Union
+    Union,
+    Optional
 )
 import copy
 from abc import ABC, abstractmethod
@@ -21,6 +22,8 @@ if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
 else:
     from typing import ParamSpec
+
+
 P = ParamSpec("P")
 
 
@@ -29,8 +32,8 @@ class baseSource(ABC):
 
     Description: Base class for all QS Sources.
     """
-
-    __parser__ = None
+    __parser__: Optional[Callable] = None
+    content_type: Optional[str] = None
 
     def __init__(
         self,
@@ -46,9 +49,10 @@ class baseSource(ABC):
     ) -> None:
         self.logger = logging.getLogger(f'QS.Source.{__name__}')
         self._definition = definition  # definition Object
-        self._conditions: dict = copy.deepcopy(conditions)
         if not conditions:
             self._conditions = {}
+        else:
+            self._conditions: dict = copy.deepcopy(conditions)
         # Aiohttp Request:
         self._request: web.Request = request
         ### basic information
@@ -59,7 +63,8 @@ class baseSource(ABC):
                 self._query = definition.query_raw
             except AttributeError:
                 self._query = None
-        else:  # is a raw query
+        else:
+            # is a raw query
             self._query: str = query
         # origin:
         self._origin = query
@@ -68,11 +73,7 @@ class baseSource(ABC):
         else:
             self.method = kwargs.pop('method', 'get')
         # Event Loop.
-        if loop:
-            self._loop = loop
-        else:
-            self._loop = asyncio.get_event_loop()
-        # asyncio.set_event_loop(self._loop)
+        self._loop = loop or asyncio.get_event_loop()
         ## Timeout:
         try:
             ts = definition.params.get('timeout', 60)
@@ -102,6 +103,22 @@ class baseSource(ABC):
                 raise ParserError(
                     "Error on Query Parser: {err}"
                 ) from err
+        # Calling the Post-Init Method:
+        self.__post_init__(
+            definition=self._definition,
+            conditions=self._conditions,
+            request=request,
+            **kwargs
+        )
+
+    def __post_init__(
+        self,
+        definition: dict,
+        conditions: dict,
+        request: Any = None,
+        **kwargs
+    ) -> None:
+        pass
 
     def build_url(self, url, queryparams: str = None, args: dict = None):
         if isinstance(args, dict):
@@ -135,7 +152,7 @@ class baseSource(ABC):
 
     def checksum(self):
         """cheksum.
-           get cheksum for URL parameters
+        Get cheksum for URL parameters
         """
         params = {
             'origin': self._origin,
@@ -151,4 +168,13 @@ class baseSource(ABC):
         pass
 
     def get(self):
-        return self._loop.run_until_complete(self.query())
+        if self._loop:
+            return self._loop.run_until_complete(
+                self.query()
+            )
+        return asyncio.run(
+            self.query()
+        )
+
+    def accepts(self) -> str:
+        return self.content_type

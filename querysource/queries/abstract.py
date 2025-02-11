@@ -32,7 +32,7 @@ from ..exceptions import (
 )
 from ..interfaces.connections import Connection
 from ..events import LogEvent
-from .outputs import OutputFactory
+from ..outputs.dt import OutputFactory
 from .models import Query, QueryResult
 from ..utils.events import enable_uvloop
 
@@ -48,8 +48,6 @@ class BaseQuery(Connection):
 
     post_cache: Callable = None
     _timeout: int = 3600
-    # SEMAPHORE LIMIT
-    semaphore = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
 
     def __init__(
             self,
@@ -66,6 +64,7 @@ class BaseQuery(Connection):
         __name__ = type(self).__name__
         self._logger = logging.getLogger(f'QS.{__name__}')
         self.slug = slug
+        self.semaphore = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
         # trying to configure the asyncio loop
         if loop:
             self._loop = loop

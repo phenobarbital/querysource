@@ -1,8 +1,8 @@
 from collections.abc import Callable
 import pandas as pd
-from .....exceptions import OutputError
+from ....exceptions import OutputError
+from ....interfaces.databases.bigquery import BigQuery
 from .abstract import AbstractOutput
-from .....interfaces.databases.bigquery import BigQuery
 
 
 class BigQueryOutput(AbstractOutput, BigQuery):
@@ -48,10 +48,9 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         """
         if self._do_update is False:
             on_conflict = 'append'
-        result = await self.write(
+        return await self.write(
             table,
             schema,
             data,
             on_conflict=on_conflict
         )
-        return result

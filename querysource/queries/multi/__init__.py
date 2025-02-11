@@ -14,7 +14,7 @@ from .transformations import (
     GoogleMaps,
 )
 from .operators.filter import Filter
-from .outputs import TableOutput
+from ...outputs.tables import TableOutput
 from .sources import ThreadQuery, ThreadFile
 
 

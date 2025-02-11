@@ -205,7 +205,8 @@ setup(
         "ipyleaflet==0.19.2",
         'rapidfuzz==3.11.0',
         'nltk==3.9.1',
-        'wordcloud==1.9.4'
+        'wordcloud==1.9.4',
+        'datatable==1.1.0'
     ],
     extras_require={
         "analytics": [

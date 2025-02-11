@@ -1,10 +1,10 @@
 import modin.config as modin_cfg
 import modin.pandas as pd  # noqa: F401
 from distributed import Client
-
+from ...conf import MODIN_SERVER
 from .abstract import OutputFormat
 
-client = Client('tcp://127.0.0.1:8786')
+client = Client(MODIN_SERVER)
 
 class modinFormat(OutputFormat):
     """
@@ -34,6 +34,6 @@ class modinFormat(OutputFormat):
             error = Exception(f"Error Parsing a Column, error: {err}")
         except Exception as err:
             self.logger.error(error)
-            error = Exception(f"PandasFormat: Error on Data: error: {err}")
+            error = Exception(f"ModinFormat: Error on Data: error: {err}")
         finally:
             return (df, error)

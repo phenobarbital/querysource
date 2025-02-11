@@ -11,9 +11,8 @@ from ..exceptions import (
 )
 from .abstract import AbstractHandler
 from ..queries import MultiQS
-from ..queries.multi.outputs import TableOutput
+from ..outputs.tables import TableOutput
 from ..queries.multi.operators import Filter, GroupBy
-# from .outputs import TableOutput
 
 
 class QueryHandler(AbstractHandler):

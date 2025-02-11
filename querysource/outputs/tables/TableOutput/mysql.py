@@ -1,30 +1,27 @@
-from collections.abc import Callable
 from sqlalchemy import MetaData, Table
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
 from sqlalchemy.inspection import inspect
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import mysql
 from sqlalchemy.schema import ForeignKeyConstraint
-from .....exceptions import OutputError
+from ....exceptions import OutputError
 from .abstract import AbstractOutput
 
 
-class SaOutput(AbstractOutput):
-    def __init__(
-        self,
-        parent: Callable,
-        dsn: str = None,
-        do_update: bool = True,
-        **kwargs
-    ) -> None:
-        super(SaOutput, self).__init__(parent, dsn, do_update=do_update, **kwargs)
+class MysqlOutput(AbstractOutput):
+    """
+    MysqlOutput.
 
+    Class for writing output to mysql database.
+
+    Used by Pandas to_sql statement.
+    """
     def db_upsert(self, table, conn, keys, data_iter):
         """
         Execute SQL statement for upserting data
 
         Parameters
         ----------
-        table : sqlalchemy.Table
+        table : pandas.io.sql.SQLTable
         conn : sqlalchemy.engine.Engine or sqlalchemy.engine.Connection
         keys : list of str of Column names
         data_iter : Iterable that iterates the values to be inserted
@@ -39,10 +36,10 @@ class SaOutput(AbstractOutput):
             fn = ForeignKeyConstraint(fk["columns"], fk["fk"], name=fk["name"])
             args.append(fn)
         metadata = MetaData()
-        metadata.bind = conn
+        metadata.bind = self._engine
         constraint = self._parent.constraints()
-        options = {"schema": self._parent.get_schema(), "autoload_with": conn}
-        tbl = Table(table.name, metadata, *args, **options)
+        options = {"schema": self._parent.get_schema(), "autoload_with": self._engine}
+        tbl = Table(tablename, metadata, *args, **options)
         # removing the columns from the table definition
         columns = self._columns
         # for column in columns:
@@ -58,31 +55,36 @@ class SaOutput(AbstractOutput):
             if not primary_keys:
                 raise OutputError(
                     f"No Primary Key on table {tablename}."
-                )
+                ) from err
         for row in data_iter:
             row_dict = dict(zip(keys, row))
-            if conn.dialect.name == 'postgresql':
-                insert_stmt = postgresql.insert(tbl).values(**row_dict)
-            else:
-                insert_stmt = tbl.insert().values(**row_dict)  # Generic SQL insert
-                # insert_stmt = conn.dialect().insert(tbl).values(**row_dict)
+            insert_stmt = mysql.insert(tbl).values(**row_dict)
             # define dict of non-primary keys for updating
             # get the list of columns that are not part of the primary key
             # create a dictionary of the values to be updated
             update_dict = {
-                c.name: c
-                for c in insert_stmt.excluded
-                if not c.primary_key and c.name in columns
+                c.name: row_dict[c.name]
+                for c in tbl.columns
+                if c.name not in primary_keys and c.name in columns
             }
             if constraint is not None:
                 upsert_stmt = insert_stmt.on_conflict_do_update(
                     constraint=constraint, set_=update_dict
                 )
+            else:
                 try:
-                    conn.execute(upsert_stmt)
-                except (ProgrammingError, OperationalError) as err:
-                    raise OutputError(f"SQL Operational Error: {err}") from err
-                except StatementError as err:
-                    raise OutputError(f"Statement Error: {err}") from err
-                except Exception as err:
-                    raise OutputError(f"Error on SA UPSERT: {err}") from err
+                    upsert_stmt = insert_stmt.on_conflict_do_update(
+                        index_elements=primary_keys, set_=update_dict
+                    )
+                except (AttributeError, TypeError, ValueError):
+                    upsert_stmt = insert_stmt.on_duplicate_key_update(
+                        update_dict
+                    )
+            try:
+                conn.execute(upsert_stmt)
+            except (ProgrammingError, OperationalError) as err:
+                raise OutputError(f"SQL Operational Error: {err}") from err
+            except StatementError as err:
+                raise OutputError(f"Statement Error: {err}") from err
+            except Exception as err:
+                raise OutputError(f"Error on SA UPSERT: {err}") from err

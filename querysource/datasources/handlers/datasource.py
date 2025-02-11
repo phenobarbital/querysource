@@ -37,6 +37,8 @@ class DatasourceView(BaseView):
                 cls = import_module(clspath)
                 clsname = f'{name}_default'
                 drv = getattr(cls, clsname)
+                if not drv:
+                    continue
                 driver = {
                     "uid": uuid.uuid1(),
                     "driver": drv.driver,
@@ -48,7 +50,7 @@ class DatasourceView(BaseView):
                     "drv": drv.modelName,
                     "default": True
                 }
-                if drv.dsn is not None:
+                if drv.dsn:
                     driver['dsn'] = drv.dsn
                 drivers.append(driver)
             except (AttributeError, ImportError) as ex:

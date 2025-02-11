@@ -1,4 +1,4 @@
-from .abstract import mime_formats, graph_ouputs
+from .abstract import mime_formats, graph_ouputs, mime_supported
 from .json import jsonWriter
 from .txt import TXTWriter
 from .csv import CSVWriter
@@ -15,3 +15,4 @@ from .pdf import PDFWriter
 # from .eda import EDAWriter
 # from .describe import DescribeWriter
 # from .clustering import ClusterWriter
+from .xml import XMLWriter

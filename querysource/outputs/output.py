@@ -1,5 +1,4 @@
 import traceback
-
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 from navconfig.logging import logging
@@ -25,6 +24,7 @@ from .writers import (
     # ProfileWriter,
     ReportWriter,
     PDFWriter,
+    XMLWriter,
     # EDAWriter,
     # DescribeWriter,
     # ClusterWriter
@@ -49,6 +49,7 @@ WRITERS = {
     # 'profiling': ProfileWriter,
     'report': ReportWriter,
     'pdf': PDFWriter,
+    'xml': XMLWriter,
     # 'eda': EDAWriter,
     # 'describe': DescribeWriter,
     # 'clustering': ClusterWriter
@@ -58,10 +59,18 @@ class DataOutput:
     """Main Router for Output formats.
     """
 
-    def __init__(self, request: web.Request, query: BaseQuery, ctype: str = 'json', slug: str = None, **kwargs):
+    def __init__(
+        self,
+        request: web.Request,
+        query: BaseQuery,
+        ctype: str = 'json',
+        slug: str = None,
+        **kwargs
+    ) -> None:
         self.request = request
         compression = None
         self.query = None
+        self.logger = logging.getLogger('QS.Output')
         # determine content negotiation
         if compression := request.headers.get('X-Encoding', None):
             self._compression = compression
@@ -80,7 +89,7 @@ class DataOutput:
         else:
             self.response_type = 'stream'
         host = request.headers.get('HOST', None)
-        logging.debug(
+        self.logger.debug(
             f'QuerySource Output: host: {host!s} compression: {compression!s} status: {self._compression!s}'
         )
         self.query = query
@@ -165,13 +174,17 @@ class DataOutput:
 
     async def response(self):
         if self.query is not None:
-            logging.debug(f'::: SENDING RESPONSE in format: {self.format!s}')
+            self.logger.debug(
+                f'::: SENDING RESPONSE in format: {self.format!s}'
+            )
             ### before, making calculation of stats.
             try:
                 wt = WRITERS[self.format]
             except KeyError:
                 ### invalid Writer, defaulting to json
-                logging.warning(f'Invalid Writer {self.format}, default to JSON.')
+                self.logger.warning(
+                    f'Invalid Writer {self.format}, default to JSON.'
+                )
                 wt = WRITERS['json']
             writer = wt(
                 request=self.request,

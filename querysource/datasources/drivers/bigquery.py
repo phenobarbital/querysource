@@ -14,6 +14,7 @@ class bigqueryDriver(BaseModel):
         default='asyncdb',
         comment="type of driver, can be asyncdb, QS or REST"
     )
+    dsn: str
     name: str = Field(required=False, comment='Google BigQuery.')
     description: str = Field(comment='Google Big Query', repr=False)
     icon: str = Field(required=False, comment='Icon Path for Datasource.', repr=False)

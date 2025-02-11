@@ -54,6 +54,26 @@ mime_formats = {
     'clustering': 'text/csv'
 }
 
+mime_supported = {
+    'text/plain': 'txt',
+    'application/json': 'json',
+    'application/octet-stream': 'pickle',
+    'text/csv': 'csv',
+    'text/tsv': 'tsv',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'application/vnd.oasis.opendocument.text': 'odt',
+    'application/vnd.oasis.opendocument.spreadsheet': 'ods',
+    'application/pdf': 'pdf',
+    'image/svg+xml': 'svg',
+    'application/vnd.ms-excel': 'excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'excel',
+    'application/vnd.ms-excel.sheet.macroEnabled.12': 'excel',
+    'application/xml': 'xml',
+    'text/html': 'html',
+    'video/x-msvideo': 'avi'
+}
+
 graph_ouputs = ('plotly', 'bokeh', 'matplotlib', 'seaborn',)
 
 class AbstractWriter(ABC):

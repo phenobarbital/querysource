@@ -57,12 +57,6 @@ class restSource(httpSource):
         if not self._conditions:  # pylint: disable=E0203
             self._conditions = {}
         self._conditions = {**self._conditions, **kwargs}
-        self.__post_init__(
-            definition=self._definition,
-            conditions=self._conditions,
-            request=request,
-            **kwargs
-        )
         if 'source' in self._conditions:  # removing usused call to driver
             del self._conditions['source']
 
