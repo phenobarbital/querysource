@@ -9,7 +9,7 @@ from ...exceptions import (
     ParserError
 )
 from importlib import import_module
-from ..abstract import BaseQuery
+from ..base import BaseQuery
 from .transformations import (
     GoogleMaps,
 )

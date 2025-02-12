@@ -463,14 +463,11 @@ cdef class AbstractParser:
         """Check if all conditions are valid and return the value."""
         elements = self._merge_conditions_and_filters(conditions)
 
-        print('ENTERING HERE > ')
         tasks = []
         for name, val in elements.items():
-            print('ELEMENTS > ', name, val)
             tasks.append(self._process_element(name, val, connection))
         # tasks = [self._process_element(name, val, connection) for name, val in elements.items()]
         results = await asyncio.gather(*tasks)
-        print('RESULTS > ', results)
 
         _filter = {}
         for result in results:
@@ -480,7 +477,6 @@ cdef class AbstractParser:
                     self._conditions[key] = value
                 else:
                     _filter[key] = value
-        print('FILTER > ', _filter)
         return _filter
 
     cpdef object where_cond(self, dict where):

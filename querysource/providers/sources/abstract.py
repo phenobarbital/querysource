@@ -103,13 +103,6 @@ class baseSource(ABC):
                 raise ParserError(
                     "Error on Query Parser: {err}"
                 ) from err
-        # Calling the Post-Init Method:
-        self.__post_init__(
-            definition=self._definition,
-            conditions=self._conditions,
-            request=request,
-            **kwargs
-        )
 
     def __post_init__(
         self,

@@ -11,7 +11,7 @@ from aiohttp.web import Response, StreamResponse
 from aiohttp.web_exceptions import (
     HTTPNoContent
 )
-from ...queries.abstract import BaseQuery
+from ...interfaces.queries import AbstractQuery
 from ...libs.encoders import DefaultEncoder
 from ...utils.functions import check_empty
 from ...exceptions import (
@@ -20,64 +20,8 @@ from ...exceptions import (
     DriverError,
     QueryException,
 )
+from ...types import mime_formats
 
-mime_formats = {
-    'plain': 'text/plain',
-    'raw': 'text/plain',
-    'json': 'application/json',
-    'table': 'application/json',
-    'dt': 'application/json',
-    'txt': 'text/plain',
-    'object': 'application/octet-stream',
-    'csv': 'text/csv',
-    'tsv': 'text/tsv',
-    'jpg': 'image/jpeg',
-    'png': 'image/png',
-    'odt': 'application/vnd.oasis.opendocument.text',
-    'ods': 'application/vnd.oasis.opendocument.spreadsheet',
-    'pdf': 'application/pdf',
-    'svg': 'image/svg+xml',
-    'xls': 'application/vnd.ms-excel',
-    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
-    'xml': 'application/xml',
-    'html': 'text/html',
-    'avi': 'video/x-msvideo',
-    'bokeh': 'text/html',
-    'plotly': 'text/html',
-    'pickle': 'application/octet-stream',
-    'profiling': 'text/html',
-    'report': 'text/html',
-    'describe': 'application/json',
-    'eda': 'text/html',
-    'clustering': 'text/csv'
-}
-
-mime_supported = {
-    'text/plain': 'txt',
-    'application/json': 'json',
-    'application/octet-stream': 'pickle',
-    'text/csv': 'csv',
-    'text/tsv': 'tsv',
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'application/vnd.oasis.opendocument.text': 'odt',
-    'application/vnd.oasis.opendocument.spreadsheet': 'ods',
-    'application/pdf': 'pdf',
-    'image/svg+xml': 'svg',
-    'application/vnd.ms-excel': 'excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'excel',
-    'application/vnd.ms-excel.sheet.macroEnabled.12': 'excel',
-    'application/xml': 'xml',
-    'application/atom+xml': 'xml',
-    'application/rss+xml': 'xml',
-    'application/rdf+xml': 'xml',
-    'text/html': 'html',
-    'video/x-msvideo': 'avi'
-}
-
-graph_ouputs = ('plotly', 'bokeh', 'matplotlib', 'seaborn',)
 
 class AbstractWriter(ABC):
     """AbstractWriter.
@@ -326,7 +270,7 @@ class AbstractWriter(ABC):
 
     async def get_result(self):
         try:
-            if isinstance(self.query, BaseQuery):
+            if isinstance(self.query, AbstractQuery):
                 self.data, error = await self.query.query(output_format=self.output_format)
             else:
                 self.data = self.query

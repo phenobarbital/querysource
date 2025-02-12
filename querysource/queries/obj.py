@@ -14,7 +14,7 @@ from ..exceptions import (
     DataNotFound,
     EmptySentence
 )
-from .abstract import BaseQuery
+from .base import BaseQuery
 
 
 class QueryObject(BaseQuery):

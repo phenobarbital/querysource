@@ -7,6 +7,8 @@ QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
 from aiohttp import web
+from datamodel.libs.mapping import ClassDict
+from datamodel.typedefs import AttrDict
 from asyncdb.exceptions import (
     NoDataFound,
     ProviderError,
@@ -15,7 +17,6 @@ from asyncdb.exceptions import (
     ConnectionTimeout
 )
 
-from ..connections import QueryConnection
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
@@ -23,11 +24,10 @@ from ..exceptions import (
     QueryError,
     SlugNotFound,
 )
+from ..connections import QueryConnection
 from ..providers import BaseProvider
-from datamodel.libs.mapping import ClassDict
-from datamodel.typedefs import AttrDict
 from ..utils.functions import check_empty
-from .abstract import BaseQuery
+from .base import BaseQuery
 
 
 class QS(BaseQuery):
@@ -295,14 +295,15 @@ class QS(BaseQuery):
 
         TODO: add support for other formats.
         """
-        if 'json' in accepts:
-            return 'iter'
-        if 'xml' in accepts:
-            return 'raw'
-        if 'csv' in accepts:
-            return 'raw'
-        if 'html' in accepts:
-            return 'raw'
+        if accepts:
+            if 'json' in accepts:
+                return 'iter'
+            if 'xml' in accepts:
+                return 'raw'
+            if 'csv' in accepts:
+                return 'raw'
+            if 'html' in accepts:
+                return 'raw'
         return 'iter'
 
     def accepts(self) -> str:

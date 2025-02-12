@@ -60,9 +60,6 @@ class restSource(httpSource):
         if 'source' in self._conditions:  # removing usused call to driver
             del self._conditions['source']
 
-    def __post_init__(self, definition: dict, conditions: dict, request: Any = None, **kwargs) -> None:
-        pass
-
     async def process_request(self, future):
         error = None
         loop = asyncio.get_running_loop()

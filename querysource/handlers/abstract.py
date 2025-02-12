@@ -6,9 +6,8 @@ from navconfig.logging import logging
 from navigator.views import BaseHandler
 # Queries:
 from ..queries.qs import QS
-# Output
-from ..outputs import mime_types
-from ..outputs.writers import mime_formats
+# Output Formats:
+from ..types import mime_formats, mime_types
 from ..exceptions import (
     QueryException
 )
@@ -47,11 +46,14 @@ class AbstractHandler(BaseHandler):
         TODO: add @json declaration in QueryParams.
         """
         # determine using content negotiation
-        if accept := request.headers.get('Content-Type'):
-            f = mime_types[accept]
-        elif accept := request.headers.get('Accept'):
-            f = mime_types[accept]
-        elif ctype is not None:  # Ctype passed by user:
+        try:
+            if accept := request.headers.get('Content-Type'):
+                f = mime_types[accept]
+            elif accept := request.headers.get('Accept'):
+                f = mime_types[accept]
+        except KeyError:
+            f = 'json'
+        if ctype is not None:  # Ctype passed by user:
             if ctype in mime_formats:
                 return ctype
             else:
