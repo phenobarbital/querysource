@@ -1,10 +1,12 @@
 import sys
 import subprocess
+from tqdm import tqdm
 import asyncio
 from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
+import gensim.downloader as api
 from aiohttp import web
 from datamodel.typedefs import Singleton
 from navconfig.logging import logging
@@ -30,7 +32,7 @@ except ImportError:
 from .interfaces.connections import PROVIDERS
 from .connections import QueryConnection
 from .parsers import QS_VARIABLES, QS_FILTERS
-
+from .conf import USE_VECTORS, vector_models
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -193,6 +195,17 @@ class QuerySource(metaclass=Singleton):
         self.app.on_shutdown.append(
             self.qs_stop
         )
+        # Loading Vector Models at Startup:
+        if USE_VECTORS:
+            self.app['vector_models'] = {}
+            print("Loading Vector Models: ", USE_VECTORS)
+            for model in tqdm(vector_models, desc="Loading Gensim models"):
+                try:
+                    vc = api.load(model)
+                    self.app['vector_models'][model] = vc
+                except Exception as err:
+                    logging.error(f"Cannot load model {model}: {err}")
+        return self.app
 
     def event_loop(self):
         return self._loop

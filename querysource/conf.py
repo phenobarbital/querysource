@@ -324,6 +324,12 @@ MODIN_CLUSTER_CONFIG = config.get(
 )
 MODIN_SERVER = config.get("MODIN_SERVER", fallback="tcp://127.0.0.1:8786")
 
+# Vector Models:
+USE_VECTORS = config.getboolean("USE_VECTORS", fallback=True)
+vector_models = config.getlist("VECTOR_MODELS")
+if not vector_models:
+    vector_models = ["word2vec-google-news-300"]
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:

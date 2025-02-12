@@ -3,11 +3,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from gensim.models import KeyedVectors
 from thefuzz import fuzz
-import gensim.downloader as api
 from querysource.providers.sources import httpSource
-
-
-vector_model = api.load("word2vec-google-news-300")
 
 # vector_model = KeyedVectors.load_word2vec_format(
 #     "GoogleNews-vectors-negative300.bin",
@@ -50,26 +46,72 @@ class rssapp(httpSource):
         bundle_id = request.match_info.get('var')
         self._args['bundle_id'] = bundle_id
         self._db = request.app['database']
+        try:
+            self._model = request.app['vector_models']["word2vec-google-news-300"]
+            self.use_gesim = True
+        except KeyError:
+            self.logger.warning(
+                "No vector model found for 'word2vec-google-news-300'"
+            )
+            self._model = None
+            self.use_gesim = False
         self._conditions = {}
+
+    async def load_keywords(self, bundle_id: str, vector_model: Any):
+        try:
+            async with await self._db.acquire() as conn:
+                result = await conn.fetch_one(
+                    "SELECT keywords, vector FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
+                    bundle_id
+                )
+                if not result:
+                    # Handle case where no row is found
+                    self.logger.warning(f"No row found for bundle_id={bundle_id}")
+                    return None
+            # vectors and keywords:
+            db_keywords = result['keywords']       # This should be a list of strings
+            db_vector = result['vector']         # This is either None or JSON
+            if self.use_gesim:
+                if db_vector is not None:
+                    # Load the vector from the database
+                    stored_vectors = self._encoder.loads(db_vector)
+                    # Pair them up with keywords so you have (kw, vector) tuples
+                    keyword_vectors = []
+                    for kw, vec in zip(db_keywords, stored_vectors):
+                        keyword_vectors.append((kw, vec))
+                    self._keywords[bundle_id] = keyword_vectors
+                else:
+                    # Vectorized the keywords found:
+                    keyword_vectors = [(kw, phrase_vector(kw, vector_model)) for kw in db_keywords]
+                    self._keywords[bundle_id] = keyword_vectors
+                    # Build a JSON-serializable structure (just list of lists):
+                    vectors_to_store = []
+                    for (kw, vector_array) in keyword_vectors:
+                        # If 'vector_array' is a NumPy array, convert to list
+                        if hasattr(vector_array, "tolist"):
+                            vector_array = vector_array.tolist()
+                        vectors_to_store.append(vector_array)
+                    # Encode as JSON using your custom encoder
+                    vector_json = self._encoder.dumps(vectors_to_store)
+                    # Update the DB
+                    update_sql = """
+                    UPDATE rssapp.bundles_keywords
+                    SET vector = $1
+                    WHERE bundle_id = $2
+                    """
+                    await conn.execute(update_sql, vector_json, bundle_id)
+            else:
+                self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
+            return True
+        except Exception as err:
+            self.logger.exception(err)
+            return None
 
     async def get_bundle(self, **kwargs) -> Any:
         try:
             bundle_id = self._args['bundle_id']
             if bundle_id not in self._keywords:
-                try:
-                    async with await self._db.acquire() as conn:
-                        result = await conn.fetch_one(
-                            f"SELECT keywords FROM rssapp.bundles_keywords WHERE bundle_id = '{bundle_id}';"
-                        )
-                    # Vectorized the keywords found:
-                    if self.use_gesim:
-                        keyword_vectors = [(kw, phrase_vector(kw, vector_model)) for kw in result['keywords']]
-                        self._keywords[bundle_id] = keyword_vectors
-                    else:
-                        self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
-                except Exception as err:
-                    self.logger.exception(err)
-                    raise
+                await self.load_keywords(bundle_id, self._model)
             keywords = self._keywords[bundle_id]
             _ = await self.aquery()
             # Iterate over the news in xml parser:
@@ -105,7 +147,7 @@ class rssapp(httpSource):
         Search for the best match between the text and the keywords
         """
         # Convert combined text to a vector:
-        item_vector = phrase_vector(text, vector_model)
+        item_vector = phrase_vector(text, self._model)
         # 3. Compare similarity with each keyword vector
         for kw, kv in keywords:
             # Cosine similarity
