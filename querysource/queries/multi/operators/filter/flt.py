@@ -44,6 +44,18 @@ def create_filter(_filter: list, df: DataFrame) -> list:
             )
         expression = condition.get('expression', '==')
         value = condition.get('value', None)
+
+        # --- New rule for filtering on column length ---
+        # If the expression is "gt" or "lt", compare the length of the column values.
+        if expression in ("gt", "lt"):
+            if not isinstance(value, (int, float)):
+                raise QueryException(
+                    "Value must be numeric for column length filtering."
+                )
+            op = ">" if expression == "gt" else "<"
+            conditions.append(f"(df['{column}'].str.len() {op} {value})")
+            continue
+
         if expression == "is_null":
             conditions.append(
                 f"df['{column}'].isnull() | (df['{column}'] == '')"
@@ -91,9 +103,17 @@ def create_filter(_filter: list, df: DataFrame) -> list:
                     conditions.append(
                         f"df['{column}'].str.startswith('{value}')"
                     )
+                elif expression == 'not_startswith':
+                    conditions.append(
+                        f"~df['{column}'].str.startswith('{value}')"
+                    )
                 elif expression == 'endswith':
                     conditions.append(
                         f"df['{column}'].str.endswith('{value}')"
+                    )
+                elif expression == 'not_endswith':
+                    conditions.append(
+                        f"~df['{column}'].str.endswith('{value}')"
                     )
                 elif expression == '==':
                     conditions.append(
@@ -131,11 +151,21 @@ def create_filter(_filter: list, df: DataFrame) -> list:
                 val = tuple(value)
                 condition = f"df['{column}'].str.startswith({val})"
                 conditions.append(f"({condition})")
+            elif expression == 'not_startswith':
+                val = tuple(value)
+                conditions.append(
+                    f"(~df['{column}'].str.startswith({val}))"
+                )
             elif expression == 'endswith':
                 # Use tuple directly with str.endswith
                 val = tuple(value)
                 condition = f"df['{column}'].str.endswith({val})"
                 conditions.append(f"({condition})")
+            elif expression == 'not_endswith':
+                val = tuple(value)
+                conditions.append(
+                    f"(~df['{column}'].str.endswith({val}))"
+                )
             elif expression == 'contains':
                 regex_pattern = "|".join(map(re.escape, value))
                 conditions.append(

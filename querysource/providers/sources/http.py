@@ -229,7 +229,13 @@ class httpSource(baseSource):
             **kwargs
         )
 
-    def __post_init__(self, definition: dict, conditions: dict, request: Any = None, **kwargs) -> None:
+    def __post_init__(
+        self,
+        definition: dict,
+        conditions: dict,
+        request: Any = None,
+        **kwargs
+    ) -> None:
         pass
 
     @property
