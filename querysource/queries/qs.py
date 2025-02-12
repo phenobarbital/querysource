@@ -295,14 +295,15 @@ class QS(BaseQuery):
 
         TODO: add support for other formats.
         """
-        if 'json' in accepts:
-            return 'iter'
-        if 'xml' in accepts:
-            return 'raw'
-        if 'csv' in accepts:
-            return 'raw'
-        if 'html' in accepts:
-            return 'raw'
+        if accepts:
+            if 'json' in accepts:
+                return 'iter'
+            if 'xml' in accepts:
+                return 'raw'
+            if 'csv' in accepts:
+                return 'raw'
+            if 'html' in accepts:
+                return 'raw'
         return 'iter'
 
     def accepts(self) -> str:

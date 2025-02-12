@@ -220,6 +220,17 @@ class httpSource(baseSource):
         self.use_json: bool = kwargs.pop('use_json', False)
         if self.use_redis is True:
             self._redis = AsyncDB('redis', dsn=CACHE_URL)
+        # Calling the Post-Init Method:
+        self.__post_init__(
+            definition=self._definition,
+            conditions=self._conditions,
+            request=request,
+            loop=loop,
+            **kwargs
+        )
+
+    def __post_init__(self, definition: dict, conditions: dict, request: Any = None, **kwargs) -> None:
+        pass
 
     @property
     def html(self):

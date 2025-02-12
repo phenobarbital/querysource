@@ -46,11 +46,14 @@ class AbstractHandler(BaseHandler):
         TODO: add @json declaration in QueryParams.
         """
         # determine using content negotiation
-        if accept := request.headers.get('Content-Type'):
-            f = mime_types[accept]
-        elif accept := request.headers.get('Accept'):
-            f = mime_types[accept]
-        elif ctype is not None:  # Ctype passed by user:
+        try:
+            if accept := request.headers.get('Content-Type'):
+                f = mime_types[accept]
+            elif accept := request.headers.get('Accept'):
+                f = mime_types[accept]
+        except KeyError:
+            f = 'json'
+        if ctype is not None:  # Ctype passed by user:
             if ctype in mime_formats:
                 return ctype
             else:

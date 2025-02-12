@@ -123,6 +123,9 @@ class BaseProvider(ABC):
             self._driver = None
         self.kwargs = kwargs
 
+    def accepts(self) -> str:
+        return None
+
     def NotFound(self, message: str):
         """Raised when Data not Found.
         """
