@@ -32,7 +32,11 @@ except ImportError:
 from .interfaces.connections import PROVIDERS
 from .connections import QueryConnection
 from .parsers import QS_VARIABLES, QS_FILTERS
-from .conf import USE_VECTORS, vector_models
+from .conf import (
+    USE_VECTORS,
+    vector_models,
+    GENSIM_DATA_DIR
+)
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -197,6 +201,8 @@ class QuerySource(metaclass=Singleton):
         )
         # Loading Vector Models at Startup:
         if USE_VECTORS:
+            # overriding
+            api.BASE_DIR = str(GENSIM_DATA_DIR)
             self.app['vector_models'] = {}
             print("Loading Vector Models: ", USE_VECTORS)
             for model in tqdm(vector_models, desc="Loading Gensim models"):

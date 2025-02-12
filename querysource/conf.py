@@ -330,6 +330,13 @@ vector_models = config.getlist("VECTOR_MODELS")
 if not vector_models:
     vector_models = ["word2vec-google-news-300"]
 
+# Gensim Folder:
+GENSIM_DATA_DIR = config.get(
+    'GENSIM_DATA_DIR',
+    fallback=BASE_DIR.joinpath('data', 'gensim')
+)
+os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:
