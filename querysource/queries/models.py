@@ -3,7 +3,7 @@ from datetime import datetime
 from datamodel import BaseModel, Field
 from ..datasources.drivers import SUPPORTED
 
-def supported_drivers(field, driver):  # pylint: disable=W0613
+def supported_drivers(field, driver, **kwargs):  # pylint: disable=W0613
     return driver in SUPPORTED
 
 

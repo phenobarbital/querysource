@@ -190,7 +190,7 @@ class uap(restSource):
             self._result = await self.query()
             return self._result
         except Exception as err:
-            logging.exception(str(err))
+            self.logger.exception(str(err))
             raise
 
     async def users(self):

@@ -12,7 +12,7 @@ from asyncdb.exceptions import (
 )  # QuerySource Query, Executor, etc
 # Output
 from ..outputs import DataOutput
-from ..outputs.writers import graph_ouputs, mime_supported
+from ..types import graph_ouputs, mime_supported
 from ..exceptions import (
     ParserError,
     QueryException,

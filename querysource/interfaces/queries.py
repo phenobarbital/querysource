@@ -11,7 +11,6 @@ from datetime import datetime
 import traceback
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
@@ -30,22 +29,19 @@ from ..exceptions import (
     CacheException,
     DataNotFound
 )
-from ..interfaces.connections import Connection
+from .connections import Connection
 from ..events import LogEvent
-from ..outputs.dt import OutputFactory
-from .models import Query, QueryResult
 from ..utils.events import enable_uvloop
 
 
-vs = logging.getLogger('visions.backends')
-vs.setLevel(logging.WARNING)
+logging.getLogger('visions.backends').setLevel(logging.WARNING)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 
-matlog = logging.getLogger('matplotlib')
-matlog.setLevel(logging.WARNING)
-
-class BaseQuery(Connection):
-
+class AbstractQuery(Connection):
+    """AbstractQuery.
+    Base Class for all Query-objects in QuerySource.
+    """
     post_cache: Callable = None
     _timeout: int = 3600
 
@@ -79,7 +75,7 @@ class BaseQuery(Connection):
                 asyncio.set_event_loop(self._loop)
         Connection.__init__(self, loop=self._loop, **kwargs)
         self._result: Union[dict, list] = None
-        self._output_format: OutputFactory = None
+        self._output_format: Any = None
         try:
             self._program = conditions.get('program', 'public')
         except (TypeError, AttributeError):
@@ -103,24 +99,12 @@ class BaseQuery(Connection):
         # configuring the encoder:
         self._encoder = DefaultEncoder()
         ## default executor:
-        self._executor = ThreadPoolExecutor(max_workers=10)
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         if not self._loop:
             return asyncio.get_running_loop()
         return self._loop
-
-    async def output(self, result, error):
-        # return result in default format
-        self._result = result
-        return [result, error]
-
-    def output_format(self, frmt: str = 'native', **kwargs):  # pylint: disable=W1113
-        self._output_format = OutputFactory(
-            self,
-            frmt=frmt,
-            **kwargs
-        )
 
     @property
     def provider(self):
@@ -157,51 +141,20 @@ class BaseQuery(Connection):
     def last_duration(self):
         return self._generated
 
-    def query_model(self, data: Union[str, dict]) -> Query:
-        if isinstance(data, str):
-            q = {
-                "query": data
-            }
-        else:
-            q = data
-        try:
-            return Query(**q)
-        except (ValueError, TypeError, ValidationError) as ex:
-            raise TypeError(
-                f"Invalid Query Object: {ex}"
-            ) from ex
+    @abstractmethod
+    def query_model(self, data: Union[str, dict]) -> Any:
+        pass
 
+    @abstractmethod
     def get_result(
         self,
-        query: Query,
+        query: object,
         data: Optional[Union[list, dict]],
         duration: float,
         errors: list = None,
         state: str = None
-    ) -> QueryResult:
-        if query.raw_result is True:
-            return data
-        else:
-            try:
-                obj = QueryResult(
-                    driver=query.driver,
-                    query=query.query,
-                    duration=duration,
-                    errors=errors,
-                    data=data,
-                    state=state
-                )
-                return obj
-            except (TypeError, ValueError) as ex:
-                raise TypeError(
-                    f"Invalid data for QueryResult: {ex}"
-                ) from ex
-            except ValidationError as ex:
-                print(ex, ex.payload)
-                errors = ex.payload
-                raise TypeError(
-                    f"Invalid data for QueryResult: {errors}"
-                ) from ex
+    ) -> object:
+        pass
 
     def default_headers(self) -> dict:
         return {
@@ -386,13 +339,6 @@ class BaseQuery(Connection):
             raise CacheException(
                 f'Error on Redis cache: {err}'
             ) from err
-
-    @abstractmethod
-    async def query(self):
-        """query.
-
-        Run an arbitrary query in async mode.
-        """
 
     def NotFound(self, message: str):
         """Raised when Data not Found.

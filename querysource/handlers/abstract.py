@@ -6,9 +6,8 @@ from navconfig.logging import logging
 from navigator.views import BaseHandler
 # Queries:
 from ..queries.qs import QS
-# Output
-from ..outputs import mime_types
-from ..outputs.writers import mime_formats
+# Output Formats:
+from ..types import mime_formats, mime_types
 from ..exceptions import (
     QueryException
 )

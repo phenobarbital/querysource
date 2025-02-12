@@ -1,5 +1,5 @@
 from ..exceptions import QueryError, QueryException
-from .abstract import BaseQuery
+from .base import BaseQuery
 
 
 class Executor(BaseQuery):

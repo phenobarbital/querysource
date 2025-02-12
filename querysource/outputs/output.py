@@ -4,8 +4,7 @@ from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 from navconfig.logging import logging
 from datamodel.parsers.encoders import DefaultEncoder
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
-# from ..libs.encoders import DefaultEncoder
-from ..queries.abstract import BaseQuery
+from ..interfaces.queries import AbstractQuery
 from ..exceptions import (
     DataNotFound,
     QueryException,
@@ -62,7 +61,7 @@ class DataOutput:
     def __init__(
         self,
         request: web.Request,
-        query: BaseQuery,
+        query: AbstractQuery,
         ctype: str = 'json',
         slug: str = None,
         **kwargs
