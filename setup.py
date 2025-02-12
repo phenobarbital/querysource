@@ -206,7 +206,9 @@ setup(
         'rapidfuzz==3.11.0',
         'nltk==3.9.1',
         'wordcloud==1.9.4',
-        'datatable==1.1.0'
+        'datatable==1.1.0',
+        "gensim==4.3.3",
+        "thefuzz==0.22.1"
     ],
     extras_require={
         "analytics": [
