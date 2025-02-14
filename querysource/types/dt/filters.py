@@ -4,6 +4,220 @@ from typing import Optional
 import pandas as pd
 import numpy as np
 from navconfig.logging import logging
+from ...exceptions import QueryException
+from ...utils.getfunc import getFunction
+
+
+valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']
+
+
+def build_condition(expression: str, column: str, value, condition: dict) -> str:
+    """Build a filter condition for DataFrame filtering.
+
+    Args:
+        expression: The filter expression to be applied.
+        column: The column to be filtered.
+        value: The value to be compared against.
+        df: The DataFrame to which the filters will be applied.
+
+    Returns:
+        a string representation of the filter condition.
+
+    Raises:
+        QueryException: If the expression is invalid.
+    """
+    if expression in ("gt", "lt"):
+        if not isinstance(value, (int, float)):
+            raise QueryException(
+                "Value must be numeric for column length filtering."
+            )
+        op = ">" if expression == "gt" else "<"
+        return f"(df['{column}'].str.len() {op} {value})"
+    if expression == "is_null":
+        return f"df['{column}'].isnull() | (df['{column}'] == '')"
+    elif expression == "not_null":
+        return f"~(df['{column}'].isnull() | (df['{column}'] == ''))"
+    elif expression == "is_empty":
+        return f"(df['{column}'] == '')"
+    elif isinstance(value, (int, float)):
+        condition['value'] = value
+        return "(df['{column}'] {expression} {value})".format_map(
+            condition
+        )
+    elif isinstance(value, str):
+        if expression in ('regex', 'not_regex', 'fullmatch'):
+            if expression == 'regex':
+                return f"df['{column}'].str.match(r'{value}', na=False)"
+            if expression == 'not_regex':
+                return f"~df['{column}'].str.match(r'{value}', na=False)"
+            if expression == 'fullmatch':
+                return f"df['{column}'].str.fullmatch(r'{value}', na=False)"
+        else:
+            condition['value'] = f"'{value}'"
+            if expression == 'contains':
+                return f"df['{column}'].str.contains(r'{value}', na=False, case=False)"
+            elif expression == 'not_contains':
+                return f"~df['{column}'].str.contains(r'{value}', na=False, case=False)"
+            elif expression == 'startswith':
+                return f"df['{column}'].str.startswith('{value}')"
+            elif expression == 'not_startswith':
+                return f"~df['{column}'].str.startswith('{value}')"
+            elif expression == 'endswith':
+                return f"df['{column}'].str.endswith('{value}')"
+            elif expression == 'not_endswith':
+                return f"~df['{column}'].str.endswith('{value}')"
+            elif expression == '==':
+                return "(df['{column}'] {expression} {value})".format_map(
+                    condition
+                )
+            elif expression == '!=':
+                return "(df['{column}'] {expression} {value})".format_map(
+                    condition
+                )
+            elif expression in valid_operators:
+                # first: validate "expression" to be valid expression on Pandas.
+                return "(df['{column}'] {expression} {value})".format_map(
+                    condition
+                )
+            else:
+                raise QueryException(
+                    f"Invalid expression: {expression}"
+                )
+    elif isinstance(value, (np.datetime64, np.timedelta64)):
+        condition['value'] = value
+        return "(df['{column}'] {expression} {value})".format_map(
+            condition
+        )
+    elif isinstance(value, list):
+        if expression == 'startswith':
+            # Use tuple directly with str.startswith
+            val = tuple(value)
+            return f"(df['{column}'].str.startswith({val}))"
+        elif expression == 'not_startswith':
+            val = tuple(value)
+            return f"(~df['{column}'].str.startswith({val}))"
+        elif expression == 'endswith':
+            # Use tuple directly with str.endswith
+            val = tuple(value)
+            return f"(df['{column}'].str.endswith({val}))"
+        elif expression == 'not_endswith':
+            val = tuple(value)
+            return f"(~df['{column}'].str.endswith({val}))"
+        elif expression == 'contains':
+            regex_pattern = "|".join(map(re.escape, value))
+            return f"df['{column}'].str.contains(r'{regex_pattern}', na=False, case=False)"
+        elif expression == 'not_contains':
+            regex_pattern = "|".join(map(re.escape, value))
+            return f"~df['{column}'].str.contains(r'{regex_pattern}', na=False, case=False)"
+        elif expression == "regex":
+            # Regular expression match
+            regex_pattern = "|".join(map(str, value))
+            return f"df['{column}'].str.contains(r'{regex_pattern}', na=False)"
+        elif expression == "not_regex":
+            # Regular expression match
+            regex_pattern = "|".join(map(str, value))
+            return f"~df['{column}'].str.contains(r'{regex_pattern}', na=False)"
+        elif expression == "fullmatch":
+            # Full match
+            regex_pattern = "|".join(map(re.escape, value))
+            return f"df['{column}'].str.fullmatch(r'{regex_pattern}', na=False)"
+        elif expression == "==":
+            return f"df['{column}'].isin({value})"
+        elif expression == "!=":
+            # not:
+            return f"~df['{column}'].isin({value})"
+        elif expression in [">", ">="]:
+            return f"(df['{column}'] {expression} min({value}))"
+        elif expression in ["<", "<="]:
+            return f"(df['{column}'] {expression} max({value}))"
+        elif expression in valid_operators:
+            return f"(df['{column}'] {expression} {value!r})"
+        else:
+            raise QueryException(
+                f"tFilter: Invalid expression: {expression}"
+            )
+
+def create_filter_chain(expression: list, column: str, df: pd.DataFrame) -> list:
+    """Construct filter conditions for DataFrame filtering.
+
+    Using an expression builder to create a Pandas Filter condition.
+
+    Args:
+        expression: A list of filter dictionaries, each specifying a column,
+            an expression, and a value.
+        column: The column to be filtered.
+        df: The DataFrame to which the filters will be applied.
+
+    Returns:
+        A list of string conditions that can be used to filter the DataFrame.
+
+    Raises:
+        QueryException: If a column name is missing, not found in the DataFrame,
+            or if an invalid expression is provided.
+    """
+    conditions = []
+    for condition in expression:
+        expression = condition.get('expression', '==')
+        value = condition.get('value', None)
+        column = condition.get('column')
+        new_condition = build_condition(expression, column, value, condition)
+        conditions.extend(new_condition)
+    # Combine all conditions with a logical AND
+    if conditions:
+        return np.logical_and.reduce(conditions)
+    return None
+
+
+def create_filter(_filter: list, df: pd.DataFrame) -> list:
+    """Construct filter conditions for DataFrame filtering.
+
+    This method takes a list of filter specifications and converts them
+    into a list of string conditions suitable for DataFrame filtering.
+
+    Args:
+        _filter: A list of filter dictionaries, each specifying a column,
+            an expression, and a value.
+        df: The DataFrame to which the filters will be applied.
+
+    Returns:
+        A list of string conditions that can be used to filter the DataFrame.
+
+    Raises:
+        QueryException: If a column name is missing, not found in the DataFrame,
+            or if an invalid expression is provided.
+    """
+    conditions = []
+    for condition in _filter:
+        column = condition.get('column')
+        if not column:
+            raise QueryException(
+                "Column name is required for filtering."
+            )
+        if column not in df.columns:
+            raise QueryException(
+                f"tFilter: Column {column} not found in DataFrame."
+            )
+        expression = condition.get('expression', '==')
+        value = condition.get('value', None)
+
+        # --- New rule for filtering on column length ---
+        # If the expression is "gt" or "lt", compare the length of the column values.
+        if expression in ('func', 'function'):
+            # Using .apply() to apply the function to Dataframe.
+            fn = getFunction(value)
+            if fn:
+                df = df[df[column].apply(fn)]
+            continue
+        if isinstance(expression, list):
+            # Using a method chain to create a new expression builder.
+            new_conditions = create_filter_chain(expression, column, df)
+            conditions.extend(new_conditions)
+            continue
+        else:
+            new_condition = build_condition(expression, column, value, condition)
+            conditions.extend(new_condition)
+            continue
+    return conditions
 
 
 def drop_columns(df: pd.DataFrame, columns: list = None, endswith: list = None, startswith: list = None):
