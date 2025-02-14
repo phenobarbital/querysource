@@ -226,6 +226,18 @@ MONGO_DATABASE = config.get('MONGO_DATABASE', fallback='navigator')
 MONGO_USER = config.get('MONGO_USER')
 MONGO_PASSWORD = config.get('MONGO_PWD')
 
+# DocumentDB configuration:
+DOCUMENTDB_HOSTNAME = config.get('DOCUMENTDB_HOSTNAME', fallback='localhost')
+DOCUMENTDB_PORT = config.get('DOCUMENTDB_PORT', fallback=27017)
+DOCUMENTDB_DATABASE = config.get('DOCUMENTDB_DATABASE', fallback='navigator')
+DOCUMENTDB_USERNAME = config.get('DOCUMENTDB_USERNAME')
+DOCUMENTDB_PASSWORD = config.get('DOCUMENTDB_PASSWORD')
+DOCUMENTDB_TLSFILE = config.get('DOCUMENTDB_TLSFILE')
+if isinstance(DOCUMENTDB_TLSFILE, str):
+    DOCUMENTDB_TLSFILE = Path(DOCUMENTDB_TLSFILE).resolve()
+if not DOCUMENTDB_TLSFILE:
+    DOCUMENTDB_TLSFILE = BASE_DIR.joinpath('env', 'global-bundle.pem')
+
 # Amazon AWS services:
 DEFAULT_AWS_REGION = config.get('DEFAULT_AWS_REGION', fallback='us-east-1')
 
