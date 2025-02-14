@@ -1,7 +1,7 @@
 from typing import Union
 from collections.abc import Iterable
 import pandas as pd
-# Default RethinkDB connection parameters
+# Default BigQuery connection parameters
 from ...conf import (
     BIGQUERY_CREDENTIALS,
     BIGQUERY_PROJECT_ID

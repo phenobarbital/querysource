@@ -11,6 +11,8 @@ from .mysql import MysqlOutput
 from .sa import SaOutput
 from .rethink import RethinkOutput
 from .bigquery import BigQueryOutput
+from .mongodb import MongoDBOutput
+from .documentdb import DocumentDBOutput
 
 
 class TableOutput:
@@ -117,6 +119,10 @@ class TableOutput:
             self._engine == RethinkOutput(parent=self, external=True)
         elif self.flavor == 'bigquery':
             self._engine == BigQueryOutput(parent=self, external=True)
+        elif self.flavor == 'mongodb':
+            self._engine == MongoDBOutput(parent=self, external=True)
+        elif self.flavor == 'documentdb':
+            self._engine == DocumentDBOutput(parent=self, external=True)
         else:
             raise OutputError(
                 f'TableOutput: unsupported DB flavor: {self.flavor}'

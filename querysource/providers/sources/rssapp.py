@@ -35,6 +35,12 @@ class rssapp(httpSource):
     use_gesim: bool = True
     threshold: float = 0.60
     fuzzy_threshold: int = 60
+    namespaces: dict = {
+        'media': 'http://search.yahoo.com/mrss/',
+        'dc': 'http://purl.org/dc/elements/1.1/',
+        'content': 'http://purl.org/rss/1.0/modules/content/',
+        'atom': 'http://www.w3.org/2005/Atom',
+    }
 
     def __post_init__(
             self,
@@ -113,7 +119,7 @@ class rssapp(httpSource):
             if bundle_id not in self._keywords:
                 await self.load_keywords(bundle_id, self._model)
             keywords = self._keywords[bundle_id]
-            _ = await self.aquery()
+            _ = await self.aquery(namespaces=self.namespaces)
             # Iterate over the news in xml parser:
             root = self._parser
             channel = root.find("channel")

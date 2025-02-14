@@ -25,6 +25,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from lxml import html, etree
+import xml.etree.ElementTree as ET
 from asyncdb import AsyncDB
 from asyncdb.utils import cPrint
 from navconfig.logging import logging
@@ -352,7 +353,9 @@ class httpSource(baseSource):
         data: dict = None,
         cookies: dict = None,
         headers: dict = None,
-        use_json: bool = False
+        use_json: bool = False,
+        namespaces: Optional[dict] = None,
+        **kwargs
     ):
         """
         Asynchronously sends an HTTP request using HTTPx.
@@ -410,7 +413,7 @@ class httpSource(baseSource):
         try:
             async with httpx.AsyncClient(**args) as client:
                 response = await client.request(**req_args)
-                result, error = await self.process_response(response, url)
+                result, error = await self.process_response(response, url, namespaces)
         except httpx.HTTPError as e:
             error = str(e)
         except Exception as exc:
@@ -474,12 +477,13 @@ class httpSource(baseSource):
                 return True
         return False
 
-    async def process_response(self, response, url: str) -> tuple:
+    async def process_response(self, response, url: str, namespaces: Optional[dict] = None)  -> tuple:
         """
         Processes the response from an HTTPx request.
 
         :param response: The response object from httpx.
         :param url: The URL that was requested.
+        : namespaces dict: XML Namespaces to be registered.
         :return: A tuple containing the processed result and any error information.
         """
         error = None
@@ -543,6 +547,9 @@ class httpSource(baseSource):
             elif any(mime in self.accept for mime in xml_types):
                 result = await response.aread()
                 try:
+                    if namespaces:
+                        for key, value in namespaces.items():
+                            ET.register_namespace(key, value)
                     self._parser = etree.fromstring(result)
                 except etree.XMLSyntaxError:
                     self._parser = html.fromstring(result)
@@ -821,7 +828,8 @@ class httpSource(baseSource):
     async def aquery(
         self,
         data: Optional[dict] = None,
-        headers: Optional[dict] = None
+        headers: Optional[dict] = None,
+        namespaces: Optional[dict] = None,
     ):
         """Run an async query on the Data Provider.
         """
@@ -845,7 +853,8 @@ class httpSource(baseSource):
                 method=self.method,
                 data=data,
                 use_json=use_json,
-                headers=headers
+                headers=headers,
+                namespaces=namespaces
             )
             if check_empty(result):
                 raise DataNotFound(
