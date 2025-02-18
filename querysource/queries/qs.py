@@ -304,7 +304,7 @@ class QS(BaseQuery):
                 return 'raw'
             if 'html' in accepts:
                 return 'raw'
-        return 'iter'
+        return None
 
     def accepts(self) -> str:
         """accepts
@@ -325,9 +325,9 @@ class QS(BaseQuery):
             await self.build_provider()
         refresh = self._qs.refresh()
         ## check the provider:
-        if hasattr(self._qs, 'accepts'):
+        # if hasattr(self._qs, 'accepts'):
+        if accepts := self._qs.accepts():
             # get the output format from the provider:
-            accepts = self._qs.accepts()
             output_format = self.format_from_accepts(accepts)
         if output_format is not None:
             self.output_format(output_format)
