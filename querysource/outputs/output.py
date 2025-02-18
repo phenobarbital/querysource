@@ -100,9 +100,7 @@ class DataOutput:
         self._json = DefaultEncoder()
         ### get name of the file:
         try:
-            self.filename = kwargs['filename']
-            if not self.filename:
-                self.filename = self.slug
+            self.filename = kwargs['filename'] or self.slug
         except KeyError:
             pass
         try:
