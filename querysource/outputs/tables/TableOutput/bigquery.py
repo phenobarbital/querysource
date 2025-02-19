@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import logging
 import pandas as pd
 from ....exceptions import OutputError
 from ....interfaces.databases.bigquery import BigQuery
@@ -29,13 +30,16 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             self, **kwargs
         )
         self._external: bool = True
+        # Inicializar logger
+        self._logger = logging.getLogger(f'DB.{self.__class__.__name__.lower()}')
 
     async def db_upsert(
         self,
         table: str,
         schema: str,
         data: pd.DataFrame,
-        on_conflict: str = 'replace'
+        on_conflict: str = 'replace',
+        pk: list = None  # Recibir las PK como parámetro
     ):
         """
         Execute an Upsert of Data using "write" method
@@ -45,12 +49,16 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         table : table name
         schema : database schema
         data : Iterable or pandas dataframe to be inserted.
+        on_conflict : str, default 'replace'
+        pk : list, optional - Primary keys for merge operations
         """
         if self._do_update is False:
             on_conflict = 'append'
+            
         return await self.write(
             table,
             schema,
             data,
-            on_conflict=on_conflict
+            on_conflict=on_conflict,
+            pk=pk  # Pasar las PK al método write
         )
