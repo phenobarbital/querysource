@@ -161,7 +161,7 @@ def create_filter_chain(expression: list, column: str, df: pd.DataFrame) -> list
         value = condition.get('value', None)
         column = condition.get('column')
         new_condition = build_condition(expression, column, value, condition)
-        conditions.extend(new_condition)
+        conditions.append(f"({new_condition})")
     # Combine all conditions with a logical AND
     if conditions:
         return np.logical_and.reduce(conditions)
@@ -215,7 +215,7 @@ def create_filter(_filter: list, df: pd.DataFrame) -> list:
             continue
         else:
             new_condition = build_condition(expression, column, value, condition)
-            conditions.extend(new_condition)
+            conditions.append(f"({new_condition})")
             continue
     return conditions
 
