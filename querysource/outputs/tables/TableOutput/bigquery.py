@@ -29,13 +29,16 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             self, **kwargs
         )
         self._external: bool = True
+        self.use_merge = kwargs.get('use_merge', False)  # Nuevo parámetro
 
     async def db_upsert(
         self,
         table: str,
         schema: str,
         data: pd.DataFrame,
-        on_conflict: str = 'replace'
+        on_conflict: str = 'replace',
+        pk: list = None,
+        use_merge: bool = None  # Cambiar el default a None
     ):
         """
         Execute an Upsert of Data using "write" method
@@ -48,9 +51,13 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         """
         if self._do_update is False:
             on_conflict = 'append'
+            use_merge = False
+        
         return await self.write(
             table,
             schema,
             data,
-            on_conflict=on_conflict
+            on_conflict=on_conflict,
+            pk=pk,
+            use_merge=use_merge
         )
