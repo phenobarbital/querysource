@@ -54,7 +54,7 @@ class MultiQS(BaseQuery):
     """
     MultiQS.
 
-       Query multiple data-origins or files in QuerySource.
+    Query multiple data-origins or files in QuerySource.
     """
     def __init__(
             self,
