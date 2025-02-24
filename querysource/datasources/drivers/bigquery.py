@@ -8,7 +8,11 @@ from ...conf import (
 )
 
 class bigqueryDriver(BaseModel):
-    driver: str = Field(required=True, primary_key=True, default='bigquery')
+    driver: str = Field(
+        required=True,
+        primary_key=True,
+        default='bigquery'
+    )
     driver_type: str = Field(
         required=True,
         default='asyncdb',

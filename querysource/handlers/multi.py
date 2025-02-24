@@ -13,7 +13,10 @@ from .abstract import AbstractHandler
 from ..queries import MultiQS
 from ..outputs.tables import TableOutput
 from ..queries.multi.operators import Filter, GroupBy
-
+from ..conf import (
+    CSV_DEFAULT_DELIMITER,
+    CSV_DEFAULT_QUOTING
+)
 
 class QueryHandler(AbstractHandler):
 
@@ -24,12 +27,12 @@ class QueryHandler(AbstractHandler):
         params = self.query_parameters(request)
         args = self.match_parameters(request)
         slug = args.get('slug', None)
+        _format: str = 'json'
         meta = args.get('meta', None)
         writer_options = {}
-        _format: str = 'json'
         try:
-            _format = args['meta'].replace(':', '')
-        except KeyError:
+            slug, _format = slug.split(':')
+        except ValueError:
             pass
         try:
             options = await self.json_data(request)
@@ -77,6 +80,15 @@ class QueryHandler(AbstractHandler):
                 "template": tpl,
                 **report
             }
+        if _format == 'csv':
+            try:
+                writer_options = options['_csv_options']
+                del options['_csv_options']
+            except (TypeError, KeyError):  # default options:
+                writer_options = {
+                    "delimiter": CSV_DEFAULT_DELIMITER,
+                    "quoting": CSV_DEFAULT_QUOTING
+                }
         try:
             writer_options = options['_output_options']
             del options['_output_options']
@@ -87,7 +99,17 @@ class QueryHandler(AbstractHandler):
         except (TypeError, KeyError):
             pass
         queryformat = self.format(request, params, _format)
+        ## will be a downloadable resource
+        download = params.pop('_download', False)
+        filename = params.pop('_filename', None)
+        try:
+            writer_options = options['_graph_options']
+            del options['_graph_options']
+        except (TypeError, KeyError):  # default options:
+            pass
         output_args = {
+            "filename": filename,
+            "download": download,
             "writer_options": writer_options,
         }
         ## Step 1: Running all Queries and Files on QueryObject
@@ -195,7 +217,7 @@ class QueryHandler(AbstractHandler):
                 request,
                 query=result,
                 ctype=queryformat,
-                slug=None,
+                slug=slug,
                 **output_args
             )
             total_time = time.monotonic() - started_at

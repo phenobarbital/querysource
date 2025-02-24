@@ -4,6 +4,7 @@ from typing import Any, Union
 from abc import ABC, abstractmethod
 from hashlib import sha1
 import traceback
+from pandas import DataFrame
 from navconfig.logging import logging
 from asyncdb.exceptions import NoDataFound, StatementError
 from aiohttp import web
@@ -260,6 +261,9 @@ class AbstractWriter(ABC):
     async def get_buffer(self):
         if isinstance(self.data, list):
             rec = self.data[0]
+        elif isinstance(self.data, DataFrame):
+            self.columns = list(self.data.columns.values)
+            return
         else:
             rec = self.data
         try:
@@ -272,6 +276,13 @@ class AbstractWriter(ABC):
         try:
             if isinstance(self.query, AbstractQuery):
                 self.data, error = await self.query.query(output_format=self.output_format)
+            elif isinstance(self.query, DataFrame):
+                if self.output_format == 'iter':
+                    # convert dataframe into a list of dictionaries:
+                    self.data = self.query.to_dict(orient='records')
+                else:
+                    self.data = self.query
+                error = None
             else:
                 self.data = self.query
                 error = None
