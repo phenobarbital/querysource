@@ -1,4 +1,8 @@
 import pyarrow as pa
+try:
+    from google.cloud.bigquery.table import RowIterator
+except ImportError:
+    RowIterator = None
 from .abstract import OutputFormat
 
 
@@ -9,14 +13,17 @@ class arrowFormat(OutputFormat):
     async def serialize(self, result, error, *args, **kwargs):
         table = None
         try:
-            names = result[0].keys()
-            result = [dict(row) for row in result]
-            table = pa.Table.from_arrays(
-                result,
-                names=names,
-                *args,
-                **kwargs
-            )
+            if isinstance(result, RowIterator):
+                table = result.to_arrow()
+            elif isinstance(result, list):
+                names = result[0].keys()
+                result = [dict(row) for row in result]
+                table = pa.Table.from_arrays(
+                    result,
+                    names=names,
+                    *args,
+                    **kwargs
+                )
             self._result = table
         except ValueError as err:
             self.logger.error(f'Arrow Serialization Error: {err}')

@@ -236,8 +236,11 @@ DOCUMENTDB_DATABASE = config.get('DOCUMENTDB_DATABASE', fallback='navigator')
 DOCUMENTDB_USERNAME = config.get('DOCUMENTDB_USERNAME')
 DOCUMENTDB_PASSWORD = config.get('DOCUMENTDB_PASSWORD')
 DOCUMENTDB_TLSFILE = config.get('DOCUMENTDB_TLSFILE')
+DOCUMENTDB_USE_SSL = config.getboolean('DOCUMENTDB_USE_SSL', fallback=True)
 if isinstance(DOCUMENTDB_TLSFILE, str):
     DOCUMENTDB_TLSFILE = Path(DOCUMENTDB_TLSFILE).resolve()
+    if not DOCUMENTDB_TLSFILE.exists():
+        DOCUMENTDB_TLSFILE = None
 if not DOCUMENTDB_TLSFILE:
     DOCUMENTDB_TLSFILE = BASE_DIR.joinpath('env', 'global-bundle.pem')
 
