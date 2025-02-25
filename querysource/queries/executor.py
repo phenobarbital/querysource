@@ -1,3 +1,4 @@
+from rethinkdb.errors import RqlRuntimeError, RqlDriverError
 from ..exceptions import QueryError, QueryException
 from .base import BaseQuery
 
@@ -109,6 +110,23 @@ class Executor(BaseQuery):
                                 frmt='recordset',
                                 **kwargs
                             )
+                        elif driver == 'rethink':
+                            # Manual Eval of RethinkDB Query (Risky):
+                            # Prepare a safe globals dict exposing only the RethinkDB query builder object
+                            safe_globals = {"r": db.engine()}
+                            try:
+                                # Evaluate the query string to get a RethinkDB query object
+                                query = eval(self._query.query, safe_globals)
+                                cursor = await query.run(conn.raw_connection)
+                                if isinstance(cursor, list):
+                                    result = cursor
+                                else:
+                                    while await cursor.fetch_next():
+                                        result.append(await cursor.next())
+                            except RqlRuntimeError as e:
+                                raise ValueError(f"Error running query: {e}")
+                            except Exception as e:
+                                raise ValueError(f"Error parsing query: {e}")
                         else:
                             result, error = await db.query(
                                 self._query.query,
