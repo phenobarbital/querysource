@@ -35,10 +35,13 @@ class rethinkDriver(NoSQLDriver):
                 "db": self.database
             }
 
-rethink_default = rethinkDriver(
-    host=RT_HOST,
-    port=RT_PORT,
-    database=RT_DATABASE,
-    username=RT_USER,
-    password=RT_PASSWORD
-)
+try:
+    rethink_default = rethinkDriver(
+        host=RT_HOST,
+        port=RT_PORT,
+        database=RT_DATABASE,
+        username=RT_USER,
+        password=RT_PASSWORD
+    )
+except (TypeError, ValueError):
+    rethink_default = None

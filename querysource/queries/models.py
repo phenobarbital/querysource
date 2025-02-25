@@ -1,5 +1,6 @@
 from typing import Union, Optional, Any
 from datetime import datetime
+from google.cloud.bigquery.table import RowIterator
 from datamodel import BaseModel, Field
 from ..datasources.drivers import SUPPORTED
 
@@ -34,3 +35,9 @@ class QueryResult(BaseModel):
 
     class Meta:
         strict = True
+
+    def __post_init__(self):
+        if isinstance(self.data, RowIterator):
+            # Convert BigQuery to list
+            self.data = [dict(row) for row in self.data]
+        return super().__post_init__()

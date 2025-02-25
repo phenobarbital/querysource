@@ -18,6 +18,7 @@ from .hazel import hazelDriver
 from .salesforce import salesforceDriver
 from .scylladb import scylladbDriver
 from .bigquery import bigqueryDriver
+from .documentdb import documentdbDriver
 
 
 ## List of Supported Drivers:
@@ -65,6 +66,10 @@ SUPPORTED = {
     "mongo": {
         "name": "MongoDB",
         "driver": mongoDriver
+    },
+    "documentdb": {
+        "name": "DocumentDB",
+        "driver": documentdbDriver
     },
     "sqlite": {
         "name": "SQLite",

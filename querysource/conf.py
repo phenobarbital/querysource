@@ -189,12 +189,15 @@ INFLUX_TOKEN = config.get('INFLUX_TOKEN')
 INFLUX_LOGGING = config.get('INFLUX_LOGGING', fallback='navigator_logs')
 
 # BigQuery Service:
-bq_file = config.get('BIGQUERY_CREDENTIALS', fallback='env/bigquery.json')
+bq_file = config.get('BIGQUERY_CREDENTIALS', fallback='env/google/bigquery.json')
 bq_file = Path(bq_file).resolve()
+if not bq_file.exists():
+    bq_file = BASE_DIR.joinpath('env', 'google', 'bigquery.json')
+
+## Bigquery Credentials
 BIGQUERY_CREDENTIALS = config.get('BIGQUERY_CREDENTIALS', fallback=bq_file)
 if isinstance(BIGQUERY_CREDENTIALS, str):
     BIGQUERY_CREDENTIALS = Path(BIGQUERY_CREDENTIALS).resolve()
-
 BIGQUERY_PROJECT_ID = config.get('BIGQUERY_PROJECT_ID')
 
 # this is the backend for saving Query Execution
@@ -233,8 +236,11 @@ DOCUMENTDB_DATABASE = config.get('DOCUMENTDB_DATABASE', fallback='navigator')
 DOCUMENTDB_USERNAME = config.get('DOCUMENTDB_USERNAME')
 DOCUMENTDB_PASSWORD = config.get('DOCUMENTDB_PASSWORD')
 DOCUMENTDB_TLSFILE = config.get('DOCUMENTDB_TLSFILE')
+DOCUMENTDB_USE_SSL = config.getboolean('DOCUMENTDB_USE_SSL', fallback=True)
 if isinstance(DOCUMENTDB_TLSFILE, str):
     DOCUMENTDB_TLSFILE = Path(DOCUMENTDB_TLSFILE).resolve()
+    if not DOCUMENTDB_TLSFILE.exists():
+        DOCUMENTDB_TLSFILE = None
 if not DOCUMENTDB_TLSFILE:
     DOCUMENTDB_TLSFILE = BASE_DIR.joinpath('env', 'global-bundle.pem')
 
