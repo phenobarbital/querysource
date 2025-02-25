@@ -101,6 +101,7 @@ class bigqueryDriver(BaseModel):
             "icon": cls.icon,
             "fields": fields
         }
+
 try:
     bigquery_default = bigqueryDriver(
         credentials=BIGQUERY_CREDENTIALS,

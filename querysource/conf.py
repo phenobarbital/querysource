@@ -189,12 +189,15 @@ INFLUX_TOKEN = config.get('INFLUX_TOKEN')
 INFLUX_LOGGING = config.get('INFLUX_LOGGING', fallback='navigator_logs')
 
 # BigQuery Service:
-bq_file = config.get('BIGQUERY_CREDENTIALS', fallback='env/bigquery.json')
+bq_file = config.get('BIGQUERY_CREDENTIALS', fallback='env/google/bigquery.json')
 bq_file = Path(bq_file).resolve()
+if not bq_file.exists():
+    bq_file = BASE_DIR.joinpath('env', 'google', 'bigquery.json')
+
+## Bigquery Credentials
 BIGQUERY_CREDENTIALS = config.get('BIGQUERY_CREDENTIALS', fallback=bq_file)
 if isinstance(BIGQUERY_CREDENTIALS, str):
     BIGQUERY_CREDENTIALS = Path(BIGQUERY_CREDENTIALS).resolve()
-
 BIGQUERY_PROJECT_ID = config.get('BIGQUERY_PROJECT_ID')
 
 # this is the backend for saving Query Execution
