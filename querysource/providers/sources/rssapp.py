@@ -1,14 +1,44 @@
 from typing import Any
 import numpy as np
+import nltk
 import xml.etree.ElementTree as ET
 from gensim.models import KeyedVectors
 from thefuzz import fuzz
 from querysource.providers.sources import httpSource
 
+nltk.download('punkt_tab')
+nltk.download('averaged_perceptron_tagger_eng')
+
 # vector_model = KeyedVectors.load_word2vec_format(
 #     "GoogleNews-vectors-negative300.bin",
 #     binary=True
 # )
+
+
+def split_keyword(keyword):
+    tokens = nltk.word_tokenize(keyword)
+    tagged = nltk.pos_tag(tokens)
+    chunk_gram = r"""
+        NP: {<DT>?<JJ>*<NN.*|CD>+}
+        VP: {<VB.*><NP|PP|CLAUSE>+$}  # Define a grammar for verb phrases
+        PP: {<IN><NP>}               # Define a grammar for prepositional phrases
+        CLAUSE: {<NP><VP>}           # Define a grammar for clauses
+    """
+    chunk_parser = nltk.RegexpParser(chunk_gram)
+    tree = chunk_parser.parse(tagged)
+    phrases = []
+    prev_subtree_label = None  # Keep track of the previous subtree label
+    for subtree in tree.subtrees():
+        if subtree.label() == 'NP' and subtree.label() != prev_subtree_label:
+            phrase = " ".join([leaf[0] for leaf in subtree.leaves()])
+            phrases.append(phrase)
+        elif subtree.label() == 'PP':
+            for child in subtree:
+                if isinstance(child, nltk.Tree) and child.label() == 'NP' and child.label() != prev_subtree_label:
+                    phrase = " ".join([leaf[0] for leaf in child.leaves()])
+                    phrases.append(phrase)
+        prev_subtree_label = subtree.label()  # Update the previous subtree label
+    return phrases
 
 
 def phrase_vector(phrase, model):
@@ -173,8 +203,11 @@ class rssapp(httpSource):
         Search for the best match between the text and the keywords
         """
         for kw in keywords:
-            # Fuzzy matching
-            similarity = fuzz.partial_ratio(text, kw)
+            # split into phrases:
+            similarity = 0
+            sentences = split_keyword(kw)
+            similarity = sum(fuzz.partial_ratio(text, sentence) for sentence in sentences)
+            similarity /= len(sentences)
             if similarity >= self.fuzzy_threshold:  # pick a threshold
                 print(f"Fuzzy Match (sim={similarity:.2f}) with '{kw}'")
                 print("--------------------------------------------------")

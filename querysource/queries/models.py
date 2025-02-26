@@ -1,5 +1,5 @@
 from typing import Union, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from google.cloud.bigquery.table import RowIterator
 from datamodel import BaseModel, Field
 from ..datasources.drivers import SUPPORTED
@@ -13,10 +13,10 @@ class Query(BaseModel):
     """
     driver: str = Field(required=False, default='pg', validator=supported_drivers)
     datasource: str = Field(required=False, default=None)
-    query: str = Field(required=False)  # TODO: to be validated with Oxide
+    query: Union[str, dict] = Field(required=False)  # TODO: to be validated
     arguments: list = Field(required=False, default_factory=list)
     parameters: dict = Field(required=False, default_factory=dict)
-    retrieved: datetime = Field(required=False, default=datetime.utcnow())
+    retrieved: datetime = Field(required=False, default=datetime.now(timezone.utc))
     raw_result: bool = Field(default=False)
     queued: bool = Field(default=False)
     connection: Optional[Any] = Field(required=False)

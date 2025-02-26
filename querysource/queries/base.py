@@ -59,29 +59,28 @@ class BaseQuery(AbstractQuery):
         errors: list = None,
         state: str = None
     ) -> QueryResult:
-        if query.raw_result is True:
+        print('DATA > ', data)
+        if query.raw_result:
             return data
-        else:
-            try:
-                obj = QueryResult(
-                    driver=query.driver,
-                    query=query.query,
-                    duration=duration,
-                    errors=errors,
-                    data=data,
-                    state=state
-                )
-                return obj
-            except (TypeError, ValueError) as ex:
-                raise TypeError(
-                    f"Invalid data for QueryResult: {ex}"
-                ) from ex
-            except ValidationError as ex:
-                print(ex, ex.payload)
-                errors = ex.payload
-                raise TypeError(
-                    f"Invalid data for QueryResult: {errors}"
-                ) from ex
+        try:
+            return QueryResult(
+                driver=query.driver,
+                query=query.query,
+                duration=duration,
+                errors=errors,
+                data=data,
+                state=state
+            )
+        except (TypeError, ValueError) as ex:
+            raise TypeError(
+                f"Invalid data for QueryResult: {ex}"
+            ) from ex
+        except ValidationError as ex:
+            print(ex, ex.payload)
+            errors = ex.payload
+            raise TypeError(
+                f"Invalid data for QueryResult: {errors}"
+            ) from ex
 
     @abstractmethod
     async def query(self):

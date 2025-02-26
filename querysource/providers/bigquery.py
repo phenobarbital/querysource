@@ -1,7 +1,7 @@
 """
-Basic PostgreSQL Provider (based on asyncpg).
+Google BigQuery Provider.
 
-Default QS database.
+This module provides a Database provider for Google BigQuery.
 """
 from typing import Any, Union
 from aiohttp import web

@@ -7,7 +7,7 @@ from abc import abstractmethod
 from typing import Any, Union, Optional
 from collections.abc import Callable
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import traceback
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -86,7 +86,7 @@ class AbstractQuery(Connection):
         except (TypeError, AttributeError):
             self._provider: str = 'db'
         # defining conditions
-        self._conditions = conditions if conditions else {}
+        self._conditions = conditions or {}
         # web Request:
         self._request = request
         self._generated: Union[int, datetime] = None
@@ -102,9 +102,7 @@ class AbstractQuery(Connection):
         self._executor = ThreadPoolExecutor(max_workers=2)
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
-        if not self._loop:
-            return asyncio.get_running_loop()
-        return self._loop
+        return self._loop if self._loop else asyncio.get_running_loop()
 
     @property
     def provider(self):
@@ -130,12 +128,12 @@ class AbstractQuery(Connection):
     ### function for calculate duration:
     def start_timing(self, started: datetime = None):
         if not started:
-            started = datetime.utcnow()
+            started = datetime.now(timezone.utc)
         self._starttime = started
         return self._starttime
 
     def generated_at(self, started: datetime):
-        self._generated = datetime.utcnow() - started
+        self._generated = datetime.now(timezone.utc) - started
         return self._generated
 
     def last_duration(self):

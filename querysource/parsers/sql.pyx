@@ -235,7 +235,7 @@ cdef class SQLParser(AbstractParser):
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
-         Last Step: Build a SQL Query
+        Last Step: Build a SQL Query.
         """
         sql = self.query_raw
         # check table and schema names:

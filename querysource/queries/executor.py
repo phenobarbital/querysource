@@ -100,9 +100,7 @@ class Executor(BaseQuery):
                     state = f'Connected: {conn.is_connected()}'
                     conn.output_format('iterable')
                     try:
-                        kwargs = self._query.parameters
-                        if not kwargs:
-                            kwargs = {}
+                        kwargs = self._query.parameters or {}
                         # TODO: add support for selecting returning options
                         if driver == 'influx':
                             result, error = await db.query(
@@ -127,6 +125,16 @@ class Executor(BaseQuery):
                                 raise ValueError(f"Error running query: {e}")
                             except Exception as e:
                                 raise ValueError(f"Error parsing query: {e}")
+                        elif driver in ('mongo', 'documentdb'):
+                            database = self._query.query.pop('database', None)
+                            if database:
+                                await conn.use(database)
+                            collection = self._query.query.pop('collection')
+                            result, error = await conn.query(
+                                collection_name=collection,
+                                query=self._query.query,
+                                **kwargs,
+                            )
                         else:
                             result, error = await db.query(
                                 self._query.query,
@@ -147,14 +155,13 @@ class Executor(BaseQuery):
         # finish: calculate duration and return result:
         duration = (self.generated_at(started).total_seconds() / 1000)
         try:
-            obj = self.get_result(
+            return self.get_result(
                 self._query,
                 data=result,
                 duration=duration,
                 errors=error,
                 state=state
             )
-            return obj
         except TypeError as ex:
             raise QueryError(
                 message=f'QS: Result Error: {ex}',

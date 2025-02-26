@@ -56,7 +56,7 @@ class InfluxParser(QueryParser):
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
-         Last Step: Build a SQL Query
+        Last Step: Build a FLUX Query
         """
         query = self.query_raw
         self.logger.debug(f":: RAW QUERY: {query}")
