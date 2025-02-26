@@ -59,7 +59,6 @@ class BaseQuery(AbstractQuery):
         errors: list = None,
         state: str = None
     ) -> QueryResult:
-        print('DATA > ', data)
         if query.raw_result:
             return data
         try:

@@ -14,7 +14,7 @@ from ..queries.executor import Executor
 from .abstract import AbstractHandler
 
 
-logging.getLogger('pymongo').setLevel(logging.INFO)
+logging.getLogger('pymongo').setLevel(logging.WARNING)
 
 class QueryExecutor(AbstractHandler):
     """Executor.
