@@ -13,6 +13,7 @@ from ...conf import (
 )
 
 class documentdbDriver(mongoDriver):
+    driver: str = MONGO_DRIVER
     dbtype: str = "documentdb"
     ssl: bool = Field(required=False, default=DOCUMENTDB_USE_SSL)
     tlsCAFile: str = Field(required=False, default=DOCUMENTDB_TLSFILE)
@@ -31,7 +32,6 @@ class documentdbDriver(mongoDriver):
 
 try:
     documentdb_default = documentdbDriver(
-        driver=MONGO_DRIVER,
         host=DOCUMENTDB_HOSTNAME,
         port=DOCUMENTDB_PORT,
         database=DOCUMENTDB_DATABASE,

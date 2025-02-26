@@ -2,12 +2,22 @@ import asyncio
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence
-from .sql import SQLParser
+from .parser import QueryParser
 
 
-class CQLParser(SQLParser):
+class MongoParser(QueryParser):
     _tablename: str = '{schema}.{table}'
     schema_based: bool = True
+
+    async def process_fields(self, query: str) -> str:
+        """
+        process_fields.
+        Process Fields for MongoDB.
+        """
+        if self.fields:
+            fields = ','.join(self.fields)
+            query = query.format(fields=fields)
+        return query
 
     def set_cql(self, cql: str):
         self.query_raw = cql
@@ -20,7 +30,7 @@ class CQLParser(SQLParser):
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
-        Last Step: Build a SQL Query
+        Last Step: Build a MongoDB Query.
         """
         cql = self.query_raw
         self.logger.debug(f":: RAW CQL: {cql}")

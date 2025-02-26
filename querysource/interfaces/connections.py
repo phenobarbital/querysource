@@ -197,8 +197,8 @@ class Connection:
         default = None
         try:
             if not self._dsmodule:
-                # load dynamically
                 clspath = f'querysource.datasources.drivers.{driver}'
+                # load dynamically
                 self.logger.notice(
                     f"Loading Driver {driver} Module: {clspath}"
                 )
@@ -219,12 +219,12 @@ class Connection:
         driver_type = default.driver_type
         if driver_type == 'asyncdb':
             try:
-                return driver_type, AsyncDB(driver, dsn=default.dsn, params=default.params())
+                return driver_type, AsyncDB(default.driver, dsn=default.dsn, params=default.params())
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"
                 ) from ex
-        elif default.driver_type == 'external':
+        elif driver_type == 'external':
             ## returning -as-is- for use internal by provider
             return driver_type, default
         else:

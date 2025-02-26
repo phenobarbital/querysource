@@ -5,6 +5,7 @@ Handler to making queries directly to providers.
 """
 # for aiohttp
 from aiohttp import web
+import logging
 from ..exceptions import (
     QueryException,
     QueryError
@@ -12,6 +13,8 @@ from ..exceptions import (
 from ..queries.executor import Executor
 from .abstract import AbstractHandler
 
+
+logging.getLogger('pymongo').setLevel(logging.WARNING)
 
 class QueryExecutor(AbstractHandler):
     """Executor.
@@ -51,47 +54,47 @@ class QueryExecutor(AbstractHandler):
         Args:
             request (web.Request, optional): HTTP Web Request. Defaults to None.
         """
-        data = await self.get_payload(request)
-        ##
-        if data:
-            # build a query Executor Object with the query
-            try:
-                query = self.get_executor(data, request)
-            except QueryError as ex:
-                return self.error(
-                    response=ex.message,
-                    status=ex.code  # bad request
-                )
-            except Exception as ex:
-                self.logger.error(str(ex), stack_info=True)
-                return self.critical(
-                    reason={"message": str(ex)},
-                    status=500
-                )
-            try:
-                obj = await query.query()
-                return self.json_response(
-                    response=obj,
-                    status=200,
-                    headers=self.default_headers()
-                )
-            except (QueryError, QueryException) as ex:
-                return self.error(
-                    response=ex.message,
-                    status=ex.code  # bad request
-                )
-            except Exception as ex:
-                self.logger.error(str(ex), stack_info=True)
-                return self.critical(
-                    reason={"message": str(ex)},
-                    exception=ex,
-                    status=500
-                )
-        else:
+        payload = await self.get_payload(request)
+        if not payload:
             return self.error(
                 response='QS: Missing Query object or sentence to run.',
                 status=410  # bad request
             )
+        ##
+        # build a query Executor Object with the query
+        try:
+            query = self.get_executor(payload, request)
+        except QueryError as ex:
+            return self.error(
+                response=ex.message,
+                status=ex.code  # bad request
+            )
+        except Exception as ex:
+            self.logger.error(str(ex), stack_info=True)
+            return self.critical(
+                reason={"message": str(ex)},
+                status=500
+            )
+        try:
+            obj = await query.query()
+            return self.json_response(
+                response=obj,
+                status=200,
+                headers=self.default_headers()
+            )
+        except (QueryError, QueryException) as ex:
+            return self.error(
+                response=ex.message,
+                status=ex.code  # bad request
+            )
+        except Exception as ex:
+            self.logger.error(str(ex), stack_info=True)
+            return self.critical(
+                reason={"message": str(ex)},
+                exception=ex,
+                status=500
+            )
+
 
     async def dry_run(self, request: web.Request = None):
         """dry_run.

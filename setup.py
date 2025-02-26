@@ -208,11 +208,12 @@ setup(
         'wordcloud==1.9.4',
         'datatable==1.1.0',
         "gensim==4.3.3",
-        "thefuzz==0.22.1"
+        "thefuzz==0.22.1",
+        "modin==0.32.0"
     ],
     extras_require={
         "analytics": [
-            "great_expectations>=0.18.21",
+            # "great_expectations>=0.18.21",
             "pygwalker>=0.4.8.9",
             "ydata-profiling>=4.8.3",
             "sweetviz==2.3.1",
