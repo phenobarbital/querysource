@@ -213,6 +213,11 @@ class QueryHandler(AbstractHandler):
                             result = await obj.run()
         ### Step 6: passing Result to DataOutput
         try:
+            if result is None or result.empty:
+                raise DataNotFound(
+                    message="Empty Result",
+                    code=404
+                )
             output = DataOutput(
                 request,
                 query=result,
@@ -225,7 +230,18 @@ class QueryHandler(AbstractHandler):
                 f'Query Duration: {total_time:.2f} seconds'
             )
             return await output.response()
-        except (DriverError, DataNotFound) as err:
+        except (DataNotFound) as ex:
+            return self.NoData(
+                message="No Data was Found",
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Slug': slug,
+                    'X-Format': queryformat,
+                    'X-Total-Time': f'{total_time:.2f} seconds',
+                    'X-Error': str(ex),
+                },
+            )
+        except (DriverError) as err:
             raise self.Error(
                 message="DataOutput Error",
                 exception=err,
