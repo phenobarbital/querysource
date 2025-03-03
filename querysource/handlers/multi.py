@@ -32,7 +32,7 @@ class QueryHandler(AbstractHandler):
         writer_options = {}
         try:
             slug, _format = slug.split(':')
-        except ValueError:
+        except (ValueError, AttributeError):
             pass
         try:
             options = await self.json_data(request)
