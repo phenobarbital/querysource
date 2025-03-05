@@ -141,6 +141,9 @@ class QS(BaseQuery):
             ### getting the connection and the provider from Slug:
             try:
                 self._conn, self._provider = await self.connection.get_provider(objquery)
+                self._logger.notice(
+                    f"Found Provider: {self._provider!s} with Connection: {self._conn!s} in {self._program}."
+                )
             except (QueryException, DriverError, ProviderError) as ex:
                 raise QueryException(
                     str(ex)

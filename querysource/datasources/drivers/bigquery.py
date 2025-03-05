@@ -108,5 +108,6 @@ try:
         project_id=BIGQUERY_PROJECT_ID
     )
 except Exception as ex:
-    print(ex)
+    print('BQ Error > ', ex)
+    print(' :: Credentials ', BIGQUERY_CREDENTIALS, BIGQUERY_PROJECT_ID)
     bigquery_default = None
