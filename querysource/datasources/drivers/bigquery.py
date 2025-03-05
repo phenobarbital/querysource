@@ -107,5 +107,6 @@ try:
         credentials=BIGQUERY_CREDENTIALS,
         project_id=BIGQUERY_PROJECT_ID
     )
-except Exception:
+except Exception as ex:
+    print(ex)
     bigquery_default = None
