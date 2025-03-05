@@ -161,6 +161,10 @@ class MultiQS(BaseQuery):
                         raise SlugNotFound(
                             f"Slug Not Found: {t.slug}"
                         )
+                    if isinstance(t.exc, DataNotFound):
+                        return self.NotFound(
+                            message=f"No Data was Found on Query {t.slug()}"
+                        )
                     if isinstance(t.exc, (QueryException, DriverError)):
                         raise self.Error(
                             f"Query Error: {str(t.exc)}",

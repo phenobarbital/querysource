@@ -219,7 +219,11 @@ class Connection:
         driver_type = default.driver_type
         if driver_type == 'asyncdb':
             try:
-                return driver_type, AsyncDB(default.driver, dsn=default.dsn, params=default.params())
+                return driver_type, AsyncDB(
+                    default.driver,
+                    dsn=default.dsn,
+                    params=default.params()
+                )
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
                     f"Error creating AsyncDB instance: {ex}"

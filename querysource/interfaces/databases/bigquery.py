@@ -33,12 +33,12 @@ class BigQuery(AbstractDB):
     ):
         if not self._connection:
             self.default_connection()
+        use_pandas = isinstance(data, pd.DataFrame)
         async with await self._connection.connection() as conn:
-            result = await conn.write(
+            return await conn.write(
                 data=data,
                 table_id=table,
                 dataset_id=schema,
                 if_exists=on_conflict,
-                use_pandas=False  # Not using stream API
+                use_pandas=use_pandas  # Not using stream API
             )
-            return result
