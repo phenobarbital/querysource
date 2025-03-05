@@ -48,14 +48,13 @@ class MongoDB(AbstractDB):
         if not self._connection:
             self.default_connection()
         async with await self._connection.connection() as conn:
-            result = await conn.write(
+            return await conn.write(
                 data=data,
                 collection=table,
                 database=schema,
                 if_exists=on_conflict,
                 use_pandas=self.use_pandas
             )
-            return result
 
 
 class DocumentDB(MongoDB):

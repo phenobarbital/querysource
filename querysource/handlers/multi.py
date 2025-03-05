@@ -122,6 +122,17 @@ class QueryHandler(AbstractHandler):
         )
         try:
             result, options = await qs.query()
+        except DataNotFound as dnf:
+            return self.NoData(
+                message=str(dnf),
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Slug': slug,
+                    'X-Format': queryformat,
+                    'X-Total-Time': f'{total_time:.2f} seconds',
+                    'X-Error': str(dnf),
+                },
+            )
         except SlugNotFound as snf:
             raise self.Error(
                 message="Slug Not Found",
