@@ -1,6 +1,7 @@
 from typing import Optional
 from datamodel import BaseModel, Field
 from datamodel.types import JSON_TYPES
+from ...utils.functions import cPrint
 from ...conf import (
     # BigQuery Default Credentials
     BIGQUERY_CREDENTIALS,
@@ -108,6 +109,6 @@ try:
         project_id=BIGQUERY_PROJECT_ID
     )
 except Exception as ex:
-    print('BQ Error > ', ex)
+    cPrint(f'BQ Error > {ex}', level='ERROR')
     print(' :: Credentials ', BIGQUERY_CREDENTIALS, BIGQUERY_PROJECT_ID)
     bigquery_default = None
