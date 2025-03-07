@@ -209,6 +209,9 @@ class Connection:
                         f"QS: There is no DataSource called {driver}: {ex}"
                     ) from ex
             clsname = f'{driver}_default'
+            self.logger.debug(
+                f"Getting Default Connection for Driver {driver} > {clsname}"
+            )
             default = getattr(self._dsmodule, clsname)
         except (AttributeError, ImportError) as ex:
             # No module for driver exists.
