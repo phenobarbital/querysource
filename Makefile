@@ -4,12 +4,13 @@ venv:
 
 install:
 	# pip install --upgrade git+https://github.com/GrocerCheck/LivePopularTimes
-	pip install --upgrade asyncdb[default,bigquery,mongodb]
+	pip install --upgrade asyncdb[all]
 	pip install --upgrade navconfig[default,uvloop]
 	pip install --upgrade navigator-session
 	pip install --upgrade navigator-auth[uvloop]
 	pip install --upgrade navigator-api[uvloop,locale]
-	pip install -e .[analytics]
+	# pip install -e .[analytics]
+	pip install -e .
 	echo 'start using QuerySource'
 
 jupyter:
