@@ -43,5 +43,6 @@ try:
         username=RT_USER,
         password=RT_PASSWORD
     )
-except (TypeError, ValueError):
+except Exception as ex:
+    print('RethinkDB > ', ex)
     rethink_default = None
