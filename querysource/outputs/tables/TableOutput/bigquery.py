@@ -62,7 +62,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             use_merge=use_merge
         )
 
-    async def connect(self):
+    def connect(self):
         """
         Connect to BigQuery
         """

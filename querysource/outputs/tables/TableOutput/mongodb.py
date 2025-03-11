@@ -53,3 +53,18 @@ class MongoDBOutput(AbstractOutput, MongoDB):
             data=data,
             on_conflict=on_conflict
         )
+
+    def connect(self):
+        """
+        Connect to MongoDB
+        """
+        if not self._connection:
+            self.default_connection()
+
+    async def close(self):
+        """
+        Close Database connection.
+
+        we don't need to explicitly close the connection.
+        """
+        pass

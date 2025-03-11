@@ -54,3 +54,19 @@ class RethinkOutput(AbstractOutput, RethinkDB):
             data,
             on_conflict=on_conflict
         )
+
+    def connect(self):
+        """
+        Connect to DocumentDB
+        """
+        if not self._connection:
+            self.default_connection()
+
+    async def close(self):
+        """
+        Close Database connection.
+        """
+        if self._connection:
+            self._connection.close()
+            self._connection = None
+        return True

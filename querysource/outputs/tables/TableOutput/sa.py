@@ -4,6 +4,11 @@ from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
 from sqlalchemy.inspection import inspect
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKeyConstraint
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncEngine,
+    AsyncConnection
+)
 from ....exceptions import OutputError
 from .abstract import AbstractOutput
 
@@ -11,9 +16,11 @@ from .abstract import AbstractOutput
 class SaOutput(AbstractOutput):
     def __init__(
         self,
-        parent: Callable,
+        parent: Callable = None,
         dsn: str = None,
         do_update: bool = True,
+        use_async: bool = False,
+        returning_all: bool = False,
         **kwargs
     ) -> None:
         super(SaOutput, self).__init__(parent, dsn, do_update=do_update, **kwargs)
@@ -86,3 +93,13 @@ class SaOutput(AbstractOutput):
                     raise OutputError(f"Statement Error: {err}") from err
                 except Exception as err:
                     raise OutputError(f"Error on SA UPSERT: {err}") from err
+
+    async def close(self):
+        """
+        Close Database connection.
+
+        """
+        self._engine.dispose()
+
+    def connect(self):
+        self._engine = create_async_engine(self._dsn, echo=False)
