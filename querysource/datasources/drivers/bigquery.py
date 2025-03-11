@@ -1,7 +1,7 @@
 from typing import Optional
 from datamodel import BaseModel, Field
 from datamodel.types import JSON_TYPES
-from ...utils.functions import cPrint
+from ...utils import cPrint
 from ...conf import (
     # BigQuery Default Credentials
     BIGQUERY_CREDENTIALS,

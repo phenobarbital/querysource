@@ -1,10 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Callable, Awaitable
-from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
+from typing import Dict, List, Optional, Union
 from navconfig.logging import logging
-from ....exceptions import OutputError
-
+from pandas import DataFrame
 
 class AbstractOutput(metaclass=ABCMeta):
     """
@@ -29,14 +27,7 @@ class AbstractOutput(metaclass=ABCMeta):
         self._do_update: bool = do_update
         self._connection: Awaitable = None
         self._driver: str = kwargs.get('driver', 'pg')
-        if not self._external:
-            try:
-                self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
-            except Exception as err:
-                logging.exception(err, stack_info=True)
-                raise OutputError(
-                    message=f"Connection Error: {err}"
-                ) from err
+        self.logger = logging.getLogger(__name__)
 
     def engine(self):
         return self._engine
@@ -44,13 +35,6 @@ class AbstractOutput(metaclass=ABCMeta):
     @property
     def is_external(self) -> bool:
         return self._external
-
-    def close(self):
-        """Closing Operations."""
-        try:
-            self._engine.dispose()
-        except Exception as err:
-            logging.error(err)
 
     def result(self):
         return self._results
@@ -62,6 +46,13 @@ class AbstractOutput(metaclass=ABCMeta):
     @columns.setter
     def columns(self, columns: list):
         self._columns = columns
+
+    @abstractmethod
+    def connect(self):
+        """
+        Connect to Database
+        """
+        pass
 
     @abstractmethod
     def db_upsert(self, table, conn, keys, data_iter):
@@ -76,3 +67,47 @@ class AbstractOutput(metaclass=ABCMeta):
         data_iter : Iterable that iterates the values to be inserted
         """
         pass
+
+    @abstractmethod
+    def write(
+        self,
+        table: str,
+        schema: str,
+        data: Union[List[Dict], DataFrame],
+        on_conflict: Optional[str] = 'replace',
+        pk: List[str] = None
+    ):
+        """
+        Execute an statement for writing data
+
+        Parameters
+        ----------
+        table : table name
+        schema : database schema
+        data : Iterable or pandas dataframe to be inserted.
+        on_conflict : str, default 'replace'
+            Conflict resolution strategy
+        pk : list of str, default None
+            Primary key columns
+        """
+        pass
+
+    @abstractmethod
+    async def close(self):
+        """
+        Close Database connection (if available)
+        """
+        pass
+
+    async def __aenter__(self):
+        """
+        Async Enter method.
+        """
+        self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Async Exit method.
+        """
+        await self.close()

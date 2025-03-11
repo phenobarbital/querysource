@@ -30,6 +30,7 @@ if not DBUSER:
     raise RuntimeError('Missing PostgreSQL Default Settings.')
 # database for changes (admin)
 default_dsn = f'postgres://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
+async_default_dsn = f'postgresql+asyncpg://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
 sqlalchemy_url = f'postgresql://{DBUSER}:{DBPWD}@{DBHOST}:{DBPORT}/{DBNAME}'
 
 # POSTGRESQL used by QuerySource:
@@ -42,6 +43,7 @@ PG_PORT = config.get('PG_PORT', fallback=5432)
 
 asyncpg_url = f'postgres://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
 database_url = f'postgresql://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+async_database_url = f'postgresql+asyncpg://{PG_USER}:{PG_PWD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
 SQLALCHEMY_DATABASE_URI = database_url
 
 POSTGRES_TIMEOUT = config.get('POSTGRES_TIMEOUT', fallback=3600000)

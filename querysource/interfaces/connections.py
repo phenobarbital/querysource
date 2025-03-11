@@ -45,6 +45,7 @@ from ..models import QueryModel
 DATASOURCES: dict = {}
 PROVIDERS: dict = {}
 SLUG_CACHE: dict = {}
+DRIVERS_CACHE: dict = {}
 EXTERNAL_PROVIDERS = ('http', 'rest', )
 
 
@@ -68,7 +69,6 @@ class Connection:
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs):
         self._connection = None
-        self._dsmodule = None
         if loop:
             self._loop = loop
         else:
@@ -171,8 +171,8 @@ class Connection:
                 clspath = f'querysource.datasources.drivers.{driver}'
                 clsname = f'{driver}Driver'
                 try:
-                    self._dsmodule = import_module(clspath)
-                    return getattr(self._dsmodule, clsname)
+                    _dsmodule = import_module(clspath)
+                    return getattr(_dsmodule, clsname)
                 except (AttributeError, ImportError) as ex:
                     raise RuntimeError(
                         f"QS: There is no Driver {driver}: {ex}"
@@ -196,23 +196,25 @@ class Connection:
         )
         default = None
         try:
-            if not self._dsmodule:
-                clspath = f'querysource.datasources.drivers.{driver}'
+            clspath = f'querysource.datasources.drivers.{driver}'
+            if clspath in DRIVERS_CACHE:
+                default = DRIVERS_CACHE[clspath]
+            else:
                 # load dynamically
                 self.logger.notice(
                     f"Loading Driver {driver} Module: {clspath}"
                 )
                 try:
-                    self._dsmodule = import_module(clspath)
+                    dsmodule = import_module(clspath)
                 except (AttributeError, ImportError) as ex:
                     raise RuntimeError(
                         f"QS: There is no DataSource called {driver}: {ex}"
                     ) from ex
-            clsname = f'{driver}_default'
-            self.logger.debug(
-                f"Getting Default Connection for Driver {driver} > {clsname}"
-            )
-            default = getattr(self._dsmodule, clsname)
+                clsname = f'{driver}_default'
+                self.logger.debug(
+                    f"Getting Default Connection for Driver {driver} > {clsname}"
+                )
+                default = getattr(dsmodule, clsname)
         except (AttributeError, ImportError) as ex:
             # No module for driver exists.
             raise RuntimeError(
@@ -388,7 +390,12 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
-    async def get_query_slug(self, slug: str, evt: asyncio.AbstractEventLoop = None, max_retries: int = 3) -> BaseModel:
+    async def get_query_slug(
+        self,
+        slug: str,
+        evt: asyncio.AbstractEventLoop = None,
+        max_retries: int = 3
+    ) -> BaseModel:
         db = self.get_connection(driver='pg', evt=evt)
         attempt = 0
         while attempt < max_retries:

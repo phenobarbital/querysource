@@ -52,7 +52,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         if self._do_update is False:
             on_conflict = 'append'
             use_merge = False
-        
+
         return await self.write(
             table,
             schema,
@@ -61,3 +61,18 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             pk=pk,
             use_merge=use_merge
         )
+
+    async def connect(self):
+        """
+        Connect to BigQuery
+        """
+        if not self._connection:
+            self.default_connection()
+
+    async def close(self):
+        """
+        Close Database connection.
+
+        we don't need to explicitly close the connection.
+        """
+        pass
