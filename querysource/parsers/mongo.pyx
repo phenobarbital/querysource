@@ -40,10 +40,6 @@ cdef class MongoParser(AbstractParser):
         self._base_query = {
             'collection_name': None,
             'query': {},
-            'projection': None,
-            'sort': None,
-            'skip': None,
-            'limit': None
         }
 
     def __init__(
