@@ -130,9 +130,11 @@ class Executor(BaseQuery):
                             if database:
                                 await conn.use(database)
                             collection = self._query.query.pop('collection')
+                            _filter = self._query.query.pop('filter', {})
+                            kwargs.update(self._query.query)
                             result, error = await conn.query(
                                 collection_name=collection,
-                                query=self._query.query,
+                                query=_filter,
                                 **kwargs,
                             )
                         else:

@@ -246,7 +246,6 @@ if isinstance(DOCUMENTDB_TLSFILE, str):
 if not DOCUMENTDB_TLSFILE:
     DOCUMENTDB_TLSFILE = BASE_DIR.joinpath('env', 'global-bundle.pem')
 
-print('DB > ', DOCUMENTDB_HOSTNAME)
 # Amazon AWS services:
 DEFAULT_AWS_REGION = config.get('DEFAULT_AWS_REGION', fallback='us-east-1')
 

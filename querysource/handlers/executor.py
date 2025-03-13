@@ -82,6 +82,11 @@ class QueryExecutor(AbstractHandler):
                 status=200,
                 headers=self.default_headers()
             )
+        except KeyError as ex:
+            return self.error(
+                response=f'Missing required field: {ex}',
+                status=400  # bad request
+            )
         except (QueryError, QueryException) as ex:
             return self.error(
                 response=ex.message,
