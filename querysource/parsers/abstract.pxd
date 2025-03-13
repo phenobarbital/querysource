@@ -13,6 +13,7 @@ cdef class AbstractParser:
     cdef public object definition
     cdef public object conditions
     cdef public str query_parsed
+    cdef public object query_object
     cdef public dict filter
     cdef public dict filter_options
     cdef public list fields

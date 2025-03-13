@@ -50,6 +50,12 @@ COMPILE_ARGS = ["-O3"]
 
 extensions = [
     Extension(
+        name='querysource.exceptions',
+        sources=['querysource/exceptions.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.parsers.abstract',
         sources=['querysource/parsers/abstract.pyx'],
         extra_compile_args=COMPILE_ARGS,
@@ -68,8 +74,8 @@ extensions = [
         language="c"
     ),
     Extension(
-        name='querysource.exceptions',
-        sources=['querysource/exceptions.pyx'],
+        name='querysource.parsers.mongo',
+        sources=['querysource/parsers/mongo.pyx'],
         extra_compile_args=COMPILE_ARGS,
         language="c"
     ),

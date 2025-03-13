@@ -289,6 +289,8 @@ class AbstractWriter(ABC):
             if error:
                 if isinstance(error, DataNotFound):
                     raise DataNotFound(str(error))
+                elif isinstance(error, Exception):
+                    raise error
                 else:
                     raise QueryException(error)
             if check_empty(self.data):

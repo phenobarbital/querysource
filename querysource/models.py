@@ -39,6 +39,9 @@ class QueryObject(ClassDict):
     hierarchy: Optional[list]
     # Limiting Query:
     querylimit: Optional[int]
+    _limit: Optional[int]
+    _offset: Optional[int]
+    # Query Information:
     query_raw: str
 
 

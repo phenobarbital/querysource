@@ -4,12 +4,17 @@ Data Provider for AWS DocumentDB.
 """
 from typing import (
     Any,
-    Union
+    List,
+    Optional,
+    Union,
+    Tuple
 )
 from collections import defaultdict
 import contextlib
 from aiohttp import web
 from datamodel.typedefs import SafeDict
+from datamodel.parsers.json import json_encoder, json_decoder
+from datamodel.exceptions import ParserError as JSONParserError
 from asyncdb.exceptions import (
     StatementError,
     ProviderError,
@@ -38,7 +43,7 @@ class documentdbProvider(BaseProvider):
         request: web.Request = None,
         **kwargs
     ):
-        """Class Initialization for MS SQL Server Provider."""
+        """Class Initialization for AWS DocumentDB Provider."""
         super(documentdbProvider, self).__init__(
             slug=slug,
             query=query,
@@ -49,6 +54,7 @@ class documentdbProvider(BaseProvider):
             **kwargs
         )
         self.is_raw = False
+        self._database = self._definition.source
         if qstype == 'slug':
             if self._definition.is_raw is True:
                 self.is_raw = True
@@ -56,37 +62,57 @@ class documentdbProvider(BaseProvider):
                 print(f"= Query is:: {self._query}")
         else:
             self._query = kwargs['query_raw']
-            print('RAW QUERY: ', self._query)
-            print(kwargs)
-            if kwargs['raw_query']:
+            if kwargs.get('raw_query', False):
                 try:
                     self._query = self.get_raw_query(self._query)
-                    print(f"= Query is:: {self._query}")
+                    self._logger.debug(f"= Raw Query: {self._query}")
                 except Exception as err:
                     raise DriverError(
                         f'Mongo Query Error: {err}'
                     ) from err
 
-    def get_raw_query(self, query):
-        sql = query
+    def get_raw_query(self, query: str) -> dict:
+        """
+        Process a raw query string with parameter substitution.
+
+        Args:
+            query: The raw query string (JSON format)
+
+        Returns:
+            dict: Processed MongoDB query object
+        """
         if self._conditions:
-            return sql.format_map(
+            return query.format_map(
                 defaultdict(str, SafeDict(**self._conditions))
             )
         conditions = {**self.replacement}
-        return sql.format_map(
+        query = query.format_map(
             defaultdict(str, SafeDict(**conditions))
         )
+        # Parse back into dictionary
+        try:
+            return json_decoder(query)
+        except JSONParserError:
+            return query
 
     async def prepare_connection(self):
+        """
+        Prepare the query for execution.
+
+        This method will use the parser to build the MongoDB query
+        from the JSON definition if needed.
+        """
         if not self._connection:
             # TODO: get a new connection
             raise DriverError(
-                'Cassandra: Database connection not prepared'
+                'DocumentDB: Database connection not prepared'
             )
         if self.is_raw is False:
             try:
                 self._query = await self._parser.build_query()
+                self._logger.debug(
+                    f":: Built Query: {self._query}"
+                )
             except Exception as ex:
                 raise ParserError(
                     f"Unable to parse Query: {ex}"
@@ -96,12 +122,36 @@ class documentdbProvider(BaseProvider):
         with contextlib.suppress(Exception):
             await self._connection.close()
 
-    async def columns(self):
-        # TODO: getting the columns of a prepared sentence
-        return self._columns
+    async def columns(self) -> List[str]:
+        """
+        Get the columns (fields) of the query result.
 
-    async def dry_run(self):
-        """Running Build Query and return the Query to be executed (without execution).
+        Returns:
+            List[str]: List of column names
+        """
+        if hasattr(self, '_columns') and self._columns:
+            return self._columns
+
+        # For MongoDB, columns come from the projection if specified
+        if isinstance(self._query, dict) and 'projection' in self._query:
+            projection = self._query['projection']
+            if projection:
+                # If projection specifies included fields with 1, use those
+                included = [field for field, value in projection.items()
+                            if value == 1 and field != '_id']
+                if included:
+                    return included
+
+        # If no projection or it only excludes fields, can't determine columns
+        # without executing the query
+        return []
+
+    async def dry_run(self) -> Tuple[Any, Optional[Exception]]:
+        """
+        Run the query preparation without execution and return the query.
+
+        Returns:
+            Tuple[Any, Optional[Exception]]: The prepared query and any error
         """
         return (self._query, None)
 
@@ -111,8 +161,19 @@ class documentdbProvider(BaseProvider):
         error = None
         try:
             error = None
+            print('QUERY > ', self._connection)
             async with await self._connection.connection() as conn:
-                result, error = await conn.query(self._query)
+                await conn.use(self._database)
+                # result, error = await conn.query(
+                #     **self._query
+                # )
+                query = {'limit': 1}
+                query = {'race_name': 'Breitenberg, Kihn and Walter Death March'}
+                result, error = await conn.query(
+                    collection_name='races',
+                    query=query,
+                )
+                print('RESULT > ', result)
                 if error:
                     return [None, error]
                 if result:
