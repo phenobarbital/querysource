@@ -80,7 +80,6 @@ cdef class AbstractParser:
             qobj = QueryObject(**conditions)
         else:
             qobj = conditions
-        print('QS CONDITIONS > ', qobj)
         # Use qobj to set up various attributes
         self.conditions = qobj
         if self.definition:
@@ -167,13 +166,11 @@ cdef class AbstractParser:
 
     async def _query_limit(self):
         # Limiting the Query
-        print('CALLING THE LIMIT > ', self.conditions)
         try:
-            self.querylimit = self.conditions.pop('_limit', None)
-            if self.querylimit is None:
+            self.querylimit = self.conditions.pop('_limit', 0)
+            if not self.querylimit:
                 self.querylimit = self.conditions.pop('querylimit', 0)
         except (KeyError, AttributeError) as e:
-            print('LIMIT > ', e)
             self.querylimit = 0
 
     async def _offset_pagination(self):
@@ -321,7 +318,6 @@ cdef class AbstractParser:
 
         Set the options for the query.
         """
-        print('QUIEN LLAMA A SET OPTIONS??')
         if not self.tablename:
             self.tablename = self.conditions.pop('tablename', None)
         if not self.schema:
