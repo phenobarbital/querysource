@@ -1,5 +1,7 @@
+from typing import Union
 from datamodel import Field
 from navconfig import BASE_DIR
+from pathlib import Path
 from .mongo import mongoDriver
 from ...conf import (
     MONGO_DRIVER,
@@ -16,7 +18,7 @@ class documentdbDriver(mongoDriver):
     driver: str = MONGO_DRIVER
     dbtype: str = "documentdb"
     ssl: bool = Field(required=False, default=DOCUMENTDB_USE_SSL)
-    tlsCAFile: str = Field(required=False, default=DOCUMENTDB_TLSFILE)
+    tlsCAFile: Union[str, Path] = Field(required=False, default=DOCUMENTDB_TLSFILE)
 
     def params(self):
         return {

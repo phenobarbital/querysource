@@ -255,9 +255,18 @@ class QueryConnection(Connection, metaclass=Singleton):
                                     default=val
                                 )
                         DATASOURCES[name] = driver(**data)
-                    except (ValueError, ValidationError) as ex:
+                    except (ValueError) as ex:
                         self.logger.exception(
                             ex,
+                            stack_info=False
+                        )
+                        continue
+                    except ValidationError as ex:
+                        self.logger.exception(
+                            (
+                                f"Datasource validation error: {ex} "
+                                f"Error: {ex.payload}"
+                            ),
                             stack_info=False
                         )
                         continue

@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Union
+from pathlib import Path
 from datamodel import BaseModel, Field
 from datamodel.types import JSON_TYPES
 from ...utils import cPrint
@@ -23,7 +24,7 @@ class bigqueryDriver(BaseModel):
     name: str = Field(required=False, comment='Google BigQuery.')
     description: str = Field(comment='Google Big Query', repr=False)
     icon: str = Field(required=False, comment='Icon Path for Datasource.', repr=False)
-    credentials: str = Field(required=True, comment='env/bigquery.json')
+    credentials: Union[str, Path] = Field(required=True, comment='env/bigquery.json')
     project_id: str = Field(required=True, comment='Google BigQuery.')
     dataset: str = Field(required=False)
     required_properties: Optional[tuple] = Field(
