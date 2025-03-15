@@ -25,6 +25,7 @@ class AbstractOutput(metaclass=ABCMeta):
         self._results: list = []
         self._columns: list = []
         self._do_update: bool = do_update
+        self._only_update: bool = kwargs.get('only_update', False)
         self._connection: Awaitable = None
         self._driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(__name__)

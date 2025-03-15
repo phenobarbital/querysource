@@ -8,7 +8,8 @@ from sqlalchemy import (
     MetaData,
     create_engine,
     Column,
-    text
+    text,
+    and_
 )
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -117,13 +118,10 @@ class PgOutput(AbstractOutput):
         # removing the columns from the table definition
         # columns = self._parent.columns
         columns = self._columns
-        # for column in columns:
-        col_instances = [
-            col for col in tbl._columns if col.name not in columns
-        ]
         # Removing the columns not involved in query
-        for col in col_instances:
-            tbl._columns.remove(col)
+        for c in list(tbl.columns):
+            if c.name not in columns:
+                tbl._columns.remove(c)
 
         primary_keys = []
         try:
@@ -134,35 +132,57 @@ class PgOutput(AbstractOutput):
                 raise OutputError(
                     f'No Primary Key on table {tablename}.'
                 ) from err
+
         for row in data_iter:
             row_dict = dict(zip(keys, row))
-            insert_stmt = postgresql.insert(tbl).values(**row_dict)
+            print('ROW >')
+            print(row_dict)
             # define dict of non-primary keys for updating
-            if self._do_update:
-                if len(columns) > 1:
-                    # TODO: add behavior of on_conflict_do_nothing
-                    update_dict = {
-                        c.name: c
-                        for c in insert_stmt.excluded
-                        if not c.primary_key and c.name in columns
-                    }
-                    if constraint is not None:
-                        upsert_stmt = insert_stmt.on_conflict_do_update(
-                            constraint=constraint, set_=update_dict
-                        )
+            if self._only_update:
+                # Build a standard UPDATE ... WHERE store_id=...
+                conditions = []
+                for pk in primary_keys:
+                    conditions.append(getattr(tbl.c, pk) == row_dict[pk])
+
+                # Combine them into a single AND condition
+                where_clause = and_(*conditions)
+                upsert_stmt = (
+                    tbl.update()
+                    .where(where_clause)
+                    .values(**row_dict)
+                )
+            else:
+                insert_stmt = postgresql.insert(tbl).values(
+                    # **row_dict
+                    {col: row_dict[col] for col in columns}
+                )
+                if self._do_update:
+                    if len(columns) > 1:
+                        update_dict = {
+                            c.name: c
+                            for c in insert_stmt.excluded
+                            if c.name in columns and not c.primary_key
+                        }
+                        print('UPDATE DICT > ', update_dict)
+                        if constraint is not None:
+                            upsert_stmt = insert_stmt.on_conflict_do_update(
+                                constraint=constraint,
+                                set_=update_dict
+                            )
+                        else:
+                            upsert_stmt = insert_stmt.on_conflict_do_update(
+                                index_elements=primary_keys,
+                                set_=update_dict
+                            )
                     else:
-                        upsert_stmt = insert_stmt.on_conflict_do_update(
-                            index_elements=primary_keys, set_=update_dict
+                        upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                            index_elements=primary_keys
                         )
                 else:
+                    # Do nothing on conflict
                     upsert_stmt = insert_stmt.on_conflict_do_nothing(
                         index_elements=primary_keys
                     )
-            else:
-                # Do nothing on conflict
-                upsert_stmt = insert_stmt.on_conflict_do_nothing(
-                    index_elements=primary_keys
-                )
             try:
                 conn.execute(upsert_stmt)
             except (ProgrammingError, OperationalError) as err:
