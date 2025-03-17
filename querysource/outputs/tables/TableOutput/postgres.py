@@ -420,11 +420,34 @@ class PgOutput(AbstractOutput):
 
         # Add RETURNING * if returning_all is True
         if self._returning_all:
-            upsert_stmt = upsert_stmt.returning(*[table.c[col] for col in valid_columns])
+            upsert_stmt = upsert_stmt.returning(
+                *[table.c[col] for col in valid_columns]
+            )
+        in_transaction = False
+        own_transaction = False
         try:
-            conn = use_conn or await self._engine.connect()
+            if use_conn:
+                conn = use_conn
+                # Check if this connection is already in a transaction
+                in_transaction = conn.in_transaction()
+            else:
+                if self._connection:
+                    conn = self._connection
+                    # Check if already in a transaction
+                    in_transaction = conn.in_transaction()
+                else:
+                    conn = await self._engine.connect()
+                    in_transaction = False
+                    own_transaction = True
+            # Start a transaction if not already in one
+            if not in_transaction:
+                await conn.begin()
             # Connect to database and execute upsert
             result = await conn.execute(upsert_stmt)
+            # Explicitly commit the transaction
+            # Only commit if we created our own connection
+            if own_transaction:
+                await conn.commit()
             # Get the result information
             if result.returns_rows:
                 # If the statement returns rows (like RETURNING clause), fetch them
@@ -433,6 +456,9 @@ class PgOutput(AbstractOutput):
                 # For INSERT/UPDATE without RETURNING, get rowcount
                 return {"rowcount": result.rowcount, "status": "success"}
         except (ProgrammingError, OperationalError) as err:
+            # Only rollback if we started our own transaction
+            if own_transaction and conn.in_transaction():
+                await conn.rollback()
             raise ValueError(f"SQL Operational Error: {err}") from err
         except StatementError as err:
             raise ValueError(f"Statement Error: {err}") from err
@@ -446,7 +472,7 @@ class PgOutput(AbstractOutput):
                 raise ValueError(error) from err
             raise ValueError(f"Error on PG UPSERT: {err}") from err
         finally:
-            if not use_conn:
+            if own_transaction:
                 await conn.close()
 
     async def upsert_many(
