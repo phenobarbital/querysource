@@ -25,12 +25,88 @@ from sqlalchemy.exc import (
 )
 import dataclasses
 from datamodel import BaseModel
+from datamodel.parsers.json import json_encoder
 from ....conf import (
     sqlalchemy_url,
     async_default_dsn
 )
 from ....exceptions import OutputError
 from .abstract import AbstractOutput
+
+
+class ReflectionHelper:
+    """
+    Helper for making reflection and instrospection of Database Objects.
+    """
+    _table: dict = {}
+    _columns: dict = {}
+    _pk_columns = None
+
+    def __init__(self, engine: AsyncEngine):
+        self._engine = engine
+
+    async def get_table(
+        self,
+        table_name: str,
+        schema: str = 'public',
+        primary_keys: list = None
+    ) -> dict:
+        table = f'{schema}.{table_name}'
+        if table not in self._table:
+            # Build the Table Definition:
+            metadata = MetaData()
+            metadata.bind = self._engine
+            async with self._engine.begin() as conn:
+                # Get table definition with reflection
+                pk_columns = []
+                if not primary_keys:
+                    pk_query = text(f"""
+                        SELECT a.attname
+                        FROM pg_index i
+                        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                        WHERE i.indrelid = '"{schema}"."{table_name}"'::regclass
+                        AND i.indisprimary;
+                    """)
+                    # Execute query to get primary keys
+                    pk_result = await conn.execute(pk_query)
+                    pk_rows = pk_result.fetchall()
+                    if not pk_rows:
+                        raise ValueError(
+                            f"No primary key found for table: {table}"
+                        )
+                    pk_columns = [row[0] for row in pk_rows]
+                else:
+                    pk_columns = primary_keys
+                # Reflect valid columns
+                cols_query = text("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = :schema
+                    AND table_name = :table_name;
+                """)
+                cols_result = await conn.execute(
+                    cols_query, {"schema": schema, "table_name": table_name}
+                )
+                cols_rows = cols_result.fetchall()
+                if not cols_rows:
+                    raise ValueError(
+                        f"Table {schema}.{table_name} not found or has no columns"
+                    )
+                valid_columns = {row[0] for row in cols_rows}
+                table_columns = set(valid_columns)
+                # Create a minimal table definition with just the columns we need
+                definition = Table(
+                    table_name,
+                    metadata,
+                    schema=schema,
+                    *(Column(name) for name in table_columns.union(set(pk_columns)))
+                )
+                self._table[table] = {
+                    "table": definition,
+                    "columns": valid_columns,
+                    "pk_columns": pk_columns
+                }
+        return self._table[table]
 
 
 class PgOutput(AbstractOutput):
@@ -60,27 +136,45 @@ class PgOutput(AbstractOutput):
         returning_all : bool, default False
             Whether to return all columns after insert/update operations (RETURNING *)
         """
-        if not dsn:
-            if use_async:
-                dsn = async_default_dsn
-            else:
-                dsn = sqlalchemy_url
+        dsn = async_default_dsn if use_async else sqlalchemy_url
         self._dsn = dsn
         super().__init__(parent, dsn, do_update=do_update, **kwargs)
         # Create an async Engine instance:
         self.use_async = use_async
         self._returning_all = returning_all
-        if use_async is False:
+        self._helper: Any = None
+        self._connection = None
+        if not use_async:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
+                self._helper = ReflectionHelper(self._engine)
             except Exception as err:
                 self.logger.exception(err, stack_info=True)
                 raise OutputError(
                     message=f"Connection Error: {err}"
                 ) from err
+        else:
+            self._engine = create_async_engine(
+                self._dsn,
+                echo=False,
+                pool_size=30,
+                max_overflow=10,
+                pool_timeout=10,
+                pool_pre_ping=True,
+            )
+            self._helper = ReflectionHelper(self._engine)
 
     def connect(self):
-        self._engine = create_async_engine(self._dsn, echo=False)
+        return self
+
+    async def open(self):
+        """
+        Open Database connection.
+        """
+        try:
+            self._connection = await self._engine.connect()
+        except Exception as err:
+            self.logger.error(err)
 
     def db_upsert(self, table, conn, keys, data_iter):
         """
@@ -135,8 +229,6 @@ class PgOutput(AbstractOutput):
 
         for row in data_iter:
             row_dict = dict(zip(keys, row))
-            print('ROW >')
-            print(row_dict)
             # define dict of non-primary keys for updating
             if self._only_update:
                 # Build a standard UPDATE ... WHERE store_id=...
@@ -163,7 +255,6 @@ class PgOutput(AbstractOutput):
                             for c in insert_stmt.excluded
                             if c.name in columns and not c.primary_key
                         }
-                        print('UPDATE DICT > ', update_dict)
                         if constraint is not None:
                             upsert_stmt = insert_stmt.on_conflict_do_update(
                                 constraint=constraint,
@@ -215,6 +306,8 @@ class PgOutput(AbstractOutput):
         primary_keys: Optional[List[str]] = None,
         constraint: Optional[str] = None,
         foreign_keys: Optional[Dict[str, Any]] = None,
+        as_values: bool = True,
+        use_conn: Any = None,
     ) -> Any:
         """Upsert a dictionary or dataclass object into PostgreSQL.
 
@@ -238,7 +331,10 @@ class PgOutput(AbstractOutput):
         """
         # Convert dataclass to dict if needed
         if isinstance(obj, BaseModel):
-            data = obj.to_dict(as_values=True, convert_enums=True)
+            if as_values:
+                data = obj.to_dict(as_values=True, convert_enums=True)
+            else:
+                data = obj.to_dict(convert_enums=True)
             if table_name is None:
                 table_name = obj.Meta.table
             if schema is None:
@@ -265,105 +361,42 @@ class PgOutput(AbstractOutput):
                 f"Schema not provided. Defaulting to '{schema}' schema."
             )
 
-        # Create metadata and table reference
-        metadata = MetaData()
-        args = []
+        # Create table reference
+        tableobj = await self._helper.get_table(
+            table_name,
+            schema=schema,
+            primary_keys=primary_keys
+        )
+        table = tableobj['table']
+        pk_columns = tableobj['pk_columns']
+        valid_columns = tableobj['columns']
 
-        # Add foreign key constraints if provided
-        if foreign_keys:
-            fk = foreign_keys
-            fn = ForeignKeyConstraint(
-                fk['columns'],
-                fk['fk'],
-                name=fk['name']
+        # Filter data to include only valid columns
+        filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+
+        if not filtered_data:
+            raise ValueError(
+                f"No valid columns found in data for table {schema}.{table_name}"
             )
-            args.append(fn)
 
-        # Get column names from the data
-        columns = list(data.keys())
+        # Get the columns from filtered_data
+        columns = list(filtered_data.keys())
 
-        # Connect to database and execute upsert
-        async with self._engine.begin() as conn:
-            # Get table definition with reflection
-            pk_columns = []
-            if primary_keys is None:
-                # Get primary key columns through a SQL query
-                table_with_schema = f'"{schema}"."{table_name}"'
-                pk_query = text(f"""
-                    SELECT a.attname
-                    FROM pg_index i
-                    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-                    WHERE i.indrelid = '"{schema}"."{table_name}"'::regclass
-                    AND i.indisprimary;
-                """)
+        # Create insert statement
+        insert_stmt = postgresql.insert(table).values(**filtered_data)
 
-                # Execute query to get primary keys
-                pk_result = await conn.execute(pk_query)
-                pk_rows = pk_result.fetchall()
-
-                if not pk_rows:
-                    raise ValueError(
-                        f"No primary key found for table: {table_with_schema}"
-                    )
-
-                pk_columns = [row[0] for row in pk_rows]
+        if self._do_update:
+            if len(columns) == 1:
+                upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                    index_elements=primary_keys
+                )
             else:
-                pk_columns = primary_keys
-
-            # Get all column names from the table
-            cols_query = text("""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = :schema
-                AND table_name = :table_name;
-            """)
-
-            # Execute query to get all columns
-            cols_result = await conn.execute(
-                cols_query, {"schema": schema, "table_name": table_name}
-            )
-            cols_rows = cols_result.fetchall()
-
-            if not cols_rows:
-                raise ValueError(
-                    f"Table {schema}.{table_name} not found or has no columns"
-                )
-
-            valid_columns = [row[0] for row in cols_rows]
-
-            # Filter data to include only valid columns
-            filtered_data = {k: v for k, v in data.items() if k in valid_columns}
-
-            if not filtered_data:
-                raise ValueError(
-                    f"No valid columns found in data for table {schema}.{table_name}"
-                )
-
-            # Now construct the upsert statement using the PostgreSQL dialect
-            # but without reflecting the table structure
-            column_set = set(filtered_data.keys())
-
-            # Create a minimal table definition with just the columns we need
-            table = Table(
-                table_name,
-                metadata,
-                schema=schema,
-                *(Column(name) for name in column_set.union(set(pk_columns)))
-            )
-
-            # Create insert statement
-            insert_stmt = postgresql.insert(table).values(**filtered_data)
-
-            if self._do_update:
                 # Define dict of non-primary keys for updating
-                update_dict = {}
-                for col_name in filtered_data:
-                    # Skip primary key columns
-                    if col_name in pk_columns:
-                        continue
-                    # Add to update dict with excluded reference
-                    update_dict[col_name] = insert_stmt.excluded[col_name]
-
+                update_dict = {
+                    c.name: c
+                    for c in insert_stmt.excluded
+                    if c.name in columns and not c.primary_key
+                }
                 if update_dict:  # Only update if there are non-primary key columns
                     if constraint is not None:
                         upsert_stmt = insert_stmt.on_conflict_do_update(
@@ -379,39 +412,42 @@ class PgOutput(AbstractOutput):
                     upsert_stmt = insert_stmt.on_conflict_do_nothing(
                         index_elements=pk_columns
                     )
+        else:
+            # Do nothing on conflict
+            upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                index_elements=pk_columns
+            )
+
+        # Add RETURNING * if returning_all is True
+        if self._returning_all:
+            upsert_stmt = upsert_stmt.returning(*[table.c[col] for col in valid_columns])
+        try:
+            conn = use_conn or await self._engine.connect()
+            # Connect to database and execute upsert
+            result = await conn.execute(upsert_stmt)
+            # Get the result information
+            if result.returns_rows:
+                # If the statement returns rows (like RETURNING clause), fetch them
+                return result.fetchall()
             else:
-                # Do nothing on conflict
-                upsert_stmt = insert_stmt.on_conflict_do_nothing(
-                    index_elements=pk_columns
-                )
+                # For INSERT/UPDATE without RETURNING, get rowcount
+                return {"rowcount": result.rowcount, "status": "success"}
+        except (ProgrammingError, OperationalError) as err:
+            raise ValueError(f"SQL Operational Error: {err}") from err
+        except StatementError as err:
+            raise ValueError(f"Statement Error: {err}") from err
+        except Exception as err:
+            if 'Unconsumed' in str(err):
+                error = f"""
+                There are missing columns on Table {table_name}.
 
-            # Add RETURNING * if returning_all is True
-            if self._returning_all:
-                upsert_stmt = upsert_stmt.returning(*[table.c[col] for col in valid_columns])
-
-            try:
-                result = await conn.execute(upsert_stmt)
-                # Get the result information
-                if result.returns_rows:
-                    # If the statement returns rows (like RETURNING clause), fetch them
-                    rows = result.fetchall()
-                    return rows
-                else:
-                    # For INSERT/UPDATE without RETURNING, get rowcount
-                    return {"rowcount": result.rowcount, "status": "success"}
-            except (ProgrammingError, OperationalError) as err:
-                raise ValueError(f"SQL Operational Error: {err}") from err
-            except StatementError as err:
-                raise ValueError(f"Statement Error: {err}") from err
-            except Exception as err:
-                if 'Unconsumed' in str(err):
-                    error = f"""
-                    There are missing columns on Table {table_name}.
-
-                    Error was: {err}
-                    """
-                    raise ValueError(error) from err
-                raise ValueError(f"Error on PG UPSERT: {err}") from err
+                Error was: {err}
+                """
+                raise ValueError(error) from err
+            raise ValueError(f"Error on PG UPSERT: {err}") from err
+        finally:
+            if not use_conn:
+                await conn.close()
 
     async def upsert_many(
         self,
@@ -421,6 +457,8 @@ class PgOutput(AbstractOutput):
         primary_keys: Optional[List[str]] = None,
         constraint: Optional[str] = None,
         foreign_keys: Optional[Dict[str, Any]] = None,
+        as_values: bool = True,
+        batch_size: int = 100
     ) -> None:
         """Upsert multiple dictionary or dataclass objects into PostgreSQL.
 
@@ -451,21 +489,34 @@ class PgOutput(AbstractOutput):
             return
 
         results = []
-        for obj in objects:
-            result = await self.upsert_object(
-                obj=obj,
-                table_name=table_name,
-                schema=schema,
-                primary_keys=primary_keys,
-                constraint=constraint,
-                foreign_keys=foreign_keys
-            )
-            results.append(result)
-        return results
+        try:
+            async with self._engine.begin() as conn:
+                # Process objects in batches
+                for i in range(0, len(objects), batch_size):
+                    batch = objects[i:i + batch_size]
+                    batch_results = []
+                    for obj in batch:
+                        result = await self.do_upsert(
+                            obj=obj,
+                            table_name=table_name,
+                            schema=schema,
+                            primary_keys=primary_keys,
+                            constraint=constraint,
+                            foreign_keys=foreign_keys,
+                            as_values=as_values,
+                            use_conn=conn
+                        )
+                        batch_results.append(result)
+                    results.extend(batch_results)
+                return results
+        except Exception as err:
+            raise ValueError(f"Error upserting objects: {err}") from err
 
     async def close(self):
         """Close the database engine."""
         try:
+            if self._connection:
+                await self._connection.close()
             if self.use_async:
                 await self._engine.dispose()
             else:

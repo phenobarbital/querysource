@@ -33,6 +33,9 @@ class AbstractOutput(metaclass=ABCMeta):
     def engine(self):
         return self._engine
 
+    def get_connection(self):
+        return self._connection
+
     @property
     def is_external(self) -> bool:
         return self._external
@@ -100,11 +103,18 @@ class AbstractOutput(metaclass=ABCMeta):
         """
         pass
 
+    async def open(self):
+        """
+        Open Database connection.
+        """
+        pass
+
     async def __aenter__(self):
         """
         Async Enter method.
         """
         self.connect()
+        await self.open()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
