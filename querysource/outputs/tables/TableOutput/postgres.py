@@ -1,5 +1,6 @@
-from typing import Union, Any, Dict, List, Optional
+from typing import Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
+import asyncio
 import inspect
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKeyConstraint
@@ -38,12 +39,13 @@ class ReflectionHelper:
     """
     Helper for making reflection and instrospection of Database Objects.
     """
-    _table: dict = {}
-    _columns: dict = {}
-    _pk_columns = None
+    _table: Dict[str, Dict] = {}
+    _columns: Dict[str, Set[str]] = {}
+    _pk_columns: Dict[str, List[str]] = {}
 
     def __init__(self, engine: AsyncEngine):
         self._engine = engine
+        self._is_async = hasattr(engine, 'run_sync')
 
     async def get_table(
         self,
@@ -52,7 +54,9 @@ class ReflectionHelper:
         primary_keys: list = None
     ) -> dict:
         table = f'{schema}.{table_name}'
-        if table not in self._table:
+        if table in self._table:
+            return self._table[table]
+        else:
             # Build the Table Definition:
             metadata = MetaData()
             metadata.bind = self._engine
@@ -101,13 +105,113 @@ class ReflectionHelper:
                     schema=schema,
                     *(Column(name) for name in table_columns.union(set(pk_columns)))
                 )
-                self._table[table] = {
+                result = {
                     "table": definition,
                     "columns": valid_columns,
                     "pk_columns": pk_columns
                 }
-        return self._table[table]
+                self._table[table] = result
+                return result
 
+    def get_table_sync(
+        self,
+        table_name: str,
+        schema: str = 'public',
+        primary_keys: Optional[List[str]] = None,
+        **options
+    ) -> Dict:
+        """
+        Synchronous version of get_table for non-async engines.
+        """
+        table_key = f'{schema}.{table_name}'
+        if table_key in self._table:
+            return self._table[table_key]
+
+        # Build the Table Definition:
+        metadata = MetaData()
+        metadata.bind = self._engine
+
+        with self._engine.connect() as conn:
+            # Get primary keys if not provided
+            pk_columns = []
+            if not primary_keys:
+                if table_key in self._pk_cache:
+                    pk_columns = self._pk_cache[table_key]
+                else:
+                    pk_query = text(f"""
+                        SELECT a.attname
+                        FROM pg_index i
+                        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                        WHERE i.indrelid = '"{schema}"."{table_name}"'::regclass
+                        AND i.indisprimary;
+                    """)
+                    pk_result = conn.execute(pk_query)
+                    pk_rows = pk_result.fetchall()
+                    if not pk_rows:
+                        raise ValueError(f"No primary key found for table: {table_key}")
+                    pk_columns = [row[0] for row in pk_rows]
+                    self._pk_columns[table_key] = pk_columns
+            else:
+                pk_columns = primary_keys
+                self._pk_columns[table_key] = pk_columns
+
+            # Get valid columns
+            if table_key in self._columns:
+                valid_columns = self._columns[table_key]
+            else:
+                cols_query = text("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = :schema
+                    AND table_name = :table_name;
+                """)
+                cols_result = conn.execute(
+                    cols_query, {"schema": schema, "table_name": table_name}
+                )
+                cols_rows = cols_result.fetchall()
+                if not cols_rows:
+                    raise ValueError(f"Table {schema}.{table_name} not found or has no columns")
+                valid_columns = {row[0] for row in cols_rows}
+                self._columns[table_key] = valid_columns
+
+            # Create a minimal table definition
+            definition = Table(
+                table_name,
+                metadata,
+                schema=schema,
+                **options
+            )
+
+            result = {
+                "table": definition,
+                "columns": valid_columns,
+                "pk_columns": pk_columns
+            }
+            self._table[table_key] = result
+            return result
+
+    def get_table_def(
+        self,
+        table_name: str,
+        schema: str = 'public',
+        primary_keys: Optional[List[str]] = None,
+        **kwargs
+    ) -> Dict:
+        """
+        Get table information, choosing async or sync method based on engine type.
+        """
+        if self._is_async:
+            # We need to run the async function in a synchronous context
+            # This is a bit of a hack but works for pandas to_sql integration
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're already in an async context, create a new task
+                return asyncio.create_task(self.get_table(table_name, schema, primary_keys))
+            else:
+                # We're in a sync context, run the async function to completion
+                return loop.run_until_complete(self.get_table(table_name, schema, primary_keys))
+        else:
+            return self.get_table_sync(table_name, schema, primary_keys, **kwargs)
 
 class PgOutput(AbstractOutput):
     """PgOutput.
@@ -121,8 +225,10 @@ class PgOutput(AbstractOutput):
         parent: Callable = None,
         dsn: str = None,
         do_update: bool = True,
+        only_update: bool = False,
         use_async: bool = False,
         returning_all: bool = False,
+        batch_size: int = 100,
         **kwargs
     ) -> None:
         """Initialize with database connection string.
@@ -138,12 +244,13 @@ class PgOutput(AbstractOutput):
         """
         dsn = async_default_dsn if use_async else sqlalchemy_url
         self._dsn = dsn
-        super().__init__(parent, dsn, do_update=do_update, **kwargs)
+        super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
         # Create an async Engine instance:
         self.use_async = use_async
         self._returning_all = returning_all
         self._helper: Any = None
         self._connection = None
+        self._batch_size = batch_size
         if not use_async:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
@@ -176,6 +283,101 @@ class PgOutput(AbstractOutput):
         except Exception as err:
             self.logger.error(err)
 
+    def _build_upsert_statement(
+        self,
+        table: Table,
+        keys: List[str],
+        values_list: List[tuple],
+        primary_keys: List[str],
+        constraint: Optional[str] = None
+    ):
+        """
+        Build an efficient upsert statement for multiple rows.
+
+        Parameters:
+        -----------
+        table : sqlalchemy.Table
+            SQLAlchemy table object
+        keys : list[str]
+            Column names for the insert
+        values_list : list[tuple]
+            List of value tuples to insert
+        primary_keys : list[str]
+            List of primary key column names
+        constraint : str, optional
+            Constraint name to use instead of primary keys
+
+        Returns:
+        --------
+        sqlalchemy.sql.dml.Insert
+            The prepared upsert statement
+        """
+        # Prepare the multi-value insert statement
+        insert_stmt = postgresql.insert(table).values([
+            dict(zip(keys, values)) for values in values_list
+        ])
+
+        # If we're doing an update on conflict
+        if self._do_update:
+            update_dict = {
+                c.name: c
+                for c in insert_stmt.excluded
+                if c.name in keys and c.name not in primary_keys
+            }
+
+            if constraint is not None:
+                upsert_stmt = insert_stmt.on_conflict_do_update(
+                    constraint=constraint,
+                    set_=update_dict
+                )
+            else:
+                upsert_stmt = insert_stmt.on_conflict_do_update(
+                    index_elements=primary_keys,
+                    set_=update_dict
+                )
+        else:
+            # Do nothing on conflict
+            upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                index_elements=primary_keys
+            )
+
+        return upsert_stmt
+
+    def _build_update_statement(self, table, keys, values_list, primary_keys):
+        """
+        Build update statements for the batch of rows.
+        Since UPDATE doesn't support multi-value syntax in PostgreSQL,
+        we need to create individual statements.
+
+        Parameters are the same as _build_upsert_statement.
+
+        Returns:
+        --------
+        list[sqlalchemy.sql.dml.Update]
+            List of update statements
+        """
+        update_statements = []
+        for values in values_list:
+            row_dict = dict(zip(keys, values))
+
+            # Build conditions for WHERE clause
+            conditions = []
+            for pk in primary_keys:
+                conditions.append(getattr(table.c, pk) == row_dict[pk])
+
+            # Combine them into a single AND condition
+            where_clause = and_(*conditions)
+
+            # Create update statement
+            update_stmt = (
+                table.update()
+                .where(where_clause)
+                .values(**row_dict)
+            )
+            update_statements.append(update_stmt)
+
+        return update_statements
+
     def db_upsert(self, table, conn, keys, data_iter):
         """
         Execute SQL statement for upserting data
@@ -192,6 +394,11 @@ class PgOutput(AbstractOutput):
             tablename = str(table.name)
         except Exception:
             tablename = self._parent.tablename
+
+        schema = self._parent.get_schema()
+        primary_keys = self._parent.primary_keys()
+        constraint = self._parent.constraints()
+
         if self._parent.foreign_keys():
             fk = self._parent.foreign_keys()
             fn = ForeignKeyConstraint(
@@ -200,14 +407,23 @@ class PgOutput(AbstractOutput):
                 name=fk['name']
             )
             args.append(fn)
-        metadata = MetaData()
-        metadata.bind = self._engine
-        constraint = self._parent.constraints()
+
+        # Create table reference
         options = {
-            'schema': self._parent.get_schema(),
             "autoload_with": self._engine
         }
-        tbl = Table(tablename, metadata, *args, **options)
+        tableobj = self._helper.get_table_def(
+            tablename,
+            schema=schema,
+            primary_keys=primary_keys,
+            **options
+        )
+        tbl = tableobj['table']
+        pk_columns = tableobj['pk_columns']
+
+        if not primary_keys:
+            primary_keys = pk_columns
+
         # get list of fields making up primary key
         # removing the columns from the table definition
         # columns = self._parent.columns
@@ -217,86 +433,66 @@ class PgOutput(AbstractOutput):
             if c.name not in columns:
                 tbl._columns.remove(c)
 
-        primary_keys = []
-        try:
-            primary_keys = self._parent.primary_keys()
-        except AttributeError as err:
-            primary_keys = [key.name for key in sa_inspect(tbl).primary_key]
-            if not primary_keys:
-                raise OutputError(
-                    f'No Primary Key on table {tablename}.'
-                ) from err
+        # Process data in batches
+        batch_size = self._batch_size
+        batch_values = []
 
         for row in data_iter:
-            row_dict = dict(zip(keys, row))
-            # define dict of non-primary keys for updating
-            if self._only_update:
-                # Build a standard UPDATE ... WHERE store_id=...
-                conditions = []
-                for pk in primary_keys:
-                    conditions.append(getattr(tbl.c, pk) == row_dict[pk])
-
-                # Combine them into a single AND condition
-                where_clause = and_(*conditions)
-                upsert_stmt = (
-                    tbl.update()
-                    .where(where_clause)
-                    .values(**row_dict)
-                )
-            else:
-                insert_stmt = postgresql.insert(tbl).values(
-                    # **row_dict
-                    {col: row_dict[col] for col in columns}
-                )
-                if self._do_update:
-                    if len(columns) > 1:
-                        update_dict = {
-                            c.name: c
-                            for c in insert_stmt.excluded
-                            if c.name in columns and not c.primary_key
-                        }
-                        if constraint is not None:
-                            upsert_stmt = insert_stmt.on_conflict_do_update(
-                                constraint=constraint,
-                                set_=update_dict
-                            )
-                        else:
-                            upsert_stmt = insert_stmt.on_conflict_do_update(
-                                index_elements=primary_keys,
-                                set_=update_dict
-                            )
-                    else:
-                        upsert_stmt = insert_stmt.on_conflict_do_nothing(
-                            index_elements=primary_keys
-                        )
-                else:
-                    # Do nothing on conflict
-                    upsert_stmt = insert_stmt.on_conflict_do_nothing(
-                        index_elements=primary_keys
+            batch_values.append(row)
+            if len(batch_values) >= batch_size:
+                # When batch size is reached, execute the batch
+                if self._only_update:
+                    # Build a standard UPDATE ... WHERE store_id=...
+                    update_statements = self._build_update_statement(
+                        tbl, keys, batch_values, primary_keys
                     )
-            try:
-                conn.execute(upsert_stmt)
-            except (ProgrammingError, OperationalError) as err:
-                raise OutputError(
-                    f"SQL Operational Error: {err}"
-                ) from err
-            except (StatementError) as err:
-                raise OutputError(
-                    f"Statement Error: {err}"
-                ) from err
-            except Exception as err:
-                if 'Unconsumed' in str(err):
-                    error = f"""
-                    There are missing columns on Table {tablename}.
+                    for stmt in update_statements:
+                        self._execute(stmt, conn, tablename)
+                else:
+                    upsert_stmt = self._build_upsert_statement(
+                        tbl, keys, batch_values, primary_keys, constraint
+                    )
+                    self._execute(upsert_stmt, conn, tablename)
+                # Clear the batch
+                batch_values = []
+        # Process any remaining rows
+        if batch_values:
+            if self._only_update:
+                update_statements = self._build_update_statement(
+                    tbl, keys, batch_values, primary_keys
+                )
+                for stmt in update_statements:
+                    self._execute(stmt, conn, tablename)
+            else:
+                upsert_stmt = self._build_upsert_statement(
+                    tbl, keys, batch_values, primary_keys, constraint
+                )
+                self._execute(upsert_stmt, conn, tablename)
 
-                    Error was: {err}
-                    """
-                    raise OutputError(
-                        error
-                    ) from err
+    def _execute(self, stmt, conn, tablename: str):
+        try:
+            conn.execute(stmt)
+        except (ProgrammingError, OperationalError) as err:
+            raise OutputError(
+                f"SQL Operational Error: {err}"
+            ) from err
+        except (StatementError) as err:
+            raise OutputError(
+                f"Statement Error: {err}"
+            ) from err
+        except Exception as err:
+            if 'Unconsumed' in str(err):
+                error = f"""
+                There are missing columns on Table {tablename}.
+
+                Error was: {err}
+                """
                 raise OutputError(
-                    f"Error on PG UPSERT: {err}"
+                    error
                 ) from err
+            raise OutputError(
+                f"Error on PG UPSERT: {err}"
+            ) from err
 
     async def do_upsert(
         self,
