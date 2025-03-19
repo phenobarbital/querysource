@@ -18,9 +18,7 @@ class iterFormat(OutputFormat):
     async def serialize(self, result, error, *args, **kwargs):
         if isinstance(result, pandas.DataFrame):
             data = result
-        elif isinstance(result, RowIterator):
-            data = [dict(row) for row in result]
-        elif isinstance(result, list):
+        elif isinstance(result, (RowIterator, list)):
             data = [dict(row) for row in result]
         else:
             data = dict(result)

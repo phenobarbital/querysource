@@ -71,6 +71,7 @@ class bigqueryProvider(sqlProvider):
         error = None
         try:
             async with await self._connection.connection() as conn:
+                conn.output_format('pandas')
                 result, error = await conn.query(self._query)
             if error:
                 return [result, error]

@@ -167,9 +167,9 @@ cdef class AbstractParser:
     async def _query_limit(self):
         # Limiting the Query
         try:
-            self.querylimit = self.conditions.pop('_limit', 0)
+            self.querylimit = int(self.conditions.pop('_limit', 0))
             if not self.querylimit:
-                self.querylimit = self.conditions.pop('querylimit', 0)
+                self.querylimit = int(self.conditions.pop('querylimit', 0))
         except (KeyError, AttributeError) as e:
             self.querylimit = 0
 
