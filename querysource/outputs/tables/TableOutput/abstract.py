@@ -15,6 +15,7 @@ class AbstractOutput(metaclass=ABCMeta):
         parent: Callable,
         dsn: str = None,
         do_update: bool = True,
+        only_update: bool = False,
         external: bool = False,
         **kwargs
     ) -> None:
@@ -25,7 +26,7 @@ class AbstractOutput(metaclass=ABCMeta):
         self._results: list = []
         self._columns: list = []
         self._do_update: bool = do_update
-        self._only_update: bool = kwargs.get('only_update', False)
+        self._only_update: bool = only_update
         self._connection: Awaitable = None
         self._driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(__name__)

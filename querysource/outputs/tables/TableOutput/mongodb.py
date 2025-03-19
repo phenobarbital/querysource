@@ -1,3 +1,4 @@
+from typing import List, Dict, Union, Optional, Any
 from collections.abc import Callable
 import pandas as pd
 from ....interfaces.databases.mongo import MongoDB
@@ -68,3 +69,33 @@ class MongoDBOutput(AbstractOutput, MongoDB):
         we don't need to explicitly close the connection.
         """
         pass
+
+    async def write(
+        self,
+        table: str,
+        schema: str,
+        data: Union[List[Dict], pd.DataFrame],
+        on_conflict: Optional[str] = 'replace',
+        pk: List[str] = None
+    ):
+        """
+        Execute an statement for writing data
+
+        Parameters
+        ----------
+        table : table name
+        schema : database schema
+        data : Iterable or pandas dataframe to be inserted.
+        on_conflict : str, default 'replace'
+            Conflict resolution strategy
+        pk : list of str, default None
+            Primary key columns
+        """
+        return await self.self._connection.write(
+            data,
+            table=table,
+            schema=schema,
+            if_exists=on_conflict,
+            pk=pk,
+            use_pandas=True
+        )

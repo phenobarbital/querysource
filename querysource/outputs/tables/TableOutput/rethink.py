@@ -1,3 +1,4 @@
+from typing import List, Dict, Union, Optional, Any
 from collections.abc import Callable
 import pandas as pd
 from ....exceptions import OutputError
@@ -70,3 +71,13 @@ class RethinkOutput(AbstractOutput, RethinkDB):
             self._connection.close()
             self._connection = None
         return True
+
+    def write(
+        self,
+        table: str,
+        schema: str,
+        data: Union[List[Dict], Any],
+        on_conflict: Optional[str] = 'replace',
+        pk: List[str] = None
+    ):
+        raise NotImplementedError("Method not implemented")

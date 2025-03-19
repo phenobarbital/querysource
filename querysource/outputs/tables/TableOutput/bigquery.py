@@ -1,3 +1,4 @@
+from typing import Union, Dict, List, Optional
 from collections.abc import Callable
 import pandas as pd
 from ....exceptions import OutputError
@@ -53,7 +54,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             on_conflict = 'append'
             use_merge = False
 
-        return await self.write(
+        return await self.self._connection.write(
             table,
             schema,
             data,
@@ -76,3 +77,33 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         we don't need to explicitly close the connection.
         """
         pass
+
+    async def write(
+        self,
+        table: str,
+        schema: str,
+        data: Union[List[Dict], pd.DataFrame],
+        on_conflict: Optional[str] = 'replace',
+        pk: List[str] = None
+    ):
+        """
+        Execute an statement for writing data
+
+        Parameters
+        ----------
+        table : table name
+        schema : database schema
+        data : Iterable or pandas dataframe to be inserted.
+        on_conflict : str, default 'replace'
+            Conflict resolution strategy
+        pk : list of str, default None
+            Primary key columns
+        """
+        return await self.self._connection.write(
+            data,
+            table_id=table,
+            dataset_id=schema,
+            if_exists=on_conflict,
+            pk=pk,
+            use_pandas=True
+        )

@@ -1,3 +1,4 @@
+from typing import List, Dict, Union, Optional, Any
 from collections.abc import Callable
 from sqlalchemy import MetaData, Table
 from sqlalchemy.exc import ProgrammingError, OperationalError, StatementError
@@ -103,3 +104,13 @@ class SaOutput(AbstractOutput):
 
     def connect(self):
         self._engine = create_async_engine(self._dsn, echo=False)
+
+    def write(
+        self,
+        table: str,
+        schema: str,
+        data: Union[List[Dict], Any],
+        on_conflict: Optional[str] = 'replace',
+        pk: List[str] = None
+    ):
+        raise NotImplementedError("Method not implemented")
