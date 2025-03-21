@@ -75,7 +75,6 @@ class bigqueryProvider(sqlProvider):
         try:
             async with await self._connection.connection() as conn:
                 result, error = await conn.query(self._query, factory='pandas')
-                print('HERE >>> RESULT >> ', type(result))
             if error:
                 return [result, error]
             if not is_empty(result):
