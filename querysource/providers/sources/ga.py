@@ -130,7 +130,6 @@ class ga(restSource):
                         f"Google Analytics: Missing Service Account Name or Google Credentials: {filename!s}"
                     )
                 self._credentials = str(filename)
-        print('CREDENTIALS: ', self._credentials)
         ### start configuring
         if self._credentials:
             os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(self._credentials)
@@ -214,7 +213,6 @@ class ga(restSource):
                 ],
                 order_bys=order_by
             )
-            # print(request, dimensions, metrics)
             response = client.run_report(request)
             self._result = await self.run_report(response)
             return self._result

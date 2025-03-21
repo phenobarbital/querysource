@@ -524,7 +524,6 @@ class DatasourceView(BaseView):
                             # "drv": driver # TODO: serialized driver
                         }
                         datasource = DataSource(**attributes)
-                        print(datasource)
                     except ValueError as ex:
                         return self.error(
                             response={

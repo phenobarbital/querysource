@@ -50,7 +50,6 @@ class InfluxParser(QueryParser):
                     )
             _where = "".join(where_cond)
             query = f"{query} {_where}"
-            print(where_cond)
         return query
 
     async def build_query(self, querylimit: int = None, offset: int = None):

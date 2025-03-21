@@ -27,7 +27,6 @@ class populartimes(restSource):
             **kwargs
     ) -> None:
 
-        print('Places > ', conditions, kwargs)
         self.rotate_ua: bool = True
 
         try:

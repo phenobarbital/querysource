@@ -275,7 +275,9 @@ class AbstractWriter(ABC):
     async def get_result(self):
         try:
             if isinstance(self.query, AbstractQuery):
-                self.data, error = await self.query.query(output_format=self.output_format)
+                self.data, error = await self.query.query(
+                    output_format=self.output_format
+                )
             elif isinstance(self.query, DataFrame):
                 if self.output_format == 'iter':
                     # convert dataframe into a list of dictionaries:

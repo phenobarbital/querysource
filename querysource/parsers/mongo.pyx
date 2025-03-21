@@ -261,7 +261,6 @@ cdef class MongoParser(AbstractParser):
             query['sort'] = ordering
 
         # Handle pagination
-        print('LIMIT > ', querylimit, self.querylimit)
         if querylimit:
             query['limit'] = querylimit
         elif self.querylimit:

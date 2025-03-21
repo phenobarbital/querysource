@@ -63,12 +63,10 @@ cdef class SQLParser(AbstractParser):
                         key = f'"{key}"'
                 except ValueError:
                     pass
-                # print('KEY: ', key, ' VALUE: ', value)
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
                     _format = None
-                # print('FILTER > > ', key, value, _format)
                 _, name, end = field_components(key)[0]
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):

@@ -281,8 +281,9 @@ class QueryService(AbstractHandler):
                         exception=ex
                     ) from ex
                 # query columns
-                if ctype := query.accepts():
-                    queryformat = mime_supported[ctype]
+                if not queryformat:
+                    if ctype := query.accepts():
+                        queryformat = mime_supported[ctype]
                 try:
                     output = DataOutput(
                         request,

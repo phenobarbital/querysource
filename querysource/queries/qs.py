@@ -6,6 +6,7 @@ Get queries from databases and other data sources.
 QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
+from typing import Optional
 from aiohttp import web
 from datamodel.libs.mapping import ClassDict
 from datamodel.typedefs import AttrDict
@@ -321,7 +322,7 @@ class QS(BaseQuery):
             return self._qs.accepts()
         return None
 
-    async def query(self, output_format: str = None):
+    async def query(self, output_format: Optional[str] = None):
         result = []
         error = None
         self._result = []
@@ -329,15 +330,15 @@ class QS(BaseQuery):
         if not self._qs:
             await self.build_provider()
         refresh = self._qs.refresh()
-        ## check the provider:
-        # if hasattr(self._qs, 'accepts'):
-        if accepts := self._qs.accepts():
-            # get the output format from the provider:
-            output_format = self.format_from_accepts(accepts)
+        ## check the output format of the writer:
+        if not output_format:
+            if accepts := self._qs.accepts():
+                # get the output format from the provider:
+                output_format = self.format_from_accepts(accepts)
         if output_format is not None:
             self.output_format(output_format)
+        self._logger.debug(f"= Output Format: {output_format}")
         self._logger.debug(f"= Refresh status: {refresh}")
-        print('OUTPUT FORMAT > ', output_format)
         if self.is_cached is True:
             # get the cache
             self._logger.debug('= Query Cache is Enabled =')

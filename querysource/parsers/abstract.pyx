@@ -401,8 +401,6 @@ cdef class AbstractParser:
             # every other option then set where conditions
             _filter = await self.set_conditions(conditions, conn)
             await self.set_where(_filter, conn)
-            # print(' :: CONDITIONS > ', self._conditions)
-            # print(' :: FILTER OPTIONS > ', self.filter)
         return self
 
     cdef object _merge_conditions_and_filters(self, dict conditions):

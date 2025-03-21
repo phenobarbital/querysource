@@ -115,7 +115,6 @@ class RethinkParser(AbstractParser):
 
     async def between(self, query):
         conditions = self.filter.copy()
-        print('CONDITION > ', self.cond_definition)
         for field in conditions:
             if field in self.cond_definition:
                 if self.cond_definition[field] in ('date', 'timestamp', 'datetime'):
@@ -157,7 +156,6 @@ class RethinkParser(AbstractParser):
         _filter = {}
         for key, value in self.filter.items():
             #  TODO: add field_definition to know escape characters or other conditions
-            # print('KEY > ', key, value)
             # check if an index exists, else, create:
             if indexing and key not in idx:
                 await table.index_create(key).run(conn)
