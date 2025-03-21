@@ -307,6 +307,8 @@ class QS(BaseQuery):
                 return 'raw'
             if 'html' in accepts:
                 return 'raw'
+            else:
+                return 'raw'
         return None
 
     def accepts(self) -> str:
@@ -335,6 +337,7 @@ class QS(BaseQuery):
         if output_format is not None:
             self.output_format(output_format)
         self._logger.debug(f"= Refresh status: {refresh}")
+        print('OUTPUT FORMAT > ', output_format)
         if self.is_cached is True:
             # get the cache
             self._logger.debug('= Query Cache is Enabled =')

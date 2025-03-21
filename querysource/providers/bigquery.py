@@ -65,14 +65,17 @@ class bigqueryProvider(sqlProvider):
                 ) from ex
         return self._columns
 
+    def accepts(self) -> str:
+        return None
+
     async def query(self):
         """Run a query on the Data Provider.
         """
         error = None
         try:
             async with await self._connection.connection() as conn:
-                conn.output_format('pandas')
-                result, error = await conn.query(self._query)
+                result, error = await conn.query(self._query, factory='pandas')
+                print('HERE >>> RESULT >> ', type(result))
             if error:
                 return [result, error]
             if not is_empty(result):

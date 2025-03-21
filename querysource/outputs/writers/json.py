@@ -12,7 +12,6 @@ class jsonWriter(AbstractWriter):
 
     async def get_response(self) -> web.StreamResponse:
         if isinstance(self.data, pd.DataFrame):
-            # self.data.to_json(buffer, orient='records')
             # Convert to a list of dictionaries
             data_dict = self.data.to_dict(orient='records')
             data = self._json.dumps(data_dict)

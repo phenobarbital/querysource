@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import traceback
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from pandas import DataFrame
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
 from navigator_session import get_session
@@ -310,9 +311,17 @@ class AbstractQuery(Connection):
             if not self._timeout:
                 self._timeout = int(DEFAULT_QUERY_TIMEOUT)
             try:
-                data = self._encoder(
-                    [dict(row) for row in result]
-                )
+                # encode the data
+                # if result is a Pandas dataframe
+                if isinstance(result, DataFrame):
+                    records = result.to_dict(orient='records')
+                    data = self._encoder(
+                        records
+                    )
+                else:
+                    data = self._encoder(
+                        [dict(row) if not isinstance(row, dict) else row for row in result]
+                    )
             except Exception as err:  # pylint: disable=W0703
                 self._logger.error(
                     f'Cache Encode Error: {err}'

@@ -25,7 +25,9 @@ class BigQuery(AbstractDB):
             "project_id": BIGQUERY_PROJECT_ID
         }
         self._driver: str = 'bigquery'
-        self._logger = logging.getLogger(f'DB.{self.__class__.__name__.lower()}')
+        self._logger = logging.getLogger(
+            f'DB.{self.__class__.__name__.lower()}'
+        )
 
     async def write(
         self,
@@ -138,5 +140,5 @@ class BigQuery(AbstractDB):
             table_id=table,
             dataset_id=schema,
             if_exists=on_conflict,
-            use_pandas=use_pandas  # Not using stream API
+            use_pandas=use_pandas
         )

@@ -141,10 +141,10 @@ class QueryService(AbstractHandler):
         - application/json + application/xml + application/html
         parameters:
         - name: slug
-          description: slug Id of Query
-          in: path
-          required: true
-          type: string
+            description: slug Id of Query
+            in: path
+            required: true
+            type: string
         responses:
             "200":
                 description: returns valid data
