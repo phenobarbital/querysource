@@ -12,6 +12,7 @@ from asyncdb.exceptions import (
 )
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
+from ..parsers.bigquery import BigQueryParser
 from ..types.validators import is_empty
 from ..exceptions import (
     DataNotFound,
@@ -28,7 +29,7 @@ class bigqueryProvider(sqlProvider):
     Provider for Google BigQuery.
     """
 
-    __parser__ = SQLParser
+    __parser__ = BigQueryParser
 
     def __init__(
         self,
