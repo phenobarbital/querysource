@@ -16,7 +16,9 @@ COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 cdef class BigQueryParser(SQLParser):
     """ BigQuery SQL Parser with support for JSON columns. """
 
-    cdef object _json_pattern
+    def __cinit__(self, *args, **kwargs):
+        """Initialize the critical attributes in __cinit__ to ensure they exist."""
+        self._json_pattern = re.compile(r"^([a-zA-Z0-9_]+)\.([a-zA-Z0-9_\.]+)$")
 
     def __init__(
         self,
@@ -27,8 +29,7 @@ cdef class BigQueryParser(SQLParser):
             *args,
             **kwargs
         )
-        # JSON pattern to detect dot notation
-        self._json_pattern = re.compile(r"^([a-zA-Z0-9_]+)\.([a-zA-Z0-9_\.]+)$")
+
 
     async def get_json_path(self, field: str) -> Tuple[str, str, bool]:
         """
