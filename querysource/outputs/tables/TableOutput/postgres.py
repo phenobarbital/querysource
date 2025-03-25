@@ -1,4 +1,4 @@
-from typing import Tuple, Union, Any, Dict, List, Optional, Set
+from typing import Union, Any, Dict, List, Optional, Set, Tuple
 from collections.abc import Callable
 from copy import deepcopy
 from functools import lru_cache
@@ -433,8 +433,7 @@ class PgOutput(AbstractOutput):
             primary_keys=primary_keys,
             **options
         )
-        tbl = tableobj['table']
-
+        tbl = deepcopy(tableobj['table'])
         pk_columns = tableobj['pk_columns']
 
         if not primary_keys:
