@@ -135,8 +135,8 @@ class ReflectionHelper:
             # Get primary keys if not provided
             pk_columns = []
             if not primary_keys:
-                if table_key in self._pk_cache:
-                    pk_columns = self._pk_cache[table_key]
+                if table_key in self._pk_columns:
+                    pk_columns = self._pk_columns[table_key]
                 else:
                     pk_query = text(f"""
                         SELECT a.attname
@@ -619,29 +619,24 @@ class PgOutput(AbstractOutput):
             upsert_stmt = upsert_stmt.returning(
                 *[table.c[col] for col in valid_columns]
             )
-        in_transaction = False
+        # Track connection and transaction ownership
         own_transaction = False
         try:
             if use_conn:
                 conn = use_conn
-                # Check if this connection is already in a transaction
-                in_transaction = conn.in_transaction()
             else:
-                if self._connection:
+                if self._connection is not None:
                     conn = self._connection
-                    # Check if already in a transaction
-                    in_transaction = conn.in_transaction()
                 else:
                     conn = await self._engine.connect()
-                    in_transaction = False
                     own_transaction = True
             # Start a transaction if not already in one
-            if not in_transaction:
+            if own_transaction:
                 await conn.begin()
             # Connect to database and execute upsert
             result = await conn.execute(upsert_stmt)
             # Explicitly commit the transaction
-            # Only commit if we created our own connection
+            # Only commit if we started the transaction ourselves
             if own_transaction:
                 await conn.commit()
             # Get the result information
@@ -737,7 +732,10 @@ class PgOutput(AbstractOutput):
     async def close(self):
         """Close the database engine."""
         try:
-            if self._connection:
+            if self._connection is not None:
+                # if we are in a transaction, then commit:
+                if self._connection.in_transaction():
+                    await self._connection.commit()
                 await self._connection.close()
             if self.use_async:
                 await self._engine.dispose()
@@ -748,6 +746,8 @@ class PgOutput(AbstractOutput):
             raise OutputError(
                 f"Error closing database connection: {err}"
             ) from err
+        finally:
+            self._connection = None
 
     def write(
         self,
