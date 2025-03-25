@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
 import asyncio
@@ -418,7 +419,7 @@ class PgOutput(AbstractOutput):
             primary_keys=primary_keys,
             **options
         )
-        tbl = tableobj['table']
+        tbl = deepcopy(tableobj['table'])
         pk_columns = tableobj['pk_columns']
 
         if not primary_keys:
