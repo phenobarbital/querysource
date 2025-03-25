@@ -1,5 +1,7 @@
-from typing import Union, Any, Dict, List, Optional, Set
+from typing import Tuple, Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
+from copy import deepcopy
+from functools import lru_cache
 import asyncio
 import inspect
 from sqlalchemy.dialects import postgresql
@@ -43,17 +45,30 @@ class ReflectionHelper:
     _columns: Dict[str, Set[str]] = {}
     _pk_columns: Dict[str, List[str]] = {}
 
-    def __init__(self, engine: AsyncEngine):
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        cache_ttl: int = 3600,
+        cache_size: int = 100
+    ):
         self._engine = engine
         self._is_async = hasattr(engine, 'run_sync')
+        self._cache_ttl: int = cache_ttl
+        self._cache_size: int = cache_size
+
+        # Use a dict to store cache entries with timestamps
+        self._table_cache: Dict[str, Tuple[float, Dict]] = {}
 
     async def get_table(
         self,
         table_name: str,
         schema: str = 'public',
-        primary_keys: list = None
+        primary_keys: list = None,
+        force_refresh: bool = False
     ) -> dict:
         table = f'{schema}.{table_name}'
+        if force_refresh:
+            del self._table[table]
         if table in self._table:
             return self._table[table]
         else:
@@ -419,6 +434,7 @@ class PgOutput(AbstractOutput):
             **options
         )
         tbl = tableobj['table']
+
         pk_columns = tableobj['pk_columns']
 
         if not primary_keys:
@@ -563,7 +579,7 @@ class PgOutput(AbstractOutput):
             schema=schema,
             primary_keys=primary_keys
         )
-        table = tableobj['table']
+        table = deepcopy(tableobj['table'])
         pk_columns = tableobj['pk_columns']
         valid_columns = tableobj['columns']
 
