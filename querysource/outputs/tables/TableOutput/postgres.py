@@ -334,11 +334,19 @@ class PgOutput(AbstractOutput):
 
         # If we're doing an update on conflict
         if self._do_update:
+            # Find columns suitable for update (non-primary key columns)
             update_dict = {
                 c.name: c
                 for c in insert_stmt.excluded
                 if c.name in keys and c.name not in primary_keys
             }
+
+            if not update_dict:
+                # No columns to update, do nothing on conflict
+                upsert_stmt = insert_stmt.on_conflict_do_nothing(
+                    index_elements=primary_keys
+                )
+                return upsert_stmt
 
             if constraint is not None:
                 upsert_stmt = insert_stmt.on_conflict_do_update(
