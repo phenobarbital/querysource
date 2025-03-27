@@ -1,4 +1,5 @@
 from typing import Any
+import re
 import numpy as np
 import nltk
 import xml.etree.ElementTree as ET
@@ -62,6 +63,7 @@ class rssapp(httpSource):
     url: str = "https://rss.app/feeds/{bundle_id}.xml"
     content_type: str = 'application/xml'
     _keywords: dict = {}
+    _negative_keywords: dict = {}
     use_gesim: bool = True
     threshold: float = 0.60
     fuzzy_threshold: int = 60
@@ -92,6 +94,7 @@ class rssapp(httpSource):
             self._model = None
             self.use_gesim = False
         self._conditions = {}
+        self._negative_keywords = {}
 
     async def load_keywords(self, bundle_id: str, vector_model: Any):
         try:
@@ -143,14 +146,41 @@ class rssapp(httpSource):
             self.logger.exception(err)
             return None
 
+    async def load_negative_keywords(self, bundle_id: str) -> Any:
+        """
+        Load negative keywords for the given bundle_id from the database
+        and populate the _negative_keywords attribute.
+        """
+        try:
+            async with await self._db.acquire() as conn:
+                result = await conn.fetch_one(
+                    "SELECT negative_keywords FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
+                    bundle_id
+                )
+                if not result:
+                    self.logger.warning(f"No negative keywords found for bundle_id {bundle_id}")
+                    self._negative_keywords[bundle_id] = []
+                    return None
+            # Process negative keywords (convert to lowercase for uniform matching)
+            self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
+            return True
+        except Exception as err:
+            self.logger.exception(err)
+            return None
+
     async def get_bundle(self, **kwargs) -> Any:
         try:
             bundle_id = self._args['bundle_id']
             if bundle_id not in self._keywords:
                 await self.load_keywords(bundle_id, self._model)
+
+            if bundle_id not in self._negative_keywords:
+                await self.load_negative_keywords(bundle_id)
+
             keywords = self._keywords[bundle_id]
+            negative_keywords = self._negative_keywords[bundle_id]
             _ = await self.aquery(namespaces=self.namespaces)
-            # Iterate over the news in xml parser:
+            # Iterate over the news items in the xml parser:
             root = self._parser
             channel = root.find("channel")
             for item in channel.findall('item'):
@@ -158,20 +188,29 @@ class rssapp(httpSource):
                 desc_node = item.find("description")
                 title = title_node.text if title_node is not None else ""
                 desc = desc_node.text if desc_node is not None else ""
-                # Combine title + description to simplify checking, and lower them
+                # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
-                matched = False
+
+                # First, check for negative keywords using regex matching:
+                if self._search_regex(combined_text, negative_keywords):
+                    print("Negative keyword found. Removing item.")
+                    channel.remove(item)
+                    continue
+
                 if self.use_gesim:
                     matched = self._search_gesim(combined_text, keywords)
                 else:
                     matched = self._search_fuzzy(combined_text, keywords)
+                # New: allow regex matching as an alternative search strategy
+                if not matched:
+                    matched = self._search_regex(combined_text, keywords)
                 if not matched:
                     channel.remove(item)
-            # at the end, convert the etree (root) object to string:
+            # Convert the updated XML tree back to a string:
             self._result = ET.tostring(
                 root,
                 encoding='utf-8',
-                method='xml',
+                method='xml'
             ).decode('utf-8')
             return self._result
         except Exception as err:
@@ -180,11 +219,11 @@ class rssapp(httpSource):
 
     def _search_gesim(self, text, keywords):
         """
-        Search for the best match between the text and the keywords
+        Search for the best match between the text and the keywords using semantic similarity.
         """
         # Convert combined text to a vector:
         item_vector = phrase_vector(text, self._model)
-        # 3. Compare similarity with each keyword vector
+        # Compare similarity with each keyword vector
         for kw, kv in keywords:
             # Cosine similarity
             dot = np.dot(item_vector, kv)
@@ -194,23 +233,37 @@ class rssapp(httpSource):
             if similarity >= self.threshold:  # pick a threshold
                 print(f"Semantic Match (sim={similarity:.2f}) with '{kw}'")
                 print("--------------------------------------------------")
-                # break if you want just the first match
                 return True
         return False
 
     def _search_fuzzy(self, text, keywords):
         """
-        Search for the best match between the text and the keywords
+        Search for the best match between the text and the keywords using fuzzy matching.
         """
         for kw in keywords:
             # split into phrases:
             similarity = 0
-            sentences = split_keyword(kw)
+            sentences = split_keyword(kw if isinstance(kw, str) else kw[0])
             similarity = sum(fuzz.partial_ratio(text, sentence) for sentence in sentences)
             similarity /= len(sentences)
             if similarity >= self.fuzzy_threshold:  # pick a threshold
-                print(f"Fuzzy Match (sim={similarity:.2f}) with '{kw}'")
+                print(f"Fuzzy Match (sim={similarity:.2f}) with '{kw if isinstance(kw, str) else kw[0]}'")
                 print("--------------------------------------------------")
-                # break if you want just the first match
+                return True
+        return False
+
+    def _search_regex(self, text, keywords):
+        """
+        Search for a regex match between the text and each keyword.
+        For each keyword, a regex pattern is created (using re.escape to handle special characters)
+        and a case-insensitive search is performed.
+        """
+        for kw in keywords:
+            # Determine the keyword string whether in tuple form or as a plain string
+            keyword_str = kw if isinstance(kw, str) else kw[0]
+            pattern = re.compile(re.escape(keyword_str), re.IGNORECASE)
+            if pattern.search(text):
+                print(f"Regex Match with '{keyword_str}'")
+                print("--------------------------------------------------")
                 return True
         return False
