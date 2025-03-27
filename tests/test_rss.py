@@ -3,6 +3,7 @@ import unittest
 import json
 import numpy as np
 import xml.etree.ElementTree as ET
+from querysource.providers.sources.rssapp import rssapp
 from typing import Any
 
 class DummyEncoder:
