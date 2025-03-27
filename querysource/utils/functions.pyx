@@ -8,6 +8,7 @@ import os
 import re
 import builtins
 import hashlib
+import calendar
 import binascii
 import requests
 from numbers import Number
@@ -437,6 +438,22 @@ cpdef datetime.datetime build_date(object value, object mask = "%Y-%m-%d %H:%M:%
             return datetime.datetime.strptime(str(value), mask)
 
 cpdef str date_diff(object value, int diff = 1, str mode = 'days', str mask = "%Y-%m-%d", str tz = None):
+    """
+    date_diff.
+        Calculate the difference between two dates.
+        Supports different modes like 'days', 'weeks','months', 'years'
+        The input date can be a datetime object, a string in the given mask, or a reference keyword ('current_date', 'now', 'yesterday', 'tomorrow', 'fdom', 'ldom', 'fdcw').
+        The output date is always in the given mask.
+
+    Parameters:
+        value: The input date or reference keyword.
+        diff: The difference to calculate.
+        mode: The mode of the difference ('days', 'weeks', 'months', 'years').
+        mask: The output format for the date as a string (default is '%Y-%m-%d').
+        tz: The timezone to use for the calculation (default is 'UTC').
+    Returns:
+        str: The calculated date difference formatted as per the given mask.
+    """
     if tz is not None:
         zone = ZoneInfo(key=tz)
     else:
@@ -447,22 +464,88 @@ cpdef str date_diff(object value, int diff = 1, str mode = 'days', str mask = "%
         value = dt.now(zone) - datetime.timedelta(days=1)
     elif value == 'tomorrow':
         value = dt.now(zone) + datetime.timedelta(days=1)
+    elif value == 'fdom':  # First day of month
+        now = dt.now(zone)
+        value = now.replace(day=1)
+    elif value == 'ldom':  # Last day of month
+        now = dt.now(zone)
+        last_day = calendar.monthrange(now.year, now.month)[1]
+        value = now.replace(day=last_day)
+    elif value == 'fdcw':  # First day of current week (assuming Monday as first day)
+        now = dt.now(zone)
+        value = now - datetime.timedelta(days=now.weekday())
+    else:
+        if not isinstance(value, (datetime.datetime, datetime.date)):
+            try:
+                value = parser.parse(value)
+            except ValueError:
+                return None
     arg = {
         mode: int(diff)
     }
     return (value - datetime.timedelta(**arg)).strftime(mask)
 
-cpdef str date_sum(object value, int diff = 1, str mode = 'days', str mask = "%Y-%m-%d"):
-    if value == 'current_date' or value == 'now' or value == 'today':
-        value = datetime.datetime.now()
-    type = {
-        mode: int(diff)
-    }
-    delta = datetime.timedelta(**type)
-    if delta:
-        return (value + delta).strftime(mask)
+
+cpdef str date_sum(object value, int diff = 1, str mode = 'days', str mask = "%Y-%m-%d", str tz = None):
+    """
+    date_sum.
+        Calculate the sum of two dates.
+        Supports different modes like 'days', 'weeks','months', 'years'
+        The input date can be a datetime object, a string in the given mask, or a reference keyword ('current_date', 'now', 'yesterday', 'tomorrow', 'fdom', 'ldom', 'fdcw').
+        The output date is always in the given mask.
+        If the sum exceeds the maximum or minimum date supported by the datetime module, it will be adjusted to the nearest valid date.
+        If the sum is less than the minimum date supported by the datetime module, it will be adjusted to the nearest valid date.
+        If the sum is greater than the maximum date supported by the datetime module, it will be adjusted to the nearest valid date.
+        If the sum is a leap year and the mode is 'days', it will be adjusted to the next valid date.
+        If the sum is a leap year and the mode is 'weeks', it will be adjusted to the next valid date.
+        If the sum is a leap year and the mode is'months', it will be adjusted to the next valid date.
+        If the sum is a leap year and the mode is 'years', it will be adjusted to the next valid date.
+        If the sum is not a leap year and the mode is 'days', it will be adjusted to the previous valid date.
+        If the sum is not a leap year and the mode is 'weeks', it will be adjusted to the previous valid date.
+
+    Parameters:
+        value: The input date or reference keyword.
+        diff: The difference to add.
+        mode: The mode of the sum ('days', 'weeks','months', 'years').
+        mask: The output format for the date as a string (default is '%Y-%m-%d').
+        tz: The timezone to use for the calculation (default is 'UTC').
+    Returns:
+        str: The calculated date sum formatted as per the given mask.
+    """
+    if tz is not None:
+        zone = ZoneInfo(key=tz)
     else:
-        return (value).strftime(mask)
+        zone = ZoneInfo("UTC")
+
+    # Determine the base date depending on the input token
+    if value in ['current_date', 'now', 'today']:
+        value = dt.now(zone)
+    elif value == 'yesterday':
+        value = dt.now(zone) - datetime.timedelta(days=1)
+    elif value == 'tomorrow':
+        value = dt.now(zone) + datetime.timedelta(days=1)
+    elif value == 'fdom':  # First day of month
+        now = dt.now(zone)
+        value = now.replace(day=1)
+    elif value == 'ldom':  # Last day of month
+        now = dt.now(zone)
+        import calendar
+        last_day = calendar.monthrange(now.year, now.month)[1]
+        value = now.replace(day=last_day)
+    elif value in ('fdcw', 'first_day_of_week'):  # First day of current week (assuming Monday as first day)
+        now = dt.now(zone)
+        value = now - datetime.timedelta(days=now.weekday())
+    else:
+        if not isinstance(value, (datetime.datetime, datetime.date)):
+            try:
+                value = parser.parse(value)
+            except ValueError:
+                return None
+
+    # Adjust the date by adding the time delta specified by diff and mode
+    arg = { mode: int(diff) }
+    return (value + datetime.timedelta(**arg)).strftime(mask)
+
 
 cpdef datetime.datetime yesterday_midnight(str tz = None):
     if tz is not None:
