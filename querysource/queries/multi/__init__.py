@@ -86,8 +86,8 @@ class MultiQS(BaseQuery):
         self._options: dict = query
         if query:
             ## Getting data from Queries or Files
-            self._queries = query.get('queries', {})
-            self._files = query.get('files', {})
+            self._queries = query.pop('queries', {})
+            self._files = query.pop('files', {})
         if not (self.slug or self._queries or self._files):
             # Check if both are effectively empty
             raise DriverError(
@@ -109,8 +109,8 @@ class MultiQS(BaseQuery):
                     slug_data = self._encoder.load(query.query_raw)
                     if slug_data:
                         self._options = slug_data
-                        self._queries = slug_data.get('queries', {})
-                        self._files = slug_data.get('files', {})
+                        self._queries = slug_data.pop('queries', {})
+                        self._files = slug_data.pop('files', {})
                         # TODO: making replacements based on POST data.
                 except Exception as exc:
                     self.logger.error(
@@ -189,7 +189,7 @@ class MultiQS(BaseQuery):
             obj = get_operator_module('Join')
             try:
                 ## making Join of Data
-                _join = self._options.get('Join', {})
+                _join = self._options.pop('Join', {})
                 if isinstance(_join, dict):
                     join = obj(data=result, **_join)
                     async with join as j:
@@ -208,9 +208,10 @@ class MultiQS(BaseQuery):
                 ) from ex
         elif 'Concat' in self._options:
             obj = get_operator_module('Concat')
+            _concat = self._options.pop('Concat', {})
             try:
                 ## making Join of Data
-                concat = obj(data=result, **self._options['Concat'])
+                concat = obj(data=result, **_concat)
                 async with concat as c:
                     result = await c.run()
             except (QueryException, Exception) as ex:
@@ -221,8 +222,9 @@ class MultiQS(BaseQuery):
         elif 'Melt' in self._options:
             try:
                 obj = get_operator_module('Melt')
+                _melt = self._options.pop('Melt', {})
                 ## making Join of Data
-                melt = obj(data=result, **self._options['Melt'])
+                melt = obj(data=result, **_melt)
                 async with melt as mt:
                     result = await mt.run()
             except (QueryException, Exception) as ex:
@@ -237,6 +239,9 @@ class MultiQS(BaseQuery):
                     result = list(result.values())[0]
             except TypeError:
                 pass
+        # From Here: iterating over the options:
+        for step_name, step in self._options.items():
+            print(step_name)
         ### Step 3: passing result to Transformations
         if 'Transform' in self._options:
             # passing the resultset for several transformation rules.

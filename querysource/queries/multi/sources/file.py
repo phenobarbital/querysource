@@ -83,7 +83,6 @@ class ThreadFile(threading.Thread):
                     self._queue.put({self._name: df})
                 )
             elif self._mime == 'text/csv':
-                print('HERE > ', type(file_content))
                 df = pd.read_csv(
                     file_content,
                     na_values=["NULL", "TBD"],
@@ -91,7 +90,6 @@ class ThreadFile(threading.Thread):
                     keep_default_na=False,
                     **self._params
                 )
-                print('DF > ', df)
                 df.infer_objects()
                 self._loop.run_until_complete(
                     self._queue.put({self._name: df})
