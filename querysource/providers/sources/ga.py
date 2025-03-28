@@ -25,7 +25,7 @@ from .rest import restSource
 
 class ga(restSource):
     """
-      Google Analytics GA4 API
+    Google Analytics GA4 API
         Get all information from Google Analytics
     """
     method: str = 'get'
@@ -39,6 +39,8 @@ class ga(restSource):
     ) -> None:
 
         # first: get type of Call
+        print('GA4: ', definition, conditions, kwargs)
+
         try:
             self.type = definition.params['type']
         except (ValueError, AttributeError, KeyError):
@@ -53,7 +55,10 @@ class ga(restSource):
         if 'property_id' in self._conditions:
             self.property_id = self._conditions['property_id']
             del self._conditions['property_id']
-        else:
+        elif 'property_id' in kwargs:
+            self.property_id = kwargs.get('property_id', None)
+
+        if not self.property_id:
             ## Default Propertiy ID:
             self.property_id = self._env.get('GA_PROPERTY_ID')
             if not self.property_id:
@@ -70,6 +75,8 @@ class ga(restSource):
         if 'account_name' in self._conditions:
             self._credentials = self._conditions['account_name']
             del self._conditions['account_name']
+        elif 'credentials' in kwargs:
+            self._credentials = kwargs.get('credentials')
         else:
             self._credentials = self._env.get('GA_CREDENTIALS')
 

@@ -1,6 +1,7 @@
 import time
 import traceback
 from aiohttp import web
+from pandas import DataFrame
 from ..outputs import DataOutput
 from ..exceptions import (
     ParserError,
@@ -213,6 +214,14 @@ class QueryHandler(AbstractHandler):
                     exception=ex
                 ) from ex
         ### Step 5: Passing result to TableOutput
+        if isinstance(result, str):
+            return self.response(
+                result,
+                headers={
+                    'X-Slug': str(slug),
+                    'X-Total-Time': f'{total_time:.2f} seconds',
+                }
+            )
         if isinstance(data, dict):
             if 'Output' in data:
                 ## Optionally saving result into Database (using Pandas)
@@ -224,7 +233,7 @@ class QueryHandler(AbstractHandler):
                             result = await obj.run()
         ### Step 6: passing Result to DataOutput
         try:
-            if result is None or result.empty:
+            if result is None or isinstance(result, DataFrame) and result.empty:
                 raise DataNotFound(
                     message="Empty Result",
                     code=404

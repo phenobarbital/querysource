@@ -185,6 +185,21 @@ class MultiQS(BaseQuery):
         while not self._queue.empty():
             result.update(await self._queue.get())
         ### Step 2: passing Results to virtual JOINs
+        if 'Info' in self._options:
+            obj = get_operator_module('Info')
+            try:
+                ## making Join of Data
+                info = obj(data=result)
+                async with info as i:
+                    result = await i.run()
+                return result, self._options
+            except DataNotFound:
+                raise
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error making Info: {ex!s}",
+                    exception=ex
+                ) from ex
         if 'Join' in self._options:
             obj = get_operator_module('Join')
             try:
@@ -232,6 +247,19 @@ class MultiQS(BaseQuery):
                     message=f"Error on Melting Data: {ex!s}",
                     exception=ex
                 ) from ex
+        elif 'Merge' in self._options:
+            obj = get_operator_module('Merge')
+            _merge = self._options.pop('Merge', {})
+            try:
+                ## making Join of Data
+                merge = obj(data=result, **_merge)
+                async with merge as m:
+                    result = await m.run()
+            except (QueryException, Exception) as ex:
+                raise self.Error(
+                    message=f"Error on Merge: {ex!s}",
+                    exception=ex
+                ) from ex
         else:
             # Fallback is to passing one single Dataframe:
             try:
@@ -239,38 +267,85 @@ class MultiQS(BaseQuery):
                     result = list(result.values())[0]
             except TypeError:
                 pass
-        # From Here: iterating over the options:
+        # Step 3: From Here: iterating over the options:
+        _output = self._options.pop('Output', None)
         for step_name, step in self._options.items():
-            print(step_name)
-        ### Step 3: passing result to Transformations
-        if 'Transform' in self._options:
-            # passing the resultset for several transformation rules.
-            for step in self._options['Transform']:
-                obj = None
-                for step_name, component in step.items():
-                    if step_name == 'GoogleMaps':
-                        obj = GoogleMaps(data=result, **component)
-                        async with obj as google:
-                            result = await google.run()
-                    else:
-                        try:
-                            clobj = get_transform_module(step_name)
-                            obj = clobj(data=result, **component)
-                            async with obj as o:
-                                result = await o.run()
-                        except ImportError as exc:
-                            raise
-                        except DataNotFound as ex:
-                            raise self.Error(
-                                message=f"No Data was Found after Transform {step_name}.",
-                                exception=ex,
-                                code=404
-                            ) from ex
-                        except Exception as ex:
-                            raise self.Error(
-                                message=f"Error on Transform {step_name}, error: {ex}",
-                                exception=ex
-                            ) from ex
+            if step_name == 'Transform':
+                for s in step:  # iterating over the list of transformations
+                    obj = None
+                    for s_name, component in s.items():
+                        if s_name == 'GoogleMaps':
+                            try:
+                                obj = GoogleMaps(data=result, **component)
+                                async with obj as google:
+                                    result = await google.run()
+                            except DataNotFound as ex:
+                                raise self.Error(
+                                    message="No Data was Found after GoogleMaps)",
+                                    exception=ex,
+                                    code=404
+                                )
+                            except (QueryException, Exception) as ex:
+                                raise self.Error(
+                                    message=f"Error on GoogleMaps: {ex!s}",
+                                    exception=ex
+                                ) from ex
+                        else:
+                            try:
+                                clobj = get_transform_module(s_name)
+                                obj = clobj(data=result, **component)
+                                async with obj as o:
+                                    result = await o.run()
+                            except ImportError as exc:
+                                raise
+                            except DataNotFound as ex:
+                                raise self.Error(
+                                    message=f"No Data was Found after Transform {step_name}.",
+                                    exception=ex,
+                                    code=404
+                                ) from ex
+                            except Exception as ex:
+                                raise self.Error(
+                                    message=f"Error on Transform {step_name}, error: {ex}",
+                                    exception=ex
+                                ) from ex
+                        continue
+            if step_name == 'Filter':
+                try:
+                    ## making Join of Data
+                    _filter = Filter(data=result, **step)
+                    async with _filter as f:
+                        result = await f.run()
+                except DataNotFound as ex:
+                    raise self.Error(
+                        message="No Data was Found after Filtering.",
+                        exception=ex,
+                        code=404
+                    )
+                except (QueryException, Exception) as ex:
+                    raise self.Error(
+                        message=f"Error on Filtering: {ex!s}",
+                        exception=ex
+                    ) from ex
+            if step_name == 'GroupBy':
+                try:
+                    obj = get_operator_module('GroupBy')
+                    ## Group By of Data:
+                    groupby = obj(data=result, **step)
+                    async with groupby as g:
+                        result = await g.run()
+                except DataNotFound as ex:
+                    raise self.Error(
+                        message="No Data was Found after GroupBy.",
+                        exception=ex,
+                        code=404
+                    )
+                except (QueryException, Exception) as ex:
+                    raise self.Error(
+                        message=f"Error on GroupBy: {ex!s}",
+                        exception=ex
+                    ) from ex
+            if step_name == 'Processors':
                 continue
         ### Step 4: Check if result is empty or is a dictionary of dataframes:
         if result is None:
@@ -281,48 +356,9 @@ class MultiQS(BaseQuery):
         # reduce to one single Dataframe:
         if isinstance(result, dict) and len(result) == 1:
             result = list(result.values())[0]
-        ### Step 5: Passing result to any Processor declared
-        if 'Processors' in self._options:
-            pass
-        ### Step 6: Applying Filters to result
-        if 'Filter' in self._options:
-            try:
-                ## making Join of Data
-                _filter = Filter(data=result, **self._options['Filter'])
-                async with _filter as f:
-                    result = await f.run()
-            except DataNotFound as ex:
-                raise self.Error(
-                    message="No Data was Found after Filtering.",
-                    exception=ex,
-                    code=404
-                )
-            except (QueryException, Exception) as ex:
-                raise self.Error(
-                    message=f"Error on Filtering: {ex!s}",
-                    exception=ex
-                ) from ex
-        if 'GroupBy' in self._options:
-            try:
-                obj = get_operator_module('GroupBy')
-                ## Group By of Data:
-                groupby = obj(data=result, **self._options['GroupBy'])
-                async with groupby as g:
-                    result = await g.run()
-            except DataNotFound as ex:
-                raise self.Error(
-                    message="No Data was Found after GroupBy.",
-                    exception=ex,
-                    code=404
-                )
-            except (QueryException, Exception) as ex:
-                raise self.Error(
-                    message=f"Error on GroupBy: {ex!s}",
-                    exception=ex
-                ) from ex
-        ### Step 7: Optionally saving result into Database (using Pandas)
-        if 'Output' in self._options:
-            for step in self._options['Output']:
+        ### Step 5: Optionally saving result into Database (using Pandas)
+        if _output:
+            for step in _output:
                 obj = None
                 for step_name, component in step.items():
                     if step_name in ('tableOutput', 'TableOutput'):
