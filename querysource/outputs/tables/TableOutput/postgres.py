@@ -1,7 +1,5 @@
-from typing import Union, Any, Dict, List, Optional, Set, Tuple
+from typing import Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
-from copy import deepcopy
-from functools import lru_cache
 import asyncio
 import inspect
 from sqlalchemy.dialects import postgresql
@@ -35,6 +33,7 @@ from ....conf import (
 )
 from ....exceptions import OutputError
 from .abstract import AbstractOutput
+from ....conf import TIMEZONE
 
 
 class ReflectionHelper:
@@ -45,30 +44,17 @@ class ReflectionHelper:
     _columns: Dict[str, Set[str]] = {}
     _pk_columns: Dict[str, List[str]] = {}
 
-    def __init__(
-        self,
-        engine: AsyncEngine,
-        cache_ttl: int = 3600,
-        cache_size: int = 100
-    ):
+    def __init__(self, engine: AsyncEngine):
         self._engine = engine
         self._is_async = hasattr(engine, 'run_sync')
-        self._cache_ttl: int = cache_ttl
-        self._cache_size: int = cache_size
-
-        # Use a dict to store cache entries with timestamps
-        self._table_cache: Dict[str, Tuple[float, Dict]] = {}
 
     async def get_table(
         self,
         table_name: str,
         schema: str = 'public',
-        primary_keys: list = None,
-        force_refresh: bool = False
+        primary_keys: list = None
     ) -> dict:
         table = f'{schema}.{table_name}'
-        if force_refresh:
-            del self._table[table]
         if table in self._table:
             return self._table[table]
         else:
@@ -244,6 +230,7 @@ class PgOutput(AbstractOutput):
         use_async: bool = False,
         returning_all: bool = False,
         batch_size: int = 100,
+        timezone: Optional[str] = None,
         **kwargs
     ) -> None:
         """Initialize with database connection string.
@@ -263,6 +250,7 @@ class PgOutput(AbstractOutput):
         # Create an async Engine instance:
         self.use_async = use_async
         self._returning_all = returning_all
+        self._tz: str = timezone or TIMEZONE
         self._helper: Any = None
         self._connection = None
         self._batch_size = batch_size
@@ -283,6 +271,7 @@ class PgOutput(AbstractOutput):
                 max_overflow=10,
                 pool_timeout=10,
                 pool_pre_ping=True,
+                connect_args={"server_settings": {"timezone": "UTC"}}
             )
             self._helper = ReflectionHelper(self._engine)
 
@@ -334,19 +323,11 @@ class PgOutput(AbstractOutput):
 
         # If we're doing an update on conflict
         if self._do_update:
-            # Find columns suitable for update (non-primary key columns)
             update_dict = {
                 c.name: c
                 for c in insert_stmt.excluded
                 if c.name in keys and c.name not in primary_keys
             }
-
-            if not update_dict:
-                # No columns to update, do nothing on conflict
-                upsert_stmt = insert_stmt.on_conflict_do_nothing(
-                    index_elements=primary_keys
-                )
-                return upsert_stmt
 
             if constraint is not None:
                 upsert_stmt = insert_stmt.on_conflict_do_update(
@@ -441,7 +422,7 @@ class PgOutput(AbstractOutput):
             primary_keys=primary_keys,
             **options
         )
-        tbl = deepcopy(tableobj['table'])
+        tbl = tableobj['table']
         pk_columns = tableobj['pk_columns']
 
         if not primary_keys:
@@ -586,7 +567,7 @@ class PgOutput(AbstractOutput):
             schema=schema,
             primary_keys=primary_keys
         )
-        table = deepcopy(tableobj['table'])
+        table = tableobj['table']
         pk_columns = tableobj['pk_columns']
         valid_columns = tableobj['columns']
 
@@ -657,6 +638,11 @@ class PgOutput(AbstractOutput):
             if own_transaction:
                 await conn.begin()
             # Connect to database and execute upsert
+            await conn.execute(
+                text(
+                    f"SET timezone TO '{self._tz}'"
+                )
+            )
             result = await conn.execute(upsert_stmt)
             # Explicitly commit the transaction
             # Only commit if we started the transaction ourselves
