@@ -221,7 +221,8 @@ setup(
         'datatable==1.1.0',
         "gensim==4.3.3",
         "thefuzz==0.22.1",
-        "modin==0.32.0"
+        "modin==0.32.0",
+        "weasyprint==65.0"
     ],
     extras_require={
         "analytics": [
