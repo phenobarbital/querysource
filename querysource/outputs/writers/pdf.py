@@ -37,9 +37,7 @@ class PDFWriter(ReportWriter):
             **kwargs
         )
         ### check if can change pdf library:
-        if 'library' in kwargs:
-            self.pdf_library = kwargs['library']
-            del kwargs['library']
+        self.pdf_library = kwargs.pop('library', 'weasyprint')
 
     def get_filename(self, filename, extension: str = None):
         dt = time.time()

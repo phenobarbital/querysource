@@ -1,3 +1,5 @@
+import pandas as pd
+import numpy as np
 from pandas import DataFrame
 from datamodel.parsers.json import json_encoder
 from ....exceptions import (
@@ -31,19 +33,24 @@ class Info(AbstractOperator):
                 # Create strings like "column > type > value of first row"
                 for col in df.columns:
                     col_type = str(df[col].dtype)
-                    # Safely get the first value or None if empty
                     first_value = None
+
                     if not df.empty:
                         first_value = df[col].iloc[0]
-                        # Convert to string representation, handle None/NaN
-                        if self._pd.isna(first_value):
-                            first_value = "NaN"
-                        else:
-                            try:
+                        try:
+                            # If it's a scalar, check for null
+                            if pd.api.types.is_scalar(first_value):
+                                if pd.isnull(first_value):
+                                    first_value = "NaN"
+                                else:
+                                    first_value = str(first_value)
+                            else:
+                                # If it's a list, array, or something else, stringify safely
                                 first_value = str(first_value)
-                            except:
-                                first_value = "Error converting to string"
-
+                            if len(first_value) > 100:
+                                first_value = first_value[:100] + "..."
+                        except Exception as err:
+                            first_value = f"Error getting value: {err!s} by {col_type}"
                     column_info = f"{col} > {col_type} > {first_value}"
                     columns_info.append(column_info)
 

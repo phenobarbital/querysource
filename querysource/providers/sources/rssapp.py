@@ -100,17 +100,17 @@ class rssapp(httpSource):
         try:
             async with await self._db.acquire() as conn:
                 result = await conn.fetch_one(
-                    "SELECT keywords, vector FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
+                    "SELECT keywords, negative_keywords, vector FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
                     bundle_id
                 )
                 if not result:
                     # Handle case where no row is found
                     self.logger.warning(f"No row found for bundle_id={bundle_id}")
                     return None
-            # vectors and keywords:
-            db_keywords = result['keywords']       # This should be a list of strings
-            db_vector = result['vector']         # This is either None or JSON
             if self.use_gesim:
+                # vectors and keywords:
+                db_keywords = result['keywords']       # This should be a list of strings
+                db_vector = result['vector']         # This is either None or JSON
                 if db_vector is not None:
                     # Load the vector from the database
                     stored_vectors = self._encoder.loads(db_vector)
@@ -140,6 +140,8 @@ class rssapp(httpSource):
                     """
                     await conn.execute(update_sql, vector_json, bundle_id)
             else:
+                if result['negative_keywords']:
+                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
                 self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
             return True
         except Exception as err:
@@ -162,7 +164,8 @@ class rssapp(httpSource):
                     self._negative_keywords[bundle_id] = []
                     return None
             # Process negative keywords (convert to lowercase for uniform matching)
-            self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
+            if result['negative_keywords']:
+                self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
             return True
         except Exception as err:
             self.logger.exception(err)
@@ -174,11 +177,8 @@ class rssapp(httpSource):
             if bundle_id not in self._keywords:
                 await self.load_keywords(bundle_id, self._model)
 
-            if bundle_id not in self._negative_keywords:
-                await self.load_negative_keywords(bundle_id)
-
             keywords = self._keywords[bundle_id]
-            negative_keywords = self._negative_keywords[bundle_id]
+            negative_keywords = self._negative_keywords.get('bundle_id', [])
             _ = await self.aquery(namespaces=self.namespaces)
             # Iterate over the news items in the xml parser:
             root = self._parser
@@ -191,11 +191,12 @@ class rssapp(httpSource):
                 # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
 
-                # First, check for negative keywords using regex matching:
-                if self._search_regex(combined_text, negative_keywords):
-                    print("Negative keyword found. Removing item.")
-                    channel.remove(item)
-                    continue
+                if negative_keywords:
+                    # First, check for negative keywords using regex matching:
+                    if self._search_regex(combined_text, negative_keywords):
+                        print("Negative keyword found. Removing item.")
+                        channel.remove(item)
+                        continue
 
                 if self.use_gesim:
                     matched = self._search_gesim(combined_text, keywords)

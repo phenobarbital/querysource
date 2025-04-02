@@ -4,6 +4,7 @@ QueryResource.
 Handler to accessing querysource objects from API.
 """
 from datetime import datetime
+from typing import Optional
 # for aiohttp
 from aiohttp import web
 from asyncdb.exceptions import (
@@ -163,13 +164,13 @@ class QueryService(AbstractHandler):
         params = self.query_parameters(request)
         args = self.match_parameters(request)
         writer_options = {}
+        _format: Optional[str] = None
         try:
             options = await self.json_data(request)
         except (TypeError, ValueError):
             options = {}
         try:
             slug: str = args['slug']
-            _format: str = 'json'
             try:
                 slug, _format = slug.split(':')
             except ValueError:
@@ -177,7 +178,6 @@ class QueryService(AbstractHandler):
             del args['slug']
         except KeyError:
             slug: str = None
-            _format: str = 'json'
         except Exception as err:  # pylint: disable=W0703
             return self.NotFound(
                 message="QS: Error with parameters.", exception=err
@@ -191,7 +191,7 @@ class QueryService(AbstractHandler):
         # extracting params from FORMAT:
         try:
             _format, tpl = _format.split('=')
-        except ValueError:
+        except (AttributeError, ValueError):
             tpl = None
         if tpl:
             try:

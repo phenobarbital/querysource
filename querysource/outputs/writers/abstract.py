@@ -73,15 +73,15 @@ class AbstractWriter(ABC):
     def enable_compression(self, response: web.StreamResponse) -> None:
         if self._compression is not None:
             if self._compression.strip().lower() == 'gzip':
-                logging.debug('WORKING WITH GZIP')
+                self.logger.debug('WORKING WITH GZIP')
                 response.enable_compression(force=web.ContentCoding.gzip)
             elif self._compression.strip().lower() == 'deflate':
-                logging.debug('WORKING WITH DEFLATE')
+                self.logger.debug('WORKING WITH DEFLATE')
                 response.enable_compression(force=web.ContentCoding.deflate)
             else:
                 response.enable_compression()
         else:
-            logging.debug('NO COMPRESSION')
+            self.logger.debug('NO COMPRESSION')
             self._compression = None
             response.enable_compression(force=False)
 
@@ -103,7 +103,7 @@ class AbstractWriter(ABC):
                 }
             )
             # response.content_length = len(data)
-            logging.debug('returning a Basic Web Response')
+            self.logger.debug('returning a Basic Web Response')
         elif response_type == 'stream':
             current = datetime.utcnow()
             last_modified = current - timedelta(hours=1)
@@ -300,7 +300,7 @@ class AbstractWriter(ABC):
         except (StatementError, NoDataFound, DataNotFound):
             raise
         except CacheException as err:
-            logging.error(
+            self.logger.error(
                 f'QS: Error on Cache: {err}'
             )
         except (DriverError, QueryException, Exception):

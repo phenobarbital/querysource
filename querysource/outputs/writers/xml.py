@@ -8,7 +8,7 @@ class XMLWriter(AbstractWriter):
     extension: str = '.xml'
     ctype: str = 'xml'
     download: bool = False
-    output_format: str = 'pandas'  # if using pandas DataFrame conversion
+    output_format: str = None
 
     def get_filename(self, filename, extension: str = None):
         dt = time.time()
