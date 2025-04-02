@@ -3,17 +3,21 @@ import re
 import numpy as np
 import nltk
 import xml.etree.ElementTree as ET
-from gensim.models import KeyedVectors
 from thefuzz import fuzz
 from querysource.providers.sources import httpSource
+try:
+    from gensim.models import KeyedVectors
+except ImportError:
+    KeyedVectors = None
 
 nltk.download('punkt_tab')
 nltk.download('averaged_perceptron_tagger_eng')
 
-# vector_model = KeyedVectors.load_word2vec_format(
-#     "GoogleNews-vectors-negative300.bin",
-#     binary=True
-# )
+if KeyedVectors:
+    vector_model = KeyedVectors.load_word2vec_format(
+        "GoogleNews-vectors-negative300.bin",
+        binary=True
+    )
 
 
 def split_keyword(keyword):
@@ -64,7 +68,7 @@ class rssapp(httpSource):
     content_type: str = 'application/xml'
     _keywords: dict = {}
     _negative_keywords: dict = {}
-    use_gesim: bool = True
+    use_gesim: bool = False
     threshold: float = 0.60
     fuzzy_threshold: int = 60
     namespaces: dict = {

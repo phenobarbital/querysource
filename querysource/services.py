@@ -6,7 +6,10 @@ from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
-import gensim.downloader as api
+try:
+    import gensim.downloader as api
+except ImportError:
+    api = None
 from aiohttp import web
 from datamodel.typedefs import Singleton
 from navconfig.logging import logging
@@ -200,7 +203,7 @@ class QuerySource(metaclass=Singleton):
             self.qs_stop
         )
         # Loading Vector Models at Startup:
-        if USE_VECTORS:
+        if USE_VECTORS and api:
             # overriding
             api.BASE_DIR = str(GENSIM_DATA_DIR)
             self.app['vector_models'] = {}

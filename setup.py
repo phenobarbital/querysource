@@ -180,7 +180,6 @@ setup(
         'odfpy==1.4.1',
         'xlrd==2.0.1',
         'reportlab==4.1.0',
-        'WeasyPrint==61.2',
         'APScheduler==3.10.4',
         'bs4==0.0.2',
         'simple_salesforce==1.12.3',
@@ -219,10 +218,9 @@ setup(
         'nltk==3.9.1',
         'wordcloud==1.9.4',
         'datatable==1.1.0',
-        "gensim==4.3.3",
         "thefuzz==0.22.1",
         "modin==0.32.0",
-        "weasyprint==65.0"
+        "WeasyPrint>=65.0"
     ],
     extras_require={
         "analytics": [
@@ -237,6 +235,9 @@ setup(
             'lux-api==0.5.1',
             'pomegranate==1.1.0',
             'autoviz==0.1.905'
+        ],
+        "vectors": [
+            "gensim==4.3.3",
         ]
     },
     tests_require=[
