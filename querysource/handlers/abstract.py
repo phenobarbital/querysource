@@ -53,7 +53,7 @@ class AbstractHandler(BaseHandler):
             elif accept := request.headers.get('Accept'):
                 f = mime_types[accept]
         except KeyError:
-            f = 'json'
+            pass
         if ctype is not None:  # Ctype passed by user:
             if ctype in mime_formats:
                 return ctype
