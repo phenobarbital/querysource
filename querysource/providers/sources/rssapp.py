@@ -4,6 +4,7 @@ import numpy as np
 import nltk
 import xml.etree.ElementTree as ET
 from thefuzz import fuzz
+from groq import Groq
 from querysource.providers.sources import httpSource
 try:
     from gensim.models import KeyedVectors
@@ -88,6 +89,7 @@ class rssapp(httpSource):
         bundle_id = request.match_info.get('var')
         self._args['bundle_id'] = bundle_id
         self._db = request.app['database']
+        self.groq_client = Groq(api_key=self._env.get('GROQ_API_KEY'))
         try:
             self._model = request.app['vector_models']["word2vec-google-news-300"]
             self.use_gesim = True
@@ -172,6 +174,7 @@ class rssapp(httpSource):
                 # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
 
+                '''
                 if self.use_gesim:
                     matched = self._search_gesim(combined_text, keywords)
                     negative_matched = self._search_gesim(combined_text, negative_keywords)
@@ -187,6 +190,12 @@ class rssapp(httpSource):
                     channel.remove(item)
                 # Remove if found in negative keywords
                 if negative_matched and matched:
+                    channel.remove(item)
+                '''
+                # LLM Search
+                matched = self._search_llm(combined_text, keywords, negative_keywords)
+                # Remove if not found in keywords
+                if not matched:
                     channel.remove(item)
 
             # Convert the updated XML tree back to a string:
@@ -250,3 +259,30 @@ class rssapp(httpSource):
                 print("--------------------------------------------------")
                 return True
         return False
+
+    def _search_llm(self, text, keywords, negative_keywords):
+        """
+        Search for a match between the text and each keyword. Using LLM model.
+        """
+        keywords = ', '.join(keywords)
+        negative_keywords = ', '.join(negative_keywords)
+        completion = self.groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You're a news editor and your role is filtering news based on keywords, all keywords need to compared in lowercase and uppercase on content"
+                },
+                {
+                    "role": "user",
+                    "content": f"Check if RSS news contain someone of the keywords '{keywords}' and not contains anyone of the keywords '{negative_keywords}'\n\nContent: {text}\n\nIf the content of RSS matches with conditions just response with the word 'TRUE', else, response with thye word 'FALSE'"
+                }
+            ],
+            temperature=1,
+            max_completion_tokens=1024,
+            top_p=1,
+            stop=None,
+        )
+        response = completion.choices[0].message.content
+        print('>>', response, True if response == 'TRUE' else False)
+        return True if response == 'TRUE' else False
