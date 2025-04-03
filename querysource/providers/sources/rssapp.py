@@ -145,31 +145,8 @@ class rssapp(httpSource):
                     await conn.execute(update_sql, vector_json, bundle_id)
             else:
                 if result['negative_keywords']:
-                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
+                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result.get('negative_keywords', [])]
                 self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
-            return True
-        except Exception as err:
-            self.logger.exception(err)
-            return None
-
-    async def load_negative_keywords(self, bundle_id: str) -> Any:
-        """
-        Load negative keywords for the given bundle_id from the database
-        and populate the _negative_keywords attribute.
-        """
-        try:
-            async with await self._db.acquire() as conn:
-                result = await conn.fetch_one(
-                    "SELECT negative_keywords FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
-                    bundle_id
-                )
-                if not result:
-                    self.logger.warning(f"No negative keywords found for bundle_id {bundle_id}")
-                    self._negative_keywords[bundle_id] = []
-                    return None
-            # Process negative keywords (convert to lowercase for uniform matching)
-            if result['negative_keywords']:
-                self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
             return True
         except Exception as err:
             self.logger.exception(err)
@@ -182,7 +159,7 @@ class rssapp(httpSource):
                 await self.load_keywords(bundle_id, self._model)
 
             keywords = self._keywords[bundle_id]
-            negative_keywords = self._negative_keywords.get('bundle_id', [])
+            negative_keywords = self._negative_keywords.get(bundle_id, [])
             _ = await self.aquery(namespaces=self.namespaces)
             # Iterate over the news items in the xml parser:
             root = self._parser
@@ -195,22 +172,23 @@ class rssapp(httpSource):
                 # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
 
-                if negative_keywords:
-                    # First, check for negative keywords using regex matching:
-                    if self._search_regex(combined_text, negative_keywords):
-                        print("Negative keyword found. Removing item.")
-                        channel.remove(item)
-                        continue
-
                 if self.use_gesim:
                     matched = self._search_gesim(combined_text, keywords)
+                    negative_matched = self._search_gesim(combined_text, negative_keywords)
                 else:
                     matched = self._search_fuzzy(combined_text, keywords)
+                    negative_matched = self._search_fuzzy(combined_text, negative_keywords)
                 # New: allow regex matching as an alternative search strategy
                 if not matched:
                     matched = self._search_regex(combined_text, keywords)
+                    negative_matched = self._search_regex(combined_text, negative_keywords)
+                # Remove if not found in keywords
                 if not matched:
                     channel.remove(item)
+                # Remove if found in negative keywords
+                if negative_matched and matched:
+                    channel.remove(item)
+
             # Convert the updated XML tree back to a string:
             self._result = ET.tostring(
                 root,
