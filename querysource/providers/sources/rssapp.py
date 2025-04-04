@@ -4,6 +4,7 @@ import numpy as np
 import nltk
 import xml.etree.ElementTree as ET
 from thefuzz import fuzz
+from groq import Groq
 from querysource.providers.sources import httpSource
 try:
     from gensim.models import KeyedVectors
@@ -71,6 +72,9 @@ class rssapp(httpSource):
     use_gesim: bool = False
     threshold: float = 0.60
     fuzzy_threshold: int = 60
+    llm_model: str = None
+    use_llm: bool = False
+    
     namespaces: dict = {
         'media': 'http://search.yahoo.com/mrss/',
         'dc': 'http://purl.org/dc/elements/1.1/',
@@ -88,6 +92,10 @@ class rssapp(httpSource):
         bundle_id = request.match_info.get('var')
         self._args['bundle_id'] = bundle_id
         self._db = request.app['database']
+        self.groq_client = Groq(api_key=self._env.get('GROQ_API_KEY'))
+        self.llm_model = self._env.get('RSSAPP_LLM_MODEL', fallback='llama-3.3-70b-versatile')
+        self.use_llm = self._env.getboolean('RSSAPP_USE_LLM', fallback=False)
+        
         try:
             self._model = request.app['vector_models']["word2vec-google-news-300"]
             self.use_gesim = True
@@ -145,7 +153,7 @@ class rssapp(httpSource):
                     await conn.execute(update_sql, vector_json, bundle_id)
             else:
                 if result['negative_keywords']:
-                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
+                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result.get('negative_keywords', [])]
                 self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
             return True
         except Exception as err:
@@ -159,7 +167,7 @@ class rssapp(httpSource):
                 await self.load_keywords(bundle_id, self._model)
 
             keywords = self._keywords[bundle_id]
-            negative_keywords = self._negative_keywords.get('bundle_id', [])
+            negative_keywords = self._negative_keywords.get(bundle_id, [])
             _ = await self.aquery(namespaces=self.namespaces)
             # Iterate over the news items in the xml parser:
             root = self._parser
@@ -172,22 +180,30 @@ class rssapp(httpSource):
                 # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
 
-                if negative_keywords:
-                    # First, check for negative keywords using regex matching:
-                    if self._search_regex(combined_text, negative_keywords):
-                        print("Negative keyword found. Removing item.")
+                if self.use_llm:
+                    # LLM Search
+                    matched = self._search_llm(combined_text, keywords, negative_keywords)
+                    # Remove if not found in keywords
+                    if not matched:
                         channel.remove(item)
-                        continue
-
-                if self.use_gesim:
-                    matched = self._search_gesim(combined_text, keywords)
                 else:
-                    matched = self._search_fuzzy(combined_text, keywords)
-                # New: allow regex matching as an alternative search strategy
-                if not matched:
-                    matched = self._search_regex(combined_text, keywords)
-                if not matched:
-                    channel.remove(item)
+                    if self.use_gesim:
+                        matched = self._search_gesim(combined_text, keywords)
+                        negative_matched = self._search_gesim(combined_text, negative_keywords)
+                    else:
+                        matched = self._search_fuzzy(combined_text, keywords)
+                        negative_matched = self._search_fuzzy(combined_text, negative_keywords)
+                    # New: allow regex matching as an alternative search strategy
+                    if not matched:
+                        matched = self._search_regex(combined_text, keywords)
+                        negative_matched = self._search_regex(combined_text, negative_keywords)
+                    # Remove if not found in keywords
+                    if not matched:
+                        channel.remove(item)
+                    # Remove if found in negative keywords
+                    if negative_matched and matched:
+                        channel.remove(item)
+
             # Convert the updated XML tree back to a string:
             self._result = ET.tostring(
                 root,
@@ -249,3 +265,30 @@ class rssapp(httpSource):
                 print("--------------------------------------------------")
                 return True
         return False
+
+    def _search_llm(self, text, keywords, negative_keywords):
+        """
+        Search for a match between the text and each keyword. Using LLM model.
+        """
+        keywords = ', '.join(keywords)
+        negative_keywords = ', '.join(negative_keywords)
+        completion = self.groq_client.chat.completions.create(
+            model=self.llm_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You're a news editor and your role is filtering news based on keywords, all keywords need to compared in lowercase and uppercase on content"
+                },
+                {
+                    "role": "user",
+                    "content": f"Check if RSS news contain someone of the keywords '{keywords}' and not contains anyone of the keywords '{negative_keywords}'\n\nContent: {text}\n\nIf the content of RSS matches with conditions just response with the word 'TRUE', else, response with the word 'FALSE'"
+                }
+            ],
+            temperature=1,
+            max_completion_tokens=1024,
+            top_p=1,
+            stop=None,
+        )
+        response = completion.choices[0].message.content
+        print('>>', response, True if response == 'TRUE' else False)
+        return True if response == 'TRUE' else False
