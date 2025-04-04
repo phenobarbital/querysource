@@ -38,18 +38,12 @@ class ga(restSource):
             **kwargs
     ) -> None:
 
-        # first: get type of Call
-        print('GA4: ', definition, conditions, kwargs)
-
         try:
             self.type = definition.params['type']
         except (ValueError, AttributeError, KeyError):
             self.type = None
-        try:
-            self.type = conditions['type']
-            del conditions['type']
-        except (ValueError, AttributeError, KeyError):
-            pass
+        if not self.type:
+            self.type = conditions.pop('type', None)
 
         # property ID:
         if 'property_id' in self._conditions:

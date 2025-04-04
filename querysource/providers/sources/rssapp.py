@@ -152,29 +152,6 @@ class rssapp(httpSource):
             self.logger.exception(err)
             return None
 
-    async def load_negative_keywords(self, bundle_id: str) -> Any:
-        """
-        Load negative keywords for the given bundle_id from the database
-        and populate the _negative_keywords attribute.
-        """
-        try:
-            async with await self._db.acquire() as conn:
-                result = await conn.fetch_one(
-                    "SELECT negative_keywords FROM rssapp.bundles_keywords WHERE bundle_id = $1;",
-                    bundle_id
-                )
-                if not result:
-                    self.logger.warning(f"No negative keywords found for bundle_id {bundle_id}")
-                    self._negative_keywords[bundle_id] = []
-                    return None
-            # Process negative keywords (convert to lowercase for uniform matching)
-            if result['negative_keywords']:
-                self._negative_keywords[bundle_id] = [kw.lower() for kw in result['negative_keywords']]
-            return True
-        except Exception as err:
-            self.logger.exception(err)
-            return None
-
     async def get_bundle(self, **kwargs) -> Any:
         try:
             bundle_id = self._args['bundle_id']

@@ -2,6 +2,7 @@ from typing import Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
 import asyncio
 import inspect
+from copy import deepcopy
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import ForeignKeyConstraint
 from sqlalchemy import (
@@ -119,13 +120,14 @@ class ReflectionHelper:
         table_name: str,
         schema: str = 'public',
         primary_keys: Optional[List[str]] = None,
+        use_cache: bool = True,
         **options
     ) -> Dict:
         """
         Synchronous version of get_table for non-async engines.
         """
         table_key = f'{schema}.{table_name}'
-        if table_key in self._table:
+        if use_cache and table_key in self._table:
             return self._table[table_key]
 
         # Build the Table Definition:
@@ -196,6 +198,7 @@ class ReflectionHelper:
         table_name: str,
         schema: str = 'public',
         primary_keys: Optional[List[str]] = None,
+        use_cache: bool = True,
         **kwargs
     ) -> Dict:
         """
@@ -212,7 +215,7 @@ class ReflectionHelper:
                 # We're in a sync context, run the async function to completion
                 return loop.run_until_complete(self.get_table(table_name, schema, primary_keys))
         else:
-            return self.get_table_sync(table_name, schema, primary_keys, **kwargs)
+            return self.get_table_sync(table_name, schema, primary_keys, use_cache, **kwargs)
 
 class PgOutput(AbstractOutput):
     """PgOutput.
@@ -246,6 +249,7 @@ class PgOutput(AbstractOutput):
         """
         dsn = async_default_dsn if use_async else sqlalchemy_url
         self._dsn = dsn
+        self.use_cache: bool = kwargs.get('use_cache', False)
         super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
         # Create an async Engine instance:
         self.use_async = use_async
@@ -366,8 +370,7 @@ class PgOutput(AbstractOutput):
 
             # Build conditions for WHERE clause
             conditions = []
-            for pk in primary_keys:
-                conditions.append(getattr(table.c, pk) == row_dict[pk])
+            conditions.extend(getattr(table.c, pk) == row_dict[pk] for pk in primary_keys)
 
             # Combine them into a single AND condition
             where_clause = and_(*conditions)
@@ -416,13 +419,18 @@ class PgOutput(AbstractOutput):
         options = {
             "autoload_with": self._engine
         }
-        tableobj = self._helper.get_table_def(
+        tbl = self._helper.get_table_def(
             tablename,
             schema=schema,
             primary_keys=primary_keys,
+            use_cache=self.use_cache,
             **options
         )
-        tbl = tableobj['table']
+        # Get the table object (copied):
+        tableobj = deepcopy(tbl)
+
+        # Get the table and primary key columns
+        tbl = deepcopy(tableobj.get('table'))
         pk_columns = tableobj['pk_columns']
 
         if not primary_keys:
@@ -446,7 +454,7 @@ class PgOutput(AbstractOutput):
             if len(batch_values) >= batch_size:
                 # When batch size is reached, execute the batch
                 if self._only_update:
-                    # Build a standard UPDATE ... WHERE store_id=...
+                    # Build a standard UPDATE ... WHERE field=...
                     update_statements = self._build_update_statement(
                         tbl, keys, batch_values, primary_keys
                     )
