@@ -72,6 +72,9 @@ class rssapp(httpSource):
     use_gesim: bool = False
     threshold: float = 0.60
     fuzzy_threshold: int = 60
+    llm_model: str = None
+    use_llm: bool = False
+    
     namespaces: dict = {
         'media': 'http://search.yahoo.com/mrss/',
         'dc': 'http://purl.org/dc/elements/1.1/',
@@ -90,6 +93,9 @@ class rssapp(httpSource):
         self._args['bundle_id'] = bundle_id
         self._db = request.app['database']
         self.groq_client = Groq(api_key=self._env.get('GROQ_API_KEY'))
+        self.llm_model = self._env.get('RSSAPP_LLM_MODEL', fallback='llama-3.3-70b-versatile')
+        self.use_llm = self._env.getboolean('RSSAPP_USE_LLM', fallback=False)
+        
         try:
             self._model = request.app['vector_models']["word2vec-google-news-300"]
             self.use_gesim = True
@@ -174,29 +180,29 @@ class rssapp(httpSource):
                 # Combine title and description for easier matching:
                 combined_text = f"{title.lower()} {desc.lower()}"
 
-                '''
-                if self.use_gesim:
-                    matched = self._search_gesim(combined_text, keywords)
-                    negative_matched = self._search_gesim(combined_text, negative_keywords)
+                if self.use_llm:
+                    # LLM Search
+                    matched = self._search_llm(combined_text, keywords, negative_keywords)
+                    # Remove if not found in keywords
+                    if not matched:
+                        channel.remove(item)
                 else:
-                    matched = self._search_fuzzy(combined_text, keywords)
-                    negative_matched = self._search_fuzzy(combined_text, negative_keywords)
-                # New: allow regex matching as an alternative search strategy
-                if not matched:
-                    matched = self._search_regex(combined_text, keywords)
-                    negative_matched = self._search_regex(combined_text, negative_keywords)
-                # Remove if not found in keywords
-                if not matched:
-                    channel.remove(item)
-                # Remove if found in negative keywords
-                if negative_matched and matched:
-                    channel.remove(item)
-                '''
-                # LLM Search
-                matched = self._search_llm(combined_text, keywords, negative_keywords)
-                # Remove if not found in keywords
-                if not matched:
-                    channel.remove(item)
+                    if self.use_gesim:
+                        matched = self._search_gesim(combined_text, keywords)
+                        negative_matched = self._search_gesim(combined_text, negative_keywords)
+                    else:
+                        matched = self._search_fuzzy(combined_text, keywords)
+                        negative_matched = self._search_fuzzy(combined_text, negative_keywords)
+                    # New: allow regex matching as an alternative search strategy
+                    if not matched:
+                        matched = self._search_regex(combined_text, keywords)
+                        negative_matched = self._search_regex(combined_text, negative_keywords)
+                    # Remove if not found in keywords
+                    if not matched:
+                        channel.remove(item)
+                    # Remove if found in negative keywords
+                    if negative_matched and matched:
+                        channel.remove(item)
 
             # Convert the updated XML tree back to a string:
             self._result = ET.tostring(
@@ -267,7 +273,7 @@ class rssapp(httpSource):
         keywords = ', '.join(keywords)
         negative_keywords = ', '.join(negative_keywords)
         completion = self.groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=self.llm_model,
             messages=[
                 {
                     "role": "system",
@@ -275,7 +281,7 @@ class rssapp(httpSource):
                 },
                 {
                     "role": "user",
-                    "content": f"Check if RSS news contain someone of the keywords '{keywords}' and not contains anyone of the keywords '{negative_keywords}'\n\nContent: {text}\n\nIf the content of RSS matches with conditions just response with the word 'TRUE', else, response with thye word 'FALSE'"
+                    "content": f"Check if RSS news contain someone of the keywords '{keywords}' and not contains anyone of the keywords '{negative_keywords}'\n\nContent: {text}\n\nIf the content of RSS matches with conditions just response with the word 'TRUE', else, response with the word 'FALSE'"
                 }
             ],
             temperature=1,
