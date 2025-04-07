@@ -220,7 +220,8 @@ setup(
         'datatable==1.1.0',
         "thefuzz==0.22.1",
         "modin==0.32.0",
-        "WeasyPrint>=65.0"
+        "WeasyPrint>=65.0",
+        "groq==0.22.0"
     ],
     extras_require={
         "analytics": [
