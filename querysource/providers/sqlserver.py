@@ -134,8 +134,9 @@ class sqlserverProvider(BaseProvider):
                 query = getattr(conn, self.default_fn)
                 fn = partial(query, **self.default_options)
                 if self.default_fn == 'exec':
+                    conditions = {**self._arguments, ** self._conditions}
                     result, error = await conn.exec(
-                        self._query, **self._arguments, **self.default_options
+                        self._query, **conditions, **self.default_options
                     )
                 else:
                     result, error = await fn(self._query)
