@@ -287,9 +287,15 @@ class PgOutput(AbstractOutput):
         Open Database connection.
         """
         try:
-            self._connection = await self._engine.connect()
+            if self._connection is None or self._connection.closed:
+                self._connection = await self._engine.connect()
         except Exception as err:
-            self.logger.error(err)
+            self.logger.error(
+                f"Error opening database connection: {err}"
+            )
+            raise OutputError(
+                f"Error opening database connection: {err}"
+            ) from err
 
     def _build_upsert_statement(
         self,
@@ -506,6 +512,41 @@ class PgOutput(AbstractOutput):
                 f"Error on PG UPSERT: {err}"
             ) from err
 
+    async def _get_connection(self, use_conn=None):
+        """
+        Get an existing connection or create a new one.
+
+        Parameters
+        ----------
+        use_conn : AsyncConnection, optional
+            An existing connection to use
+
+        Returns
+        -------
+        tuple
+            (connection, own_transaction) where own_transaction indicates if we created the connection
+        """
+        own_transaction = False
+
+        if use_conn:
+            return use_conn, own_transaction
+
+        if self._connection is not None and not self._connection.closed:
+            return self._connection, own_transaction
+
+        # We need a new connection
+        try:
+            conn = await self._engine.connect()
+            own_transaction = True
+            return conn, own_transaction
+        except Exception as err:
+            self.logger.error(
+                f"Error getting database connection: {err}"
+            )
+            raise OutputError(
+                f"Error getting database connection: {err}"
+            ) from err
+
     async def do_upsert(
         self,
         obj: Union[Dict[str, Any], Any],
@@ -541,6 +582,9 @@ class PgOutput(AbstractOutput):
         if isinstance(obj, BaseModel):
             if as_values:
                 data = obj.to_dict(as_values=True, convert_enums=True)
+                # Remove any keys that start with underscore (threatened by dataclasses)
+                # and are not part of the model
+                data = {k: v for k, v in data.items() if not k.startswith('_')}
             else:
                 data = obj.to_dict(convert_enums=True)
             if table_name is None:
@@ -581,6 +625,11 @@ class PgOutput(AbstractOutput):
 
         # Filter data to include only valid columns
         filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+
+        # Add debugging to see what we're trying to insert
+        # self.logger.debug(
+        #     f"Upserting into {schema}.{table_name} with columns: {list(filtered_data.keys())}"
+        # )
 
         if not filtered_data:
             raise ValueError(
@@ -640,8 +689,9 @@ class PgOutput(AbstractOutput):
                 if self._connection is not None:
                     conn = self._connection
                 else:
-                    conn = await self._engine.connect()
-                    own_transaction = True
+                    # conn = await self._engine.connect()
+                    # own_transaction = True
+                    conn, own_transaction = await self._get_connection(use_conn)
             # Start a transaction if not already in one
             if own_transaction:
                 await conn.begin()
@@ -744,7 +794,9 @@ class PgOutput(AbstractOutput):
                     results.extend(batch_results)
                 return results
         except Exception as err:
-            raise ValueError(f"Error upserting objects: {err}") from err
+            raise ValueError(
+                f"Error upserting objects: {err}"
+            ) from err
 
     async def close(self):
         """Close the database engine."""
