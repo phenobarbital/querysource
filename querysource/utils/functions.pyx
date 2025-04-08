@@ -574,6 +574,99 @@ cpdef str midnight_tomorrow(str mask = "%Y-%m-%d %H:%M:%S", str tz = None):
     return tomorrow_midnight(tz=tz).strftime(mask)
 
 
+cpdef int current_weekday(str tz = None):
+    if tz is not None:
+        zone = ZoneInfo(key=tz)
+    else:
+        zone = ZoneInfo("UTC")
+    return dt.now(zone).weekday()
+
+cpdef int current_day_of_week(str tz = None):
+    if tz is not None:
+        zone = ZoneInfo(key=tz)
+    else:
+        zone = ZoneInfo("UTC")
+    return dt.now(zone).isoweekday()
+
+
+cpdef long current_epoch(bint milliseconds=False, str tz=None):
+    """
+    Returns the current time as a UNIX epoch.
+
+    Parameters:
+        milliseconds (bool): If True, the epoch is returned in milliseconds.
+        tz (str): A timezone string key; if None, defaults to UTC.
+
+    Returns:
+        int: UNIX epoch timestamp (seconds or milliseconds).
+    """
+    dt_obj = current_timestamp(tz)
+    epoch_val = dt_obj.timestamp()
+    if milliseconds:
+        return int(epoch_val * 1000)
+    else:
+        return int(epoch_val)
+
+
+cpdef long fdow_epoch(object value=None, bint milliseconds=False, str zone=None):
+    """
+    Returns the first day of the week as a UNIX epoch timestamp.
+
+    Parameters:
+        value: Optional datetime input used by first_day_of_week.
+        milliseconds (bool): If True, returns the timestamp in milliseconds.
+        zone (str): Timezone string key; if None, defaults to UTC as per the helper.
+
+    Returns:
+        int: UNIX epoch timestamp (seconds or milliseconds).
+    """
+    dt_obj = first_day_of_week(value, zone=zone)
+    epoch_val = dt_obj.timestamp()
+    if milliseconds:
+        return int(epoch_val * 1000)
+    else:
+        return int(epoch_val)
+
+
+cpdef long ldow_epoch(object value=None, bint milliseconds=False, str zone=None):
+    """
+    Returns the last day of the week as a UNIX epoch timestamp.
+
+    Parameters:
+        value: Optional datetime input used by last_day_of_week.
+        milliseconds (bool): If True, returns the timestamp in milliseconds.
+        zone (str): Timezone string key; if None, defaults to UTC as per the helper.
+
+    Returns:
+        int: UNIX epoch timestamp (seconds or milliseconds).
+    """
+    dt_obj = last_day_of_week(value, zone=zone)
+    epoch_val = dt_obj.timestamp()
+    if milliseconds:
+        return int(epoch_val * 1000)
+    else:
+        return int(epoch_val)
+
+
+cpdef long yesterday_epoch(bint milliseconds=False, str tz=None):
+    """
+    Returns yesterday's midnight as a UNIX epoch timestamp.
+
+    Parameters:
+        milliseconds (bool): If True, returns the timestamp in milliseconds.
+        tz (str): A timezone string key; if None, defaults to UTC.
+
+    Returns:
+        int: UNIX epoch timestamp (seconds or milliseconds).
+    """
+    dt_obj = yesterday_midnight(tz)
+    epoch_val = dt_obj.timestamp()
+    if milliseconds:
+        return int(epoch_val * 1000)
+    else:
+        return int(epoch_val)
+
+
 cpdef datetime.datetime current_midnight(str tz = None):
     if tz is not None:
         zone = ZoneInfo(key=tz)
@@ -583,6 +676,7 @@ cpdef datetime.datetime current_midnight(str tz = None):
         dt.now(tz), dt.min.time()
     )
     return midnight
+
 
 cpdef str midnight_current(str mask="%Y-%m-%dT%H:%M:%S", str tz = None):
     return current_midnight(tz=tz).strftime(mask)
