@@ -167,10 +167,10 @@ setup(
     install_requires=[
         'LivePopularTimes==1.3',
         'hubspot-api-client==10.0.0',
-        'httpx>=0.25.0,<=0.27.0',
+        'httpx>=0.25.0,<=0.28.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.18.15',
-        'google-api-python-client==2.151.0',
+        'google-api-python-client>=2.151.0,<=2.166.0',
         'google-auth-oauthlib==1.2.1',
         'sqloxide==0.1.39',
         'aiocsv>=1.3.2',
@@ -221,7 +221,9 @@ setup(
         "thefuzz==0.22.1",
         "modin==0.32.0",
         "WeasyPrint>=65.0",
-        "groq==0.22.0"
+        "groq==0.22.0",
+        "alphashape==1.3.1",
+        "hdbscan==0.8.40"
     ],
     extras_require={
         "analytics": [
