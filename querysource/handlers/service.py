@@ -3,8 +3,9 @@ QueryResource.
 
 Handler to accessing querysource objects from API.
 """
-from datetime import datetime
 from typing import Optional
+import contextlib
+from datetime import datetime
 # for aiohttp
 from aiohttp import web
 from asyncdb.exceptions import (
@@ -325,6 +326,91 @@ class QueryService(AbstractHandler):
                 exception=ex
             ) from ex
 
+    async def get_columns(self, request):
+        """
+        Return the columns associated to a Named Query.
+        """
+        params = self.query_parameters(request)
+        args = self.match_parameters(request)
+        try:
+            options = await self.json_data(request)
+        except (TypeError, ValueError):
+            options = {}
+        try:
+            slug: str = args.pop('slug')
+            with contextlib.suppress(ValueError):
+                slug, _ = slug.split(':')
+        except KeyError:
+            slug: str = None
+        if not params:
+            params = {}
+        if not options:
+            options = {}
+        conditions = {**options, **params}
+        self.logger.debug(
+            f'Slug: {slug}, format: json, conditions: {conditions}'
+        )
+        try:
+            if query := await self.get_source(request, slug, conditions, driver=args):
+                try:
+                    await query.build_provider()
+                except SlugNotFound as err:
+                    response_obj = {
+                        'status': 'empty',
+                        'message': err.message
+                    }
+                    return self.error(response=response_obj, status=404)
+                except ParserError as err:
+                    return self.Error(
+                        message=f"Error parsing Query Slug {slug}",
+                        exception=err
+                    )
+                except (ProviderError, DriverError) as err:
+                    return self.Error(
+                        message="Connection Error",
+                        exception=err
+                    )
+                # query columns
+                try:
+                    columns = await query.columns()
+                    if not columns:
+                        # using the *columns* attribute in definition:
+                        if definition := query.get_definition():
+                            columns = definition.get('attributes', {}).get('columns', [])
+                    if not columns:
+                        columns = []
+                    headers = {
+                        "X-Columns": f"{columns!r}",
+                        "X-Slug": str(slug),
+                    }
+                    if not columns:
+                        headers['X-Message'] = "No Columns found"
+                    if queryformat := query.accepts():
+                        queryformat = mime_supported[queryformat]
+                    if queryformat:
+                        headers['Content-Type'] = queryformat
+                    return self.no_content(headers=headers)
+                except (ProviderError, DriverError, QueryException) as err:
+                    return self.Error(
+                        message="Columns Error",
+                        exception=err,
+                        code=402
+                    )
+            else:
+                return self.Error(
+                    message=f"Unable to get Provider for slug: {slug}"
+                )
+        except (ProviderError, DriverError) as err:
+            return self.Error(
+                message='Error on query Columns',
+                exception=err
+            )
+        except (QueryException, Exception) as ex:
+            raise self.Except(
+                message="Unknown Error on Column Fn",
+                exception=ex
+            ) from ex
+
     async def columns(self, request):
         """
         ---
@@ -405,7 +491,7 @@ class QueryService(AbstractHandler):
                         'status': 'empty',
                         'message': err.message
                     }
-                    return self.error(response=response_obj, state=404)
+                    return self.error(response=response_obj, status=404)
                 except ParserError as err:
                     return self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -419,7 +505,7 @@ class QueryService(AbstractHandler):
                 # query columns
                 try:
                     columns = await query.columns()
-                    return self.json_response(columns, state=200)
+                    return self.json_response(columns, status=200)
                 except (ProviderError, DriverError, QueryException) as err:
                     return self.Error(
                         message="Columns Error",
@@ -540,7 +626,7 @@ class QueryService(AbstractHandler):
                 if not ignore_query:
                     resultset['conditions'] = conditions
                     resultset['query'] = result
-                return self.json_response(resultset, state=200)
+                return self.json_response(resultset, status=200)
             elif queryformat in ('txt', 'plain', 'raw'):
                 return self.response(
                     response=result,

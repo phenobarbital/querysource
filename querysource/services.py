@@ -57,9 +57,8 @@ class QuerySource(metaclass=Singleton):
     jupyter_process = None
 
     def __init__(self, **kwargs):
-        if hasattr(self, '__initialized__'):
-            if self.__initialized__ is True:
-                return  # already configured.
+        if hasattr(self, '__initialized__') and self.__initialized__ is True:
+            return
         self.lazy: bool = kwargs.get('lazy', False)
         self._loop: asyncio.AbstractEventLoop = kwargs.get('loop', asyncio.get_event_loop())
         ### Connection Object:
@@ -101,12 +100,15 @@ class QuerySource(metaclass=Singleton):
         ## Test query without saving (also: running)
         r = self.app.router.add_post('/api/v2/test/queries', qs.run_query)
         routes.append(r)
-        r = self.app.router.add_get('/api/v2/services/queries/{slug}', qs.query, allow_head=True)
+        r = self.app.router.add_get('/api/v2/services/queries/{slug}', qs.query, allow_head=False)
         routes.append(r)
         r = self.app.router.add_post('/api/v2/services/queries/{slug}', qs.query)
         routes.append(r)
         # get columns:
         r = self.app.router.add_patch('/api/v2/services/queries/{slug}', qs.columns)
+        routes.append(r)
+        # get columns but via HEAD:
+        r = self.app.router.add_head('/api/v2/services/queries/{slug}', qs.get_columns)
         routes.append(r)
 
         ### Query Executor:
@@ -140,12 +142,23 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
         r = self.app.router.add_get(
             r'/api/v3/queries/{slug}{meta:\:?.*}',
-            mq.query
+            mq.query,
+            allow_head=False
         )
         routes.append(r)
         r = self.app.router.add_post(
             r'/api/v3/queries{meta:\:?.*}',
             mq.query
+        )
+        routes.append(r)
+        r = self.app.router.add_head(
+            r'/api/v3/queries{meta:\:?.*}',
+            mq.columns
+        )
+        routes.append(r)
+        r = self.app.router.add_head(
+            r'/api/v3/queries/{slug}{meta:\:?.*}',
+            mq.columns
         )
         routes.append(r)
 

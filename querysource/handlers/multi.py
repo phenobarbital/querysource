@@ -21,6 +21,14 @@ from ..conf import (
 
 class QueryHandler(AbstractHandler):
 
+    async def columns(self, request: web.Request) -> web.StreamResponse:
+        raise self.no_content(
+            headers={
+                'Content-Type': 'application/json',
+                'X-Message': 'No Columns available',
+            }
+        )
+
     async def query(self, request: web.Request) -> web.StreamResponse:
         total_time = 0
         started_at = time.monotonic()

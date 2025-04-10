@@ -126,6 +126,11 @@ class BaseProvider(ABC):
     def accepts(self) -> str:
         return None
 
+    def get_definition(self) -> Union[QueryModel, dict]:
+        """Return the definition of the Query.
+        """
+        return self._definition
+
     def NotFound(self, message: str):
         """Raised when Data not Found.
         """
