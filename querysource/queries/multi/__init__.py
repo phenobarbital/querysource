@@ -83,7 +83,9 @@ class MultiQS(BaseQuery):
         self._queries = queries
         self._files = files
         # Query Options:
-        self._options: dict = query
+        self._options: dict = query or {}
+        # return all dataframes
+        self._return_all: bool = kwargs.get('return_all', False)
         if query:
             ## Getting data from Queries or Files
             self._queries = query.pop('queries', {})
@@ -106,8 +108,7 @@ class MultiQS(BaseQuery):
             try:
                 query = await self.get_slug(slug=self.slug)
                 try:
-                    slug_data = self._encoder.load(query.query_raw)
-                    if slug_data:
+                    if slug_data := self._encoder.load(query.query_raw):
                         self._options = slug_data
                         self._queries = slug_data.pop('queries', {})
                         self._files = slug_data.pop('files', {})
@@ -147,7 +148,7 @@ class MultiQS(BaseQuery):
 
         ## then, run all jobs:
         try:
-            for _, t in tasks.items():
+            for t in tasks.values():
                 t.join()
                 if t.exc:
                     ## raise exception for this Query
@@ -183,7 +184,7 @@ class MultiQS(BaseQuery):
                 exception=ex
             ) from ex
         while not self._queue.empty():
-            result.update(await self._queue.get())
+            result |= await self._queue.get()
         ### Step 2: passing Results to virtual JOINs
         if 'Info' in self._options:
             obj = get_operator_module('Info')
@@ -262,11 +263,12 @@ class MultiQS(BaseQuery):
                 ) from ex
         else:
             # Fallback is to passing one single Dataframe:
-            try:
-                if len(result.values()) == 1:
-                    result = list(result.values())[0]
-            except TypeError:
-                pass
+            if self._return_all is False:
+                try:
+                    if len(result.values()) == 1:
+                        result = list(result.values())[0]
+                except TypeError:
+                    pass
         # Step 3: From Here: iterating over the options:
         _output = self._options.pop('Output', None)
         for step_name, step in self._options.items():
@@ -284,7 +286,7 @@ class MultiQS(BaseQuery):
                                     message="No Data was Found after GoogleMaps)",
                                     exception=ex,
                                     code=404
-                                )
+                                ) from ex
                             except (QueryException, Exception) as ex:
                                 raise self.Error(
                                     message=f"Error on GoogleMaps: {ex!s}",
@@ -321,7 +323,7 @@ class MultiQS(BaseQuery):
                         message="No Data was Found after Filtering.",
                         exception=ex,
                         code=404
-                    )
+                    ) from ex
                 except (QueryException, Exception) as ex:
                     raise self.Error(
                         message=f"Error on Filtering: {ex!s}",
@@ -339,7 +341,7 @@ class MultiQS(BaseQuery):
                         message="No Data was Found after GroupBy.",
                         exception=ex,
                         code=404
-                    )
+                    ) from ex
                 except (QueryException, Exception) as ex:
                     raise self.Error(
                         message=f"Error on GroupBy: {ex!s}",
@@ -353,8 +355,8 @@ class MultiQS(BaseQuery):
                 message="Empty Result",
                 code=404
             )
-        # reduce to one single Dataframe:
-        if isinstance(result, dict) and len(result) == 1:
+        if self._return_all is False and (isinstance(result, dict) and len(result) == 1):
+            # reduce to one single Dataframe:
             result = list(result.values())[0]
         ### Step 5: Optionally saving result into Database (using Pandas)
         if _output:
@@ -364,11 +366,14 @@ class MultiQS(BaseQuery):
                     if step_name in ('tableOutput', 'TableOutput'):
                         obj = TableOutput(data=result, **component)
                         result = await obj.run()
-                    else:
-                        # Saving into a DWH selected.
-                        pass
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"
             )
         return result, self._options
+
+    async def execute(self):
+        """
+        Execute the Query
+        """
+        return await self.query()

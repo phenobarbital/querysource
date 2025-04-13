@@ -224,7 +224,9 @@ setup(
         "WeasyPrint>=65.0",
         "groq==0.22.0",
         "alphashape==1.3.1",
-        "hdbscan==0.8.40"
+        "hdbscan==0.8.40",
+        "ydata-profiling==4.16.1",
+        "altair==5.5.0"
     ],
     extras_require={
         "analytics": [
@@ -238,7 +240,8 @@ setup(
             'dtale==3.13.1',
             'lux-api==0.5.1',
             'pomegranate==1.1.0',
-            'autoviz==0.1.905'
+            'autoviz==0.1.905',
+            "spacy==3.8.5"
         ],
         "vectors": [
             "gensim==4.3.3",
