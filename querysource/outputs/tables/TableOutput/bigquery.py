@@ -1,12 +1,12 @@
 from typing import Union, Dict, List, Optional
 from collections.abc import Callable
 import pandas as pd
+import logging
 from ....exceptions import OutputError
 from ....interfaces.databases.bigquery import BigQuery
 from .abstract import AbstractOutput
 
-
-class BigQueryOutput(AbstractOutput, BigQuery):
+class BigQueryOutput(BigQuery, AbstractOutput):
     """
     BigQueryOutput.
 
@@ -19,18 +19,15 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         parent: Callable,
         dsn: str = None,
         do_update: bool = True,
+        only_update: bool = False,
         external: bool = True,
         **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
-        AbstractOutput.__init__(
-            self, parent, dsn, do_update, external, **kwargs
-        )
-        BigQuery.__init__(
-            self, **kwargs
-        )
+        super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
         self._external: bool = True
-        self.use_merge = kwargs.get('use_merge', False)  # Nuevo parámetro
+        self._do_update = do_update
+        self.use_merge = kwargs.get('use_merge', False)
 
     async def db_upsert(
         self,
@@ -50,23 +47,23 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         schema : database schema
         data : Iterable or pandas dataframe to be inserted.
         """
-        self._logger.debug(f"Primary keys: {pk}")
-        self._logger.debug(f"use_merge parameter: {use_merge}, self.use_merge: {self.use_merge}")
+        logging.debug(f"Primary keys: {pk}")
+        logging.debug(f"use_merge parameter: {use_merge}, self.use_merge: {self.use_merge}")
         if isinstance(data, pd.DataFrame):
-            self._logger.debug(f"DataFrame columns: {list(data.columns)}")
-            self._logger.debug(f"DataFrame shape: {data.shape}")
+            logging.debug(f"DataFrame columns: {list(data.columns)}")
+            logging.debug(f"DataFrame shape: {data.shape}")
         
         self.connect()
         
         if self._do_update is False:
-            self._logger.debug("do_update is False, setting on_conflict to 'append' and use_merge to False")
+            logging.debug("do_update is False, setting on_conflict to 'append' and use_merge to False")
             on_conflict = 'append'
             use_merge = False
         elif use_merge is None:
-            self._logger.debug(f"use_merge is None, using self.use_merge: {self.use_merge}")
+            logging.debug(f"use_merge is None, using self.use_merge: {self.use_merge}")
             use_merge = self.use_merge
 
-        self._logger.debug(f"Calling write with use_merge={use_merge}, on_conflict={on_conflict}")
+        logging.debug(f"Calling write with use_merge={use_merge}, on_conflict={on_conflict}")
         
         # Asegurarse de que todos los parámetros se pasan correctamente
         result = await BigQuery.write(
@@ -91,7 +88,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
                 if not self._connection:
                     raise ConnectionError("Failed to establish connection to BigQuery")
         except Exception as e:
-            self._logger.error(f"Error connecting to BigQuery: {e}")
+            logging.error(f"Error connecting to BigQuery: {e}")
             raise
 
     async def close(self):
