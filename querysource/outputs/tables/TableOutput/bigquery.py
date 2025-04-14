@@ -39,7 +39,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         data: pd.DataFrame,
         on_conflict: str = 'replace',
         pk: list = None,
-        use_merge: bool = None  # Cambiar el default a None
+        use_merge: bool = None
     ):
         """
         Execute an Upsert of Data using "write" method
@@ -50,11 +50,27 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         schema : database schema
         data : Iterable or pandas dataframe to be inserted.
         """
+        self._logger.debug(f"Primary keys: {pk}")
+        self._logger.debug(f"use_merge parameter: {use_merge}, self.use_merge: {self.use_merge}")
+        if isinstance(data, pd.DataFrame):
+            self._logger.debug(f"DataFrame columns: {list(data.columns)}")
+            self._logger.debug(f"DataFrame shape: {data.shape}")
+        
+        self.connect()
+        
         if self._do_update is False:
+            self._logger.debug("do_update is False, setting on_conflict to 'append' and use_merge to False")
             on_conflict = 'append'
             use_merge = False
+        elif use_merge is None:
+            self._logger.debug(f"use_merge is None, using self.use_merge: {self.use_merge}")
+            use_merge = self.use_merge
 
-        return await self.self._connection.write(
+        self._logger.debug(f"Calling write with use_merge={use_merge}, on_conflict={on_conflict}")
+        
+        # Asegurarse de que todos los parámetros se pasan correctamente
+        result = await BigQuery.write(
+            self,
             table,
             schema,
             data,
@@ -62,13 +78,21 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             pk=pk,
             use_merge=use_merge
         )
+        
+        return result
 
     def connect(self):
         """
         Connect to BigQuery
         """
-        if not self._connection:
-            self.default_connection()
+        try:
+            if not self._connection:
+                self.default_connection()
+                if not self._connection:
+                    raise ConnectionError("Failed to establish connection to BigQuery")
+        except Exception as e:
+            self._logger.error(f"Error connecting to BigQuery: {e}")
+            raise
 
     async def close(self):
         """
@@ -99,7 +123,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         pk : list of str, default None
             Primary key columns
         """
-        return await self.self._connection.write(
+        return await self._connection.write(
             data,
             table_id=table,
             dataset_id=schema,

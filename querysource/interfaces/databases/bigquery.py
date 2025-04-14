@@ -3,6 +3,7 @@ from collections.abc import Iterable
 import pandas as pd
 import time
 import logging
+import asyncio
 # Default BigQuery connection parameters
 from ...conf import (
     BIGQUERY_CREDENTIALS,
@@ -47,12 +48,18 @@ class BigQuery(AbstractDB):
                 can_merge = (
                     use_merge and isinstance(data, pd.DataFrame) and on_conflict == 'replace' and pk and len(pk) > 0
                 )
+                
                 if not can_merge:
                     return await self._default_write(conn, table, schema, data, on_conflict)
+                    
                 # Check if the table exists and has data
                 check_query = f"SELECT COUNT(*) as count FROM `{schema}.{table}`"
+                self._logger.debug(f"Executing table check query: {check_query}")
                 result, error = await conn.query(check_query)
+                self._logger.debug(f"Table check result: {result}, error: {error}")
+                
                 if error or not result:
+                    self._logger.debug(f"Table check failed or empty result, using default write")
                     return await self._default_write(conn, table, schema, data, on_conflict)
 
                 # Get the schema of the original table
@@ -62,13 +69,17 @@ class BigQuery(AbstractDB):
                 WHERE table_name = '{table}'
                 """
                 schema_result, error = await conn.query(schema_query)
+                
                 if error:
+                    self._logger.error(f"Schema query error: {error}")
                     raise ConnectionError(
                         f"Error getting table schema: {error}"
                     )
 
-                # Create a dictionary with column types
-                column_types = {row['column_name']: row['data_type'] for row in schema_result}
+                schema_result_list = list(schema_result) if schema_result else []
+
+                # Create a dictionary with the type of each column using the list
+                column_types = {row['column_name']: row['data_type'] for row in schema_result_list}
 
                 # Create temporary table
                 temp_table = f"{table}_temp_{int(time.time())}"
@@ -76,12 +87,53 @@ class BigQuery(AbstractDB):
                 CREATE TABLE `{schema}.{temp_table}`
                 AS SELECT * FROM `{schema}.{table}` WHERE 1=0
                 """
-                await conn.query(create_temp_query)
+                _, create_error = await conn.query(create_temp_query)
+                
+                if create_error:
+                    self._logger.error(f"Failed to create temporary table: {create_error}")
+                    return await self._default_write(conn, table, schema, data, on_conflict)
 
                 try:
                     # Load data into temporary table
-                    await self._default_write(conn, temp_table, schema, data, 'append')
-
+                    load_result = await self._default_write(conn, temp_table, schema, data, 'append')
+                    
+                    if not load_result:
+                        self._logger.error("Failed to load data into temporary table")
+                        return await self._default_write(conn, table, schema, data, on_conflict)
+                    
+                    # Add a delay to ensure the data has been loaded
+                    self._logger.debug(f"Waiting 2 seconds for data to be fully loaded...")
+                    await asyncio.sleep(2)
+                    
+                    # Verify that the data was loaded correctly with retries
+                    count_rows = 0
+                    max_retries = 3
+                    for retry in range(max_retries):
+                        verify_load_query = f"SELECT COUNT(*) as count FROM `{schema}.{temp_table}`"
+                        self._logger.debug(f"Verifying data load (attempt {retry+1}/{max_retries}): {verify_load_query}")
+                        verify_load_result, verify_load_error = await conn.query(verify_load_query)
+                        
+                        # Extract the value of count
+                        if verify_load_result:
+                            for row in verify_load_result:
+                                count_rows = row['count']
+                                break
+                        
+                        self._logger.debug(f"Verification attempt {retry+1}: Temporary table has {count_rows} rows")
+                        
+                        if count_rows > 0:
+                            self._logger.debug(f"✅ Data verified: {count_rows} rows loaded into temporary table")
+                            break
+                        
+                        if retry < max_retries - 1:
+                            wait_time = (retry + 1) * 2  # Incremental backoff
+                            self._logger.debug(f"No data found yet, waiting {wait_time} seconds before retrying...")
+                            await asyncio.sleep(wait_time)
+                    
+                    if count_rows == 0:
+                        self._logger.debug("⚠️ WARNING: No data was verified in the temporary table even after retries")
+                        self._logger.debug("Proceeding anyway as the data might be loaded but not yet visible to queries")
+                    
                     # Build MERGE statement
                     merge_keys = " AND ".join([f"T.{key} = S.{key}" for key in pk])
 
@@ -100,7 +152,7 @@ class BigQuery(AbstractDB):
                     # Build INSERT clause
                     insert_columns = ", ".join(data.columns)
                     source_columns = ", ".join([f"S.{col}" for col in data.columns])
-
+                    
                     merge_query = f"""
                     MERGE `{schema}.{table}` T
                     USING `{schema}.{temp_table}` S
@@ -111,22 +163,44 @@ class BigQuery(AbstractDB):
                         INSERT({insert_columns})
                         VALUES({source_columns})
                     """
-                    result, error = await conn.query(merge_query)
+                    
+                    # Try to execute the MERGE and capture detailed information
+                    try:
+                        result, error = await conn.query(merge_query)
+                        
+                        # Try to access attributes of the result
+                        if result:
+                            try:
+                                if hasattr(result, 'num_dml_affected_rows'):
+                                    self._logger.info(f"Affected rows: {result.num_dml_affected_rows}")
+                                elif hasattr(result, '__iter__'):
+                                    first_row = next(iter(result), None)
+                                    self._logger.info(f"First row of result: {first_row}")
+                            except Exception as result_ex:
+                                self._logger.error(f"Error examining result object: {result_ex}")
+                        
+                    except Exception as query_ex:
+                        self._logger.error(f"Exception during conn.query execution: {query_ex}")
+                        self._logger.error(f"Exception type: {type(query_ex)}")
+                        raise
 
                     if error:
+                        self._logger.error(f"Error executing MERGE: {error}")
                         raise ConnectionError(
                             f"Error executing MERGE: {error}"
                         )
-
+                    
+                    self._logger.info(f"MERGE executed successfully")
+                    
                     return result
 
                 finally:
-                    # Clean up temporary table
                     await conn.query(f"DROP TABLE IF EXISTS `{schema}.{temp_table}`")
 
             except Exception as e:
-
                 self._logger.error(f"Error writing to BigQuery: {e}")
+                import traceback
+                self._logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
 
     async def _default_write(self, conn, table, schema, data, on_conflict):
