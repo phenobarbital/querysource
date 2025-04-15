@@ -56,7 +56,6 @@ class BigQuery(AbstractDB):
                 check_query = f"SELECT COUNT(*) as count FROM `{schema}.{table}`"
                 self._logger.debug(f"Executing table check query: {check_query}")
                 result, error = await conn.query(check_query)
-                self._logger.debug(f"Table check result: {result}, error: {error}")
                 
                 if error or not result:
                     self._logger.debug(f"Table check failed or empty result, using default write")
@@ -104,35 +103,6 @@ class BigQuery(AbstractDB):
                     # Add a delay to ensure the data has been loaded
                     self._logger.debug(f"Waiting 2 seconds for data to be fully loaded...")
                     await asyncio.sleep(2)
-                    
-                    # Verify that the data was loaded correctly with retries
-                    count_rows = 0
-                    max_retries = 3
-                    for retry in range(max_retries):
-                        verify_load_query = f"SELECT COUNT(*) as count FROM `{schema}.{temp_table}`"
-                        self._logger.debug(f"Verifying data load (attempt {retry+1}/{max_retries}): {verify_load_query}")
-                        verify_load_result, verify_load_error = await conn.query(verify_load_query)
-                        
-                        # Extract the value of count
-                        if verify_load_result:
-                            for row in verify_load_result:
-                                count_rows = row['count']
-                                break
-                        
-                        self._logger.debug(f"Verification attempt {retry+1}: Temporary table has {count_rows} rows")
-                        
-                        if count_rows > 0:
-                            self._logger.debug(f"✅ Data verified: {count_rows} rows loaded into temporary table")
-                            break
-                        
-                        if retry < max_retries - 1:
-                            wait_time = (retry + 1) * 2  # Incremental backoff
-                            self._logger.debug(f"No data found yet, waiting {wait_time} seconds before retrying...")
-                            await asyncio.sleep(wait_time)
-                    
-                    if count_rows == 0:
-                        self._logger.debug("⚠️ WARNING: No data was verified in the temporary table even after retries")
-                        self._logger.debug("Proceeding anyway as the data might be loaded but not yet visible to queries")
                     
                     # Build MERGE statement
                     merge_keys = " AND ".join([f"T.{key} = S.{key}" for key in pk])
