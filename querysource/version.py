@@ -6,9 +6,9 @@ __description__ = (
     'QuerySource Query parser and generator.'
     'Supports SQL, NoSQL, MongoDB, Cassandra, Elasticsearch, etc.'
 )
-__version__ = '3.15.39'
+__version__ = '3.15.40'
 __url__ = 'https://github.com/phenobarbital/querysource'
-__copyright__ = 'Copyright (c) 2018-2024 Jesus Lara'
+__copyright__ = 'Copyright (c) 2018-2025 Jesus Lara'
 __author__ = 'Jesus Lara'
 __author_email__ = 'jesuslarag@gmail.com'
 __license__ = 'BSD'
