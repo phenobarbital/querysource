@@ -1,12 +1,12 @@
 from typing import Union, Dict, List, Optional
 from collections.abc import Callable
 import pandas as pd
+import logging
 from ....exceptions import OutputError
 from ....interfaces.databases.bigquery import BigQuery
 from .abstract import AbstractOutput
 
-
-class BigQueryOutput(AbstractOutput, BigQuery):
+class BigQueryOutput(BigQuery, AbstractOutput):
     """
     BigQueryOutput.
 
@@ -19,18 +19,15 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         parent: Callable,
         dsn: str = None,
         do_update: bool = True,
+        only_update: bool = False,
         external: bool = True,
         **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
-        AbstractOutput.__init__(
-            self, parent, dsn, do_update, external, **kwargs
-        )
-        BigQuery.__init__(
-            self, **kwargs
-        )
+        super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
         self._external: bool = True
-        self.use_merge = kwargs.get('use_merge', False)  # Nuevo parámetro
+        self._do_update = do_update
+        self.use_merge = kwargs.get('use_merge', False)
 
     async def db_upsert(
         self,
@@ -39,7 +36,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         data: pd.DataFrame,
         on_conflict: str = 'replace',
         pk: list = None,
-        use_merge: bool = None  # Cambiar el default a None
+        use_merge: bool = None
     ):
         """
         Execute an Upsert of Data using "write" method
@@ -50,11 +47,27 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         schema : database schema
         data : Iterable or pandas dataframe to be inserted.
         """
+        logging.debug(f"Primary keys: {pk}")
+        logging.debug(f"use_merge parameter: {use_merge}, self.use_merge: {self.use_merge}")
+        if isinstance(data, pd.DataFrame):
+            logging.debug(f"DataFrame columns: {list(data.columns)}")
+            logging.debug(f"DataFrame shape: {data.shape}")
+        
+        self.connect()
+        
         if self._do_update is False:
+            logging.debug("do_update is False, setting on_conflict to 'append' and use_merge to False")
             on_conflict = 'append'
             use_merge = False
+        elif use_merge is None:
+            logging.debug(f"use_merge is None, using self.use_merge: {self.use_merge}")
+            use_merge = self.use_merge
 
-        return await self.self._connection.write(
+        logging.debug(f"Calling write with use_merge={use_merge}, on_conflict={on_conflict}")
+        
+        # Asegurarse de que todos los parámetros se pasan correctamente
+        result = await BigQuery.write(
+            self,
             table,
             schema,
             data,
@@ -62,13 +75,21 @@ class BigQueryOutput(AbstractOutput, BigQuery):
             pk=pk,
             use_merge=use_merge
         )
+        
+        return result
 
     def connect(self):
         """
         Connect to BigQuery
         """
-        if not self._connection:
-            self.default_connection()
+        try:
+            if not self._connection:
+                self.default_connection()
+                if not self._connection:
+                    raise ConnectionError("Failed to establish connection to BigQuery")
+        except Exception as e:
+            logging.error(f"Error connecting to BigQuery: {e}")
+            raise
 
     async def close(self):
         """
@@ -99,7 +120,7 @@ class BigQueryOutput(AbstractOutput, BigQuery):
         pk : list of str, default None
             Primary key columns
         """
-        return await self.self._connection.write(
+        return await self._connection.write(
             data,
             table_id=table,
             dataset_id=schema,
