@@ -1,3 +1,4 @@
+import time
 from typing import Union, Any, Dict, List, Optional, Set
 from collections.abc import Callable
 import asyncio
@@ -45,23 +46,37 @@ class ReflectionHelper:
     _columns: Dict[str, Set[str]] = {}
     _pk_columns: Dict[str, List[str]] = {}
 
-    def __init__(self, engine: AsyncEngine):
+    def __init__(self, engine: AsyncEngine, cache_ttl: int = 3600):
         self._engine = engine
         self._is_async = hasattr(engine, 'run_sync')
+        self._cache_timestamp = {}  # Track when each table was cached
+        self._cache_ttl = cache_ttl  # Time-to-live in seconds (default: 1 hour)
+
+    def _is_cache_fresh(self, cache_key: str) -> bool:
+        """
+        Check if the cache for the given table has expired based on TTL.
+        """
+        if cache_key not in self._cache_timestamp:
+            return True
+        current_time = time.time()
+        return (current_time - self._cache_timestamp[cache_key]) < self._cache_ttl
 
     async def get_table(
         self,
         table_name: str,
         schema: str = 'public',
-        primary_keys: list = None
+        primary_keys: list = None,
+        force_refresh: bool = False
     ) -> dict:
         table = f'{schema}.{table_name}'
-        if table in self._table:
+        # Check if cache is valid or force refresh is requested
+        if not force_refresh and table in self._table and self._is_cache_fresh(table):
             return self._table[table]
         else:
             # Build the Table Definition:
             metadata = MetaData()
             metadata.bind = self._engine
+            self._cache_timestamp[table] = time.time()
             async with self._engine.begin() as conn:
                 # Get table definition with reflection
                 pk_columns = []
@@ -199,6 +214,7 @@ class ReflectionHelper:
         schema: str = 'public',
         primary_keys: Optional[List[str]] = None,
         use_cache: bool = True,
+        force_refresh: bool = False,
         **kwargs
     ) -> Dict:
         """
@@ -210,10 +226,14 @@ class ReflectionHelper:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # We're already in an async context, create a new task
-                return asyncio.create_task(self.get_table(table_name, schema, primary_keys))
+                return asyncio.create_task(
+                    self.get_table(table_name, schema, primary_keys, force_refresh=force_refresh)
+                )
             else:
                 # We're in a sync context, run the async function to completion
-                return loop.run_until_complete(self.get_table(table_name, schema, primary_keys))
+                return loop.run_until_complete(
+                    self.get_table(table_name, schema, primary_keys, force_refresh=force_refresh)
+                )
         else:
             return self.get_table_sync(table_name, schema, primary_keys, use_cache, **kwargs)
 
@@ -250,12 +270,13 @@ class PgOutput(AbstractOutput):
         dsn = async_default_dsn if use_async else sqlalchemy_url
         self._dsn = dsn
         self.use_cache: bool = kwargs.get('use_cache', False)
+        self.force_refresh: bool = kwargs.get('force_refresh', False)
         super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
         # Create an async Engine instance:
         self.use_async = use_async
         self._returning_all = returning_all
         self._tz: str = timezone or TIMEZONE
-        self._helper: Any = None
+        self._helper: ReflectionHelper = None
         self._connection = None
         self._batch_size = batch_size
         if not use_async:
@@ -430,6 +451,7 @@ class PgOutput(AbstractOutput):
             schema=schema,
             primary_keys=primary_keys,
             use_cache=self.use_cache,
+            force_refresh=self.force_refresh,
             **options
         )
         # Get the table object (copied):
