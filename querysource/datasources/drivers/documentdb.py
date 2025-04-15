@@ -17,6 +17,7 @@ from ...conf import (
 class documentdbDriver(mongoDriver):
     driver: str = MONGO_DRIVER
     dbtype: str = "documentdb"
+    name: str = "DocumentDB"
     ssl: bool = Field(required=False, default=DOCUMENTDB_USE_SSL)
     tlsCAFile: Union[str, Path] = Field(required=False, default=DOCUMENTDB_TLSFILE)
 
