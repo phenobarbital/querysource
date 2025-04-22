@@ -24,7 +24,13 @@ class BigQueryOutput(BigQuery, AbstractOutput):
         **kwargs
     ) -> None:
         # External: using a non-SQLAlchemy engine (outside Pandas)
-        super().__init__(parent, dsn, do_update=do_update, only_update=only_update, **kwargs)
+        super().__init__(
+            parent, dsn,
+            do_update=do_update,
+            only_update=only_update,
+            external=external,
+            **kwargs
+        )
         self._external: bool = True
         self._do_update = do_update
         self.use_merge = kwargs.get('use_merge', False)
@@ -52,9 +58,9 @@ class BigQueryOutput(BigQuery, AbstractOutput):
         if isinstance(data, pd.DataFrame):
             logging.debug(f"DataFrame columns: {list(data.columns)}")
             logging.debug(f"DataFrame shape: {data.shape}")
-        
+
         self.connect()
-        
+
         if self._do_update is False:
             logging.debug("do_update is False, setting on_conflict to 'append' and use_merge to False")
             on_conflict = 'append'
@@ -64,18 +70,18 @@ class BigQueryOutput(BigQuery, AbstractOutput):
             use_merge = self.use_merge
 
         logging.debug(f"Calling write with use_merge={use_merge}, on_conflict={on_conflict}")
-        
+
         # Asegurarse de que todos los parámetros se pasan correctamente
         result = await BigQuery.write(
             self,
-            table,
-            schema,
-            data,
+            table=table,
+            schema=schema,
+            data=data,
             on_conflict=on_conflict,
             pk=pk,
             use_merge=use_merge
         )
-        
+
         return result
 
     def connect(self):
@@ -120,6 +126,7 @@ class BigQueryOutput(BigQuery, AbstractOutput):
         pk : list of str, default None
             Primary key columns
         """
+        print('HERE >> table: ', table, ' schema: ', schema, ' data: ')
         return await self._connection.write(
             data,
             table_id=table,

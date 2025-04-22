@@ -1,3 +1,4 @@
+import asyncio
 from typing import Union
 import pandas as pd
 from navconfig.logging import logging
@@ -101,7 +102,9 @@ class TableOutput:
             on_conflict = 'replace'
             if hasattr(elem, 'if_exists'):
                 on_conflict = elem.if_exists
+            print('AQUI >>', table, schema)
             await self._engine.db_upsert(  # pylint: disable=E1120,E1123 # noqa
+                data=datasource,
                 table=table,
                 schema=schema,
                 on_conflict=on_conflict
@@ -109,24 +112,29 @@ class TableOutput:
 
     async def run(self):
         # TODO: add a Truncate Method to every Engine
-        if self.flavor == 'postgresql':
-            self._engine = PgOutput(parent=self)
-        elif self.flavor == 'mysql':
-            self._engine = MysqlOutput(parent=self)
-        elif self.flavor == 'sqlalchemy':
-            self._engine = SaOutput(parent=self)
-        elif self.flavor == 'rethink':
-            self._engine == RethinkOutput(parent=self, external=True)
-        elif self.flavor == 'bigquery':
-            self._engine == BigQueryOutput(parent=self, external=True)
-        elif self.flavor == 'mongodb':
-            self._engine == MongoDBOutput(parent=self, external=True)
-        elif self.flavor == 'documentdb':
-            self._engine == DocumentDBOutput(parent=self, external=True)
-        else:
+        try:
+            if self.flavor in ('postgresql', 'postgres'):
+                self._engine = PgOutput(parent=self)
+            elif self.flavor == 'mysql':
+                self._engine = MysqlOutput(parent=self)
+            elif self.flavor == 'sqlalchemy':
+                self._engine = SaOutput(parent=self)
+            elif self.flavor == 'rethink':
+                self._engine = RethinkOutput(parent=self, external=True)
+            elif self.flavor == 'bigquery':
+                self._engine = BigQueryOutput(parent=self, external=True)
+            elif self.flavor == 'mongodb':
+                self._engine = MongoDBOutput(parent=self, external=True)
+            elif self.flavor == 'documentdb':
+                self._engine = DocumentDBOutput(parent=self, external=True)
+            else:
+                raise OutputError(
+                    f'TableOutput: unsupported DB flavor: {self.flavor}'
+                )
+        except Exception as err:
             raise OutputError(
-                f'TableOutput: unsupported DB flavor: {self.flavor}'
-            )
+                f'TableOutput: Engine Error: {err}'
+            ) from err
         try:
             if isinstance(self.data, dict):
                 for _, data in self.data.items():
@@ -146,7 +154,12 @@ class TableOutput:
                 return self.data
             elif isinstance(self.data, pd.DataFrame):
                 # Send to Table Output
-                await self.table_output(self, self.data)
+                try:
+                    await self.table_output(self, self.data)
+                except Exception as err:
+                    raise OutputError(
+                        f'TableOutput Error: {err}'
+                    ) from err
                 return self.data
             else:
                 raise DriverError(
@@ -154,6 +167,9 @@ class TableOutput:
                 )
         finally:
             try:
-                self._engine.close()
+                if asyncio.iscoroutinefunction(self._engine.close):
+                    await self._engine.close()
+                else:
+                    self._engine.close()
             except Exception as err:
                 logging.error(err)

@@ -48,17 +48,19 @@ class BigQuery(AbstractDB):
                 can_merge = (
                     use_merge and isinstance(data, pd.DataFrame) and on_conflict == 'replace' and pk and len(pk) > 0
                 )
-                
+
                 if not can_merge:
                     return await self._default_write(conn, table, schema, data, on_conflict)
-                    
+
                 # Check if the table exists and has data
                 check_query = f"SELECT COUNT(*) as count FROM `{schema}.{table}`"
                 self._logger.debug(f"Executing table check query: {check_query}")
                 result, error = await conn.query(check_query)
-                
+
                 if error or not result:
-                    self._logger.debug(f"Table check failed or empty result, using default write")
+                    self._logger.debug(
+                        "Table check failed or empty result, using default write"
+                    )
                     return await self._default_write(conn, table, schema, data, on_conflict)
 
                 # Get the schema of the original table
@@ -68,7 +70,7 @@ class BigQuery(AbstractDB):
                 WHERE table_name = '{table}'
                 """
                 schema_result, error = await conn.query(schema_query)
-                
+
                 if error:
                     self._logger.error(f"Schema query error: {error}")
                     raise ConnectionError(
@@ -87,7 +89,7 @@ class BigQuery(AbstractDB):
                 AS SELECT * FROM `{schema}.{table}` WHERE 1=0
                 """
                 _, create_error = await conn.query(create_temp_query)
-                
+
                 if create_error:
                     self._logger.error(f"Failed to create temporary table: {create_error}")
                     return await self._default_write(conn, table, schema, data, on_conflict)
@@ -95,15 +97,15 @@ class BigQuery(AbstractDB):
                 try:
                     # Load data into temporary table
                     load_result = await self._default_write(conn, temp_table, schema, data, 'append')
-                    
+
                     if not load_result:
                         self._logger.error("Failed to load data into temporary table")
                         return await self._default_write(conn, table, schema, data, on_conflict)
-                    
+
                     # Add a delay to ensure the data has been loaded
                     self._logger.debug(f"Waiting 2 seconds for data to be fully loaded...")
                     await asyncio.sleep(2)
-                    
+
                     # Build MERGE statement
                     merge_keys = " AND ".join([f"T.{key} = S.{key}" for key in pk])
 
@@ -122,7 +124,7 @@ class BigQuery(AbstractDB):
                     # Build INSERT clause
                     insert_columns = ", ".join(data.columns)
                     source_columns = ", ".join([f"S.{col}" for col in data.columns])
-                    
+
                     merge_query = f"""
                     MERGE `{schema}.{table}` T
                     USING `{schema}.{temp_table}` S
@@ -133,11 +135,11 @@ class BigQuery(AbstractDB):
                         INSERT({insert_columns})
                         VALUES({source_columns})
                     """
-                    
+
                     # Try to execute the MERGE and capture detailed information
                     try:
                         result, error = await conn.query(merge_query)
-                        
+
                         # Try to access attributes of the result
                         if result:
                             try:
@@ -148,7 +150,7 @@ class BigQuery(AbstractDB):
                                     self._logger.info(f"First row of result: {first_row}")
                             except Exception as result_ex:
                                 self._logger.error(f"Error examining result object: {result_ex}")
-                        
+
                     except Exception as query_ex:
                         self._logger.error(f"Exception during conn.query execution: {query_ex}")
                         self._logger.error(f"Exception type: {type(query_ex)}")
@@ -159,9 +161,9 @@ class BigQuery(AbstractDB):
                         raise ConnectionError(
                             f"Error executing MERGE: {error}"
                         )
-                    
+
                     self._logger.info(f"MERGE executed successfully")
-                    
+
                     return result
 
                 finally:
@@ -179,10 +181,16 @@ class BigQuery(AbstractDB):
             "BigQuery write method: use_pandas=False, using load_table_from_json"
         )
         use_pandas = isinstance(data, pd.DataFrame)
-        return await conn.write(
-            data=data,
-            table_id=table,
-            dataset_id=schema,
-            if_exists=on_conflict,
-            use_pandas=use_pandas
-        )
+        try:
+            return await conn.write(
+                data=data,
+                table_id=table,
+                dataset_id=schema,
+                if_exists=on_conflict,
+                use_pandas=use_pandas
+            )
+        except Exception as e:
+            self._logger.error(f"Error writing to BigQuery on Table {schema}.{table}: {e}")
+            raise ConnectionError(
+                f"Error writing to BigQuery on Table {schema}.{table}: {e}"
+            ) from e

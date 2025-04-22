@@ -54,6 +54,8 @@ class QueryHandler(AbstractHandler):
                 message="No valid JSON data was not found in payload.",
                 code=400
             )
+        # if no return, then we don't need to return anything:
+        self.no_return: bool = options.pop('no_return', False)
         ## Getting data from Queries or Files
         if not slug:
             data = {}
@@ -245,6 +247,13 @@ class QueryHandler(AbstractHandler):
                 raise DataNotFound(
                     message="Empty Result",
                     code=404
+                )
+            if self.no_return:
+                return self.response(
+                    headers={
+                        'X-Total-Time': f'{total_time:.2f} seconds',
+                    },
+                    status=204
                 )
             output = DataOutput(
                 request,
