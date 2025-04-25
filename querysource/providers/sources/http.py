@@ -11,9 +11,14 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
 from functools import partial
+# backoff retry:
+import backoff
 # from traitlets import HasTraits
 import urllib3
 import requests
+from simplejson.errors import JSONDecodeError
+from requests.exceptions import ConnectionError, Timeout, RequestException
+from requests import HTTPError
 from requests.auth import HTTPBasicAuth
 import httpx
 import aiohttp
@@ -95,6 +100,32 @@ mobile_ua = [
     'Mozilla/5.0 (Linux; Android 10; HUAWEI VOG-L29) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36',  # noqa
     'Mozilla/5.0 (iPad; CPU OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0 Mobile/15E148 Safari/604.1',  # noqa
 ]
+
+
+# Define exception handlers
+def bad_gateway_exception(e):
+    if isinstance(e, HTTPError):
+        return 500 <= e.response.status_code < 600
+    return False
+
+def should_retry(e):
+    # Retry on HTTP errors (except 404), connection timeouts and JSON decode errors
+    if isinstance(e, HTTPError):
+        return e.response.status_code != 404
+    return (
+        isinstance(e, (ConnectionError, Timeout, httpx.ConnectTimeout)) or
+        isinstance(e, JSONDecodeError)
+    )
+
+def on_backoff(details):
+    retry_number = details.get("tries", 0)
+    wait_time = details.get("wait", 0)
+    exception = details.get("exception")
+    exception_type = type(exception).__name__ if exception else "Unknown"
+    cPrint(
+        f"Backing off {wait_time:.1f} seconds after {retry_number} tries. "
+        f"Exception: {exception_type}", level='WARNING'
+    )
 
 class httpSource(baseSource):
     """httpSource.
@@ -307,6 +338,14 @@ class httpSource(baseSource):
                 ) as response:
                     return response
 
+    @backoff.on_exception(
+        backoff.expo,
+        (httpx.TimeoutException, httpx.ConnectTimeout, httpx.HTTPStatusError, httpx.HTTPError),
+        max_tries=3,
+        jitter=backoff.full_jitter,
+        on_backoff=on_backoff,
+        giveup=lambda e: not bad_gateway_exception(e) and not isinstance(e, httpx.ConnectTimeout)
+    )
     async def http_request(
         self,
         url: str,
@@ -346,6 +385,14 @@ class httpSource(baseSource):
             error = str(exc)
         return response, error
 
+    @backoff.on_exception(
+        backoff.expo,
+        (httpx.TimeoutException, httpx.ConnectTimeout, httpx.HTTPStatusError, httpx.HTTPError),
+        max_tries=3,
+        jitter=backoff.full_jitter,
+        on_backoff=on_backoff,
+        giveup=lambda e: not bad_gateway_exception(e) and not isinstance(e, httpx.ConnectTimeout)
+    )
     async def async_request(
         self,
         url: str,
@@ -399,7 +446,7 @@ class httpSource(baseSource):
             f"HTTP: Connecting to {url} using {method.upper()}", level="DEBUG"
         )
         timeout = httpx.Timeout(self.timeout)
-        args = {"timeout": timeout, "headers": headers, "cookies": cookies}
+        args = {"timeout": timeout, "headers": headers, "cookies": cookies, **kwargs}
         if auth is not None:
             args["auth"] = auth
         if proxies:
@@ -425,7 +472,6 @@ class httpSource(baseSource):
             elif isinstance(error, bs):
                 return (result, error)
             else:
-                print('ERROR > ', error)
                 raise DriverError(str(error))
         ## saving last execution parameters:
         self._last_execution = {
@@ -477,7 +523,7 @@ class httpSource(baseSource):
                 return True
         return False
 
-    async def process_response(self, response, url: str, namespaces: Optional[dict] = None)  -> tuple:
+    async def process_response(self, response, url: str, namespaces: Optional[dict] = None) -> tuple:
         """
         Processes the response from an HTTPx request.
 
@@ -605,6 +651,14 @@ class httpSource(baseSource):
         driver.quit()
         return page
 
+    @backoff.on_exception(
+        backoff.expo,
+        (HTTPError, ConnectionError, Timeout, httpx.ConnectTimeout, JSONDecodeError),
+        max_tries=3,
+        giveup=lambda e: not bad_gateway_exception(e) and not isinstance(e, httpx.ConnectTimeout) and not should_retry(e),
+        jitter=backoff.full_jitter,
+        on_backoff=on_backoff
+    )
     async def request(
         self,
         url,
