@@ -1,6 +1,8 @@
 import sys
 from typing import (
     Any,
+    Dict,
+    Iterable,
     Union,
     Optional
 )
@@ -23,6 +25,12 @@ from requests.auth import HTTPBasicAuth
 import httpx
 import aiohttp
 from aiohttp import web
+from aiohttp.client_exceptions import (
+    ClientError,
+    ClientConnectorError,
+    ServerTimeoutError,
+    ClientResponseError
+)
 from bs4 import BeautifulSoup as bs
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
@@ -31,6 +39,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from lxml import html, etree
 import xml.etree.ElementTree as ET
+from datamodel.parsers.json import json_encoder
 from asyncdb import AsyncDB
 from asyncdb.utils import cPrint
 from navconfig.logging import logging
@@ -53,6 +62,8 @@ else:
 
 
 P = ParamSpec("P")
+
+AIOHTTP_ALLOWED_METHODS: set[str] = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
 
 urllib3.disable_warnings()
@@ -102,11 +113,26 @@ mobile_ua = [
 ]
 
 
+def on_backoff(details):
+    retry_number = details.get("tries", 0)
+    wait_time = details.get("wait", 0)
+    exception = details.get("exception")
+    exception_type = type(exception).__name__ if exception else "Unknown"
+    logging.warning(
+        f"Backing off {wait_time:.1f} seconds after {retry_number} tries. due to error: {exception_type}"
+    )
+    cPrint(
+        f"Backing off {wait_time:.1f} seconds after {retry_number} tries. "
+        f"Exception: {exception_type}", level='WARNING'
+    )
+
+
 # Define exception handlers
 def bad_gateway_exception(e):
     if isinstance(e, HTTPError):
         return 500 <= e.response.status_code < 600
     return False
+
 
 def should_retry(e):
     # Retry on HTTP errors (except 404), connection timeouts and JSON decode errors
@@ -117,15 +143,23 @@ def should_retry(e):
         isinstance(e, JSONDecodeError)
     )
 
-def on_backoff(details):
-    retry_number = details.get("tries", 0)
-    wait_time = details.get("wait", 0)
-    exception = details.get("exception")
-    exception_type = type(exception).__name__ if exception else "Unknown"
-    cPrint(
-        f"Backing off {wait_time:.1f} seconds after {retry_number} tries. "
-        f"Exception: {exception_type}", level='WARNING'
+
+# Define exception handlers
+def aiohttp_bad_gateway(e):
+    if isinstance(e, ClientResponseError):
+        return 500 <= e.status < 600
+    return False
+
+
+def aiohttp_should_retry(e):
+    # Retry on HTTP errors (except 404), connection timeouts and JSON decode errors
+    if isinstance(e, ClientResponseError):
+        return e.status != 404
+    return (
+        isinstance(e, (ClientConnectorError, ServerTimeoutError, aiohttp.ClientOSError)) or
+        isinstance(e, JSONDecodeError)
     )
+
 
 class httpSource(baseSource):
     """httpSource.
@@ -301,42 +335,127 @@ class httpSource(baseSource):
             val = self.get_env_value(value, default=default)
             self.auth[key] = val
 
-    async def session(self, url: str = None, method: str = None, data: dict = None):
+    @backoff.on_exception(
+        backoff.expo,
+        (ClientResponseError, ClientConnectorError, ServerTimeoutError, aiohttp.ClientOSError, JSONDecodeError),
+        max_tries=3,
+        giveup=lambda e: not aiohttp_bad_gateway(e) and not isinstance(e, ClientConnectorError) and not aiohttp_should_retry(e),
+        jitter=backoff.full_jitter,
+        on_backoff=on_backoff
+    )
+    async def session(
+        self,
+        url: Optional[str] = None,
+        method: str | None = None,
+        data: Dict[str, Any] | None = None,
+        *,
+        headers: Dict[str, str] | None = None,
+        cookies: Dict[str, str] | None = None,
+        timeout: Dict[str, float] | None = None,
+        proxies: Iterable[str] | None = None,
+        use_json: bool = False,
+        enable_http2: bool = False
+    ) -> aiohttp.ClientResponse:
         """
-        session.
-        Connect to an http source using aiohttp.
+        Send an HTTP request and return the raw aiohttp.ClientResponse.
+
+        Parameters
+        ----------
+        url        : override self.url
+        method     : 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' (case-insensitive)
+        data       : payload for POST/PUT/PATCH requests
+        headers    : extra request headers (merged with self._headers)
+        cookies    : optional cookie jar
+        timeout    : dict passed straight into aiohttp.ClientTimeout(**timeout)
+                    (falls back to {'total': self.timeout})
+        proxies    : iterable of proxies; falls back to self._proxies
+        use_json   : if True send body via *json=* (application/json),
+                    otherwise send via *data=* (form-url-encoded or bytes)
+        enable_http2: if True, HTTP/2 will be used for the request
+
+        Returns
+        -------
+        aiohttp.ClientResponse  (remember to `.json()` / `.text()` / `.read()` it)
         """
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
-        if not url:
-            url = self.url
-        if not method:
-            method = self.method
-        auth = {}
+        url = url or self.url
+        method = (method or self.method or "GET").upper()
+        if method not in AIOHTTP_ALLOWED_METHODS:
+            raise ValueError(f"Unsupported HTTP method '{method}'")
+
+        # ---------- build headers ------- #
+        request_headers: dict[str, str] = {**getattr(self, "_headers", {})}
+        if isinstance(headers, dict):
+            request_headers.update(headers)
+
+        headers = request_headers
+
+        # ---------- auth handling --------------- #
+        auth: Optional[aiohttp.BasicAuth] = None
         proxy = None
         if self.auth:
-            auth = self.auth
-        if self._proxies:
-            proxy = random.choice(self._proxies)
-        async with aiohttp.ClientSession(auth) as session:
-            if method == 'get':
-                async with session.get(
-                    url,
-                    headers=self.headers,
-                    timeout=timeout,
-                    auth=auth,
-                    proxy=proxy
-                ) as response:
-                    return response
-            elif method == 'post':
-                async with session.post(
-                    url,
-                    headers=self.headers,
-                    timeout=timeout,
-                    proxy=proxy,
-                    auth=auth,
-                    data=data
-                ) as response:
-                    return response
+            if "apikey" in self.auth:
+                request_headers["Authorization"] = (
+                    f"{getattr(self, 'token_type', 'Bearer')} {self.auth['apikey']}"
+                )
+            elif self.auth_type == "api_key":
+                request_headers.update(self.auth)                    # headers-style key
+            elif self.auth_type == "key":
+                url = self.build_url(
+                    url, args=getattr(self, "_arguments", None), queryparams=urlencode(self.auth)
+                )
+            elif self.auth_type in {"basic", "auth", "user"}:
+                auth = aiohttp.BasicAuth(*self.auth)                 # ('user', 'pwd')
+        elif getattr(self, "_user", None) and self.auth_type == "basic":
+            auth = aiohttp.BasicAuth(self._user, self._pwd)
+        else:
+            if self.auth:
+                auth = self.auth
+
+        print('AUTH > ', auth)
+
+        # ---------- timeout --------------------- #
+        if not timeout:
+            timeout = {}
+        timeout_obj = aiohttp.ClientTimeout(total=self.timeout, **timeout)
+        # ---------- proxy choice ---------------- #
+        proxy_pool = list(proxies or getattr(self, "_proxies", []) or [])
+        proxy = random.choice(proxy_pool) if proxy_pool else None
+
+        # Prepare session kwargs
+        session_kwargs = {
+            "json_serialize": json_encoder
+        }
+        if auth:
+            session_kwargs['auth'] = auth
+
+        # Enable HTTP/2 if requested
+        if enable_http2:
+            session_kwargs['version'] = aiohttp.HttpVersion11
+
+        # Session:
+        async with aiohttp.ClientSession(**session_kwargs) as session:
+            request_kwargs: dict[str, Any] = dict(
+                url=url,
+                headers=request_headers,
+                timeout=timeout_obj,
+                proxy=proxy,
+                auth=auth,
+            )
+            if cookies:
+                request_kwargs['cookies'] = cookies
+            if method == 'GET':
+                if data:
+                    request_kwargs["params"] = data
+            elif method in {"POST", "PUT", "PATCH"}:
+                if use_json:
+                    request_kwargs["json"] = data
+                else:
+                    request_kwargs["data"] = data
+            elif method == 'DELETE':
+                if data:
+                    request_kwargs["data"] = data
+            async with session.request(method, **request_kwargs) as response:
+                return response
 
     @backoff.on_exception(
         backoff.expo,

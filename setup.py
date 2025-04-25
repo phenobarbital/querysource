@@ -199,6 +199,7 @@ setup(
         # Backoff Support
         "backoff==2.2.1",
         "simplejson==3.20.1",
+        "h2==4.2.0",
         # Jinja2 extensions:
         "jinja2-iso8601==1.0.0",
         "jinja2-time==0.2.0",

@@ -73,7 +73,11 @@ class baseSource(ABC):
         else:
             self.method = kwargs.pop('method', 'get')
         # Event Loop.
-        self._loop = loop or asyncio.get_event_loop()
+        try:
+            self._loop = loop or asyncio.get_event_loop()
+        except RuntimeError:
+            self._loop = loop or asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
         ## Timeout:
         try:
             ts = definition.params.get('timeout', 60)
