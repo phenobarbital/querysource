@@ -27,7 +27,7 @@ class jdbcDriver(SQLDriver):
     hostname: InitVar = ''
     username: InitVar = ''
     user: str = Field(required=False, default=None, repr=True)
-    password: str = Field(required=False, default=None, repr=False)
+    password: str = Field(required=False, default=None, repr=False, is_secret=True)
     dsn_format: str = None
     jar: Union[list, str] = Field(Required=True)
     classpath: Path = Field(Required=False)

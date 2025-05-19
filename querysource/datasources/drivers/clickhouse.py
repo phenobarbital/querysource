@@ -19,7 +19,7 @@ class clickhouseDriver(NoSQLDriver):
     host: str = Column(required=True, default='127.0.0.1')
     port: int = Column(required=False, default=9000)
     user: str = Column(required=True)
-    password: str = Column(required=True)
+    password: str = Column(required=True, is_secret=True)
     database: str = Column(required=False, default='default')
     secure: bool = Column(required=False, default=False)
     protocol: str = Column(required=False, default='http')

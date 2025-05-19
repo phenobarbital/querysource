@@ -57,6 +57,20 @@ cpdef object to_uuid(object obj):
     except ValueError:
         return None
 
+cpdef str anonymize(str s, int visible = 2, str mask_char = "*", int max_length = 10):
+    """
+    Masks all but the first `visible` characters of the string `s` with `mask_char`.
+    If s is shorter than or equal to `visible`, returns s unchanged.
+    """
+    if s is None:
+        return None
+    # If the string is too short to mask, just return it as-is
+    if len(s) <= visible:
+        # return all replaced with mask_char
+        return mask_char * len(s)
+    # Keep the first `visible` chars, mask the rest
+    return s[:visible] + mask_char * (max_length - visible)
+
 ### Date-time Functions
 # date utilities
 cpdef datetime.date current_date(str tz = None):

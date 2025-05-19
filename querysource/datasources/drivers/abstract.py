@@ -101,7 +101,11 @@ class BaseDriver(BaseModel):
             except KeyError:
                 continue  # Field Missing on Driver:
             secret = False
-            if 'is_secret' in f.metadata:
+            if field == 'password':
+                # password is always secret
+                secret = True
+            elif 'secret' in f.metadata:
+                # secret is a keyword for other fields
                 secret = f.metadata["is_secret"]
             title = field
             if 'title' in f.metadata:

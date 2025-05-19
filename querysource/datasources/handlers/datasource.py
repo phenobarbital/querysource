@@ -12,6 +12,7 @@ from asyncdb.exceptions import (
 )
 from navigator.views import BaseView
 from ...conf import default_dsn
+from ...utils.functions import anonymize
 from ...utils.parseqs import ParseDict
 from ...exceptions import ParserError
 from ..models import DataSource
@@ -39,13 +40,23 @@ class DatasourceView(BaseView):
                 drv = getattr(cls, clsname)
                 if not drv:
                     continue
+                credentials = drv.get_credentials()
+                if 'password' in credentials:
+                    credentials['password'] = anonymize(
+                        credentials['password']
+                    )
+                params = drv.get_parameters()
+                if 'password' in params:
+                    params['password'] = anonymize(
+                        params['password']
+                    )
                 driver = {
                     "uid": uuid.uuid1(),
                     "driver": drv.driver,
                     "name": name,
                     "description": drv.name,
-                    "params": drv.get_parameters(),
-                    "credentials": drv.get_credentials(),
+                    "params": params,
+                    "credentials": credentials,
                     "program_slug": "default",
                     "drv": drv.modelName,
                     "default": True
