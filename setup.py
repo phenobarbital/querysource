@@ -167,8 +167,8 @@ setup(
     install_requires=[
         'LivePopularTimes==1.3',
         'hubspot-api-client==10.0.0',
-        'httpx[http2]>=0.25.0,<=0.28.0',
-        'h2==4.2.0',
+        'httpx[http2]>=0.25.0,<=0.28.1',
+        'h2>=4.2.0',
         'oauth2client==4.1.3',
         'google-analytics-data==0.18.15',
         'google-api-python-client>=2.151.0,<=2.166.0',
@@ -195,6 +195,7 @@ setup(
         'proxylists>=0.12.5',
         'async-notify>=1.3.1',
         'navconfig[uvloop,default]>=1.7.9',
+        'navigator-api>=2.12.22',
         'jsonschema==4.22.0',
         # Backoff Support
         "backoff==2.2.1",
