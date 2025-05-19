@@ -61,8 +61,10 @@ class DatasourceView(BaseView):
                     "drv": drv.modelName,
                     "default": True
                 }
-                if drv.dsn:
-                    driver['dsn'] = drv.dsn
+                if hasattr(drv, 'dsn_format'):
+                    driver['dsn'] = drv.dsn_format
+                if hasattr(drv, 'icon'):
+                    driver['icon'] = drv.icon
                 drivers.append(driver)
             except (AttributeError, ImportError) as ex:
                 print(ex)

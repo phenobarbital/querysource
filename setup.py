@@ -233,7 +233,8 @@ setup(
         "alphashape==1.3.1",
         "hdbscan==0.8.40",
         "ydata-profiling==4.16.1",
-        "altair==5.5.0"
+        "altair==5.5.0",
+        "tqdm>=4.65.0,<=4.67.1",
     ],
     extras_require={
         "analytics": [
