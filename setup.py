@@ -190,6 +190,8 @@ setup(
         'selenium>=4.24.0',
         'snapshot-selenium>=0.0.2',
         'webdriver-manager>=4.0.2',
+        # Playwright Support:
+        'playwright>=1.52.0',
         # NAV libraries:
         # 'asyncdb[all]>=2.8.1',
         'proxylists>=0.12.5',
@@ -229,7 +231,7 @@ setup(
         "thefuzz==0.22.1",
         "modin==0.32.0",
         "WeasyPrint>=65.0",
-        "groq==0.22.0",
+        "groq>=0.22.0,<=0.25.0",
         "alphashape==1.3.1",
         "hdbscan==0.8.40",
         "ydata-profiling==4.16.1",

@@ -268,6 +268,22 @@ JIRA_PASSWORD = config.get('JIRA_PASSWORD')
 JIRA_TOKEN = config.get('JIRA_TOKEN')
 JIRA_CERT = config.get('JIRA_CERT')
 
+## HTTPClioent
+HTTPCLIENT_MAX_SEMAPHORE = config.getint("HTTPCLIENT_MAX_SEMAPHORE", fallback=5)
+HTTPCLIENT_MAX_WORKERS = config.getint("HTTPCLIENT_MAX_WORKERS", fallback=1)
+
+## Google API:
+GOOGLE_API_KEY = config.get('GOOGLE_API_KEY')
+GOOGLE_SEARCH_API_KEY = config.get('GOOGLE_SEARCH_API_KEY')
+GOOGLE_SEARCH_ENGINE_ID = config.get('GOOGLE_SEARCH_ENGINE_ID')
+GOOGLE_PLACES_API_KEY = config.get('GOOGLE_PLACES_API_KEY')
+GOOGLE_CREDENTIALS_FILE = Path(
+    config.get(
+        'GOOGLE_CREDENTIALS_FILE',
+        fallback=BASE_DIR.joinpath('env', 'google', 'key.json')
+    )
+)
+
 # Google Analytics
 GOOGLE_SERVICE_FILE = config.get('GA_SERVICE_ACCOUNT_NAME', fallback="ga-api-a78f7d886a47.json")
 GOOGLE_SERVICE_PATH = config.get('GA_SERVICE_PATH', fallback=BASE_DIR.joinpath("env"))
