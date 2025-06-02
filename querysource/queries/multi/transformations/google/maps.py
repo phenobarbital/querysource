@@ -37,15 +37,37 @@ class GoogleMaps(AbstractTransform):
         )
         destination = origin
         args = {}
-        if self.departure_time:
+
+        # Get departure_time from row or self
+        departure_time = row.get('departure_time', self.departure_time)
+        if departure_time is not None:
             args = {
-                "departure_time": self.departure_time
+                "departure_time": departure_time
             }
+            print(f"Debug - departure_time in args: {args['departure_time']}")
+            print(f"Debug - departure_time type: {type(args['departure_time'])}")
+
         try:
+            # Convert locations to Location objects
+            formatted_locations = []
+            for loc in row['locations']:
+                # Create Location object with all required attributes
+                location = Location(
+                    latitude=loc['latitude'],
+                    longitude=loc['longitude'],
+                    location_name=loc['location_name']  # Add location_name in constructor
+                )
+                # Add store_id as an attribute
+                location.store_id = loc['store_id']
+                formatted_locations.append(location)
+
+            print(f"Debug - formatted_locations: {formatted_locations}")
+            print(f"Debug - args being passed to TravelerSearch: {args}")
+
             traveler = TravelerSearch(
                 origin=origin,
-                destination=destination,  # Get destination from last location
-                locations=row['locations'],
+                destination=destination,
+                locations=formatted_locations,  # Pass Location objects directly
                 optimal=False,
                 scale=self.map_scale,
                 zoom=self.zoom,
