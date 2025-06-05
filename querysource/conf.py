@@ -308,6 +308,10 @@ CLICKHOUSE_DATABASE = config.get('CLICKHOUSE_DATABASE', fallback='default')
 CLICKHOUSE_SECURE = config.getboolean('CLICKHOUSE_SECURE', fallback=False)
 CLICKHOUSE_CLIENT_NAME = config.get('CLICKHOUSE_CLIENT_NAME', fallback='Navigator')
 
+# Oxylabs
+OXYLABS_USERNAME = config.get('OXYLABS_USERNAME')
+OXYLABS_PASSWORD = config.get('OXYLABS_PASSWORD')
+OXYLABS_ENDPOINT = config.get('OXYLABS_ENDPOINT')
 
 ## Export Options (Output):
 CSV_DEFAULT_DELIMITER = config.get('CSV_DEFAULT_DELIMITER', fallback=',')

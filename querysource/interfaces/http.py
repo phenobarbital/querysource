@@ -29,7 +29,9 @@ from datamodel.parsers.json import JSONContent, json_encoder  # pylint: disable=
 from navconfig.logging import logging
 from proxylists.proxies import (
     FreeProxy,
-    Oxylabs
+    Oxylabs,
+    Decodo,
+    Geonode
 )
 from ..conf import (
     HTTPCLIENT_MAX_SEMAPHORE,
@@ -202,7 +204,7 @@ class HTTPService:
         # Logger:
         self.logger = logging.getLogger(__name__)
 
-    async def get_proxies(self, session_time: float = 1):
+    async def get_proxies(self, session_time: float = 0.40):
         """
         Asynchronously retrieves a list of free proxies.
         TODO: SELECT or rotate the free/paid proxies.
@@ -210,10 +212,17 @@ class HTTPService:
         if self._free_proxy is True:
             return await FreeProxy().get_list()
         else:
-            return await Oxylabs(
-                session_time=session_time,
-                timeout=10
-            ).get_list()
+            if self.proxy_type == 'decodo':
+                return await Decodo().get_list()
+            elif self.proxy_type == 'oxylabs':
+                return await Oxylabs(
+                    session_time=session_time,
+                    timeout=10
+                ).get_list()
+            elif self.proxy_type == 'geonode':
+                return await Geonode().get_list()
+            else:
+                return []
 
     async def refresh_proxies(self):
         """
