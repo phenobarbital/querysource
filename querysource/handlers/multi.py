@@ -54,6 +54,8 @@ class QueryHandler(AbstractHandler):
                 message="No valid JSON data was not found in payload.",
                 code=400
             )
+        elif options is None:
+            options = {}
         # if no return, then we don't need to return anything:
         self.no_return: bool = options.pop('no_return', False)
         ## Getting data from Queries or Files
