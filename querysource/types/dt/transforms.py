@@ -2729,3 +2729,63 @@ def flatten(
     except Exception as e:
         print(f"Error in flatten function: {e}")
         raise
+
+def rename_nested_json_key(
+    df: pd.DataFrame,
+    field: str,
+    field_mapping: dict
+) -> pd.DataFrame:
+    """
+    Rename keys within nested JSON objects in a DataFrame column.
+    
+    Args:
+        df (pd.DataFrame): The DataFrame containing the field to be processed.
+        field (str): The name of the column containing nested JSON objects.
+        field_mapping (dict): A dictionary mapping old field names to new field names.
+                             Example: {"old_name": "new_name", "text": "content"}
+    
+    Returns:
+        pd.DataFrame: The DataFrame with renamed keys in the nested JSON objects.
+    
+    Example usage in ETL:
+        - TransformRows:
+            fields:
+              reviews:
+                value:
+                  - rename_nested_json_key
+                  - field_mapping:
+                      text: content
+                      rating: score
+                      time: timestamp
+    """
+    try:
+        def rename_keys_in_item(item):
+            """Helper function to rename keys in a single JSON item."""
+            if isinstance(item, dict):
+                new_item = {}
+                for key, value in item.items():
+                    # Use the new name if it exists in mapping, otherwise keep the old name
+                    new_key = field_mapping.get(key, key)
+                    new_item[new_key] = value
+                return new_item
+            return item
+        
+        def process_nested_items(nested_items):
+            """Process nested items (list of dictionaries or single dictionary)."""
+            if isinstance(nested_items, list):
+                # Handle list of dictionaries
+                return [rename_keys_in_item(item) for item in nested_items]
+            elif isinstance(nested_items, dict):
+                # Handle single dictionary
+                return rename_keys_in_item(nested_items)
+            else:
+                # Return as is if not a list or dict
+                return nested_items
+        
+        # Apply the transformation to the field
+        df[field] = df[field].apply(process_nested_items)
+        
+    except Exception as err:
+        print(f"Error in rename_nested_json_key for field {field}:", err)
+    
+    return df
