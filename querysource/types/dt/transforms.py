@@ -12,6 +12,7 @@ import traceback
 import orjson
 import calendar
 import timezonefinder
+import phonenumbers
 from zoneinfo import ZoneInfo
 import locale
 import numpy as np
@@ -45,6 +46,45 @@ def from_currency(df: pd.DataFrame, field: str, symbol="$", remove_nan: bool = T
         df[field] = df[field].fillna(0)
     df[field] = pd.to_numeric(df[field], errors="coerce")
     df[field] = df[field].replace([-np.inf, np.inf], np.nan)
+    return df
+
+def phone_format(df: pd.DataFrame, field: str, country: str = 'US', format: str = 'E164') -> pd.DataFrame:
+    """
+    Format phone numbers in a DataFrame column using the `phonenumbers` library.
+
+    Parameters:
+    - country (str): The default country code (e.g., 'US', 'GB') used for parsing.
+    - format (str): The desired output format for the phone numbers.
+        Supported values:
+        - 'E164': +12025550123
+        - 'INTERNATIONAL': +1 202-555-0123
+        - 'NATIONAL': (202) 555-0123
+        - 'RFC3966': tel:+1-202-555-0123
+
+    Returns:
+    - pd.DataFrame: The DataFrame with the formatted phone numbers. Invalid numbers are returned as-is,
+      and null/empty values are set to None.
+    """
+
+    def format_number(number):
+        #if not number or pd.isna(number):
+        if pd.isna(number):
+            return None
+        try:
+            parsed = phonenumbers.parse(str(number), country)
+            if not phonenumbers.is_valid_number(parsed):
+                return number
+            format_enum = {
+                'E164': phonenumbers.PhoneNumberFormat.E164,
+                'INTERNATIONAL': phonenumbers.PhoneNumberFormat.INTERNATIONAL,
+                'NATIONAL': phonenumbers.PhoneNumberFormat.NATIONAL,
+                'RFC3966': phonenumbers.PhoneNumberFormat.RFC3966
+            }.get(format.upper(), phonenumbers.PhoneNumberFormat.E164)
+            return phonenumbers.format_number(parsed, format_enum)
+        except Exception:
+            return number
+
+    df[field] = df[field].apply(format_number)
     return df
 
 def num_formatter(n: Union[int, Any]):

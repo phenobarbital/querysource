@@ -237,6 +237,7 @@ setup(
         "ydata-profiling==4.16.1",
         "altair==5.5.0",
         "tqdm>=4.65.0,<=4.67.1",
+        'phonenumbers==9.0.9',
     ],
     extras_require={
         "analytics": [
