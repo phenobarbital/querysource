@@ -1,54 +1,191 @@
+# QuerySource Makefile
+# This Makefile provides a set of commands to manage the QuerySource project.
+
+.PHONY: venv install develop setup dev release format lint test clean distclean lock sync
+
+# Python version to use
+PYTHON_VERSION := 3.11
+
+# Auto-detect available tools
+HAS_UV := $(shell command -v uv 2> /dev/null)
+HAS_PIP := $(shell command -v pip 2> /dev/null)
+
+# Install uv for faster workflows
+install-uv:
+	curl -LsSf https://astral.sh/uv/install.sh | sh
+	@echo "uv installed! You may need to restart your shell or run 'source ~/.bashrc'"
+	@echo "Then re-run make commands to use faster uv workflows"
+
+# Create virtual environment
 venv:
-	python3.11 -m venv .venv
-	echo 'run `source .venv/bin/activate` to start develop QuerySource'
+	uv venv --python $(PYTHON_VERSION) .venv
+	@echo 'run `source .venv/bin/activate` to start develop with QuerySource.'
 
+# Install production dependencies using lock file
 install:
-	# pip install --upgrade git+https://github.com/GrocerCheck/LivePopularTimes
-	pip install --upgrade asyncdb[all]
-	pip install --upgrade navconfig[default,uvloop]
-	pip install --upgrade navigator-session
-	pip install --upgrade navigator-auth[uvloop]
-	pip install --upgrade navigator-api[uvloop,locale]
-	# pip install -e .[analytics]
-	pip install -e .
-	echo 'start using QuerySource'
+	uv sync --frozen --no-dev --extra analytics --extra vectors
+	uv pip install navigator-api[uvloop,locale]
+	@echo "Production dependencies installed. Use 'make develop' for development setup."
 
-jupyter:
-	pip install git+https://github.com/m-wrzr/populartimes.git@master#egg=populartimes
-	python -m pip install -Ur docs/requirements-dev.txt
-	pip install --upgrade asyncdb[all]
-	pip install --upgrade navigator-session
-	pip install --upgrade navigator-auth[uvloop]
-	pip install --upgrade navigator-api[uvloop,locale]
-	pip install elyra[all]==3.15.0
-	pip install jupyterlab-code-snippets
-	pip install -e .[jupyter]
-	echo 'start develop QuerySource'
+# Generate lock files (uv only)
+lock:
+ifdef HAS_UV
+	uv lock
+else
+	@echo "Lock files require uv. Install with: pip install uv"
+endif
 
+# Install all dependencies including dev dependencies
+develop:
+	uv sync --frozen --extra all --extra dev
+
+# Alternative: install without lock file (faster for development)
+develop-fast:
+	uv pip install -e .[all,dev]
+
+# Setup development environment from requirements file (if you still have one)
 setup:
-	pip install -e .[analytics]
-	python -m pip install -Ur docs/requirements-dev.txt
+	uv pip install -r requirements/requirements-dev.txt
 
+# Install in development mode using flit (if you want to keep flit)
 dev:
+	uv pip install flit
 	flit install --symlink
 
+# Build and publish release
 release: lint test clean
+	uv build
+	uv publish
+
+# Alternative release using flit
+release-flit: lint test clean
 	flit publish
 
+# Format code
 format:
-	python -m black querysource
+	uv run black querysource
 
+# Lint code
 lint:
-	python -m pylint --rcfile .pylintrc querysource/*.py
-	python -m pylint --rcfile .pylintrc querysource/outputs/*.py
-	python -m pylint --rcfile .pylintrc querysource/providers/*.py
-	python -m pylint --rcfile .pylintrc querysource/parsers/*.py
-	python -m black --check navigator
+	uv run pylint --rcfile .pylint querysource/*.py
+	uv run black --check querysource
 
+# Run tests with coverage
 test:
-	python -m coverage run -m querysource.tests
-	python -m coverage report
-	python -m mypy querysource/*.py
+	uv run coverage run -m querysource.tests
+	uv run coverage report
+	uv run mypy querysource/*.py
 
+# Alternative test command using pytest directly
+test-pytest:
+	uv run pytest
+
+# Add new dependency and update lock file
+add:
+	@if [ -z "$(pkg)" ]; then echo "Usage: make add pkg=package-name"; exit 1; fi
+	uv add $(pkg)
+
+# Add development dependency
+add-dev:
+	@if [ -z "$(pkg)" ]; then echo "Usage: make add-dev pkg=package-name"; exit 1; fi
+	uv add --dev $(pkg)
+
+# Remove dependency
+remove:
+	@if [ -z "$(pkg)" ]; then echo "Usage: make remove pkg=package-name"; exit 1; fi
+	uv remove $(pkg)
+
+# Compile Cython extensions using setup.py
+build-cython:
+	@echo "Compiling Cython extensions..."
+	python setup.py build_ext
+
+# Build Cython extensions in place (for development)
+build-inplace:
+	@echo "Building Cython extensions in place..."
+	python setup.py build_ext --inplace
+
+# Full build using uv
+build: clean
+	@echo "Building package with uv..."
+	uv build
+
+# Update all dependencies
+update:
+	uv lock --upgrade
+
+# Show project info
+info:
+	uv tree
+
+# Clean build artifacts
+clean:
+	rm -rf build/
+	rm -rf dist/
+	rm -rf *.egg-info/
+	find . -name "*.pyc" -delete
+	find . -name "*.pyo" -delete
+	find . -name "*.so" -delete
+	find . -type d -name __pycache__ -delete
+	find . -type f -name "*.pyc" -delete
+	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	@echo "Clean complete."
+
+# Remove virtual environment
 distclean:
 	rm -rf .venv
+	rm -rf uv.lock
+
+# Version management
+bump-patch:
+	@python -c "import re; \
+	content = open('querysource/version.py').read(); \
+	version = re.search(r'__version__ = \"(.+)\"', content).group(1); \
+	parts = version.split('.'); \
+	parts[2] = str(int(parts[2]) + 1); \
+	new_version = '.'.join(parts); \
+	new_content = re.sub(r'__version__ = \".+\"', f'__version__ = \"{new_version}\"', content); \
+	open('querysource/version.py', 'w').write(new_content); \
+	print(f'Version bumped to {new_version}')"
+
+bump-minor:
+	@python -c "import re; \
+	content = open('querysource/version.py').read(); \
+	version = re.search(r'__version__ = \"(.+)\"', content).group(1); \
+	parts = version.split('.'); \
+	parts[1] = str(int(parts[1]) + 1); \
+	parts[2] = '0'; \
+	new_version = '.'.join(parts); \
+	new_content = re.sub(r'__version__ = \".+\"', f'__version__ = \"{new_version}\"', content); \
+	open('querysource/version.py', 'w').write(new_content); \
+	print(f'Version bumped to {new_version}')"
+
+bump-major:
+	@python -c "import re; \
+	content = open('querysource/version.py').read(); \
+	version = re.search(r'__version__ = \"(.+)\"', content).group(1); \
+	parts = version.split('.'); \
+	parts[0] = str(int(parts[0]) + 1); \
+	parts[1] = '0'; \
+	parts[2] = '0'; \
+	new_version = '.'.join(parts); \
+	new_content = re.sub(r'__version__ = \".+\"', f'__version__ = \"{new_version}\"', content); \
+	open('querysource/version.py', 'w').write(new_content); \
+	print(f'Version bumped to {new_version}')"
+
+help:
+	@echo "Available targets:"
+	@echo "  venv         - Create virtual environment"
+	@echo "  install      - Install production dependencies"
+	@echo "  develop      - Install development dependencies"
+	@echo "  build        - Build package"
+	@echo "  release      - Build and publish package"
+	@echo "  test         - Run tests"
+	@echo "  format       - Format code"
+	@echo "  lint         - Lint code"
+	@echo "  clean        - Clean build artifacts"
+	@echo "  detect-tools - Show detected tools"
+	@echo "  install-uv   - Install uv"
+	@echo "  build-inplace - Build Cython extensions in place"
+	@echo ""
+	@echo "Current setup: $(TOOL_INFO)"

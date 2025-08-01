@@ -1,69 +1,190 @@
-[project]
-name = "querysource"
-authors = [
-    {name = "Jesus Lara G.", email = "jesuslarag@gmail.com"},
-]
-readme = "README.md"
-requires-python = ">=3.9.16"
-classifiers=[
-  "Development Status :: 4 - Beta",
-  "Intended Audience :: Developers",
-  "Intended Audience :: System Administrators",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python",
-  "Typing :: Typed",
-  "Development Status :: 4 - Beta",
-  "Environment :: Web Environment",
-  "Framework :: AsyncIO",
-  "Topic :: Software Development :: Libraries :: Application Frameworks",
-  "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: Software Development :: Build Tools",
-  "License :: OSI Approved :: BSD License",
-]
-dynamic = [
-    "version",
-    "description",
-    "urls",
-    "dependencies",
-    "license",
-    "entry-points",
-    "optional-dependencies",
-]
-
-[options]
-python_requires = ">=3.9.16"
-platforms = "manylinux_2_28_x86_64"
-
 [build-system]
 requires = [
-    'setuptools==67.6.1',
-    'Cython==3.0.11',
-    'wheel==0.44.0',
-    'setuptools-scm',
-    'flit'
+    "setuptools>=67.6.1",
+    "setuptools_scm[toml]>=6.0",
+    "Cython==3.0.11",
+    "wheel>=0.44.0"
 ]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "querysource"
+dynamic = ["version"]
+description = "Aiohttp web service for querying several databases easily"
+authors = [
+    {name = "Jesus Lara", email = "jesuslarag@gmail.com"}
+]
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+requires-python = ">=3.10.1"
+keywords = ["querysource", "database", "query", "aiohttp", "web service"]
 
-[tool.flit.metadata]
-module = "querysource"
-author = "Jesus Lara Gimenez"
-author-email = "jesuslarag@gmail.com"
-home-page = "https://github.com/phenobarbital/querysource"
-description-file = "README.md"
-requires-python = ">=3.9.16"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: BSD License",
+    "Framework :: AsyncIO",
+    "Environment :: Web Environment",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    # Core dependencies - compatible versions
+    "LivePopularTimes==1.3",
+    "hubspot-api-client==10.0.0",
+    "httpx[http2]>=0.26.0",
+    "h2>=4.2.0",
+    "oauth2client>=4.1.3",
+    "google-analytics-data>=0.18.15",
+    "google-api-python-client>=2.151.0", # Aligned with flowtask
+    "google-auth-oauthlib==1.2.1",
+    "sqloxide==0.1.39",
+    "aiocsv>=1.3.2",
+    "lxml==5.3.0",
+    "xlsxwriter==3.2.0",
+    "odswriter==0.4.0",
+    "odfpy==1.4.1",
+    "xlrd==2.0.1",
+    "reportlab==4.1.0",
+    "APScheduler>=3.11.0,<3.12.0",
+    "bs4==0.0.2",
+    "simple_salesforce==1.12.3",
+    "psycopg2-binary>=2.9.10",
+    "sqlalchemy>=2.0.23",
+    # Selenium Support - aligned versions
+    "selenium>=4.28.1",
+    "snapshot-selenium>=0.0.2",
+    "webdriver-manager>=4.0.2",
+    # Playwright Support
+    "playwright==1.52.0",
+    # NAV libraries - using compatible versions
+    "proxylists>=0.14.0",
+    "async-notify[all]>=1.4.0",
+    "navconfig[uvloop,default]>=1.7.13",
+    "navigator-api[uvloop,locale]>=2.12.22",
+    "jsonschema>=4.22.0",
+    # Backoff Support
+    "backoff==2.2.1",
+    "simplejson==3.20.1",
+    # Jinja2 extensions
+    "jinja2-iso8601==1.0.0",
+    "jinja2-time==0.2.0",
+    "jinja2-humanize-extension==0.4.0",
+    # Scientific computing - compatible versions
+    "statsmodels==0.14.2",
+    "pmdarima==2.0.4",
+    "scikit-learn==1.5.1",
+    "pygal==3.0.5",
+    "pandas_bokeh==0.5.5",
+    "plotly==5.22.0",
+    "seaborn==0.13.2",
+    "matplotlib==3.10.0",
+    "prompt_toolkit==3.0.47",
+    # Geospatial
+    "folium==0.18.0",
+    "geopandas==1.0.1",
+    "geographiclib==2.0",
+    "geopy==2.4.1",
+    "polars==1.27.1",
+    "contextily==1.6.2",
+    "jenkspy==0.4.1",
+    "timezonefinder==6.5.5",
+    "ipyleaflet==0.19.2",
+    # Text processing
+    "rapidfuzz==3.11.0",
+    "nltk==3.9.1",
+    "wordcloud==1.9.4",
+    "thefuzz==0.22.1",
+    "modin==0.32.0",
+    "WeasyPrint>=65.0",
+    "groq>=0.30.0",
+    "alphashape==1.3.1",
+    "hdbscan==0.8.40",
+    "ydata-profiling==4.16.1",
+    "altair==5.5.0",
+    "tqdm>=4.65.0,<=4.67.1",
+    "phonenumbers==9.0.9",
+    "navigator-auth>=0.15.8",
+]
+
+[project.optional-dependencies]
+analytics = [
+    "pygwalker>=0.4.8.9",
+    "ydata-profiling>=4.16.1",
+    "sweetviz==2.3.1",
+    "pandas-eda>=1.2.0",
+    "pydqc==0.1.0",
+    "prophet==1.1.5",
+    "dtale==3.13.1",
+    "lux-api==0.5.1",
+    "pomegranate==1.1.0",
+    "autoviz==0.1.905",
+    "spacy==3.8.6"
+]
+
+vectors = [
+    "gensim==4.3.3",
+]
+
+dev = [
+    "pytest>=5.4.0",
+    "coverage",
+    "pytest-asyncio==0.23.8",
+    "pytest-xdist==3.3.1",
+    "pytest-assume==2.4.3"
+]
+
+[project.scripts]
+query = "querysource.__cli__:main"
+
+[project.urls]
+Homepage = "https://github.com/phenobarbital/querysource/"
+Source = "https://github.com/phenobarbital/querysource/"
+Tracker = "https://github.com/phenobarbital/querysource/issues"
+Documentation = "https://querysource.readthedocs.io/en/latest/"
+Funding = "https://paypal.me/phenobarbital"
+"Say Thanks!" = "https://saythanks.io/to/phenobarbital"
+
+[tool.setuptools_scm]
+write_to = "querysource/_version.py"
+
+[tool.setuptools.dynamic]
+version = {attr = "querysource.__version__"}
+
+[tool.setuptools.packages.find]
+exclude = [
+    "contrib",
+    "google",
+    "docs",
+    "plugins",
+    "lab",
+    "examples",
+    "samples",
+    "settings",
+    "etc",
+    "bin",
+    "build",
+    "dist",
+    "tests",
+    "env",
+]
+
+[tool.setuptools.package-data]
+querysource = ["py.typed"]
 
 [tool.pytest.ini_options]
 addopts = [
-  "--strict-config",
-  "--strict-markers",
+    "--strict-config",
+    "--strict-markers",
 ]
-
 filterwarnings = [
     "error",
     'ignore:The loop argument is deprecated since Python 3\.8, and scheduled for removal in Python 3\.10:DeprecationWarning:asyncio',

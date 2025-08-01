@@ -6,8 +6,13 @@ QuerySource.
 Querysource is a tool for querying database with different syntax, no matter
 type of database (SQL, noSQL, etc).
 """
-
-## more information
-__copyright__ = 'Copyright (c) 2020-2023 Jesus Lara'
-__license__ = 'BSD'
-__author__ = 'Jesus Lara <jesuslarag@gmail.com>'
+from .version import (
+    __title__,
+    __description__,
+    __version__,
+    __url__,
+    __copyright__,
+    __author__,
+    __author_email__,
+    __license__
+)

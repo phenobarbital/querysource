@@ -7,44 +7,30 @@ https://github.com/phenobarbital/querysource/
 """
 import ast
 from os import path
-from setuptools import find_packages, setup, Extension
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 def get_path(filename):
     return path.join(path.dirname(path.abspath(__file__)), filename)
 
-
 def readme():
     with open(get_path('README.md'), 'r', encoding='utf-8') as rd:
         return rd.read()
 
-
-version = get_path('querysource/version.py')
-with open(version, 'r', encoding='utf-8') as meta:
-    t = compile(meta.read(), version, 'exec', ast.PyCF_ONLY_AST)
-    for node in (n for n in t.body if isinstance(n, ast.Assign)):
-        if len(node.targets) == 1:
-            name = node.targets[0]
-            if isinstance(name, ast.Name) and \
-                    name.id in (
-                        '__version__',
-                        '__title__',
-                        '__description__',
-                        '__author__',
-                        '__license__', '__author_email__'):
-                v = node.value
-                if name.id == '__version__':
-                    __version__ = v.s
-                if name.id == '__title__':
-                    __title__ = v.s
-                if name.id == '__description__':
-                    __description__ = v.s
-                if name.id == '__license__':
-                    __license__ = v.s
-                if name.id == '__author__':
-                    __author__ = v.s
-                if name.id == '__author_email__':
-                    __author_email__ = v.s
+# Try to get version from setuptools_scm first, fall back to manual parsing
+try:
+    from setuptools_scm import get_version
+    __version__ = get_version()
+except Exception:
+    version = get_path('querysource/version.py')
+    with open(version, 'r', encoding='utf-8') as meta:
+        t = compile(meta.read(), version, 'exec', ast.PyCF_ONLY_AST)
+        for node in (n for n in t.body if isinstance(n, ast.Assign)):
+            if len(node.targets) == 1:
+                name = node.targets[0]
+                if isinstance(name, ast.Name) and name.id == '__version__':
+                    __version__ = node.value.s
+                    break
 
 COMPILE_ARGS = ["-O3"]
 
@@ -116,167 +102,7 @@ extensions = [
     )
 ]
 
-
 setup(
-    name='querysource',
-    version=__version__,
-    python_requires=">=3.9.16",
-    url='https://github.com/phenobarbital/querysource/',
-    description=__description__,
-    long_description=readme(),
-    long_description_content_type='text/markdown',
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Topic :: Software Development :: Libraries :: Application Frameworks",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Software Development :: Build Tools",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "License :: OSI Approved :: BSD License",
-    ],
-    author='Jesus Lara',
-    author_email='jesuslarag@gmail.com',
-    packages=find_packages(
-        exclude=[
-            'contrib',
-            'google',
-            'docs',
-            'plugins',
-            'lab',
-            'examples',
-            'samples',
-            'settings',
-            'etc',
-            'bin',
-            'build'
-        ]
-    ),
-    include_package_data=True,
-    package_data={"querysource": ["py.typed"]},
-    license=__license__,
-    license_files='LICENSE',
-    setup_requires=[
-        'setuptools==67.6.1',
-        'Cython==3.0.11',
-        'wheel==0.44.0'
-    ],
-    install_requires=[
-        'LivePopularTimes==1.3',
-        'hubspot-api-client==10.0.0',
-        'httpx[http2]>=0.25.0,<=0.28.1',
-        'h2>=4.2.0',
-        'oauth2client==4.1.3',
-        'google-analytics-data==0.18.15',
-        'google-api-python-client>=2.151.0,<=2.166.0',
-        'google-auth-oauthlib==1.2.1',
-        'sqloxide==0.1.39',
-        'aiocsv>=1.3.2',
-        'lxml==5.3.0',
-        'xlsxwriter==3.2.0',
-        'odswriter==0.4.0',
-        'odfpy==1.4.1',
-        'xlrd==2.0.1',
-        'reportlab==4.1.0',
-        'APScheduler>=3.10.4',
-        'bs4==0.0.2',
-        'simple_salesforce==1.12.3',
-        'psycopg2-binary>=2.9.10',
-        'sqlalchemy>=2.0.23',
-        # Selenium Support:
-        'selenium>=4.24.0',
-        'snapshot-selenium>=0.0.2',
-        'webdriver-manager>=4.0.2',
-        # Playwright Support:
-        'playwright>=1.52.0',
-        # NAV libraries:
-        # 'asyncdb[all]>=2.8.1',
-        'proxylists>=0.12.5',
-        'async-notify>=1.3.1',
-        'navconfig[uvloop,default]>=1.7.9',
-        'navigator-api>=2.12.22',
-        'jsonschema==4.22.0',
-        # Backoff Support
-        "backoff==2.2.1",
-        "simplejson==3.20.1",
-        "h2==4.2.0",
-        # Jinja2 extensions:
-        "jinja2-iso8601==1.0.0",
-        "jinja2-time==0.2.0",
-        "jinja2-humanize-extension==0.4.0",
-        'statsmodels==0.14.2',
-        'pmdarima==2.0.4',
-        'scikit-learn==1.5.1',
-        'pygal==3.0.5',
-        'pandas_bokeh==0.5.5',
-        'plotly==5.22.0',
-        'seaborn==0.13.2',
-        'matplotlib==3.9.2',
-        'prompt_toolkit==3.0.47',
-        'folium==0.18.0',
-        "geopandas==1.0.1",
-        "geographiclib==2.0",
-        "geopy==2.4.1",
-        "polars==1.27.1",
-        "contextily==1.6.2",
-        "jenkspy==0.4.1",
-        "timezonefinder==6.5.5",
-        "ipyleaflet==0.19.2",
-        'rapidfuzz==3.11.0',
-        'nltk==3.9.1',
-        'wordcloud==1.9.4',
-        "thefuzz==0.22.1",
-        "modin==0.32.0",
-        "WeasyPrint>=65.0",
-        "groq>=0.22.0,<=0.25.0",
-        "alphashape==1.3.1",
-        "hdbscan==0.8.40",
-        "ydata-profiling==4.16.1",
-        "altair==5.5.0",
-        "tqdm>=4.65.0,<=4.67.1",
-        'phonenumbers==9.0.9',
-    ],
-    extras_require={
-        "analytics": [
-            # "great_expectations>=0.18.21",
-            "pygwalker>=0.4.8.9",
-            "ydata-profiling>=4.8.3",
-            "sweetviz==2.3.1",
-            "pandas-eda>=1.2.0",
-            'pydqc==0.1.0',
-            'prophet==1.1.5',
-            'dtale==3.13.1',
-            'lux-api==0.5.1',
-            'pomegranate==1.1.0',
-            'autoviz==0.1.905',
-            "spacy==3.8.5"
-        ],
-        "vectors": [
-            "gensim==4.3.3",
-        ]
-    },
-    tests_require=[
-        'pytest>=5.4.0',
-        'coverage',
-        'pytest-asyncio',
-        'pytest-xdist',
-        'pytest-assume'
-    ],
     ext_modules=cythonize(extensions),
     zip_safe=False,
-    entry_points={
-        'console_scripts': [
-            'query = querysource.__cli__:main',
-        ],
-    },
-    project_urls={  # Optional
-        'Source': 'https://github.com/phenobarbital/querysource/',
-        'Tracker': 'https://github.com/phenobarbital/querysource/issues',
-        'Documentation': 'https://querysource.readthedocs.io/en/latest/',
-        'Funding': 'https://paypal.me/phenobarbital',
-        'Say Thanks!': 'https://saythanks.io/to/phenobarbital',
-    },
 )

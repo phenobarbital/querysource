@@ -1,4 +1,4 @@
-name: Python package build and publish
+name: Python package build and publish with uv
 
 on:
   release:
@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -28,15 +28,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: RalfG/python-wheels-manylinux-build@v0.7.1-manylinux2014_x86_64
         with:
-          python-versions: 'cp39-cp39 cp310-cp310 cp311-cp311 cp312-cp312'
-          build-requirements: 'cython numpy'
-
-      - name: Build wheels on Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          pip install cibuildwheel
-          cibuildwheel --output-dir dist
-          # You may need to adjust the above command based on your package's specific requirements
+          python-versions: 'cp310-cp310 cp311-cp311 cp312-cp312'
+          build-requirements: 'cython setuptools wheel'
+          system-packages: 'libmemcached-devel openssl-devel zlib-devel'
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
@@ -47,52 +41,32 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ai-parrot
+    permissions:
+      id-token: write  # For trusted publishing
     steps:
-      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4.1.7
+        uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: dist-artifacts
 
-      - name: Move wheel files to 'dist' directory
+      - name: Move wheel files to dist directory
         run: |
-          find dist -name '*.whl' -exec mv {} dist \;
-
-      - name: Check for wheel types
-        id: check_wheels
-        run: |
-          echo "Checking for wheel types..."
-          if ls dist/*-manylinux*.whl 1> /dev/null 2>&1; then
-            echo "Found manylinux wheels."
-            echo "HAS_MANYLINUX_WHEELS=true" >> $GITHUB_ENV
-          fi
-          if ls dist/*-win_*.whl 1> /dev/null 2>&1; then
-            echo "Found Windows wheels."
-            echo "HAS_WINDOWS_WHEELS=true" >> $GITHUB_ENV
-          fi
+          mkdir -p dist
+          find dist-artifacts -name '*.whl' -exec mv {} dist/ \;
 
       - name: List files in dist
         run: ls -l dist
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install twine
-        run: pip install twine
-
-      - name: Publish manylinux wheels to Production PyPI
-        if: env.HAS_MANYLINUX_WHEELS == 'true'
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.QUERYSOURCE_API_TOKEN }}
-        run: twine upload dist/*-manylinux*.whl
-
-      - name: Publish Windows wheels to Production PyPI
-        if: env.HAS_WINDOWS_WHEELS == 'true'
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.QUERYSOURCE_API_TOKEN }}
-        run: twine upload dist/*-win_*.whl
+      - name: Publish to PyPI
+        run: |
+          uv tool install twine
+          uv tool run twine upload dist/*-manylinux*.whl --username __token__ --password ${{ secrets.QUERYSOURCE_API_TOKEN }}
