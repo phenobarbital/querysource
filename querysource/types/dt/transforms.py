@@ -2829,3 +2829,56 @@ def rename_nested_json_key(
         print(f"Error in rename_nested_json_key for field {field}:", err)
     
     return df
+
+def set_when(
+    df: pd.DataFrame,
+    field: str,
+    value,
+    column: str,
+    condition,
+    column2: str = None,
+    condition2 = None
+) -> pd.DataFrame:
+    """
+    Assign `value` to the `field` column whenever:
+      df[column] == condition  (or isin(condition) if it's a list)
+    and, optionally,
+      df[column2] == condition2 (or isin(condition2) if it's a list).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+    field : str
+        Column destination where `value` will be assigned.
+    value : any type
+        Value to assign.
+    column : str
+        Name of the first column to check.
+    condition : scalar or list
+        Value or list of values to compare with df[column].
+    column2 : str, optional
+        Name of the second column to check.
+    condition2 : scalar or list, optional
+        Value or list of values to compare with df[column2].
+
+    Returns
+    -------
+    pd.DataFrame
+        The modified DataFrame.
+    """
+    # Mask for the first condition
+    if isinstance(condition, (list, tuple, set)):
+        mask = df[column].isin(condition)
+    else:
+        mask = (df[column] == condition)
+
+    # If a second condition is provided, chain it with AND
+    if column2 is not None and condition2 is not None:
+        if isinstance(condition2, (list, tuple, set)):
+            mask &= df[column2].isin(condition2)
+        else:
+            mask &= (df[column2] == condition2)
+
+    # Apply the value where the mask is True
+    df.loc[mask, field] = value
+    return df
