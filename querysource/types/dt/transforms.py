@@ -10,6 +10,7 @@ from datetime import timedelta, datetime as dtime
 from functools import reduce
 import traceback
 import orjson
+import json
 import calendar
 import timezonefinder
 import phonenumbers
@@ -230,8 +231,24 @@ def extract_from_array(
         idx = -1
     else:
         idx = index
+    def safe_extract(x):
+        """Safely extract element from list, handling edge cases"""
+        if not isinstance(x, list) or x is None:
+            return None
+        # Handle empty list
+        if len(x) == 0:
+            return None
+        # Handle negative indices (like -1 for last)
+        if idx < 0:
+            if abs(idx) > len(x):
+                return None
+            return x[idx]
+        # Handle positive indices
+        if idx >= len(x):
+            return None
+        return x[idx]
     try:
-        df[field] = df[column].apply(lambda x: x[idx] if isinstance(x, list) and x is not None else None)
+        df[field] = df[column].apply(safe_extract)
     except Exception as err:
         logging.error(f"extract_from_array Error: {err}")
     finally:
@@ -1180,7 +1197,23 @@ def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
     """
     col1 = columns[0]
     col2 = columns[1]
-    df[field] = df.apply(lambda x: x[col1].replace((x[col2]), ""), 1)
+    
+    def safe_replace(row):
+        """Safely replace values handling None/NaN cases"""
+        val1 = row[col1]
+        val2 = row[col2]
+        # Handle None/NaN cases
+        if pd.isna(val1) or val1 is None:
+            return ""
+        if pd.isna(val2) or val2 is None:
+            return str(val1)
+        # Convert to string and perform replace
+        try:
+            return str(val1).replace(str(val2), newvalue)
+        except (AttributeError, TypeError):
+            return str(val1)
+    
+    df[field] = df.apply(safe_replace, axis=1)
     return df
 
 def replace_to_nan(df: pd.DataFrame, field: str, to_replace=[]):
@@ -2387,25 +2420,41 @@ def flatten_array(
 
 
 def extract_json_data(row, field: str, column: str):
-    """
-    Extracts data from a JSON-like dictionary or list in a specified column of a DataFrame row.
-
-    :param row: The DataFrame row containing the JSON-like data.
-    :param field: The key to extract from the JSON data.
-    :param column: The name of the column containing the JSON data.
-    :return: The extracted data or None if the key is not found.
-    """
     try:
-        rows = row[column]
+        rows = row[column]       
+        # Handle None/empty values
+        if rows is None:
+            return None
+        # Handle string JSON
+        if isinstance(rows, str):
+            try:
+                rows = json.loads(rows)
+            except (json.JSONDecodeError, ValueError):
+                import ast
+                try:
+                    rows = ast.literal_eval(rows)
+                except (ValueError, SyntaxError):
+                    return None
         if isinstance(rows, list):
+            # Handle empty list
+            if len(rows) == 0:
+                return None
             # Extract the column from the dictionary column
-            _data = [row[field] for row in rows]
+            _data = []
+            for row_item in rows:
+                if isinstance(row_item, dict) and field in row_item:
+                    _data.append(row_item[field])
+                else:
+                    _data.append(None)
             return _data
-        else:
+        elif isinstance(rows, dict):
             # Extract the column from the dictionary column
-            return row[column][field]
-    except KeyError:
-        # Return None or some default value if 'column' key is not found
+            result = rows.get(field)
+            return result
+        else:
+            return None
+    except (KeyError, TypeError, AttributeError) as e:
+        # Return None if any error occurs
         return None
 
 
@@ -2420,7 +2469,11 @@ def extract_column(df: pd.DataFrame, field: str, column: str):
         column (str): Column used for transformation
     """
     try:
-        df[field] = df.apply(extract_json_data, axis=1, args=(field, column))
+        # Create a wrapper function to handle the argument order correctly
+        def extract_wrapper(row):
+            return extract_json_data(row, field, column)
+        
+        df[field] = df.apply(extract_wrapper, axis=1)
     except Exception as exc:
         print(f"Error on extract_column {field}: {exc}")
     return df
