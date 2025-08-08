@@ -2935,3 +2935,94 @@ def set_when(
     # Apply the value where the mask is True
     df.loc[mask, field] = value
     return df
+
+def dict_to_attr_list(
+    df: pd.DataFrame,
+    field: str,
+    column: Optional[str] = None,
+    key_field: str = "attribute_key",
+    value_field: str = "attribute_value",
+    include_keys: Optional[List[Any]] = None,
+    exclude_keys: Optional[List[Any]] = None
+) -> pd.DataFrame:
+    """
+    Converts each dict in df[column] into a list of dicts
+    of the form { key_field: key, value_field: value }.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    field : str
+        Name of the output column to populate with the list.
+    column : str, optional
+        Name of the input column containing dicts. If None, defaults to `field`.
+    key_field : str, default "attribute_key"
+        Name to use for the key in the output dicts.
+    value_field : str, default "attribute_value"
+        Name to use for the value in the output dicts.
+    include_keys : list, optional
+        If provided, only these keys will be included in the output.
+    exclude_keys : list, optional
+        If provided, these keys will be excluded from the output.
+
+    Returns
+    -------
+    pd.DataFrame
+        The same DataFrame with `field` populated by lists of key/value dicts.
+    """
+    if column is None:
+        column = field
+
+    def to_attr_list(d: Any) -> List[Dict[str, Any]]:
+        if not isinstance(d, dict):
+            return []
+        items = d.items()
+        if include_keys is not None:
+            items = ((k, v) for k, v in items if k in include_keys)
+        if exclude_keys is not None:
+            items = ((k, v) for k, v in items if k not in exclude_keys)
+        return [
+            { key_field: k, value_field: v }
+            for k, v in items
+        ]
+
+    df[field] = df[column].apply(to_attr_list)
+    return df
+
+def filter_list_elements(df: pd.DataFrame, field: str, column: str, filter_value: str = ""):
+    """
+    Filter elements in a list column to keep only those containing a specific value.
+    
+    Args:
+        df (pd.DataFrame): Pandas Dataframe.
+        field (str): New column name for the filtered result.
+        column (str): Column containing lists to filter.
+        filter_value (str): Value to filter for (default: "").
+    """
+    def filter_elements(x):
+        """Filter list elements containing the specified value"""
+        try:
+            if isinstance(x, list):
+                # Filter elements that contain the filter_value
+                filtered = [item for item in x if filter_value in str(item)]
+                return filtered if filtered else None
+            elif isinstance(x, str):
+                # Try to evaluate as list if it's a string representation
+                import ast
+                try:
+                    parsed_list = ast.literal_eval(x)
+                    if isinstance(parsed_list, list):
+                        filtered = [item for item in parsed_list if filter_value in str(item)]
+                        return filtered if filtered else None
+                except:
+                    pass
+            return None
+        except Exception:
+            return None
+    
+    try:
+        df[field] = df[column].apply(filter_elements)
+    except Exception as exc:
+        print(f"Error on filter_list_elements {field}: {exc}")
+    return df
