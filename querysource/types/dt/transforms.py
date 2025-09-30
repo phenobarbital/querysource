@@ -5,6 +5,7 @@ Function Tree for Pandas-related row/column transformations.
 from typing import Any, Dict, List, Optional, Union
 import ast
 import datetime
+import decimal
 from bs4 import BeautifulSoup
 from datetime import timedelta, datetime as dtime
 from functools import reduce
@@ -1343,6 +1344,18 @@ def convert_to_array(
     return df
 
 
+def json_sanitize(obj):
+    """Convert recursively non-JSON objects to serializable types."""
+    if isinstance(obj, dict):
+        return {k: json_sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [json_sanitize(v) for v in obj]
+    if isinstance(obj, (decimal.Decimal, )):
+        return float(obj)
+    if isinstance(obj, (datetime.datetime, datetime.date, pd.Timestamp)):
+        return obj.isoformat()
+    return obj
+
 def to_json(df: pd.DataFrame, field: str):
     """
     Converts the values in a specified column of a pandas DataFrame to JSON format.
@@ -1369,14 +1382,19 @@ def convert_json(value: str) -> str:
     :return: The converted JSON string.
     """
     try:
+        # If it comes as a string type dict/list, try to convert it to a Python object
         value = ast.literal_eval(value)
     except Exception:
         pass
     try:
-        value = orjson.dumps(value).decode("utf-8")
+        value = json_sanitize(value)
+        return orjson.dumps(value).decode("utf-8")
     except Exception as err:
         print(err)
-    return value
+        try:
+            return orjson.dumps(str(value)).decode("utf-8")
+        except Exception:
+            return None
 
 
 def convert_to_json(df: pd.DataFrame, field: str):
