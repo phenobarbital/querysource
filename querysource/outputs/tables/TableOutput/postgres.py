@@ -1,5 +1,6 @@
+import json
 import time
-from typing import Union, Any, Dict, List, Optional, Set
+from typing import Union, Any, Dict, List, Optional, Set, Tuple, FrozenSet
 from collections.abc import Callable
 import asyncio
 import inspect
@@ -20,7 +21,6 @@ from sqlalchemy.ext.asyncio import (
     AsyncConnection
 )
 from sqlalchemy.pool import NullPool
-from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.exc import (
     ProgrammingError,
     OperationalError,
@@ -28,7 +28,6 @@ from sqlalchemy.exc import (
 )
 import dataclasses
 from datamodel import BaseModel
-from datamodel.parsers.json import json_encoder
 from ....conf import (
     sqlalchemy_url,
     async_default_dsn
@@ -42,7 +41,7 @@ class ReflectionHelper:
     """
     Helper for making reflection and instrospection of Database Objects.
     """
-    _table: Dict[str, Dict] = {}
+    _table: Dict[Tuple[str, str, FrozenSet[str]], Dict] = {}
     _columns: Dict[str, Set[str]] = {}
     _pk_columns: Dict[str, List[str]] = {}
 
@@ -52,7 +51,10 @@ class ReflectionHelper:
         self._cache_timestamp = {}  # Track when each table was cached
         self._cache_ttl = cache_ttl  # Time-to-live in seconds (default: 1 hour)
 
-    def _is_cache_fresh(self, cache_key: str) -> bool:
+    def _is_cache_fresh(
+        self,
+        cache_key: Tuple[str, str, FrozenSet[str]]
+    ) -> bool:
         """
         Check if the cache for the given table has expired based on TTL.
         """
@@ -66,17 +68,19 @@ class ReflectionHelper:
         table_name: str,
         schema: str = 'public',
         primary_keys: list = None,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        jsonb_columns: Optional[Set[str]] = None
     ) -> dict:
-        table = f'{schema}.{table_name}'
+        jsonb_columns = set(jsonb_columns or [])
+        table_key = (schema, table_name, frozenset(jsonb_columns))
         # Check if cache is valid or force refresh is requested
-        if not force_refresh and table in self._table and self._is_cache_fresh(table):
-            return self._table[table]
+        if not force_refresh and table_key in self._table and self._is_cache_fresh(table_key):
+            return self._table[table_key]
         else:
             # Build the Table Definition:
             metadata = MetaData()
             metadata.bind = self._engine
-            self._cache_timestamp[table] = time.time()
+            self._cache_timestamp[table_key] = time.time()
             async with self._engine.begin() as conn:
                 # Get table definition with reflection
                 pk_columns = []
@@ -93,7 +97,7 @@ class ReflectionHelper:
                     pk_rows = pk_result.fetchall()
                     if not pk_rows:
                         raise ValueError(
-                            f"No primary key found for table: {table}"
+                            f"No primary key found for table: {schema}.{table_name}"
                         )
                     pk_columns = [row[0] for row in pk_rows]
                 else:
@@ -120,14 +124,20 @@ class ReflectionHelper:
                     table_name,
                     metadata,
                     schema=schema,
-                    *(Column(name) for name in table_columns.union(set(pk_columns)))
+                    *(
+                        Column(name, postgresql.JSONB())
+                        if name in jsonb_columns
+                        else Column(name)
+                        for name in table_columns.union(set(pk_columns))
+                    )
                 )
                 result = {
                     "table": definition,
                     "columns": valid_columns,
-                    "pk_columns": pk_columns
+                    "pk_columns": pk_columns,
+                    "jsonb_columns": jsonb_columns
                 }
-                self._table[table] = result
+                self._table[table_key] = result
                 return result
 
     def get_table_sync(
@@ -136,12 +146,14 @@ class ReflectionHelper:
         schema: str = 'public',
         primary_keys: Optional[List[str]] = None,
         use_cache: bool = True,
+        jsonb_columns: Optional[Set[str]] = None,
         **options
     ) -> Dict:
         """
         Synchronous version of get_table for non-async engines.
         """
-        table_key = f'{schema}.{table_name}'
+        jsonb_columns = set(jsonb_columns or [])
+        table_key = (schema, table_name, frozenset(jsonb_columns))
         if use_cache and table_key in self._table:
             return self._table[table_key]
 
@@ -153,8 +165,9 @@ class ReflectionHelper:
             # Get primary keys if not provided
             pk_columns = []
             if not primary_keys:
-                if table_key in self._pk_columns:
-                    pk_columns = self._pk_columns[table_key]
+                pk_cache_key = f'{schema}.{table_name}'
+                if pk_cache_key in self._pk_columns:
+                    pk_columns = self._pk_columns[pk_cache_key]
                 else:
                     pk_query = text(f"""
                         SELECT a.attname
@@ -166,16 +179,17 @@ class ReflectionHelper:
                     pk_result = conn.execute(pk_query)
                     pk_rows = pk_result.fetchall()
                     if not pk_rows:
-                        raise ValueError(f"No primary key found for table: {table_key}")
+                        raise ValueError(f"No primary key found for table: {schema}.{table_name}")
                     pk_columns = [row[0] for row in pk_rows]
-                    self._pk_columns[table_key] = pk_columns
+                    self._pk_columns[pk_cache_key] = pk_columns
             else:
                 pk_columns = primary_keys
-                self._pk_columns[table_key] = pk_columns
+                self._pk_columns[f'{schema}.{table_name}'] = pk_columns
 
             # Get valid columns
-            if table_key in self._columns:
-                valid_columns = self._columns[table_key]
+            columns_cache_key = f'{schema}.{table_name}'
+            if columns_cache_key in self._columns:
+                valid_columns = self._columns[columns_cache_key]
             else:
                 cols_query = text("""
                     SELECT column_name
@@ -190,7 +204,7 @@ class ReflectionHelper:
                 if not cols_rows:
                     raise ValueError(f"Table {schema}.{table_name} not found or has no columns")
                 valid_columns = {row[0] for row in cols_rows}
-                self._columns[table_key] = valid_columns
+                self._columns[columns_cache_key] = valid_columns
 
             # Create a minimal table definition
             definition = Table(
@@ -203,7 +217,8 @@ class ReflectionHelper:
             result = {
                 "table": definition,
                 "columns": valid_columns,
-                "pk_columns": pk_columns
+                "pk_columns": pk_columns,
+                "jsonb_columns": jsonb_columns
             }
             self._table[table_key] = result
             return result
@@ -215,6 +230,7 @@ class ReflectionHelper:
         primary_keys: Optional[List[str]] = None,
         use_cache: bool = True,
         force_refresh: bool = False,
+        jsonb_columns: Optional[Set[str]] = None,
         **kwargs
     ) -> Dict:
         """
@@ -227,15 +243,34 @@ class ReflectionHelper:
             if loop.is_running():
                 # We're already in an async context, create a new task
                 return asyncio.create_task(
-                    self.get_table(table_name, schema, primary_keys, force_refresh=force_refresh)
+                    self.get_table(
+                        table_name,
+                        schema,
+                        primary_keys,
+                        force_refresh=force_refresh,
+                        jsonb_columns=jsonb_columns
+                    )
                 )
             else:
                 # We're in a sync context, run the async function to completion
                 return loop.run_until_complete(
-                    self.get_table(table_name, schema, primary_keys, force_refresh=force_refresh)
+                    self.get_table(
+                        table_name,
+                        schema,
+                        primary_keys,
+                        force_refresh=force_refresh,
+                        jsonb_columns=jsonb_columns
+                    )
                 )
         else:
-            return self.get_table_sync(table_name, schema, primary_keys, use_cache, **kwargs)
+            return self.get_table_sync(
+                table_name,
+                schema,
+                primary_keys,
+                use_cache,
+                jsonb_columns=jsonb_columns,
+                **kwargs
+            )
 
 class PgOutput(AbstractOutput):
     """PgOutput.
@@ -279,6 +314,11 @@ class PgOutput(AbstractOutput):
         self._helper: ReflectionHelper = None
         self._connection = None
         self._batch_size = batch_size
+        parent_jsonb = getattr(self._parent, 'jsonb_columns', None)
+        default_jsonb = parent_jsonb if parent_jsonb is not None else []
+        self._jsonb_columns: Set[str] = set(
+            kwargs.get('jsonb_columns', default_jsonb)
+        )
         if not use_async:
             try:
                 self._engine = create_engine(dsn, echo=False, poolclass=NullPool)
@@ -302,6 +342,36 @@ class PgOutput(AbstractOutput):
 
     def connect(self):
         return self
+
+    def _convert_jsonb_value(self, value: Any) -> Any:
+        """Normalize values destined for jsonb columns."""
+        if value is None:
+            return None
+        if isinstance(value, BaseModel):
+            return value.to_dict(as_values=True, convert_enums=True)
+        if dataclasses.is_dataclass(value) and not isinstance(value, dict):
+            return dataclasses.asdict(value)
+        if isinstance(value, (dict, list)):
+            return value
+        if isinstance(value, (bytes, bytearray)):
+            value = value.decode('utf-8')
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                return json.loads(stripped)
+            except (json.JSONDecodeError, ValueError):
+                return stripped
+        return value
+
+    def _prepare_row_dict(self, keys: List[str], values: tuple) -> Dict[str, Any]:
+        """Build a row dictionary applying jsonb conversions when required."""
+        row_dict = dict(zip(keys, values))
+        if self._jsonb_columns:
+            for column in self._jsonb_columns.intersection(row_dict.keys()):
+                row_dict[column] = self._convert_jsonb_value(row_dict[column])
+        return row_dict
 
     async def open(self):
         """
@@ -348,9 +418,11 @@ class PgOutput(AbstractOutput):
             The prepared upsert statement
         """
         # Prepare the multi-value insert statement
-        insert_stmt = postgresql.insert(table).values([
-            dict(zip(keys, values)) for values in values_list
-        ])
+        prepared_values = [
+            self._prepare_row_dict(keys, values)
+            for values in values_list
+        ]
+        insert_stmt = postgresql.insert(table).values(prepared_values)
 
         # If we're doing an update on conflict
         if self._do_update:
@@ -393,7 +465,7 @@ class PgOutput(AbstractOutput):
         """
         update_statements = []
         for values in values_list:
-            row_dict = dict(zip(keys, values))
+            row_dict = self._prepare_row_dict(keys, values)
 
             # Build conditions for WHERE clause
             conditions = []
@@ -452,6 +524,7 @@ class PgOutput(AbstractOutput):
             primary_keys=primary_keys,
             use_cache=self.use_cache,
             force_refresh=self.force_refresh,
+            jsonb_columns=self._jsonb_columns,
             **options
         )
         # Get the table object (copied):
@@ -639,7 +712,8 @@ class PgOutput(AbstractOutput):
         tableobj = await self._helper.get_table(
             table_name,
             schema=schema,
-            primary_keys=primary_keys
+            primary_keys=primary_keys,
+            jsonb_columns=self._jsonb_columns
         )
         table = tableobj['table']
         pk_columns = tableobj['pk_columns']
@@ -647,6 +721,9 @@ class PgOutput(AbstractOutput):
 
         # Filter data to include only valid columns
         filtered_data = {k: v for k, v in data.items() if k in valid_columns}
+        if self._jsonb_columns:
+            for column in self._jsonb_columns.intersection(filtered_data.keys()):
+                filtered_data[column] = self._convert_jsonb_value(filtered_data[column])
 
         # Add debugging to see what we're trying to insert
         # self.logger.debug(
