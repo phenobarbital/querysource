@@ -1,5 +1,5 @@
 import asyncio
-from typing import Union
+from typing import Set, Union
 import pandas as pd
 from navconfig.logging import logging
 from ....exceptions import (
@@ -25,6 +25,7 @@ class TableOutput:
         self._engine = None
         self._columns: list = []
         self._constraint: list = None
+        self._jsonb_columns: Set[str] = set(kwargs.pop('jsonb_columns', []) or [])
         self.flavor: str = kwargs.pop('flavor', 'postgresql')
         self._truncate: bool = kwargs.get('truncate', False)
         self.logger = logging.getLogger(
@@ -44,6 +45,10 @@ class TableOutput:
 
     def get_schema(self):
         return self._schema
+
+    @property
+    def jsonb_columns(self) -> Set[str]:
+        return self._jsonb_columns
 
     async def table_output(self, elem, datasource: pd.DataFrame):
         # get info
@@ -114,7 +119,7 @@ class TableOutput:
         # TODO: add a Truncate Method to every Engine
         try:
             if self.flavor in ('postgresql', 'postgres'):
-                self._engine = PgOutput(parent=self)
+                self._engine = PgOutput(parent=self, jsonb_columns=self._jsonb_columns)
             elif self.flavor == 'mysql':
                 self._engine = MysqlOutput(parent=self)
             elif self.flavor == 'sqlalchemy':
