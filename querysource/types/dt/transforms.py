@@ -2901,56 +2901,67 @@ def rename_nested_json_key(
     
     return df
 
+def _build_mask(series: pd.Series, condition: Any, op: str = "eq") -> pd.Series:
+    """
+    Build a boolean mask for a Series based on an operator and a condition.
+    Supports scalars and, for equality, lists/tuples/sets.
+    """
+    op_norm = op.strip().lower()
+
+    # List-like condition -> only allowed for equality / IN
+    if isinstance(condition, (list, tuple, set)):
+        if op_norm in ("eq", "==", "in"):
+            return series.isin(list(condition))
+        raise ValueError(f"Operator '{op}' not supported with list conditions")
+
+    # Scalar condition
+    if op_norm in ("eq", "=="):
+        return series == condition
+    if op_norm in ("ne", "!="):
+        return series != condition
+    if op_norm in ("gt", ">"):
+        return series > condition
+    if op_norm in ("gte", ">=", "ge"):
+        return series >= condition
+    if op_norm in ("lt", "<"):
+        return series < condition
+    if op_norm in ("lte", "<=", "le"):
+        return series <= condition
+
+    raise ValueError(f"Unsupported operator: {op}")
+
+
 def set_when(
     df: pd.DataFrame,
     field: str,
-    value,
+    value: Any,
     column: str,
-    condition,
-    column2: str = None,
-    condition2 = None
+    condition: Any,
+    column2: Optional[str] = None,
+    condition2: Any = None,
+    op: str = "eq",
+    op2: str = "eq",
 ) -> pd.DataFrame:
     """
-    Assign `value` to the `field` column whenever:
-      df[column] == condition  (or isin(condition) if it's a list)
-    and, optionally,
-      df[column2] == condition2 (or isin(condition2) if it's a list).
+    Assign `value` to `field` when conditions hold on one or two columns.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-    field : str
-        Column destination where `value` will be assigned.
-    value : any type
-        Value to assign.
-    column : str
-        Name of the first column to check.
-    condition : scalar or list
-        Value or list of values to compare with df[column].
-    column2 : str, optional
-        Name of the second column to check.
-    condition2 : scalar or list, optional
-        Value or list of values to compare with df[column2].
+    First condition:
+        series = df[column]
+        mask1 = series (op) condition
 
-    Returns
-    -------
-    pd.DataFrame
-        The modified DataFrame.
+    Optional second condition:
+        series2 = df[column2]
+        mask2 = series2 (op2) condition2
+
+    Final mask = mask1 & mask2 (if second condition is provided).
     """
-    # Mask for the first condition
-    if isinstance(condition, (list, tuple, set)):
-        mask = df[column].isin(condition)
-    else:
-        mask = (df[column] == condition)
+    # First condition
+    mask = _build_mask(df[column], condition, op=op)
 
-    # If a second condition is provided, chain it with AND
+    # Optional second condition
     if column2 is not None and condition2 is not None:
-        if isinstance(condition2, (list, tuple, set)):
-            mask &= df[column2].isin(condition2)
-        else:
-            mask &= (df[column2] == condition2)
+        mask &= _build_mask(df[column2], condition2, op=op2)
 
-    # Apply the value where the mask is True
     df.loc[mask, field] = value
     return df
 
