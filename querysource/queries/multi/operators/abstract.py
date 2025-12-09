@@ -7,7 +7,7 @@ Operators are the main building blocks of a query. They are responsible for maki
 as Join, Melt, Concat or Filter.
 """
 import pandas as pd
-import modin.pandas as mpd
+
 from abc import ABC, abstractmethod
 from ....exceptions import QueryException
 
@@ -20,7 +20,11 @@ class AbstractOperator(ABC):
     def __init__(self, data: dict, **kwargs) -> None:
         self._backend = kwargs.get('backend', 'pandas')
         # Use Modin as backend if available
-        self._pd = mpd if self._backend == 'modin' else pd
+        if self._backend == 'modin':
+            import modin.pandas as mpd
+            self._pd = mpd
+        else:
+            self._pd = pd
         self.data = data
         for k, v in kwargs.items():
             setattr(self, k, v)

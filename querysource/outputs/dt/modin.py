@@ -1,20 +1,26 @@
-import modin.config as modin_cfg
-import modin.pandas as pd  # noqa: F401
-from distributed import Client
-from ...conf import MODIN_SERVER
 from .abstract import OutputFormat
 
-client = Client(MODIN_SERVER)
 
 class modinFormat(OutputFormat):
     """
     Returns a Pandas Dataframe from a Resultset
     """
     def __init__(self):
+        import modin.config as modin_cfg
+        from distributed import Client
+        from ...conf import MODIN_SERVER
+
+        try:
+             # Check if client is already initialized
+             self.client = Client.current()
+        except ValueError:
+             self.client = Client(MODIN_SERVER)
+
         modin_cfg.Engine.put("dask")  # Modin will use HDK
         modin_cfg.IsExperimental.put(True)
 
     async def serialize(self, result, error, *args, **kwargs):
+        import modin.pandas as pd
         df = None
         try:
             # result = [dict(row) for row in result]
