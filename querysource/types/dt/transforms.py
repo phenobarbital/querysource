@@ -2904,7 +2904,54 @@ def rename_nested_json_key(
 def _build_mask(series: pd.Series, condition: Any, op: str = "eq") -> pd.Series:
     """
     Build a boolean mask for a Series based on an operator and a condition.
-    Supports scalars and, for equality, lists/tuples/sets.
+
+    Parameters:
+        series (pd.Series): The pandas Series to filter.
+        condition (Any): The value or collection to compare against. Can be a scalar (int, str, float, etc.)
+            or a list/tuple/set for equality/inclusion checks.
+        op (str, optional): The comparison operator to use. Default is "eq".
+            Supported operators:
+                - "eq", "==": Equal to
+                - "in": In (only for list/tuple/set conditions)
+                - "ne", "!=": Not equal to
+                - "gt", ">": Greater than
+                - "gte", ">=", "ge": Greater than or equal to
+                - "lt", "<": Less than
+                - "lte", "<=", "le": Less than or equal to
+
+    Returns:
+        pd.Series: A boolean mask Series indicating which elements match the condition.
+
+    Raises:
+        ValueError: If an unsupported operator is provided, or if a list-like condition is used with
+            an unsupported operator.
+
+    Examples:
+        >>> import pandas as pd
+        >>> s = pd.Series([1, 2, 3, 4, 5])
+        >>> _build_mask(s, 3, "eq")
+        0    False
+        1    False
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        >>> _build_mask(s, [2, 4], "in")
+        0    False
+        1     True
+        2    False
+        3     True
+        4    False
+        dtype: bool
+
+        >>> _build_mask(s, 3, "gt")
+        0    False
+        1    False
+        2    False
+        3     True
+        4     True
+        dtype: bool
     """
     op_norm = op.strip().lower()
 
