@@ -2977,7 +2977,10 @@ def _build_mask(series: pd.Series, condition: Any, op: str = "eq") -> pd.Series:
     if op_norm in ("lte", "<=", "le"):
         return series <= condition
 
-    raise ValueError(f"Unsupported operator: {op}")
+    raise ValueError(
+        f"Unsupported operator: '{op}'. Supported operators are: "
+        "'eq', '==', 'ne', '!=', 'gt', '>', 'gte', '>=', 'ge', 'lt', '<', 'lte', '<=', 'le', 'in'"
+    )
 
 
 def set_when(
