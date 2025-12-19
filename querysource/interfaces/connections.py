@@ -133,9 +133,6 @@ class Connection:
                 **self.pgargs
             }
             args['server_settings']['application_name'] = 'QS.Read'
-        self.logger.debug(
-            f"Connection Arguments: {args!s}"
-        )
         try:
             connection = AsyncDB(
                 driver,
@@ -143,9 +140,6 @@ class Connection:
                 loop=self._loop,
                 params=params,
                 **args
-            )
-            self.logger.debug(
-                f'DSN {driver} > {dsn}'
             )
             return connection
         except Exception as ex:
