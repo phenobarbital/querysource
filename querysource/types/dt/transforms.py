@@ -2953,6 +2953,8 @@ def _build_mask(series: pd.Series, condition: Any, op: str = "eq") -> pd.Series:
         4     True
         dtype: bool
     """
+    if not isinstance(op, str):
+        raise TypeError(f"Operator must be a string, got {type(op).__name__}")
     op_norm = op.strip().lower()
 
     # List-like condition -> only allowed for equality / IN
