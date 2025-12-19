@@ -2959,7 +2959,7 @@ def _build_mask(series: pd.Series, condition: Any, op: str = "eq") -> pd.Series:
     if isinstance(condition, (list, tuple, set)):
         if op_norm in ("eq", "==", "in"):
             return series.isin(list(condition))
-        raise ValueError(f"Operator '{op}' not supported with list conditions")
+        raise ValueError(f"Operator '{op}' not supported with list conditions. Only 'eq', '==', or 'in' are allowed with lists.")
 
     # Scalar condition
     if op_norm in ("eq", "=="):
