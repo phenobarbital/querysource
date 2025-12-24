@@ -2883,6 +2883,14 @@ def rename_nested_json_key(
         
         def process_nested_items(nested_items):
             """Process nested items (list of dictionaries or single dictionary)."""
+            # First, check if nested_items is a JSON string and parse it
+            if isinstance(nested_items, str):
+                try:
+                    nested_items = json.loads(nested_items)
+                except (json.JSONDecodeError, ValueError):
+                    # If parsing fails, return as is
+                    return nested_items
+
             if isinstance(nested_items, list):
                 # Handle list of dictionaries
                 return [rename_keys_in_item(item) for item in nested_items]
