@@ -1,6 +1,6 @@
 import time
 from io import BytesIO
-import pandas
+
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -44,6 +44,7 @@ class ExcelWriter(AbstractWriter):
             engine = 'xlrd'
         # create the engine
         columns = list(self.data.columns)
+        import pandas
         with pandas.ExcelWriter(output, engine=engine) as writer:  # pylint: disable=E0110
             self.data.to_excel(
                 writer,

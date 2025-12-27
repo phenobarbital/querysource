@@ -249,3 +249,4 @@ querysource/utils/functions.cpp
 great_expectations/
 querysource/handlers/variables.py
 resources/
+uv.lock

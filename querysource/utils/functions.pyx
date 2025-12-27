@@ -22,7 +22,7 @@ from cpython.datetime cimport datetime as dt
 from cpython.datetime cimport time as dtime
 from zoneinfo import ZoneInfo
 from uuid import UUID
-from pandas import DataFrame
+
 from .validators import is_udf
 
 
@@ -848,7 +848,7 @@ cpdef bool_t check_empty(object obj):
     """check_empty.
     Check if a basic object is empty or not.
     """
-    if isinstance(obj, DataFrame):
+    if hasattr(obj, 'empty') and hasattr(obj, 'to_dict'):
         return True if obj.empty else False
     else:
         return bool(not obj)

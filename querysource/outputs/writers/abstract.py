@@ -4,7 +4,7 @@ from typing import Any, Union
 from abc import ABC, abstractmethod
 from hashlib import sha1
 import traceback
-from pandas import DataFrame
+
 from navconfig.logging import logging
 from asyncdb.exceptions import NoDataFound, StatementError
 from aiohttp import web
@@ -261,7 +261,8 @@ class AbstractWriter(ABC):
     async def get_buffer(self):
         if isinstance(self.data, list):
             rec = self.data[0]
-        elif isinstance(self.data, DataFrame):
+        elif hasattr(self.data, 'to_dict') and hasattr(self.data, 'columns'):
+            # It looks like a DataFrame
             self.columns = list(self.data.columns.values)
             return
         else:
@@ -278,13 +279,27 @@ class AbstractWriter(ABC):
                 self.data, error = await self.query.query(
                     output_format=self.output_format
                 )
-            elif isinstance(self.query, DataFrame):
-                if self.output_format == 'iter':
-                    # convert dataframe into a list of dictionaries:
-                    self.data = self.query.to_dict(orient='records')
-                else:
+            elif hasattr(self.query, 'to_dict') and hasattr(self.query, 'columns'):
+                # Check for DataFrame using duck typing or lazy import if strict check needed
+                # For now duck typing "has columns and to_dict" is often enough, 
+                # but let's be safe with lazy import for exact behavior match if it was relying on strict type
+                try:
+                    from pandas import DataFrame
+                    if isinstance(self.query, DataFrame):
+                        if self.output_format == 'iter':
+                             # convert dataframe into a list of dictionaries:
+                            self.data = self.query.to_dict(orient='records')
+                        else:
+                            self.data = self.query
+                        error = None
+                    else:
+                        # Fallback if it looked like a DF but wasn't one according to pandas (unlikely if we imported it)
+                        self.data = self.query
+                        error = None
+                except ImportError:
+                     # Pandas not available, treat as normal object
                     self.data = self.query
-                error = None
+                    error = None
             else:
                 self.data = self.query
                 error = None

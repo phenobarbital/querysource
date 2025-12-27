@@ -1,9 +1,5 @@
 import time
-import pandas
-from bokeh.plotting import figure
-from bokeh.resources import CDN
-from bokeh.embed import file_html
-from bokeh.models import ColumnDataSource
+
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -38,6 +34,11 @@ class BokehWriter(AbstractWriter):
 
     async def get_response(self) -> web.StreamResponse:
         try:
+            import pandas
+            from bokeh.plotting import figure
+            from bokeh.resources import CDN
+            from bokeh.embed import file_html
+            from bokeh.models import ColumnDataSource
             pandas.set_option('plotting.backend', 'pandas_bokeh')
             data = await self.get_buffer()
             df = pandas.DataFrame(data, columns=self.columns)

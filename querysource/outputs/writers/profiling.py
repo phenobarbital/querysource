@@ -1,6 +1,6 @@
 import time
 import logging
-from pandas_profiling import ProfileReport
+
 from aiohttp import web
 from ...conf import URL_PROFILING
 from .abstract import AbstractWriter
@@ -20,6 +20,7 @@ class ProfileWriter(AbstractWriter):
         return f"{dt}-{filename}{self.extension}"
 
     async def get_response(self) -> web.StreamResponse:
+        from pandas_profiling import ProfileReport
         buffer = None
         profile = ProfileReport(
             self.data,

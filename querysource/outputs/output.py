@@ -2,7 +2,7 @@ import traceback
 from typing import Union
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
-from pandas import DataFrame
+
 from navconfig.logging import logging
 from datamodel.parsers.encoders import DefaultEncoder
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
@@ -63,7 +63,7 @@ class DataOutput:
     def __init__(
         self,
         request: web.Request,
-        query: Union[AbstractQuery, DataFrame, list],
+        query: Union[AbstractQuery, "DataFrame", list],
         ctype: str = 'json',
         slug: str = None,
         **kwargs

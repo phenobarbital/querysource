@@ -1,6 +1,6 @@
 import time
 from io import StringIO
-from pandas import DataFrame
+
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -22,7 +22,12 @@ class HTMLWriter(AbstractWriter):
         return f"{dt}-{filename}{self.extension}"
 
     async def get_response(self) -> web.StreamResponse:
-        if isinstance(self.data, DataFrame):
+        try:
+            from pandas import DataFrame
+            is_dataframe = isinstance(self.data, DataFrame)
+        except ImportError:
+            is_dataframe = False
+        if is_dataframe:
             output = StringIO()
             # create the HTML file:
             columns = list(self.data.columns)

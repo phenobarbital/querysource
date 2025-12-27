@@ -1,8 +1,7 @@
 from typing import Any, Union
 import time
 from io import StringIO
-import pandas
-import plotly.express as px
+
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -77,6 +76,8 @@ class PlotlyWriter(AbstractWriter):
 
     async def get_response(self) -> web.StreamResponse:
         try:
+            import pandas
+            import plotly.express as px
             pandas.options.plotting.backend = "plotly"
             data = await self.get_buffer()
             df = pandas.DataFrame(data, columns=self.columns)

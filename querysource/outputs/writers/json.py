@@ -1,5 +1,5 @@
 from io import BytesIO, StringIO
-import pandas as pd
+
 from aiohttp import web
 from .abstract import AbstractWriter
 
@@ -11,7 +11,12 @@ class jsonWriter(AbstractWriter):
     output_format: str = 'iter'
 
     async def get_response(self) -> web.StreamResponse:
-        if isinstance(self.data, pd.DataFrame):
+        try:
+            from pandas import DataFrame
+            is_dataframe = isinstance(self.data, DataFrame)
+        except ImportError:
+            is_dataframe = False
+        if is_dataframe:
             # Convert to a list of dictionaries
             data_dict = self.data.to_dict(orient='records')
             data = self._json.dumps(data_dict)

@@ -3,15 +3,14 @@ from io import BytesIO
 import base64
 from typing import Any, Union
 from aiohttp import web
-import pygal
-import pandas
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+
 from .abstract import AbstractWriter
 
 
 def render_seaborn(data, chart_type, info: dict):
+    from pandas import DataFrame
+    import seaborn as sns
+    import matplotlib.pyplot as plt
     image_data = None
     if chart_type == 'heatmap':
         columns = info['columns']
@@ -19,7 +18,7 @@ def render_seaborn(data, chart_type, info: dict):
         plt.figure(figsize=(10, 16))
         if 'correlation_matrix' in info:
             col = info['correlation_matrix']
-            correlation_matrix = pandas.DataFrame(
+            correlation_matrix = DataFrame(
                 0,
                 index=data[col],
                 columns=data[col]
@@ -140,6 +139,7 @@ def render_seaborn(data, chart_type, info: dict):
 
 
 def render_matplotlib(data, chart_type, info: dict):
+    import matplotlib.pyplot as plt
     image_data = None
     plt.rcParams['axes.unicode_minus'] = False
     if chart_type == 'heatmap':
@@ -252,6 +252,7 @@ class ReportWriter(AbstractWriter):
             for chart_name in self._charts:
                 info = self._charts[chart_name]
                 if self._chart_backend == 'pygal':
+                    import pygal
                     chart = pygal.Bar()  # TODO: making configurable from type
                     chart.title = chart_name
                     x = info['x_series']
@@ -277,7 +278,12 @@ class ReportWriter(AbstractWriter):
                         pass
 
         ## parser params
-        if isinstance(self.data, pandas.DataFrame):
+        try:
+             import pandas
+             is_pandas = isinstance(self.data, pandas.DataFrame)
+        except ImportError:
+            is_pandas = False
+        if is_pandas:
             ## converting pandas to list of dict
             self.data = self.data.to_dict('records')
         params = {

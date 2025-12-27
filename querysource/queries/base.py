@@ -37,6 +37,16 @@ class BaseQuery(AbstractQuery):
             **kwargs
         )
 
+    async def __aenter__(self):
+        """Async context manager entry - builds the provider."""
+        await self.build_provider()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - closes resources."""
+        await self.close()
+        return False
+
     def query_model(self, data: Union[str, dict]) -> Query:
         if isinstance(data, str):
             q = {
@@ -80,6 +90,22 @@ class BaseQuery(AbstractQuery):
             raise TypeError(
                 f"Invalid data for QueryResult: {errors}"
             ) from ex
+
+    async def build_provider(self):
+        """build_provider.
+
+        Create and configure the provider for this query.
+        Override in subclasses if provider setup is needed.
+        """
+        pass
+
+    async def close(self):
+        """close.
+
+        Close and cleanup resources used by the query.
+        Override in subclasses if cleanup is needed.
+        """
+        pass
 
     @abstractmethod
     async def query(self):

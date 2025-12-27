@@ -5,12 +5,7 @@
 import time
 from io import StringIO, BytesIO
 from typing import Any, Union
-import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.cluster import AgglomerativeClustering
-from scipy.signal import argrelextrema
+
 from aiohttp import web
 from navconfig.logging import logging
 from .abstract import AbstractWriter
@@ -64,6 +59,12 @@ class ClusterWriter(AbstractWriter):
         return f"{dt}-{filename}{self.extension}"
 
     async def get_response(self) -> web.StreamResponse:
+        import numpy as np
+        import pandas as pd
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import silhouette_score
+        from sklearn.cluster import AgglomerativeClustering
+        from scipy.signal import argrelextrema
         buffer = None
         selected_data_oh = pd.get_dummies(self.data)
         # calculate the silhouette score per each cluster identified in KMeans
