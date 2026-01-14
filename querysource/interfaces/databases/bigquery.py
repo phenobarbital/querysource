@@ -4,7 +4,9 @@ import pandas as pd
 import time
 import logging
 import asyncio
-from google.api_core.exceptions import GoogleAPIError 
+import json
+import datetime as dt
+from google.api_core.exceptions import GoogleAPIError
 # Default BigQuery connection parameters
 from ...conf import (
     BIGQUERY_CREDENTIALS,
@@ -63,7 +65,7 @@ class BigQuery(AbstractDB):
         use_merge: bool = False,
     ):
         """
-        Writes `data` to BigQuery.  
+        Writes `data` to BigQuery.
         If `use_merge=True` and the conditions are met, it does a MERGE
         using a temporary table and explicitly waits for the LoadJob
         to finish (no arbitrary sleeps).
@@ -73,6 +75,26 @@ class BigQuery(AbstractDB):
 
         async with await self._connection.connection() as conn:
             try:
+                column_types = {}
+                json_columns = set()
+                try:
+                    schema_q = f"""
+                        SELECT column_name, data_type
+                        FROM {schema}.INFORMATION_SCHEMA.COLUMNS
+                        WHERE table_name = '{table}'
+                    """
+                    schema_res, error = await conn.query(schema_q)
+                    if not error:
+                        column_types = {
+                            row["column_name"]: row["data_type"] for row in schema_res or []
+                        }
+                        json_columns = {
+                            col for col, dtype in column_types.items() if dtype == "JSON"
+                        }
+                except Exception:
+                    column_types = {}
+                    json_columns = set()
+
                 can_merge = (
                     use_merge
                     and isinstance(data, pd.DataFrame)
@@ -83,36 +105,68 @@ class BigQuery(AbstractDB):
 
                 if not can_merge:
                     load_job = await self._default_write(
-                        conn, table, schema, data, on_conflict
+                        conn,
+                        table,
+                        schema,
+                        data,
+                        on_conflict,
+                        json_columns=json_columns,
+                        column_types=column_types,
                     )
                     await self._wait_for_job(load_job, self._logger)
-                    return load_job 
+                    return load_job
 
                 # ─────────────── MERGE ───────────────
-                # 1) Verify that the target table exists and has data
-                check_q = f"SELECT COUNT(*) AS c FROM `{schema}.{table}`"
+                # 1) Verify that the target table exists and has data (OPTIMIZED)
+                check_q = f"""
+                    SELECT EXISTS(
+                        SELECT 1 FROM `{schema}.{table}` LIMIT 1
+                    ) AS table_exists
+                """
                 self._logger.debug("Check table: %s", check_q)
                 result, error = await conn.query(check_q)
-                if error or not result:
+                rows = None
+                if result is not None and hasattr(result, "__iter__"):
+                    rows = list(result)
+                else:
+                    rows = result
+                table_exists = False
+                if rows:
+                    first_row = rows[0] if isinstance(rows, list) else rows
+                    if hasattr(first_row, "get"):
+                        table_exists = bool(first_row.get("table_exists"))
+                    else:
+                        table_exists = bool(getattr(first_row, "table_exists", False))
+                if error or not table_exists:
                     self._logger.debug("Empty/non-existent table; fallback to single load")
                     load_job = await self._default_write(
-                        conn, table, schema, data, on_conflict
+                        conn,
+                        table,
+                        schema,
+                        data,
+                        on_conflict,
+                        json_columns=json_columns,
+                        column_types=column_types,
                     )
                     await self._wait_for_job(load_job, self._logger)
                     return load_job
 
                 # 2) Get column types from the main table
-                schema_q = f"""
-                    SELECT column_name, data_type
-                    FROM {schema}.INFORMATION_SCHEMA.COLUMNS
-                    WHERE table_name = '{table}'
-                """
-                schema_res, error = await conn.query(schema_q)
-                if error:
-                    raise ConnectionError(f"Error checking the schema: {error}")
-                column_types = {
-                    row["column_name"]: row["data_type"] for row in schema_res or []
-                }
+                if not column_types:
+                    schema_q = f"""
+                        SELECT column_name, data_type
+                        FROM {schema}.INFORMATION_SCHEMA.COLUMNS
+                        WHERE table_name = '{table}'
+                    """
+                    schema_res, error = await conn.query(schema_q)
+                    if error:
+                        raise ConnectionError(f"Error checking the schema: {error}")
+                    column_types = {
+                        row["column_name"]: row["data_type"] for row in schema_res or []
+                    }
+                    json_columns = {
+                        col for col, dtype in column_types.items() if dtype == "JSON"
+                    }
 
                 # 3) Create cloned empty temporary table
                 temp_table = f"{table}_temp_{int(time.time())}"
@@ -132,7 +186,13 @@ class BigQuery(AbstractDB):
                 try:
                     # 4) Load data on the temp table and wait
                     load_job = await self._default_write(
-                        conn, temp_table, schema, data, "append"
+                        conn,
+                        temp_table,
+                        schema,
+                        data,
+                        "append",
+                        json_columns=json_columns,
+                        column_types=column_types,
                     )
                     await self._wait_for_job(load_job, self._logger)
 
@@ -145,7 +205,7 @@ class BigQuery(AbstractDB):
                             continue
                         col_type = column_types.get(col, "STRING")
                         if col_type == "JSON":
-                            set_clause.append(f"{col} = TO_JSON_STRING(S.{col})")
+                            set_clause.append(f"{col} = S.{col}")
                         else:
                             set_clause.append(f"{col} = S.{col}")
                     set_clause_sql = ", ".join(set_clause)
@@ -170,16 +230,76 @@ class BigQuery(AbstractDB):
                     return result
 
                 finally:
-                    # Clean the temp table 
+                    # Clean the temp table
                     await conn.query(f"DROP TABLE IF EXISTS `{schema}.{temp_table}`")
 
             except Exception as exc:
                 self._logger.error("Error en write(): %s", exc, exc_info=True)
                 raise
 
-    async def _default_write(self, conn, table, schema, data, on_conflict):
+    async def _default_write(
+        self,
+        conn,
+        table,
+        schema,
+        data,
+        on_conflict,
+        json_columns=None,
+        column_types=None,
+    ):
         """Default write behavior without MERGE – now returns the LoadJob."""
+        json_columns = set(json_columns or [])
+        column_types = column_types or {}
         use_pandas = isinstance(data, pd.DataFrame)
+        if use_pandas and json_columns:
+            records = data.to_dict(orient="records")
+
+            def normalize_value(value, column=None):
+                col_type = column_types.get(column)
+                if value is None:
+                    return None
+                # JSON columns: dict/list come directly from pandas, no need to parse
+                if column in json_columns and isinstance(value, (dict, list)):
+                    return value
+                if col_type in ("DATETIME", "TIMESTAMP") and isinstance(value, (int, float)):
+                    # Assume unix seconds (or ms if large) for temporal columns.
+                    ts = value / 1000 if value > 1_000_000_000_000 else value
+                    dt_value = dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc)
+                    if col_type == "DATETIME":
+                        return dt_value.strftime("%Y-%m-%d %H:%M:%S")
+                    return dt_value.isoformat()
+                if col_type == "DATE" and isinstance(value, (int, float)):
+                    ts = value / 1000 if value > 1_000_000_000_000 else value
+                    dt_value = dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).date()
+                    return dt_value.isoformat()
+                if isinstance(value, (pd.Timestamp, dt.datetime)):
+                    if col_type == "DATE":
+                        return value.date().isoformat()
+                    return value.isoformat()
+                if isinstance(value, dt.date):
+                    if col_type == "DATETIME":
+                        return dt.datetime.combine(value, dt.time.min).strftime("%Y-%m-%d %H:%M:%S")
+                    return value.isoformat()
+                if col_type == "DATE" and isinstance(value, str):
+                    if "T" in value:
+                        return value.split("T", 1)[0]
+                    return value
+                if isinstance(value, dict):
+                    return {k: normalize_value(v) for k, v in value.items()}
+                if isinstance(value, list):
+                    return [normalize_value(v) for v in value]
+                if pd.isna(value):
+                    return None
+                return value
+
+            normalized = []
+            for record in records:
+                normalized.append(
+                    {k: normalize_value(v, column=k) for k, v in record.items()}
+                )
+            data = normalized
+            use_pandas = False
+
         load_job = await conn.write(
             data=data,
             table_id=table,
