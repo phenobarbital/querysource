@@ -84,6 +84,15 @@ cdef class BigQueryParser(SQLParser):
         Override filter_conditions to handle JSON fields in BigQuery.
         """
         _sql = sql
+        if self._conditions:
+            for key, value in self._conditions.items():
+                if f"{{{key}}}" not in _sql:
+                    # Condition is not in the SQL placeholders, add to filter
+                    if self.filter:
+                         self.filter[key] = value
+                    else:
+                        self.filter = {key: value}
+
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():

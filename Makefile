@@ -37,11 +37,11 @@ endif
 
 # Install all dependencies including dev dependencies
 develop:
-	uv sync --frozen --extra all --extra dev
+	uv sync --frozen --extra analytics --extra dev
 
 # Alternative: install without lock file (faster for development)
 develop-fast:
-	uv pip install -e .[all,dev]
+	uv pip install -e .[analytics,dev]
 
 # Setup development environment from requirements file (if you still have one)
 setup:
