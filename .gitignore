@@ -243,10 +243,14 @@ querysource/types/converters.cpp
 querysource/types/typedefs.c
 querysource/types/validators.cpp
 querysource/utils/functions.cpp
-
+querysource/_version.py
+/templates/.compiled
 
 ### Temp ignoring tests and examples
 great_expectations/
 querysource/handlers/variables.py
 resources/
 uv.lock
+
+# antigrativy workspace
+.code-workspace
