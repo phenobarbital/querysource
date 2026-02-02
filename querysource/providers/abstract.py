@@ -57,13 +57,12 @@ class BaseProvider(ABC):
         self._slug: str = slug
         self._type: str = qstype
         self.is_raw: bool = False
+        self._query: str = query  # Initialize _query with the parameter first
         if self._slug:
             try:
                 self._query = definition.query_raw
             except AttributeError:
-                pass
-        else:  # is a raw query
-            self._query: str = query
+                pass  # Keep the original query parameter value
         ## Attributes of Query:
         self._columns: list = []
         self._sentence: str = ''
