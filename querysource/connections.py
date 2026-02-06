@@ -262,12 +262,11 @@ class QueryConnection(Connection, metaclass=Singleton):
                         )
                         continue
                     except ValidationError as ex:
-                        self.logger.exception(
+                        self.logger.warning(
                             (
                                 f"Datasource validation error: {ex} "
                                 f"Error: {ex.payload}"
-                            ),
-                            stack_info=False
+                            )
                         )
                         continue
                     # SAVING DATASOURCES IN MEMORY (memcached)

@@ -68,7 +68,7 @@ cpdef bool_t is_pandas_dataframe(obj):
     Returns:
     bool: True if the object is a pandas DataFrame, False otherwise.
     """
-    return hasattr(obj, "_data") and hasattr(obj, "loc") and hasattr(obj, "iloc")
+    return hasattr(obj, "columns") and hasattr(obj, "index") and hasattr(obj, "loc") and hasattr(obj, "iloc")
 
 cpdef bool_t is_empty(object value):
     cdef bool_t result = False
