@@ -60,6 +60,24 @@ extensions = [
         language="c"
     ),
     Extension(
+        name='querysource.parsers.pgsql',
+        sources=['querysource/parsers/pgsql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.sqlserver',
+        sources=['querysource/parsers/sqlserver.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.sosql',
+        sources=['querysource/parsers/sosql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.parsers.bigquery',
         sources=['querysource/parsers/bigquery.pyx'],
         extra_compile_args=COMPILE_ARGS,

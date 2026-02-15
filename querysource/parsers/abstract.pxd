@@ -33,7 +33,7 @@ cdef class AbstractParser:
     cdef public int32_t _limit
     cdef public int32_t _offset
     cdef public dict attributes
-    cdef str _distinct
+    cdef bint _distinct
     # Parser Options:
     cdef public dict params
     cdef public dict _query_filters
@@ -44,6 +44,7 @@ cdef class AbstractParser:
     # internal:
     cdef public object _redis
     cdef bint _add_fields
+    cdef public dict _qry_options
     cdef public bint _safe_substitution
     cdef public bint string_literal
 
@@ -58,3 +59,20 @@ cdef class AbstractParser:
     cdef object _get_function_replacement(self, object function, str key, object val)
     cdef object _merge_conditions_and_filters(self, dict conditions)
     cdef bint _handle_keys(self, str key, object val, dict _filter)
+    # Synchronous option extractors (replace asyncio.gather overhead):
+    cdef void _extract_options(self)
+    cdef void _parse_hierarchy_sync(self)
+    cdef void _program_slug_sync(self)
+    cdef void _query_slug_sync(self)
+    cdef void _query_refresh_sync(self)
+    cdef void _query_fields_sync(self)
+    cdef void _query_limit_sync(self)
+    cdef void _offset_pagination_sync(self)
+    cdef void _grouping_sync(self)
+    cdef void _ordering_sync(self)
+    cdef void _filter_options_sync(self)
+    cdef void _query_filter_sync(self)
+    cdef void _qs_filters_sync(self)
+    cdef void _col_definition_sync(self)
+    cdef void _qry_options_sync(self)
+    cdef object _get_redis(self)

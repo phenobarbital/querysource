@@ -1,7 +1,12 @@
-# cython: language_level=3, embedsignature=True
+# cython: language_level=3, embedsignature=True, boundscheck=False, wraparound=False
 # Copyright (C) 2018-present Jesus Lara
 #
 # file: abstract.pyx
+"""
+AbstractParser.
+
+Base class for all QuerySource parsers.
+"""
 from abc import abstractmethod
 import asyncio
 from navconfig.logging import logging
@@ -15,82 +20,93 @@ from ..types.validators import Entity, is_valid, field_components
 from ..utils.parseqs import is_parseable
 
 
-
-cdef tuple START_TOKENS = ('@', '$', '~', '^', '?', '*', )
-cdef tuple END_TOKENS = ('|', '&', '!', '<', '>', )
-cdef tuple KEYWORD_TOKENS = ('::', '@>', '<@', '->', '->>', '>=', '<=', '<>', '!=', '<', '>', )
+cdef tuple START_TOKENS = ('@', '$', '~', '^', '?', '*')
+cdef tuple END_TOKENS = ('|', '&', '!', '<', '>')
+cdef tuple KEYWORD_TOKENS = ('::', '@>', '<@', '->', '->>', '>=', '<=', '<>', '!=', '<', '>')
 
 
 cdef class AbstractParser:
+    """Base class for all QuerySource parsers."""
+
     def __cinit__(
         self,
         *args,
         definition: object,
         conditions: object,
         query: str = None,
-        **kwargs: P.kwargs
+        **kwargs
     ):
         self._name_ = type(self).__name__
         self.logger = logging.getLogger(f'QS.Parser.{self._name_}')
         self.query_raw = query
-        self.query_parsed: str = None
+        self.query_parsed = None
         self.schema_based = kwargs.pop('schema_based', False)
         self._limit = kwargs.pop('max_limit', 0)
         self.string_literal = kwargs.pop('string_literal', False)
-        self.definition: QueryModel = definition if definition else None
-        self._distinct: bool = False
+        self.definition = definition if definition else None
+        self._distinct = False
         self.set_attributes()
         self.define_conditions(conditions)
-        ## redis connection:
-        self._redis = AsyncDB(
-            'redis',
-            dsn=REDIS_URL
-        )
+        # Lazy Redis — initialized on first use via _get_redis()
+        self._redis = None
 
-    def __init__(
-        self,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, *args, **kwargs):
         """Constructor."""
         pass
 
-    def _str__(self):
+    def __str__(self):
         return f"<{type(self).__name__}>"
 
     def __repr__(self):
         return f"<{type(self).__name__}>"
 
+    cdef object _get_redis(self):
+        """Lazy Redis connection initialization."""
+        if self._redis is None:
+            self._redis = AsyncDB('redis', dsn=REDIS_URL)
+        return self._redis
+
     cdef void set_attributes(self):
-        self._query_filters: dict = {}
-        self._hierarchy: list = []
-        self.fields: list = []
-        self.params: dict = {}
-        self._limit: int = 0
-        self._offset: int = 0
-        self._conditions: dict = {}
+        self._query_filters = {}
+        self._hierarchy = []
+        self.fields = []
+        self.params = {}
+        self._limit = 0
+        self._offset = 0
+        self._conditions = {}
+        self.attributes = {}
+        self.filter = {}
+        self.filter_options = {}
+        self.ordering = []
+        self.grouping = []
+        self.program_slug = None
+        self.tablename = None
+        self.schema = None
+        self.database = None
+        self.refresh = False
+        self.querylimit = 0
+        self.cond_definition = {}
+        self._slug = None
+        self._paged = False
+        self._page_ = 0
+        self._add_fields = False
+        self._safe_substitution = False
+        self.c_length = 0
 
     cdef void define_conditions(self, object conditions):
-        """
-        define_conditions.
-
-        Build the options needed by every query in QuerySource.
-        """
+        """Build the options needed by every query in QuerySource."""
         if isinstance(conditions, dict):
             qobj = QueryObject(**conditions)
         else:
             qobj = conditions
-        # Use qobj to set up various attributes
         self.conditions = qobj
         if self.definition:
             self.attributes = self.definition.attributes
         if not self.attributes:
             self.attributes = {}
-        # save substitution:
         self._safe_substitution = self.attributes.get('safe_substitution', False)
         if not self.query_raw:
             if self.definition:
-                # Query comes from Definition Database:
                 self.query_raw = self.definition.query_raw
             else:
                 try:
@@ -114,29 +130,42 @@ cdef class AbstractParser:
 
     @abstractmethod
     async def build_query(self):
-        """_summary_
-        Build a QuerySource Query.
-        """
+        """Build a QuerySource Query."""
 
-    async def _parse_hierarchy(self):
-        """
-        _parse_hierarchy.
+    # ------------------------------------------------------------------
+    # Synchronous option extractors (replace asyncio.gather overhead)
+    # ------------------------------------------------------------------
 
-        Parse the hierarchy of the query.
-        """
+    cdef void _extract_options(self):
+        """Extract all query options synchronously — no event loop overhead."""
+        self._parse_hierarchy_sync()
+        self._program_slug_sync()
+        self._query_slug_sync()
+        self._query_refresh_sync()
+        self._query_fields_sync()
+        self._query_limit_sync()
+        self._offset_pagination_sync()
+        self._grouping_sync()
+        self._ordering_sync()
+        self._filter_options_sync()
+        self._qry_options_sync()
+        self._query_filter_sync()
+        self._qs_filters_sync()
+        self._col_definition_sync()
+
+    cdef void _parse_hierarchy_sync(self):
         try:
             self._hierarchy = self.conditions.pop('hierarchy', [])
         except (KeyError, AttributeError):
-            ### get hierarchy from function:
             self._hierarchy = []
 
-    async def _program_slug(self):
+    cdef void _program_slug_sync(self):
         try:
             self.program_slug = self.definition.program_slug
         except (KeyError, IndexError, AttributeError):
             self.program_slug = None
 
-    async def _query_slug(self):
+    cdef void _query_slug_sync(self):
         try:
             self._slug = self.definition.query_slug
         except (KeyError, IndexError, AttributeError):
@@ -145,7 +174,8 @@ cdef class AbstractParser:
             except (KeyError, AttributeError):
                 self._slug = None
 
-    async def _query_refresh(self):
+    cdef void _query_refresh_sync(self):
+        cdef object refresh
         try:
             refresh = self.conditions.pop('refresh', False)
             if isinstance(refresh, bool):
@@ -155,8 +185,7 @@ cdef class AbstractParser:
         except (KeyError, AttributeError, ValueError):
             self.refresh = False
 
-    async def _query_fields(self):
-        # FIELDS (Columns needed by the Query)
+    cdef void _query_fields_sync(self):
         self.fields = self.conditions.pop('fields', [])
         if not self.fields:
             try:
@@ -164,22 +193,20 @@ cdef class AbstractParser:
             except AttributeError:
                 self.fields = []
 
-    async def _query_limit(self):
-        # Limiting the Query
+    cdef void _query_limit_sync(self):
         try:
             self.querylimit = int(self.conditions.pop('_limit', 0))
             if not self.querylimit:
                 self.querylimit = int(self.conditions.pop('querylimit', 0))
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError):
             self.querylimit = 0
 
-    async def _offset_pagination(self):
-        # OFFSET, number of rows offset.
+    cdef void _offset_pagination_sync(self):
+        cdef object paged
         try:
             self._offset = self.conditions.pop('_offset', 0)
         except (KeyError, AttributeError):
             self._offset = 0
-        # PAGINATION
         try:
             paged = self.conditions.pop('paged', False)
             if is_boolean(paged):
@@ -193,17 +220,15 @@ cdef class AbstractParser:
         try:
             self._page_ = self.conditions.pop('page', 0)
         except (KeyError, AttributeError):
-            self._page = 0
+            self._page_ = 0
 
-    async def _grouping(self):
-        # # GROUPING
-        self.grouping: list = []
-        group1: list = []
-        group2: list = []
+    cdef void _grouping_sync(self):
+        cdef list group1 = []
+        cdef list group2 = []
+        cdef str g
         try:
             group1 = self.conditions.pop('group_by', [])
         except TypeError:
-            # group is an string:
             g = self.conditions.pop('group_by')
             group1 = [a.strip() for a in g.split(',')]
         except AttributeError:
@@ -211,7 +236,6 @@ cdef class AbstractParser:
         try:
             group2 = self.conditions.pop('grouping', [])
         except TypeError:
-            # group is an string:
             g = self.conditions.pop('grouping')
             group2 = [a.strip() for a in g.split(',')]
         except AttributeError:
@@ -225,13 +249,11 @@ cdef class AbstractParser:
             try:
                 self.grouping = self.definition.grouping
             except AttributeError:
-                self.grouping: list = []
+                self.grouping = []
 
-    async def _ordering(self):
-        # ordering condition
-        self.ordering: list = []
-        order1: object = None
-        order2: object = None
+    cdef void _ordering_sync(self):
+        cdef object order1 = []
+        cdef object order2 = []
         try:
             order1 = self.conditions.pop('order_by', [])
         except AttributeError:
@@ -244,23 +266,26 @@ cdef class AbstractParser:
             order1 = [a.strip() for a in order1.split(',')]
         if isinstance(order2, str):
             order2 = [a.strip() for a in order2.split(',')]
-        self.ordering = order1 + order2
+        self.ordering = (order1 or []) + (order2 or [])
         if not self.ordering:
             try:
                 self.ordering = self.definition.ordering
             except AttributeError:
                 pass
 
-    async def _filter_options(self):
-        # filtering options
+    cdef void _filter_options_sync(self):
         try:
             self.filter_options = self.conditions.pop('filter_options', {})
         except (KeyError, AttributeError):
-            self.filter_options: dict = {}
+            self.filter_options = {}
 
-    async def _query_filter(self):
-        ## FILTERING
-        # where condition (alias for Filter)
+    cdef void _qry_options_sync(self):
+        try:
+            self._qry_options = self.conditions.pop('qry_options', {})
+        except (KeyError, AttributeError):
+            self._qry_options = {}
+
+    cdef void _query_filter_sync(self):
         self.filter = {}
         try:
             self.filter = self.conditions.pop('where_cond', {})
@@ -279,20 +304,16 @@ cdef class AbstractParser:
             except (TypeError, AttributeError):
                 self.filter = {}
 
-    async def _qs_filters(self):
-        # FILTER OPTIONS
-        for _filter, fn in QS_FILTERS.items():
-            if _filter in self.conditions:
-                _f = self.conditions.pop(_filter)
-                self._query_filters[_filter] = (fn, _f)
+    cdef void _qs_filters_sync(self):
+        cdef str _filter_name
+        for _filter_name, fn in QS_FILTERS.items():
+            if _filter_name in self.conditions:
+                _f = self.conditions.pop(_filter_name)
+                self._query_filters[_filter_name] = (fn, _f)
 
-    cpdef dict get_query_filters(self):
-        return self._query_filters
-
-    async def _col_definition(self):
-        # Data Type: Definition of columns
+    cdef void _col_definition_sync(self):
         self.cond_definition = self.conditions.pop('cond_definition', {})
-        if self.definition.cond_definition:
+        if self.definition and self.definition.cond_definition:
             self.cond_definition = {
                 **self.cond_definition,
                 **self.definition.cond_definition
@@ -312,40 +333,72 @@ cdef class AbstractParser:
             self.c_length = 0
             self.cond_definition = {}
 
-    async def set_options(self):
-        """
-        set_options.
+    # ------------------------------------------------------------------
+    # Legacy async wrappers (kept for subclass compatibility)
+    # ------------------------------------------------------------------
 
-        Set the options for the query.
-        """
+    async def _parse_hierarchy(self):
+        self._parse_hierarchy_sync()
+
+    async def _program_slug(self):
+        self._program_slug_sync()
+
+    async def _query_slug(self):
+        self._query_slug_sync()
+
+    async def _query_refresh(self):
+        self._query_refresh_sync()
+
+    async def _query_fields(self):
+        self._query_fields_sync()
+
+    async def _query_limit(self):
+        self._query_limit_sync()
+
+    async def _offset_pagination(self):
+        self._offset_pagination_sync()
+
+    async def _grouping(self):
+        self._grouping_sync()
+
+    async def _ordering(self):
+        self._ordering_sync()
+
+    async def _filter_options(self):
+        self._filter_options_sync()
+
+    async def _query_filter(self):
+        self._query_filter_sync()
+
+    async def _qs_filters(self):
+        self._qs_filters_sync()
+
+    async def _col_definition(self):
+        self._col_definition_sync()
+
+    cpdef dict get_query_filters(self):
+        return self._query_filters
+
+    # ------------------------------------------------------------------
+    # set_options — now synchronous extraction + async Redis path
+    # ------------------------------------------------------------------
+
+    async def set_options(self):
+        """Set the options for the query."""
         if not self.tablename:
             self.tablename = self.conditions.pop('tablename', None)
         if not self.schema:
             self.schema = self.conditions.pop('schema', None)
         if not self.database:
             self.database = self.conditions.pop('database', None)
-        self._distinct = self.conditions.pop('distinct', None)
-        self._add_fields: bool = self.conditions.pop('add_fields', False)
-        # Data Type: Definition of columns
-        await asyncio.gather(
-            self._parse_hierarchy(),
-            self._program_slug(),
-            self._query_slug(),
-            self._query_refresh(),
-            self._query_fields(),
-            self._query_limit(),
-            self._offset_pagination(),
-            self._grouping(),
-            self._ordering(),
-            self._filter_options(),
-            self._query_filter(),
-            self._qs_filters(),
-            self._col_definition()
-        )
+        self._distinct = bool(self.conditions.pop('distinct', False))
+        self._add_fields = self.conditions.pop('add_fields', False)
+        # Synchronous extraction — no asyncio.gather overhead
+        self._extract_options()
         # other options are set of conditions
         try:
             params = {}
-            conditions: dict = dict(self.conditions) if self.conditions else {}
+            conditions = dict(self.conditions) if self.conditions else {}
             try:
                 def_conditions = self.definition.conditions
                 if def_conditions is None:
@@ -360,7 +413,7 @@ cdef class AbstractParser:
                 conditions=conditions
             )
         except KeyError as err:
-            print(err)
+            self.logger.warning(f'set_options KeyError: {err}')
         return self
 
     cdef object _get_function_replacement(self, object function, str key, object val):
@@ -371,19 +424,13 @@ cdef class AbstractParser:
 
     async def _get_operational_value(self, value: object, connection: object) -> object:
         try:
-            # if isinstance(value, str):
-            #     result = await connection.get(value)
-            #     return Entity.quoteString(result)
             return None
         except Exception:
             return None
 
     cpdef str filtering_options(self, str sentence):
-        """
-        Add Filter Options.
-        """
+        """Add Filter Options."""
         if self.filter_options:
-            # TODO: get instructions for getting the filter from session
             self.logger.notice(
                 f" == FILTER OPTION: {self.filter_options}"
             )
@@ -396,9 +443,8 @@ cdef class AbstractParser:
         return sentence
 
     async def _parser_conditions(self, conditions: dict):
-        async with await self._redis.connection() as conn:
-            # One sigle connection for all Redis variables
-            # every other option then set where conditions
+        redis = self._get_redis()
+        async with await redis.connection() as conn:
             _filter = await self.set_conditions(conditions, conn)
             await self.set_where(_filter, conn)
         return self
@@ -411,28 +457,33 @@ cdef class AbstractParser:
             return conditions
 
     cdef bint _handle_keys(self, str key, object val, dict _filter):
-        _type = self.cond_definition.get(key, None)
-        if isinstance(val, dict):  # its a comparison operator:
+        cdef object _type = self.cond_definition.get(key, None)
+        cdef str prefix
+        cdef str fn
+        cdef object result
+        if isinstance(val, dict):
             op, value = val.popitem()
             result = is_valid(key, value, _type)
             self._conditions[key] = {op: result}
             return True
-        ## if value start with a symbol (ex: @, : or #), variable replacement.
-        try:
-            prefix, fn, _ = field_components(str(val))[0]
+        comps = field_components(str(val))
+        if comps:
+            prefix, fn, _ = comps[0]
             if prefix == '@':
-                ## Calling a Variable Replacement:
                 result = self._get_function_replacement(fn, key, val)
                 result = is_valid(key, result, _type)
                 self._conditions[key] = result
                 return True
-        except IndexError:
+        else:
             return False
         return False
 
     async def _process_element(self, name: str, value: object, connection: object):
         """Process a single element and return the key-value pair to be added to the filter."""
-        _, key, _ = field_components(name)[0]
+        comps = field_components(name)
+        if not comps:
+            return name, value
+        _, key, _ = comps[0]
         if key in self.cond_definition:
             if self._handle_keys(key, value, {}):
                 return None
@@ -459,14 +510,13 @@ cdef class AbstractParser:
     async def set_conditions(self, conditions: dict, connection: object) -> dict:
         """Check if all conditions are valid and return the value."""
         elements = self._merge_conditions_and_filters(conditions)
-
         tasks = []
+        _filter = {}
+
         for name, val in elements.items():
             tasks.append(self._process_element(name, val, connection))
-        # tasks = [self._process_element(name, val, connection) for name, val in elements.items()]
         results = await asyncio.gather(*tasks)
 
-        _filter = {}
         for result in results:
             if result:
                 key, value = result
@@ -481,11 +531,9 @@ cdef class AbstractParser:
         return self
 
     async def _where_element(self, key, value, connection):
-        """Process a single element for the WHERE clause and return the key-value pair."""
-        # self.logger.debug(
-        #     f"SET WHERE: key is {key}, value is {value}:{type(value)}"
-        # )
-        if isinstance(value, dict):  # its a comparison operator
+        """Process a single element for the WHERE clause."""
+
+        if isinstance(value, dict):
             op, v = value.popitem()
             result = is_valid(key, v, noquote=self.string_literal)
             return key, {op: result}
@@ -498,17 +546,15 @@ cdef class AbstractParser:
                 except (TypeError, ValueError):
                     pass
 
-        try:
-            prefix, fn, _ = field_components(str(value))[0]
+        comps = field_components(str(value))
+        if comps:
+            prefix, fn, _ = comps[0]
             if prefix == '@':
                 result = self._get_function_replacement(fn, key, value)
                 result = is_valid(key, result, noquote=self.string_literal)
                 return key, result
             elif prefix in ('|', '!', '&', '>', '<'):
-                # Leave as-is because we use it in WHERE
                 return key, value
-        except IndexError:
-            pass
 
         new_val = await self._get_operational_value(value, connection)
         if new_val:

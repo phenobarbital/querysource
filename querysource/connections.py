@@ -71,6 +71,16 @@ class QueryConnection(Connection, metaclass=Singleton):
         self._memcached: Callable = None
         self.start_cache(QUERYSET_REDIS)
         self._json = JSONContent()
+    async def __aenter__(self) -> "QueryConnection":
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        try:
+            await self.stop()
+        except Exception as err:  # pylint: disable=W0703
+            self.logger.error(err)
+
 
     def start_cache(self, dsn):
         ### redis connection:
@@ -151,6 +161,7 @@ class QueryConnection(Connection, metaclass=Singleton):
         self.app.on_shutdown.append(
             self.stop
         )
+        self.app['qs_connection'] = self
         return self.app
 
     async def start(self, app: Union[web.Application, None] = None):
@@ -167,10 +178,6 @@ class QueryConnection(Connection, metaclass=Singleton):
             loop = self._loop
         if self.lazy is True:
             self.logger.debug(':: Starting QuerySource in Lazy Mode ::')
-            cPrint(
-                ':: Starting QuerySource in Lazy Mode ::',
-                level='DEBUG'
-            )
             # # lazy mode: create a simple database connector
             try:
                 self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
@@ -278,7 +285,6 @@ class QueryConnection(Connection, metaclass=Singleton):
                         self.logger.warning(
                             str(ex)
                         )
-        app['qs_connection'] = self
         self._connected = True
 
     async def query_table_exists(self, connection: Callable, program: str) -> bool:
@@ -311,7 +317,6 @@ class QueryConnection(Connection, metaclass=Singleton):
         stop.
            Close and dispose all connections
         """
-        self.logger.debug(':: Closing all Querysource connections ::')
         try:
             if self.lazy is True:
                 await self._connection.close()
@@ -323,5 +328,4 @@ class QueryConnection(Connection, metaclass=Singleton):
         except Exception as err:
             self.logger.exception(err)
             raise
-        self.logger.debug('Exiting ...')
         self._connected = False
