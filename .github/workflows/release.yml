@@ -6,25 +6,17 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-
-      - name: Set up Python (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -41,11 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install cibuildwheel maturin twine cython
 
-      - name: Build wheels on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build wheels
         env:
           CIBW_ARCHS: x86_64
-          # Install Rust and build the qs_parsers Rust sub-package inside the manylinux container
+          # Install Rust and build qs_parsers Rust sub-package inside the manylinux container
           CIBW_BEFORE_BUILD: >-
             curl https://sh.rustup.rs -sSf | sh -s -- -y &&
             export PATH=/root/.cargo/bin:$PATH &&
@@ -58,20 +49,10 @@ jobs:
         run: |
           cibuildwheel --platform linux --output-dir dist
 
-      - name: Build wheels on Windows
-        if: matrix.os == 'windows-latest'
-        env:
-          CIBW_BEFORE_BUILD: >-
-            pip install maturin &&
-            cd rust && maturin build --release && pip install target\wheels\*.whl && cd ..
-          CIBW_BUILD: "cp3{10,11,12,13}-*"
-        run: |
-          cibuildwheel --output-dir dist
-
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: wheels-py${{ matrix.python-version }}
           path: dist/*.whl
 
   deploy:
