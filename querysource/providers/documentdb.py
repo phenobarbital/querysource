@@ -32,6 +32,7 @@ class documentdbProvider(BaseProvider):
     Querysource Provider for AWS DocumentDB (MongoDB-based).
     """
     __parser__ = MongoParser
+    _parser_options = {"string_literal": True}
 
     def __init__(
         self,
@@ -54,14 +55,23 @@ class documentdbProvider(BaseProvider):
             **kwargs
         )
         self.is_raw = False
-        self._database = self._definition.source
+        self._database = None
+        if self._definition is not None:
+            self._database = getattr(self._definition, 'source', None)
+        if not self._database and isinstance(self._conditions, dict):
+            self._database = (
+                self._conditions.get('database')
+                or self._conditions.get('schema')
+            )
         if qstype == 'slug':
             if self._definition.is_raw is True:
                 self.is_raw = True
                 self._query = self.get_raw_query(self._definition.query_raw)
                 self._logger.notice(f"= Query is:: {self._query}")
+        elif qstype == 'query':
+            self._query = query if query is not None else kwargs.get('query_raw', '{}')
         else:
-            self._query = kwargs['query_raw']
+            self._query = kwargs.get('query_raw', query)
             if kwargs.get('raw_query', False):
                 try:
                     self._query = self.get_raw_query(self._query)
