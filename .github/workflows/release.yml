@@ -41,7 +41,7 @@ jobs:
             curl https://sh.rustup.rs -sSf | sh -s -- -y &&
             export PATH=/root/.cargo/bin:$PATH &&
             pip install maturin &&
-            cd rust && maturin build --release && pip install target/wheels/*.whl && cd ..
+            cd rust && rm -rf target/wheels && maturin build --release --interpreter python3 && pip install target/wheels/*.whl && cd ..
           # Make sure Rust tools are on the PATH for the Cython build
           CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH"
           RUST_SUBPACKAGE_PATH: rust
