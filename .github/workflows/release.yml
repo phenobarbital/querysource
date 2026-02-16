@@ -7,7 +7,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.10"
+            cibw-build: "cp310-*"
+          - python-version: "3.11"
+            cibw-build: "cp311-*"
+          - python-version: "3.12"
+            cibw-build: "cp312-*"
+          - python-version: "3.13"
+            cibw-build: "cp313-*"
     steps:
       - uses: actions/checkout@v4
 
@@ -43,14 +54,14 @@ jobs:
           # Make sure Rust tools are on the PATH for the Cython build
           CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH"
           RUST_SUBPACKAGE_PATH: rust
-          CIBW_BUILD: "cp3{10,11,12,13}-*"
+          CIBW_BUILD: ${{ matrix.cibw-build }}
         run: |
           cibuildwheel --platform linux --output-dir dist
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-py${{ matrix.python-version }}
           path: dist/*.whl
 
   deploy:
@@ -69,7 +80,9 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4.1.7
         with:
+          pattern: wheels-py*
           path: dist-artifacts
+          merge-multiple: true
 
       - name: Move wheel files to dist directory
         run: |
