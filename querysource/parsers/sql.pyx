@@ -14,6 +14,13 @@ from ..exceptions cimport EmptySentence
 from ..types.validators import Entity, field_components
 from .abstract cimport AbstractParser
 
+# Try to import Rust extension for accelerated parsing
+try:
+    import qs_parsers as _rs
+    HAS_RUST = True
+except ImportError:
+    HAS_RUST = False
+
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
@@ -54,6 +61,10 @@ cdef class SQLParser(AbstractParser):
         """
         Options for Filtering.
         """
+        # Rust fast path: delegate entire WHERE-building to Rust
+        if HAS_RUST and self.filter:
+            return _rs.filter_conditions(sql, dict(self.filter), dict(self.cond_definition))
+        # --- Cython fallback ---
         _sql = sql
         if self.filter:
             where_cond = []
@@ -161,6 +172,10 @@ cdef class SQLParser(AbstractParser):
         return _sql
 
     async def group_by(self, sql: str):
+        # Rust fast path
+        if HAS_RUST and self.grouping:
+            return _rs.group_by(sql, list(self.grouping))
+        # --- Cython fallback ---
         # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
         if self.grouping:
             match = self._group_pattern.search(sql)
@@ -182,6 +197,13 @@ cdef class SQLParser(AbstractParser):
         return sql
 
     async def order_by(self, sql: str):
+        # Rust fast path
+        if HAS_RUST and self.ordering:
+            if isinstance(self.ordering, list):
+                return _rs.order_by(sql, self.ordering)
+            else:
+                return _rs.order_by(sql, [self.ordering])
+        # --- Cython fallback ---
         _sql = "{sql} ORDER BY {order}"
         if isinstance(self.ordering, list) and len(self.ordering) > 0:
             order = ', '.join(self.ordering)
@@ -191,6 +213,10 @@ cdef class SQLParser(AbstractParser):
         return sql
 
     async def limiting(self, sql: str, limit: Union[str, int] = None, offset: Union[str, int] = None):
+        # Rust fast path
+        if HAS_RUST:
+            return _rs.limiting(sql, str(limit) if limit else '', str(offset) if offset else '')
+        # --- Cython fallback ---
         if '{limit}' in sql:
             if limit:
                 limit = f"LIMIT {limit}"
@@ -207,6 +233,10 @@ cdef class SQLParser(AbstractParser):
         return sql
 
     async def process_fields(self, sql: str):
+        # Rust fast path
+        if HAS_RUST and isinstance(self.fields, list) and len(self.fields) > 0:
+            return _rs.process_fields(sql, self.fields, bool(self._add_fields), self.query_raw)
+        # --- Cython fallback ---
         if isinstance(self.fields, list) and len(self.fields) > 0:
             if self._add_fields:
                 # Only add new fields if requested:

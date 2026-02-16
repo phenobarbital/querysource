@@ -1,3 +1,7 @@
+# cython: language_level=3, embedsignature=True
+# Copyright (C) 2018-present Jesus Lara
+#
+# file: pgsql.pyx
 """
 SQL Parser for PostgreSQL.
 """
@@ -7,22 +11,52 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from datamodel.parsers.json import json_encoder
-from ..exceptions import EmptySentence
+from ..exceptions cimport EmptySentence
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
-from .sql import SQLParser
+from .sql cimport SQLParser
+
+# Try to import Rust extension for accelerated parsing
+try:
+    import qs_parsers as _rs
+    HAS_RUST = True
+except ImportError:
+    HAS_RUST = False
 
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 
-class pgSQLParser(SQLParser):
-    schema_based: bool = True
+cdef class pgSQLParser(SQLParser):
+    """PostgreSQL-specific SQL Parser."""
+
+    def __init__(self, *args, **kwargs):
+        super(pgSQLParser, self).__init__(*args, **kwargs)
+        self.schema_based = True
 
     async def filter_conditions(self, sql):
-        """
-        Options for Filtering.
-        """
-        _sql = sql
+        """Options for Filtering (PostgreSQL-specific, rayon-parallel Rust fast-path)."""
+        if HAS_RUST and self.filter and isinstance(self.filter, dict):
+            try:
+                cond_def = self.cond_definition if self.cond_definition else {}
+                return _rs.pgsql_filter_conditions(sql, self.filter, cond_def)
+            except Exception:
+                pass  # fall through to Cython implementation
+        return await self._filter_conditions_cy(sql)
+
+    async def _filter_conditions_cy(self, sql):
+        """Cython fallback for filter_conditions with full PG operator support."""
+        cdef str _sql = sql
+        cdef str key
+        cdef str name
+        cdef str end
+        cdef str _format
+        cdef str _and
+        cdef str _filter
+        cdef str val
+        cdef str fval
+        cdef str op
+        cdef list where_cond
+
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():
@@ -213,9 +247,9 @@ class pgSQLParser(SQLParser):
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
-         Last Step: Build a SQL Query
+         Last Step: Build a SQL Query.
         """
-        sql = self.query_raw
+        cdef str sql = self.query_raw
         self.logger.notice(
             f"RAW SQL is: {sql}"
         )

@@ -5,6 +5,7 @@ import asyncio
 from querysource.connections import QueryConnection
 from querysource.models import QueryModel, QueryObject
 from querysource.parsers.sql import SQLParser
+from querysource.parsers.pgsql import pgSQLParser
 import time
 
 
@@ -32,7 +33,7 @@ async def get_query(db):
         }
     }
     b = QueryObject(**conditions)
-    parser = SQLParser(
+    parser = pgSQLParser(
         definition=qry,
         conditions=b
     )
@@ -42,10 +43,10 @@ async def get_query(db):
 
 
 async def main():
-    conn = QueryConnection(lazy=True)
-    db = await conn.get_connection()
-    sql = await get_query(db)
-    print(sql)
+    async with QueryConnection(lazy=True) as conn:
+        db = conn.get_connection()
+        sql = await get_query(db)
+        print(sql)
 
 if __name__ == "__main__":
     start_time = time.time()
