@@ -32,6 +32,9 @@ eggs/
 etc/
 google/*.json
 great_expetations/
+uv.lock
+/querysource/_version.py
+/templates/.compiled
 #lib/
 lib64/
 parts/
