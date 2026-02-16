@@ -5,14 +5,11 @@ Manage Database connections and supporting datasources.
 import asyncio
 from collections.abc import Callable
 from typing import Any, Union
-
 from aiohttp import web
-from datamodel import BaseModel
 from datamodel.parsers.json import JSONContent
 from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB, AsyncPool
 from asyncdb.exceptions import (
-    NoDataFound,
     ProviderError,
     DriverError
 )

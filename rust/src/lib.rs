@@ -8,6 +8,8 @@ use pyo3::prelude::*;
 mod bigquery_parser;
 mod cql_parser;
 mod filter_common;
+mod flux_parser;
+mod mongo_parser;
 mod mssql_parser;
 mod parseqs;
 mod pgsql_parser;
@@ -72,6 +74,15 @@ fn qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // -- CQL Parser --
     m.add_function(wrap_pyfunction!(cql_parser::cql_filter_conditions, m)?)?;
+
+    // -- Flux (InfluxDB) Parser --
+    m.add_function(wrap_pyfunction!(flux_parser::flux_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(flux_parser::flux_process_fields, m)?)?;
+
+    // -- MongoDB/DocumentDB Parser --
+    m.add_function(wrap_pyfunction!(mongo_parser::mongo_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(mongo_parser::mongo_process_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(mongo_parser::mongo_process_ordering, m)?)?;
 
     // -- Additional validators --
     m.add_function(wrap_pyfunction!(validators::is_camel_case, m)?)?;
