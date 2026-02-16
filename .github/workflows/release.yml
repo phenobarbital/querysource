@@ -7,9 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +50,7 @@ jobs:
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-py${{ matrix.python-version }}
+          name: wheels
           path: dist/*.whl
 
   deploy:
@@ -63,6 +61,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/querysource
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
