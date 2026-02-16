@@ -5,6 +5,8 @@
 
 use pyo3::prelude::*;
 
+mod bigquery_parser;
+mod cql_parser;
 mod filter_common;
 mod mssql_parser;
 mod parseqs;
@@ -63,6 +65,13 @@ fn qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // -- SOQL Parser --
     m.add_function(wrap_pyfunction!(soql_parser::soql_filter_conditions, m)?)?;
+
+    // -- BigQuery Parser --
+    m.add_function(wrap_pyfunction!(bigquery_parser::bq_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(bigquery_parser::bq_process_fields, m)?)?;
+
+    // -- CQL Parser --
+    m.add_function(wrap_pyfunction!(cql_parser::cql_filter_conditions, m)?)?;
 
     // -- Additional validators --
     m.add_function(wrap_pyfunction!(validators::is_camel_case, m)?)?;

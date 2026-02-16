@@ -84,6 +84,12 @@ extensions = [
         language="c"
     ),
     Extension(
+        name='querysource.parsers.cql',
+        sources=['querysource/parsers/cql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.parsers.mongo',
         sources=['querysource/parsers/mongo.pyx'],
         extra_compile_args=COMPILE_ARGS,
