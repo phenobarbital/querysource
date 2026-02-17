@@ -16,11 +16,11 @@ from itertools import repeat
 
 
 DRIVER = 'postgres'
-DSN = "postgres://troc_pgdata:12345678@127.0.0.1:5432/navigator_dev"
+DSN = "postgres://qs_data:12345678@127.0.0.1:5432/navigator_dev"
 params = {
     "host": '127.0.0.1',
     "port": '5432',
-    "user": 'troc_pgdata',
+    "user": 'qs_data',
     "password": '12345678',
     "database": 'navigator_dev'
 }
@@ -73,19 +73,12 @@ async def test_threads(event_loop):
     slugs = [
         'corporate_dashboard_adp',
         'turnover_corp_dashboard',
-        'wm_assembly_salaries',
-        'troc_corporate_revenue_sold',
-        'troc_corporate_revenue_billed',
-        'wm_reset_billable_expenses',
-        'troc_oportunities_lost',
-        'troc_oportunities_won',
-        'troc_pipeline_by_industry',
-        'walmart_stores',
-        'loreal_stores',
-        'epson_stores',
-        'flexroc_stores',
-        'epson_forms',
-        'totalplay_agent_monitoring'
+        'corporate_revenue_billed',
+        'billable_expenses',
+        'oportunities_lost',
+        'oportunities_won',
+        'pipeline_by_industry',
+        'agent_monitoring'
     ]
     with ThreadPoolExecutor() as ex:
         args = ((s, event_loop) for s in slugs)

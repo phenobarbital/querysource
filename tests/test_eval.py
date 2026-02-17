@@ -14,11 +14,11 @@ from querysource.connections import QueryConnection
 from querysource.utils.functions import cPrint
 
 DRIVER = 'postgres'
-DSN = "postgres://troc_pgdata:12345678@127.0.0.1:5432/navigator_dev"
+DSN = "postgres://qs_data:12345678@127.0.0.1:5432/navigator_dev"
 params = {
     "host": '127.0.0.1',
     "port": '5432',
-    "user": 'troc_pgdata',
+    "user": 'qs_data',
     "password": '12345678',
     "database": 'navigator_dev'
 }
@@ -86,9 +86,7 @@ async def connection(event_loop):
 pytestmark = pytest.mark.asyncio
 
 slugs = [
-         ("flexroc_stores", {"refresh": 1}),
          ("loreal_stores", {"refresh": 1}),
-         ("walmart_stores", {"refresh": 1})
         ]
 @pytest.mark.parametrize("slug, conditions", slugs)
 async def test_slug(event_loop, connection, slug, conditions):
@@ -100,8 +98,8 @@ async def test_slug(event_loop, connection, slug, conditions):
             slug=slug,
             conditions=conditions
         )
-        await asyncio.sleep(2, loop=event_loop)
+        await asyncio.sleep(2)
         pytest.assume(result is not None)
     except Exception as err:
-        cPrint(f'Error running {slug}', level='ERROR')
+        cPrint(f'Error running {slug}: {err}', level='ERROR')
         # raise Exception(str(err))
