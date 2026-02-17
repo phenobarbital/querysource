@@ -36,6 +36,7 @@ uv.lock
 /querysource/_version.py
 /templates/.compiled
 #lib/
+/examples/
 lib64/
 parts/
 var/
