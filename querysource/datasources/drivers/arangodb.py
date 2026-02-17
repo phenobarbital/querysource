@@ -1,13 +1,22 @@
 from dataclasses import asdict
 from datamodel import Column
+from ...conf import (
+    ARANGODB_DRIVER,
+    ARANGODB_HOST,
+    ARANGODB_PORT,
+    ARANGODB_USER,
+    ARANGODB_PASSWORD,
+    ARANGODB_DATABASE,
+)
 from .abstract import NoSQLDriver
 
 
 class arangodbDriver(NoSQLDriver):
-    driver: str = 'arangodb'
-    port: int = Column(required=True, default=8529)
+    """ArangoDB Driver configuration."""
+    driver: str = ARANGODB_DRIVER
+    port: int = Column(required=True, default=ARANGODB_PORT)
     protocol: str = Column(required=False, default='http')
-    database: str = Column(required=False, default='_system')
+    database: str = Column(required=False, default=ARANGODB_DATABASE)
     url: str = Column(required=False)
     dsn_format: str = '{protocol}://{host}:{port}/'
 
@@ -32,10 +41,11 @@ class arangodbDriver(NoSQLDriver):
 
 try:
     arangodb_default = arangodbDriver(
-        host='localhost',
-        port=8529,
-        username='root',
-        password='password'
+        host=ARANGODB_HOST,
+        port=ARANGODB_PORT,
+        database=ARANGODB_DATABASE,
+        username=ARANGODB_USER,
+        password=ARANGODB_PASSWORD,
     )
 except Exception:
     arangodb_default = None

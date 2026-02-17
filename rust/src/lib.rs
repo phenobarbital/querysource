@@ -5,6 +5,7 @@
 
 use pyo3::prelude::*;
 
+mod arangodb_parser;
 mod bigquery_parser;
 mod cql_parser;
 mod filter_common;
@@ -13,6 +14,7 @@ mod mongo_parser;
 mod mssql_parser;
 mod parseqs;
 mod pgsql_parser;
+mod rethink_parser;
 mod safe_dict;
 mod soql_parser;
 mod sql_parser;
@@ -83,6 +85,17 @@ fn qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mongo_parser::mongo_filter_conditions, m)?)?;
     m.add_function(wrap_pyfunction!(mongo_parser::mongo_process_fields, m)?)?;
     m.add_function(wrap_pyfunction!(mongo_parser::mongo_process_ordering, m)?)?;
+
+    // -- RethinkDB Parser --
+    m.add_function(wrap_pyfunction!(rethink_parser::rethink_process_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(rethink_parser::rethink_process_ordering, m)?)?;
+    m.add_function(wrap_pyfunction!(rethink_parser::rethink_classify_conditions, m)?)?;
+
+    // -- ArangoDB AQL Parser --
+    m.add_function(wrap_pyfunction!(arangodb_parser::aql_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(arangodb_parser::aql_process_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(arangodb_parser::aql_process_ordering, m)?)?;
+    m.add_function(wrap_pyfunction!(arangodb_parser::aql_build_query, m)?)?;
 
     // -- Additional validators --
     m.add_function(wrap_pyfunction!(validators::is_camel_case, m)?)?;

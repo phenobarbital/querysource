@@ -231,6 +231,14 @@ MONGO_DATABASE = config.get('MONGO_DATABASE', fallback='navigator')
 MONGO_USER = config.get('MONGO_USER')
 MONGO_PASSWORD = config.get('MONGO_PWD')
 
+# ArangoDB
+ARANGODB_DRIVER = config.get('ARANGODB_DRIVER', fallback='arangodb')
+ARANGODB_HOST = config.get('ARANGODB_HOST', fallback='localhost')
+ARANGODB_PORT = config.getint('ARANGODB_PORT', fallback=8529)
+ARANGODB_USER = config.get('ARANGODB_USER', fallback='root')
+ARANGODB_PASSWORD = config.get('ARANGODB_PASSWORD')
+ARANGODB_DATABASE = config.get('ARANGODB_DATABASE', fallback='_system')
+
 # DocumentDB configuration:
 DOCUMENTDB_HOSTNAME = config.get('DOCUMENTDB_HOSTNAME', fallback='localhost')
 DOCUMENTDB_PORT = config.get('DOCUMENTDB_PORT', fallback=27017)

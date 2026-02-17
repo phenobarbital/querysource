@@ -398,3 +398,123 @@ class TestBuildSQL:
             {"table_name": "users"},
         )
         assert result == "SELECT * FROM users"
+
+
+# ===========================================================================
+# RethinkDB Parser
+# ===========================================================================
+
+class TestRethinkProcessFields:
+    """Tests for rethink_process_fields()."""
+
+    def test_simple_fields(self):
+        fields, aliases = qs_parsers.rethink_process_fields(
+            ["name", "status", "email"]
+        )
+        assert fields == ["name", "status", "email"]
+        assert aliases == {}
+
+    def test_field_with_alias(self):
+        fields, aliases = qs_parsers.rethink_process_fields(
+            ["user_name as name", "email"]
+        )
+        assert fields == ["user_name", "email"]
+        assert aliases == {"name": "user_name"}
+
+    def test_multiple_aliases(self):
+        fields, aliases = qs_parsers.rethink_process_fields(
+            ['first_name as "fname"', 'last_name as "lname"']
+        )
+        assert fields == ["first_name", "last_name"]
+        assert aliases == {"fname": "first_name", "lname": "last_name"}
+
+    def test_empty_fields(self):
+        fields, aliases = qs_parsers.rethink_process_fields([])
+        assert fields == []
+        assert aliases == {}
+
+
+class TestRethinkProcessOrdering:
+    """Tests for rethink_process_ordering()."""
+
+    def test_desc_ordering(self):
+        result = qs_parsers.rethink_process_ordering(["name DESC"])
+        assert result == [("name", "DESC")]
+
+    def test_asc_ordering(self):
+        result = qs_parsers.rethink_process_ordering(["name ASC"])
+        assert result == [("name", "ASC")]
+
+    def test_default_asc(self):
+        result = qs_parsers.rethink_process_ordering(["name"])
+        assert result == [("name", "ASC")]
+
+    def test_multiple_orderings(self):
+        result = qs_parsers.rethink_process_ordering(
+            ["name DESC", "created_at"]
+        )
+        assert result == [("name", "DESC"), ("created_at", "ASC")]
+
+    def test_empty_ordering(self):
+        result = qs_parsers.rethink_process_ordering([])
+        assert result is None
+
+
+class TestRethinkClassifyConditions:
+    """Tests for rethink_classify_conditions()."""
+
+    def test_date_field(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"inserted_at": "2024-01-01"},
+            {"inserted_at": "date"},
+        )
+        assert result == {"inserted_at": "date"}
+
+    def test_epoch_field(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"created_ts": 1234567890},
+            {"created_ts": "epoch"},
+        )
+        assert result == {"created_ts": "epoch"}
+
+    def test_timestamp_field(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"updated_at": "2024-01-01T00:00:00"},
+            {"updated_at": "timestamp"},
+        )
+        assert result == {"updated_at": "date"}
+
+    def test_list_value(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"tags": [1, 2, 3]},
+            {},
+        )
+        assert result == {"tags": "list"}
+
+    def test_dict_value(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"meta": {"contains": "test"}},
+            {},
+        )
+        assert result == {"meta": "dict"}
+
+    def test_scalar_value(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"status": "active"},
+            {},
+        )
+        assert result == {"status": "scalar"}
+
+    def test_mixed_conditions(self):
+        result = qs_parsers.rethink_classify_conditions(
+            {"name": "John", "inserted_at": "2024-01-01", "tags": [1]},
+            {"inserted_at": "datetime"},
+        )
+        assert result["name"] == "scalar"
+        assert result["inserted_at"] == "date"
+        assert result["tags"] == "list"
+
+    def test_empty_filter(self):
+        result = qs_parsers.rethink_classify_conditions({}, {})
+        assert result == {}
+
