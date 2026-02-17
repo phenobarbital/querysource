@@ -13,9 +13,11 @@ cdef class ArangoDBParser(AbstractParser):
         public dict _search_options
         public str _doc_var
 
-    cpdef str query(self)
-
-    # Private fallback methods
+    # Private cdef methods
     cdef str _build_filter_clause_cy(self)
+    cdef list _build_filter_clauses_list(self)
     cdef str _build_return_clause_cy(self)
     cdef str _build_sort_clause_cy(self)
+    cdef str _build_graph_for_clause(self)
+    cdef str _build_search_clause(self)
+    cdef str _build_query_cy(self, str collection, int limit, int offset)

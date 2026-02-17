@@ -19,6 +19,7 @@ from .salesforce import salesforceDriver
 from .scylladb import scylladbDriver
 from .bigquery import bigqueryDriver
 from .documentdb import documentdbDriver
+from .arangodb import arangodbDriver
 
 
 ## List of Supported Drivers:
@@ -90,6 +91,10 @@ SUPPORTED = {
     "bigquery": {
         "name": "BigQuery",
         "driver": bigqueryDriver
+    },
+    "arangodb": {
+        "name": "ArangoDB",
+        "driver": arangodbDriver
     }
 }
 

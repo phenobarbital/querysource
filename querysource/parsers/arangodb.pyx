@@ -419,6 +419,7 @@ cdef class ArangoDBParser(AbstractParser):
                 parts.append(f'LIMIT {limit}')
 
         # RETURN
+        cdef str return_str
         if graph_clause:
             if self.fields:
                 field_parts = ', '.join(
@@ -428,7 +429,7 @@ cdef class ArangoDBParser(AbstractParser):
             else:
                 parts.append('RETURN v')
         else:
-            cdef str return_str = self._build_return_clause_cy()
+            return_str = self._build_return_clause_cy()
             parts.append(return_str)
 
         return '\n    '.join(parts)
