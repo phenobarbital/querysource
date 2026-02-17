@@ -102,6 +102,18 @@ extensions = [
         language="c"
     ),
     Extension(
+        name='querysource.parsers.rethink',
+        sources=['querysource/parsers/rethink.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.arangodb',
+        sources=['querysource/parsers/arangodb.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.utils.parseqs',
         sources=['querysource/utils/parseqs.pyx'],
         extra_compile_args=COMPILE_ARGS,

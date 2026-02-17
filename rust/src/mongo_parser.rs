@@ -493,7 +493,7 @@ mod tests {
     #[test]
     fn test_process_null_entry() {
         let entry = MongoFilterEntry {
-            key: "email".to_string(),
+            _key: "email".to_string(),
             field_name: "email".to_string(),
             suffix: String::new(),
             value: MongoValue::Str("null".to_string()),
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn test_process_not_null_entry() {
         let entry = MongoFilterEntry {
-            key: "email".to_string(),
+            _key: "email".to_string(),
             field_name: "email".to_string(),
             suffix: String::new(),
             value: MongoValue::Str("!null".to_string()),
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_process_negation_entry() {
         let entry = MongoFilterEntry {
-            key: "status".to_string(),
+            _key: "status".to_string(),
             field_name: "status".to_string(),
             suffix: String::new(),
             value: MongoValue::Str("!active".to_string()),
@@ -550,7 +550,7 @@ mod tests {
     #[test]
     fn test_process_equality_entry() {
         let entry = MongoFilterEntry {
-            key: "name".to_string(),
+            _key: "name".to_string(),
             field_name: "name".to_string(),
             suffix: String::new(),
             value: MongoValue::Str("admin".to_string()),
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn test_process_int_entry() {
         let entry = MongoFilterEntry {
-            key: "age".to_string(),
+            _key: "age".to_string(),
             field_name: "age".to_string(),
             suffix: String::new(),
             value: MongoValue::Int(30),
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_process_bool_entry() {
         let entry = MongoFilterEntry {
-            key: "active".to_string(),
+            _key: "active".to_string(),
             field_name: "active".to_string(),
             suffix: String::new(),
             value: MongoValue::Bool(true),
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn test_process_none_entry() {
         let entry = MongoFilterEntry {
-            key: "deleted".to_string(),
+            _key: "deleted".to_string(),
             field_name: "deleted".to_string(),
             suffix: String::new(),
             value: MongoValue::None,
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn test_process_in_list() {
         let entry = MongoFilterEntry {
-            key: "status".to_string(),
+            _key: "status".to_string(),
             field_name: "status".to_string(),
             suffix: String::new(),
             value: MongoValue::List(vec![
@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn test_process_nin_list() {
         let entry = MongoFilterEntry {
-            key: "status!".to_string(),
+            _key: "status!".to_string(),
             field_name: "status".to_string(),
             suffix: "!".to_string(),
             value: MongoValue::List(vec![
@@ -670,7 +670,7 @@ mod tests {
     #[test]
     fn test_process_dict_operator() {
         let entry = MongoFilterEntry {
-            key: "age".to_string(),
+            _key: "age".to_string(),
             field_name: "age".to_string(),
             suffix: String::new(),
             value: MongoValue::Dict {
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn test_process_between() {
         let entry = MongoFilterEntry {
-            key: "created_at".to_string(),
+            _key: "created_at".to_string(),
             field_name: "created_at".to_string(),
             suffix: String::new(),
             value: MongoValue::Str("BETWEEN 2024-01-01 AND 2024-12-31".to_string()),
@@ -743,7 +743,7 @@ mod tests {
     #[test]
     fn test_list_with_mongo_op() {
         let entry = MongoFilterEntry {
-            key: "score".to_string(),
+            _key: "score".to_string(),
             field_name: "score".to_string(),
             suffix: String::new(),
             value: MongoValue::ListWithOp {
