@@ -6,6 +6,7 @@ Get queries from databases and other data sources.
 QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
+import hashlib
 from typing import Optional
 from aiohttp import web
 from datamodel.libs.mapping import ClassDict
@@ -98,6 +99,16 @@ class QS(BaseQuery):
 
     def __repr__(self) -> str:
         return f'<QS: {self._type}:"{self._query}" >'
+
+    @staticmethod
+    def _query_preview(query: object, max_chars: int = 220) -> str:
+        if not isinstance(query, str):
+            return str(query)
+        compact = " ".join(query.split())
+        digest = hashlib.sha1(compact.encode("utf-8")).hexdigest()[:10]
+        if len(compact) > max_chars:
+            compact = f"{compact[:max_chars]}..."
+        return f"len={len(query)} sha1={digest} sql={compact}"
 
     @property
     def timeout(self):
@@ -201,7 +212,7 @@ class QS(BaseQuery):
         elif self._type == 'query':
             ## Query Object (TBD)
             self._logger.debug(
-                f':: Query: {self._query!s} for {self._driver}'
+                f':: Query: {self._query_preview(self._query)} for {self._driver}'
             )
             ### build manually objquery:
             objquery = AttrDict({"provider": self._driver})
@@ -242,7 +253,7 @@ class QS(BaseQuery):
         elif self._type == 'raw':
             ## Raw Query
             self._logger.debug(
-                f':: Raw Query: {self._query!s} for {self._driver}'
+                f':: Raw Query: {self._query_preview(self._query)} for {self._driver}'
             )
         elif self._type == 'driver':
             ### calling an HTTP, REST or other provider:
@@ -384,7 +395,7 @@ class QS(BaseQuery):
         async with self.semaphore:  # pylint: disable=E1701
             try:
                 self._logger.debug(
-                    f':: Query: {self._query}'
+                    f':: Query: {self._query_preview(self._query)}'
                 )
                 result, error = await self._qs.query()
                 duration = self.epoch_duration(self._starttime)
