@@ -316,6 +316,16 @@ CLICKHOUSE_DATABASE = config.get('CLICKHOUSE_DATABASE', fallback='default')
 CLICKHOUSE_SECURE = config.getboolean('CLICKHOUSE_SECURE', fallback=False)
 CLICKHOUSE_CLIENT_NAME = config.get('CLICKHOUSE_CLIENT_NAME', fallback='Navigator')
 
+## Elasticsearch
+ELASTIC_DRIVER = config.get('ELASTIC_DRIVER', fallback='elastic')
+ELASTIC_HOST = config.get('ELASTIC_HOST', fallback='localhost')
+ELASTIC_PORT = config.getint('ELASTIC_PORT', fallback=9200)
+ELASTIC_USER = config.get('ELASTIC_USER')
+ELASTIC_PASSWORD = config.get('ELASTIC_PASSWORD')
+ELASTIC_DATABASE = config.get('ELASTIC_DATABASE', fallback='default')
+ELASTIC_PROTOCOL = config.get('ELASTIC_PROTOCOL', fallback='http')
+ELASTIC_USE_SSL = config.getboolean('ELASTIC_USE_SSL', fallback=False)
+
 # Oxylabs
 OXYLABS_USERNAME = config.get('OXYLABS_USERNAME')
 OXYLABS_PASSWORD = config.get('OXYLABS_PASSWORD')

@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 mod arangodb_parser;
 mod bigquery_parser;
 mod cql_parser;
+mod elastic_parser;
 mod filter_common;
 mod flux_parser;
 mod mongo_parser;
@@ -96,6 +97,11 @@ fn qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(arangodb_parser::aql_process_fields, m)?)?;
     m.add_function(wrap_pyfunction!(arangodb_parser::aql_process_ordering, m)?)?;
     m.add_function(wrap_pyfunction!(arangodb_parser::aql_build_query, m)?)?;
+
+    // -- Elasticsearch Parser --
+    m.add_function(wrap_pyfunction!(elastic_parser::es_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(elastic_parser::es_process_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(elastic_parser::es_process_ordering, m)?)?;
 
     // -- Additional validators --
     m.add_function(wrap_pyfunction!(validators::is_camel_case, m)?)?;

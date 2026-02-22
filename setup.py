@@ -114,6 +114,12 @@ extensions = [
         language="c"
     ),
     Extension(
+        name='querysource.parsers.elastic',
+        sources=['querysource/parsers/elastic.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.utils.parseqs',
         sources=['querysource/utils/parseqs.pyx'],
         extra_compile_args=COMPILE_ARGS,

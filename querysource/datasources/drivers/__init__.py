@@ -20,6 +20,7 @@ from .scylladb import scylladbDriver
 from .bigquery import bigqueryDriver
 from .documentdb import documentdbDriver
 from .arangodb import arangodbDriver
+from .elastic import elasticDriver
 
 
 ## List of Supported Drivers:
@@ -95,6 +96,10 @@ SUPPORTED = {
     "arangodb": {
         "name": "ArangoDB",
         "driver": arangodbDriver
+    },
+    "elastic": {
+        "name": "Elasticsearch",
+        "driver": elasticDriver
     }
 }
 
