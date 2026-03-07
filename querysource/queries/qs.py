@@ -394,16 +394,16 @@ class QS(BaseQuery):
                     else:
                         result = self._encoder.loads(result)
                 except ImportError as err:
-                    # pyarrow (or other parquet dependency) not available; treat as cache miss
                     self._logger.warning(
                         f'Querysource: Cache deserialization failed due to missing dependency, '
                         f'treating as cache miss: {err!s}'
                     )
+                    # fall through to provider fetch below
                 except Exception as err:  # pylint: disable=W0703
-                    # Any deserialization issue should not break the request; fall back to provider
                     self._logger.warning(
                         f'Querysource: Cache deserialization error, treating as cache miss: {err!s}'
                     )
+                    # fall through to provider fetch below
                 else:
                     self._result = result
                     return await self._output_format(self._result, error)  # pylint: disable=W0150
