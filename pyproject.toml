@@ -52,7 +52,7 @@ dependencies = [
     "xlsxwriter==3.2.0",
     "odswriter==0.4.0",
     "odfpy==1.4.1",
-    "xlrd==2.0.1",
+    "xlrd==2.0.2",
     "reportlab==4.1.0",
     "APScheduler>=3.11.0,<3.12.0",
     "bs4==0.0.2",
