@@ -19,6 +19,7 @@ from asyncdb.exceptions import (
     ConnectionTimeout
 )
 
+from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
@@ -387,7 +388,10 @@ class QS(BaseQuery):
                 self._logger.debug(
                     f"Query {checksum} was cached!"
                 )
-                result = self._encoder.loads(result)
+                if is_parquet_payload(result):
+                    result = deserialize_cache_payload(result)
+                else:
+                    result = self._encoder.loads(result)
                 self._result = result
                 return await self._output_format(self._result, error)  # pylint: disable=W0150
         # getting data directly from provider instead:

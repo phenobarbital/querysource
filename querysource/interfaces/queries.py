@@ -33,6 +33,7 @@ from ..exceptions import (
 from .connections import Connection
 from ..events import LogEvent
 from ..utils.events import enable_uvloop
+from ..utils.cache_serialization import serialize_cache_payload
 
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
@@ -317,15 +318,20 @@ class AbstractQuery(Connection):
                     from pandas import DataFrame
                     if isinstance(result, DataFrame):
                         records = result.to_dict(orient='records')
-                        data = self._encoder(
-                            records
-                        )
                     else:
-                        raise ImportError
+                        records = [
+                            dict(row) if not isinstance(row, dict) else row
+                            for row in result
+                        ]
                 except ImportError:
-                    data = self._encoder(
-                        [dict(row) if not isinstance(row, dict) else row for row in result]
-                    )
+                    records = [
+                        dict(row) if not isinstance(row, dict) else row
+                        for row in result
+                    ]
+                try:
+                    data = serialize_cache_payload(records)
+                except ImportError:
+                    data = self._encoder(records)
             except Exception as err:  # pylint: disable=W0703
                 self._logger.error(
                     f'Cache Encode Error: {err}'
