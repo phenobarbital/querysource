@@ -19,6 +19,7 @@ from asyncdb.exceptions import (
     ConnectionTimeout
 )
 
+from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
@@ -387,9 +388,25 @@ class QS(BaseQuery):
                 self._logger.debug(
                     f"Query {checksum} was cached!"
                 )
-                result = self._encoder.loads(result)
-                self._result = result
-                return await self._output_format(self._result, error)  # pylint: disable=W0150
+                try:
+                    if is_parquet_payload(result):
+                        result = deserialize_cache_payload(result)
+                    else:
+                        result = self._encoder.loads(result)
+                except ImportError as err:
+                    self._logger.warning(
+                        f'Querysource: Cache deserialization failed due to missing dependency, '
+                        f'treating as cache miss: {err!s}'
+                    )
+                    # fall through to provider fetch below
+                except Exception as err:  # pylint: disable=W0703
+                    self._logger.warning(
+                        f'Querysource: Cache deserialization error, treating as cache miss: {err!s}'
+                    )
+                    # fall through to provider fetch below
+                else:
+                    self._result = result
+                    return await self._output_format(self._result, error)  # pylint: disable=W0150
         # getting data directly from provider instead:
         self._logger.debug('= Query from PROVIDER =')
         async with self.semaphore:  # pylint: disable=E1701
