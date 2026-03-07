@@ -330,7 +330,10 @@ class AbstractQuery(Connection):
                     ]
                 try:
                     data = serialize_cache_payload(records)
-                except ImportError:
+                except Exception as serr:
+                    self._logger.warning(
+                        f"Cache Encode using Parquet failed, falling back to JSON: {serr}"
+                    )
                     data = self._encoder(records)
             except Exception as err:  # pylint: disable=W0703
                 self._logger.error(
