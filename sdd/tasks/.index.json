@@ -291,16 +291,16 @@
             "feature_id": "FEAT-008",
             "feature": "querysource-scheduler",
             "spec": "sdd/specs/querysource-scheduler.spec.md",
-            "status": "pending",
+            "status": "done",
             "priority": "medium",
             "effort": "S",
             "depends_on": [],
             "parallel": true,
             "parallelism_notes": "Standalone module — no dependencies on other FEAT-008 tasks. Creates notifications.py only.",
-            "assigned_to": null,
-            "started_at": null,
-            "completed_at": null,
-            "file": "sdd/tasks/active/TASK-017-notification-callbacks.md"
+            "assigned_to": "claude-session-2026-03-25",
+            "started_at": "2026-03-25T00:00:00Z",
+            "completed_at": "2026-03-25T00:00:00Z",
+            "file": "sdd/tasks/completed/TASK-017-notification-callbacks.md"
         },
         {
             "id": "TASK-018",

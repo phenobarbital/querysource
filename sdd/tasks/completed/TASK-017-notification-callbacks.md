@@ -2,7 +2,7 @@
 
 **Feature**: QuerySource Scheduler (QSScheduler)
 **Spec**: `sdd/specs/querysource-scheduler.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -181,8 +181,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: claude-session-2026-03-25
+**Date**: 2026-03-25
+**Notes**: Implemented NotificationManager with logging_callback. All 5 unit tests pass.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
