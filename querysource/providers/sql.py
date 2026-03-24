@@ -145,7 +145,8 @@ class sqlProvider(BaseProvider):
         if self._type == 'query':
             use_parser = self._needs_parser(self._query) or self._has_parser_conditions(self._conditions)
             if not use_parser:
-                self._query = self.raw_query(self._query)
+                # Keep SQL untouched to avoid formatting collisions with
+                # literals that contain braces (e.g. Postgres array/json syntax).
                 return self
         if self.is_raw is True:
             return self
