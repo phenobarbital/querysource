@@ -2,7 +2,7 @@
 
 **Feature**: QuerySource Scheduler (QSScheduler)
 **Spec**: `sdd/specs/querysource-scheduler.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: TASK-014, TASK-015
@@ -133,8 +133,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: claude-session-2026-03-25
+**Date**: 2026-03-25
+**Notes**: Added `ENABLE_QS_SCHEDULER` import and conditional QSScheduler creation in `QuerySource.setup()`. Scheduler hooks are appended after connection setup hooks, ensuring correct startup ordering. 5 integration tests pass.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
