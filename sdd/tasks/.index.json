@@ -237,16 +237,16 @@
             "feature_id": "FEAT-008",
             "feature": "querysource-scheduler",
             "spec": "sdd/specs/querysource-scheduler.spec.md",
-            "status": "pending",
+            "status": "done",
             "priority": "high",
             "effort": "S",
             "depends_on": [],
             "parallel": true,
             "parallelism_notes": "No shared files with TASK-016 or TASK-017 — can run in parallel.",
-            "assigned_to": null,
-            "started_at": null,
-            "completed_at": null,
-            "file": "sdd/tasks/active/TASK-014-scheduler-config.md"
+            "assigned_to": "claude-session-2026-03-25",
+            "started_at": "2026-03-25T00:00:00Z",
+            "completed_at": "2026-03-25",
+            "file": "sdd/tasks/completed/TASK-014-scheduler-config.md"
         },
         {
             "id": "TASK-015",

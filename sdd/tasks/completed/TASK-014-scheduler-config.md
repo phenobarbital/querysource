@@ -2,7 +2,7 @@
 
 **Feature**: QuerySource Scheduler (QSScheduler)
 **Spec**: `sdd/specs/querysource-scheduler.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -115,8 +115,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: claude-session-2026-03-25
+**Date**: 2026-03-25
+**Notes**: Added 4 config values to querysource/conf.py: ENABLE_QS_SCHEDULER (bool, False), QS_SCHEDULER_TIMEZONE (str, TIMEZONE), QS_SCHEDULER_MAX_INSTANCES (int, 1), QS_SCHEDULER_COALESCE (bool, True). All verified importable with correct defaults.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
