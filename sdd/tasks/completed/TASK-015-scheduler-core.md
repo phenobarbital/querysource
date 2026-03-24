@@ -2,7 +2,7 @@
 
 **Feature**: QuerySource Scheduler (QSScheduler)
 **Spec**: `sdd/specs/querysource-scheduler.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: L (4-8h)
 **Depends-on**: TASK-014, TASK-016, TASK-017
@@ -202,8 +202,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: claude-session-2026-03-25
+**Date**: 2026-03-25
+**Notes**: Implemented QSScheduler with full lifecycle (setup/startup/shutdown), trigger parsing (cron/crontab/interval), scheduled query and cache refresh job loading, own DB pool, and notification callback delegation. 13 unit tests pass covering trigger parsing, job registration, cache filtering, and initialization.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
