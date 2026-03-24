@@ -2,7 +2,7 @@
 
 **Feature**: QuerySource Scheduler (QSScheduler)
 **Spec**: `sdd/specs/querysource-scheduler.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-014
@@ -185,8 +185,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: claude-session-2026-03-25
+**Date**: 2026-03-25
+**Notes**: Created `querysource/scheduler/jobs.py` with `scheduled_query_job` and `cache_refresh_job` async functions. Both lazily import QS to avoid circular imports. 8 unit tests pass covering execution, error handling, notification, and edge cases.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: Tests patch `querysource.queries.qs.QS` instead of `querysource.scheduler.jobs.QS` since QS is lazily imported inside function body.
