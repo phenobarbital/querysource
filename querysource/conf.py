@@ -339,6 +339,12 @@ CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
+## QSScheduler (APScheduler-based query scheduler):
+ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
+QS_SCHEDULER_TIMEZONE = config.get('QS_SCHEDULER_TIMEZONE', fallback=TIMEZONE)
+QS_SCHEDULER_MAX_INSTANCES = config.getint('QS_SCHEDULER_MAX_INSTANCES', fallback=1)
+QS_SCHEDULER_COALESCE = config.getboolean('QS_SCHEDULER_COALESCE', fallback=True)
+
 ## QuerySource Query Timeout:
 DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)
 DEFAULT_QUERY_FORMAT = config.get(
