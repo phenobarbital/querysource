@@ -36,6 +36,7 @@ from .interfaces.connections import PROVIDERS
 from .connections import QueryConnection
 from .parsers import QS_VARIABLES, QS_FILTERS
 from .conf import (
+    ENABLE_QS_SCHEDULER,
     USE_VECTORS,
     vector_models,
     GENSIM_DATA_DIR
@@ -215,6 +216,12 @@ class QuerySource(metaclass=Singleton):
         self.app.on_shutdown.append(
             self.qs_stop
         )
+        # QSScheduler (conditional — gated by ENABLE_QS_SCHEDULER)
+        if ENABLE_QS_SCHEDULER:
+            from .scheduler import QSScheduler
+            self._scheduler = QSScheduler(loop=self._loop)
+            self._scheduler.setup(self.app)
+
         # Loading Vector Models at Startup:
         if USE_VECTORS and api:
             # overriding
