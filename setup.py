@@ -36,12 +36,6 @@ COMPILE_ARGS = ["-O3"]
 
 extensions = [
     Extension(
-        name='querysource.exceptions',
-        sources=['querysource/exceptions.pyx'],
-        extra_compile_args=COMPILE_ARGS,
-        language="c"
-    ),
-    Extension(
         name='querysource.parsers.abstract',
         sources=['querysource/parsers/abstract.pyx'],
         extra_compile_args=COMPILE_ARGS,
@@ -116,6 +110,18 @@ extensions = [
     Extension(
         name='querysource.parsers.elastic',
         sources=['querysource/parsers/elastic.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.iceberg',
+        sources=['querysource/parsers/iceberg.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.deltatbl',
+        sources=['querysource/parsers/deltatbl.pyx'],
         extra_compile_args=COMPILE_ARGS,
         language="c"
     ),

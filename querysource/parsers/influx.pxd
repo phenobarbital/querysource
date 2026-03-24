@@ -3,5 +3,5 @@ from .parser cimport QueryParser
 
 
 cdef class InfluxParser(QueryParser):
-    cdef str bucket
-    cdef str measurement
+    cdef public str bucket
+    cdef public str measurement

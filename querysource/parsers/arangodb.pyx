@@ -4,7 +4,7 @@
 # file: arangodb.pyx
 """ArangoDB AQL Parser for QuerySource."""
 from datamodel.parsers.json import json_encoder, json_decoder
-from querysource.exceptions cimport EmptySentence
+from querysource.exceptions import EmptySentence
 from .abstract cimport AbstractParser
 
 # Try to import Rust extension for accelerated parsing

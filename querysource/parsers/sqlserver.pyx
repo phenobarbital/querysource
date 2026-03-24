@@ -9,7 +9,7 @@ Build SQL-Queries for MS SQL Server, validation and parsing.
 """
 from datamodel.typedefs import SafeDict
 from ..types.validators import Entity, field_components
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from .sql cimport SQLParser
 
 # Try to import Rust extension for accelerated parsing

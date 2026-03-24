@@ -8,7 +8,7 @@ Base Query Parser.
 from abc import ABC, abstractmethod
 import asyncio
 from ..models import QueryObject
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from .abstract cimport AbstractParser
 
 

@@ -9,7 +9,7 @@ Build CQL-Queries for Apache Cassandra, validation and parsing.
 import asyncio
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..types.validators import Entity, field_components
 from .sql cimport SQLParser
 

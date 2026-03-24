@@ -5,7 +5,7 @@
 """Elasticsearch Parser for QuerySource."""
 import re
 from datamodel.parsers.json import json_encoder, json_decoder
-from querysource.exceptions cimport EmptySentence
+from querysource.exceptions import EmptySentence
 from ..types.validators import Entity, field_components
 from .abstract cimport AbstractParser
 

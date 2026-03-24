@@ -7,7 +7,7 @@
 Build Flux queries for InfluxDB, validation and parsing.
 """
 from datamodel.typedefs import NullDefault, SafeDict
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..types.validators import Entity
 from .parser cimport QueryParser
 

@@ -8,7 +8,7 @@ from rethinkdb.errors import (
     ReqlDriverError,
     ReqlRuntimeError,
 )
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from querysource.exceptions import ParserError
 from .abstract cimport AbstractParser
 

@@ -13,7 +13,7 @@ import re
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from ..types.validators import Entity, field_components
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..exceptions import ParserError
 from .sql cimport SQLParser
 

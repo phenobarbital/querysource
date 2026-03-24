@@ -73,7 +73,7 @@ class rethinkProvider(BaseProvider):
                 try:
                     query_raw = json_decoder(self._definition.query_raw)
                     self._parser.database = query_raw.get('database')
-                    self._parser.table = query_raw.get('table')
+                    self._parser.tablename = query_raw.get('table')
                 except Exception as err:
                     # Unable to use query_raw for database:table info
                     self._logger.error(
@@ -81,8 +81,8 @@ class rethinkProvider(BaseProvider):
                     )
             if not self._parser.database:
                 self._parser.database = self._program
-            if not self._parser.table:
-                self._parser.table = self._definition.source or slug
+            if not self._parser.tablename:
+                self._parser.tablename = self._definition.source or slug
 
     def checksum(self):
         name = f'{self._slug}:{self._conditions!s}'

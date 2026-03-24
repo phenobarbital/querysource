@@ -14,7 +14,7 @@ from asyncdb import AsyncDB
 from . import QS_FILTERS, QS_VARIABLES
 from ..types import strtobool, is_boolean
 from ..models import QueryObject, QueryModel
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
 from ..utils.parseqs import is_parseable

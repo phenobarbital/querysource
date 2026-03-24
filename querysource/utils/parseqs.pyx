@@ -6,7 +6,7 @@ import orjson
 from typing import Type
 from libcpp cimport bool as bool_t
 from libcpp.string cimport string
-from ..exceptions cimport ParserError
+from ..exceptions import ParserError
 
 
 prefixes = frozenset(('(', '[', '{'))

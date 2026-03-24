@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from datamodel.parsers.json import json_encoder
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..types.validators import Entity, field_components, is_integer, is_camel_case
 from .sql cimport SQLParser
 

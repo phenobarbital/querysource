@@ -10,7 +10,7 @@ import re
 from typing import Union
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
-from ..exceptions cimport EmptySentence
+from ..exceptions import EmptySentence
 from ..types.validators import Entity, field_components
 from .abstract cimport AbstractParser
 

@@ -21,6 +21,8 @@ from .bigquery import bigqueryDriver
 from .documentdb import documentdbDriver
 from .arangodb import arangodbDriver
 from .elastic import elasticDriver
+from .iceberg import icebergDriver
+from .delta import deltaDriver
 
 
 ## List of Supported Drivers:
@@ -100,6 +102,14 @@ SUPPORTED = {
     "elastic": {
         "name": "Elasticsearch",
         "driver": elasticDriver
+    },
+    "iceberg": {
+        "name": "Apache Iceberg",
+        "driver": icebergDriver
+    },
+    "delta": {
+        "name": "DeltaTable (Delta Lake)",
+        "driver": deltaDriver
     }
 }
 
