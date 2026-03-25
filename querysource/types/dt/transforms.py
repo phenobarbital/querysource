@@ -13,7 +13,6 @@ import traceback
 import orjson
 import json
 import calendar
-import timezonefinder
 import phonenumbers
 from zoneinfo import ZoneInfo
 import locale
@@ -2129,6 +2128,7 @@ def fn_get_timezone(latitudes, longitudes):
     :param longitudes: Array of longitude values.
     :return: Array of timezone names.
     """
+    import timezonefinder
     tz = timezonefinder.TimezoneFinder()
     zones = np.full_like(latitudes, DEFAULT_TIMEZONE, dtype=object)
     mask = ~np.isnan(latitudes) & ~np.isnan(longitudes)
