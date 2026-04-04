@@ -508,7 +508,7 @@ class DatasourceView(BaseView):
                 if ds is not None:
                     try:
                         dt = await DataSource.get(**ds)
-                        attributes = {**dt.dict(), **data}
+                        attributes = {**dt.to_dict(), **data}
                         datasource = DataSource(**attributes)
                         found = True
                     except NoDataFound:

@@ -124,7 +124,7 @@ class BaseDriver(BaseModel):
                 "type": _type,
                 "is_secret": secret
             }
-            value = getattr(cls, field)
+            value = getattr(cls, field, None)
             default = hasattr(f, 'default')
             if not value and default:
                 value = f.default

@@ -505,6 +505,15 @@ cdef class AbstractParser:
                     return None
             return key, result
         else:
+            # Handle @-prefixed function replacements even for unknown keys
+            if isinstance(value, str):
+                val_comps = field_components(value)
+                if val_comps:
+                    prefix, fn, _ = val_comps[0]
+                    if prefix == '@':
+                        result = self._get_function_replacement(fn, key, value)
+                        self._conditions[key] = result
+                        return None
             return name, value
 
     async def set_conditions(self, conditions: dict, connection: object) -> dict:

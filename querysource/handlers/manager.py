@@ -119,7 +119,7 @@ class QueryManager(QueryView):
                     query = await QueryModel.filter(**qp)
                 else:
                     query = await QueryModel.all(**args)
-                    query = [row.dict() for row in query]
+                    query = [row.to_dict() for row in query]
                 return self.json_response(query)
         except NoDataFound as err:
             headers = {

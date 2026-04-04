@@ -70,15 +70,14 @@ class QueryService(AbstractHandler):
             options = {}
         queryformat = self.format(request, params, _format)
         try:
-            query = options['query']
+            query = options.pop('query')
         except KeyError as ex:
             raise self.Error(
                 message="Option *query* was not found in payload.",
                 code=400
             ) from ex
         try:
-            driver = options['driver']
-            del options['driver']
+            driver = options.pop('driver')
         except KeyError:
             driver = 'db'
         if not options:
