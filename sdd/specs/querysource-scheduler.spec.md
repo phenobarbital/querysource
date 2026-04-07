@@ -3,7 +3,7 @@
 **Feature ID**: FEAT-008
 **Date**: 2026-03-25
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.x
 
 ---
@@ -302,9 +302,9 @@ def sample_query_with_cache_refresh():
 
 ## 7. Open Questions
 
-- [ ] Should `dwh_scheduler` column be used for DWH-specific scheduled jobs in a future feature, or is `attributes.scheduler` the universal mechanism? — *Owner: Jesus Lara*
-- [ ] For v2: should cache refresh jobs support a minimal "execute + cache only" path that bypasses QS validation overhead? — *Owner: Jesus Lara*
-- [ ] Should there be a global maximum number of concurrent scheduled jobs, or is per-job `max_instances=1` sufficient? — *Owner: Jesus Lara*
+- [ ] Should `dwh_scheduler` column be used for DWH-specific scheduled jobs in a future feature, or is `attributes.scheduler` the universal mechanism? — *Owner: Jesus Lara*: like cache_options, dwh_scheduler will be used in a future feature for moving data into DWH.
+- [ ] For v2: should cache refresh jobs support a minimal "execute + cache only" path that bypasses QS validation overhead? — *Owner: Jesus Lara*: yes
+- [ ] Should there be a global maximum number of concurrent scheduled jobs, or is per-job `max_instances=1` sufficient? — *Owner: Jesus Lara*: max_instances=1 is sufficient.
 
 ---
 

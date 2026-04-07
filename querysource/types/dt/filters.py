@@ -11,21 +11,32 @@ from ...utils.getfunc import getFunction
 valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']
 
 
-def build_condition(expression: str, column: str, value, condition: dict) -> str:
+def build_condition(expression: str, column: str, value, condition: dict, df: pd.DataFrame = None) -> str:
     """Build a filter condition for DataFrame filtering.
 
     Args:
         expression: The filter expression to be applied.
         column: The column to be filtered.
-        value: The value to be compared against.
-        df: The DataFrame to which the filters will be applied.
+        value: The value to be compared against. Can be a scalar or {"$column": "column_name"} for column-to-column comparison.
+        condition: The condition dictionary with additional context.
+        df: The DataFrame to which the filters will be applied (used for validating column references).
 
     Returns:
         a string representation of the filter condition.
 
     Raises:
-        QueryException: If the expression is invalid.
+        QueryException: If the expression is invalid or a referenced column doesn't exist.
     """
+    # Check if value is a column reference: {"$column": "column_name"}
+    if isinstance(value, dict) and "$column" in value:
+        ref_column = value["$column"]
+        if df is not None and ref_column not in df.columns:
+            raise QueryException(
+                f"Referenced column '{ref_column}' not found in DataFrame."
+            )
+        # Column-to-column comparison
+        return f"(df['{column}'] {expression} df['{ref_column}'])"
+
     if expression in ("gt", "lt"):
         if not isinstance(value, (int, float)):
             raise QueryException(
@@ -83,8 +94,11 @@ def build_condition(expression: str, column: str, value, condition: dict) -> str
                 raise QueryException(
                     f"Invalid expression: {expression}"
                 )
-    elif isinstance(value, (np.datetime64, np.timedelta64)):
-        condition['value'] = value
+    elif isinstance(value, (np.datetime64, np.timedelta64, pd.Timestamp)):
+        if isinstance(value, pd.Timestamp):
+            condition['value'] = f"pd.Timestamp('{value}')"
+        else:
+            condition['value'] = value
         return "(df['{column}'] {expression} {value})".format_map(
             condition
         )
@@ -160,7 +174,7 @@ def create_filter_chain(expression: list, column: str, df: pd.DataFrame) -> list
         expression = condition.get('expression', '==')
         value = condition.get('value', None)
         column = condition.get('column')
-        new_condition = build_condition(expression, column, value, condition)
+        new_condition = build_condition(expression, column, value, condition, df)
         conditions.append(f"({new_condition})")
     # Combine all conditions with a logical AND
     if conditions:
@@ -214,7 +228,7 @@ def create_filter(_filter: list, df: pd.DataFrame) -> list:
             conditions.extend(new_conditions)
             continue
         else:
-            new_condition = build_condition(expression, column, value, condition)
+            new_condition = build_condition(expression, column, value, condition, df)
             conditions.append(f"({new_condition})")
             continue
     return conditions
