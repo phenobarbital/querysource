@@ -6,6 +6,7 @@ from ....exceptions import (
     DriverError,
     QueryException
 )
+from ....types.dt.filters import create_filter
 from .abstract import AbstractOperator
 
 
@@ -16,6 +17,14 @@ class Join(AbstractOperator):
         self._left = kwargs.pop('left', None)
         # Right Operator
         self._right = kwargs.pop('right', None)
+        # Join Conditions (column-to-column comparisons applied after merge)
+        self._join_conditions = kwargs.pop('join_conditions', None)
+
+        # Convert 'on' to 'using' for backward compatibility
+        # (allows JSON: "on": "user_id" to work)
+        if 'on' in kwargs:
+            kwargs['using'] = kwargs.pop('on')
+
         super(Join, self).__init__(data, **kwargs)
         self.data = data
 
@@ -113,6 +122,79 @@ class Join(AbstractOperator):
                 f"Unknown JOIN error {err!s}"
             ) from err
 
+    def _apply_join_conditions(self, df: DataFrame) -> DataFrame:
+        """Apply join conditions (column-to-column filters) to merged DataFrame.
+
+        Reuses the filter expression builder from filters module.
+        Join conditions are semantically part of the join, applied immediately
+        after the merge.
+
+        Args:
+            df: The merged DataFrame
+
+        Returns:
+            Filtered DataFrame with join conditions applied
+
+        Raises:
+            QueryException: If a column doesn't exist or condition is invalid
+        """
+        if not self._join_conditions:
+            return df
+
+        try:
+            # Convert join_conditions to filter format expected by create_filter
+            # join_conditions format: [{"left": col_a, "expression": ">=", "right": col_b}, ...]
+            # create_filter format: [{"column": col, "expression": ">=", "value": {"$column": col_b}}, ...]
+
+            filter_specs = []
+            for condition in self._join_conditions:
+                left_col = condition.get('left')
+                expression = condition.get('expression', '==')
+                right_col = condition.get('right')
+
+                if not left_col or not right_col:
+                    raise QueryException(
+                        "Join condition must have 'left', 'expression', and 'right' fields"
+                    )
+
+                # Transform to Filter format
+                filter_specs.append({
+                    'column': left_col,
+                    'expression': expression,
+                    'value': {'$column': right_col}
+                })
+
+            # Use create_filter to build the conditions
+            conditions = create_filter(filter_specs, df)
+
+            # Apply conditions with AND logic
+            condition_str = " & ".join(conditions)
+            df_filtered = df.loc[eval(condition_str)]
+
+            if df_filtered is None:
+                raise DataNotFound(
+                    "Error applying join conditions"
+                )
+
+            # Note: empty DataFrame after conditions is valid, not an error
+            # (a valid join might produce no rows based on the conditions)
+
+            logging.debug(
+                f"Applied {len(self._join_conditions)} join condition(s), "
+                f"result: {len(df_filtered)} rows"
+            )
+
+            return df_filtered
+
+        except DataNotFound:
+            raise
+        except QueryException:
+            raise
+        except Exception as err:
+            raise QueryException(
+                f"Error applying join conditions: {err!s}"
+            ) from err
+
     def _join(self, df1: DataFrame, df2: DataFrame, **kwargs):
         try:
             df = self._pd.merge(
@@ -140,5 +222,12 @@ class Join(AbstractOperator):
             inplace=True
         )
         df.reset_index(drop=True)
-        self._print_info(df)
+
+        # Apply join conditions if provided
+        if self._join_conditions:
+            df = self._apply_join_conditions(df)
+
+        # Print info only if DataFrame has data (avoid IndexError on empty frames)
+        if not df.empty:
+            self._print_info(df)
         return df
