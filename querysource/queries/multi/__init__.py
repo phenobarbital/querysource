@@ -154,7 +154,7 @@ class MultiQS(BaseQuery):
                     ## raise exception for this Query
                     if isinstance(t.exc, ParserError):
                         raise self.Error(
-                            f"Error parsing Query Slug {t.slug()}",
+                            f"Error parsing Query Slug {t.slug}",
                             exception=t.exc
                         )
                     if isinstance(t.exc, SlugNotFound):
@@ -163,7 +163,7 @@ class MultiQS(BaseQuery):
                         )
                     if isinstance(t.exc, DataNotFound):
                         return self.NotFound(
-                            message=f"No Data was Found on Query {t.slug()}"
+                            message=f"No Data was Found on Query {t.slug}"
                         )
                     if isinstance(t.exc, (QueryException, DriverError)):
                         raise self.Error(
