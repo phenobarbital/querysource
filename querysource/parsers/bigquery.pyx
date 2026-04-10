@@ -87,6 +87,35 @@ cdef class BigQueryParser(SQLParser):
                 return f"JSON_VALUE({field}, '$')"
         return field
 
+    async def _parser_conditions(self, conditions: dict):
+        """Override to preserve raw varchar string values for BigQuery quoting.
+
+        The base class routes varchar conditions through to_string() which calls
+        escape_string() — that function strips single quotes, turning "Sam's Club"
+        into "Sams Club".  We intercept here, before the parent processes the
+        conditions, save the raw strings, and after processing replace the
+        mangled values in _conditions with properly double-quoted BigQuery strings.
+        """
+        cdef str key
+        cdef dict raw_varchars = {}
+        cdef object t
+
+        _bq_types = ('varchar', 'string', 'field', 'char', 'text')
+        for key, val in conditions.items():
+            if isinstance(val, str):
+                try:
+                    t = self.cond_definition.get(key)
+                    if t in _bq_types:
+                        raw_varchars[key] = val
+                except (AttributeError, KeyError):
+                    pass
+
+        await super()._parser_conditions(conditions)
+
+        for key, raw_val in raw_varchars.items():
+            if key in self._conditions:
+                self._conditions[key] = bq_quote_string(raw_val)
+
     async def filter_conditions(self, sql):
         """Options for Filtering (BigQuery-specific, rayon-parallel Rust fast-path)."""
         if HAS_RUST and self.filter and isinstance(self.filter, dict):
