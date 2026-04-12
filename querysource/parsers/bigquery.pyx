@@ -18,6 +18,13 @@ try:
 except ImportError:
     HAS_RUST = False
 
+from navconfig.logging import logging
+_logger = logging.getLogger('QS.Parser.BigQuery')
+if HAS_RUST:
+    _logger.notice("BigQuery Rust parser (qs_parsers) loaded successfully.")
+else:
+    _logger.warning("BigQuery Rust parser (qs_parsers) not available, using Cython fallback.")
+
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 
@@ -122,8 +129,10 @@ cdef class BigQueryParser(SQLParser):
             try:
                 cond_def = self.cond_definition if self.cond_definition else {}
                 return _rs.bq_filter_conditions(sql, self.filter, cond_def)
-            except Exception:
-                pass  # fall through to Cython implementation
+            except Exception as exc:
+                self.logger.warning(
+                    "Rust bq_filter_conditions failed, falling back to Cython: %s", exc
+                )
         return await self._filter_conditions_cy(sql)
 
     async def _filter_conditions_cy(self, sql):
@@ -289,8 +298,10 @@ cdef class BigQueryParser(SQLParser):
                     sql, self.fields, bool(self._add_fields),
                     self.query_raw, cond_def
                 )
-            except Exception:
-                pass  # fall through to Cython implementation
+            except Exception as exc:
+                self.logger.warning(
+                    "Rust bq_process_fields failed, falling back to Cython: %s", exc
+                )
 
         if isinstance(self.fields, list) and len(self.fields) > 0:
             if self._add_fields:
