@@ -200,6 +200,19 @@ pub fn quote_string(value: &str, no_dblquoting: bool) -> String {
     format!("'{escaped}'")
 }
 
+/// Quote a string value for BigQuery using double-quote delimiters.
+///
+/// BigQuery strings enclosed in double quotes do not require single-quote
+/// escaping, so "Sam's Club" is valid as-is.  Internal double quotes are
+/// backslash-escaped.  Null sentinel values are passed through unquoted.
+pub fn bq_quote_string(value: &str) -> String {
+    if value == "null" || value == "NULL" {
+        return value.to_string();
+    }
+    let v = value.replace('"', "\\\"");
+    format!("\"{}\"", v)
+}
+
 /// Escape and quote a string — combines escape_string + quoteString.
 ///
 /// Mirrors `to_string()` from validators.pyx.
