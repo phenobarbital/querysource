@@ -14,15 +14,23 @@ graft tests
 # Global excludes
 global-exclude *.pyc
 global-exclude __pycache__
-global-exclude *.so
 global-exclude *.o
 global-exclude .git*
 global-exclude .DS_Store
 global-exclude .venv
+# Exclude Cython-generated .so files (they are compiled during wheel build)
+# but keep Rust extension .so files bundled in qs_parsers
+recursive-exclude querysource/parsers *.so
+recursive-exclude querysource/types *.so
+recursive-exclude querysource/utils *.so
 prune docs
 prune samples
 prune examples
 prune settings
 prune plugins/*
+prune sdd
+prune my_prompts
+prune lab
+prune rust/target
 recursive-exclude */__pycache__
 prune */__pycache__

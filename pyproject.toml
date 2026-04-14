@@ -160,22 +160,7 @@ write_to = "querysource/_version.py"
 version = {attr = "querysource.__version__"}
 
 [tool.setuptools.packages.find]
-exclude = [
-    "contrib",
-    "google",
-    "docs",
-    "plugins",
-    "lab",
-    "examples",
-    "samples",
-    "settings",
-    "etc",
-    "bin",
-    "build",
-    "dist",
-    "tests",
-    "env",
-]
+include = ["querysource", "querysource.*"]
 
 [tool.setuptools.package-data]
 querysource = ["py.typed"]
