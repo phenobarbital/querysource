@@ -158,5 +158,9 @@ extensions = [
 
 setup(
     ext_modules=cythonize(extensions),
+    package_data={
+        "querysource": ["py.typed"],
+        "querysource.qs_parsers": ["*.so", "*.pyd"],
+    },
     zip_safe=False,
 )
