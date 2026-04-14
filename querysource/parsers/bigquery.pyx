@@ -18,7 +18,37 @@ try:
 except ImportError:
     HAS_RUST = False
 
+from navconfig.logging import logging
+_logger = logging.getLogger('QS.Parser.BigQuery')
+if HAS_RUST:
+    _logger.notice("BigQuery Rust parser (qs_parsers) loaded successfully.")
+else:
+    _logger.warning("BigQuery Rust parser (qs_parsers) not available, using Cython fallback.")
+
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
+
+
+cdef str bq_quote_string(object value):
+    """Quote a string value for BigQuery using double-quote delimiters.
+
+    BigQuery strings enclosed in double quotes do not require escaping
+    internal single quotes, avoiding the PostgreSQL-style '' doubling
+    that is incompatible with BigQuery (e.g. "Sam's Club" instead of
+    'Sam''s Club').
+    """
+    cdef str v
+    if value is None or value == 'None':
+        return '""'
+    if value in ('null', 'NULL'):
+        return <str>value
+    v = str(value)
+    # Strip surrounding single quotes if already wrapped by a caller
+    if v.startswith("'") and v.endswith("'") and len(v) >= 2:
+        v = v[1:-1]
+    # Escape any literal double quotes inside the string
+    v = v.replace('"', '\\"')
+    return f'"{v}"'
+
 
 cdef class BigQueryParser(SQLParser):
     """ BigQuery SQL Parser with support for JSON columns. """
@@ -64,14 +94,45 @@ cdef class BigQueryParser(SQLParser):
                 return f"JSON_VALUE({field}, '$')"
         return field
 
+    async def _parser_conditions(self, conditions: dict):
+        """Override to preserve raw varchar string values for BigQuery quoting.
+
+        The base class routes varchar conditions through to_string() which calls
+        escape_string() — that function strips single quotes, turning "Sam's Club"
+        into "Sams Club".  We intercept here, before the parent processes the
+        conditions, save the raw strings, and after processing replace the
+        mangled values in _conditions with properly double-quoted BigQuery strings.
+        """
+        cdef str key
+        cdef dict raw_varchars = {}
+        cdef object t
+
+        _bq_types = ('varchar', 'string', 'field', 'char', 'text')
+        for key, val in conditions.items():
+            if isinstance(val, str):
+                try:
+                    t = self.cond_definition.get(key)
+                    if t in _bq_types:
+                        raw_varchars[key] = val
+                except (AttributeError, KeyError):
+                    pass
+
+        await super()._parser_conditions(conditions)
+
+        for key, raw_val in raw_varchars.items():
+            if key in self._conditions:
+                self._conditions[key] = bq_quote_string(raw_val)
+
     async def filter_conditions(self, sql):
         """Options for Filtering (BigQuery-specific, rayon-parallel Rust fast-path)."""
         if HAS_RUST and self.filter and isinstance(self.filter, dict):
             try:
                 cond_def = self.cond_definition if self.cond_definition else {}
                 return _rs.bq_filter_conditions(sql, self.filter, cond_def)
-            except Exception:
-                pass  # fall through to Cython implementation
+            except Exception as exc:
+                self.logger.warning(
+                    "Rust bq_filter_conditions failed, falling back to Cython: %s", exc
+                )
         return await self._filter_conditions_cy(sql)
 
     async def _filter_conditions_cy(self, sql):
@@ -145,7 +206,7 @@ cdef class BigQueryParser(SQLParser):
                         # BigQuery: JSON extraction via dict key
                         json_expr = f"JSON_VALUE({field_expr}, '$.{op}')"
                         where_cond.append(
-                            f"{json_expr} = {Entity.quoteString(str(v))}"
+                            f"{json_expr} = {bq_quote_string(str(v))}"
                         )
 
                 elif isinstance(value, list):
@@ -155,7 +216,7 @@ cdef class BigQueryParser(SQLParser):
                             where_cond.append(f"{field_expr} {fval} {value[1]}")
                         else:
                             val = ','.join(
-                                [f"{Entity.quoteString(v)}" for v in value]
+                                [f"{bq_quote_string(v)}" for v in value]
                             )
                             if end == '!':
                                 where_cond.append(f"{name} NOT IN ({val})")
@@ -163,7 +224,7 @@ cdef class BigQueryParser(SQLParser):
                                 where_cond.append(f"{field_expr} IN ({val})")
                     except (KeyError, IndexError):
                         val = ','.join(
-                            [f"{Entity.quoteString(v)}" for v in value]
+                            [f"{bq_quote_string(v)}" for v in value]
                         )
                         if not val:
                             where_cond.append(f"{field_expr} IN (NULL)")
@@ -181,11 +242,11 @@ cdef class BigQueryParser(SQLParser):
                         where_cond.append(f"{name} != {value}")
                     elif str(value).startswith('!'):
                         where_cond.append(
-                            f"{field_expr} != {Entity.quoteString(value[1:])}"
+                            f"{field_expr} != {bq_quote_string(value[1:])}"
                         )
                     else:
                         where_cond.append(
-                            f"{field_expr}={Entity.quoteString(value)}"
+                            f"{field_expr}={bq_quote_string(value)}"
                         )
 
                 elif isinstance(value, bool):
@@ -193,7 +254,7 @@ cdef class BigQueryParser(SQLParser):
 
                 else:
                     where_cond.append(
-                        f"{field_expr}={Entity.quoteString(value)}"
+                        f"{field_expr}={bq_quote_string(value)}"
                     )
 
             # Build WHERE clause
@@ -237,8 +298,10 @@ cdef class BigQueryParser(SQLParser):
                     sql, self.fields, bool(self._add_fields),
                     self.query_raw, cond_def
                 )
-            except Exception:
-                pass  # fall through to Cython implementation
+            except Exception as exc:
+                self.logger.warning(
+                    "Rust bq_process_fields failed, falling back to Cython: %s", exc
+                )
 
         if isinstance(self.fields, list) and len(self.fields) > 0:
             if self._add_fields:

@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 
 use crate::filter_common::apply_where_clause;
 use crate::safe_dict::safe_format_map_rust;
-use crate::validators::{field_components, is_integer, quote_string};
+use crate::validators::{bq_quote_string, field_components, is_integer, quote_string};
 
 /// BigQuery comparison tokens.
 const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
@@ -199,7 +199,7 @@ fn process_dict_value(
     if entries.len() == 1 {
         let val_str = v.as_str();
         let json_expr = format!("JSON_VALUE({}, '$.{}')", field_expr, op);
-        return Some(format!("{} = {}", json_expr, quote_string(&val_str, true)));
+        return Some(format!("{} = {}", json_expr, bq_quote_string(&val_str)));
     }
 
     None
@@ -240,7 +240,7 @@ fn process_list_value(
     // Build IN clause from list values
     let val_str: String = items
         .iter()
-        .map(|v| quote_string(&v.as_str(), true))
+        .map(|v| bq_quote_string(&v.as_str()))
         .collect::<Vec<_>>()
         .join(",");
 
@@ -280,11 +280,11 @@ fn process_str_value(
         return Some(format!(
             "{} != {}",
             field_expr,
-            quote_string(&value[1..], true)
+            bq_quote_string(&value[1..])
         ));
     }
     // Default: quoted equality
-    Some(format!("{}={}", field_expr, quote_string(value, true)))
+    Some(format!("{}={}", field_expr, bq_quote_string(value)))
 }
 
 // ---------------------------------------------------------------------------
@@ -510,8 +510,22 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("name='John'".to_string())
+            Some("name=\"John\"".to_string())
         );
+    }
+
+    #[test]
+    fn test_process_str_with_single_quote() {
+        // NAV-8095: apostrophe in value must produce double-quoted BigQuery string.
+        let entry = FilterEntry {
+            key: "retailer".to_string(),
+            value: FilterValue::Str("Sam's Club".to_string()),
+            format_hint: None,
+        };
+        let result = process_entry(&entry).unwrap();
+        assert_eq!(result, "retailer=\"Sam's Club\"");
+        assert!(!result.contains("Sams Club"), "apostrophe must not be stripped");
+        assert!(!result.contains("Sam''s Club"), "PostgreSQL-style escaping must not appear");
     }
 
     // -- JSON field filter tests --
@@ -525,7 +539,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("JSON_VALUE(metadata, '$.region')='us-east-1'".to_string())
+            Some("JSON_VALUE(metadata, '$.region')=\"us-east-1\"".to_string())
         );
     }
 
@@ -551,7 +565,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("JSON_VALUE(config, '$')='active'".to_string())
+            Some("JSON_VALUE(config, '$')=\"active\"".to_string())
         );
     }
 
@@ -584,7 +598,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("status IN ('active','pending')".to_string())
+            Some("status IN (\"active\",\"pending\")".to_string())
         );
     }
 
