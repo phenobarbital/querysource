@@ -23,16 +23,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Add Rust to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
@@ -45,15 +41,17 @@ jobs:
       - name: Build wheels
         env:
           CIBW_ARCHS: x86_64
-          # Install Rust and build qs_parsers Rust sub-package inside the manylinux container
+          # Install Rust, build _qs_parsers, and copy the .so into the querysource package tree
           CIBW_BEFORE_BUILD: >-
             curl https://sh.rustup.rs -sSf | sh -s -- -y &&
             export PATH=/root/.cargo/bin:$PATH &&
             pip install maturin &&
-            cd rust && rm -rf target/wheels && maturin build --release --interpreter python3 && pip install target/wheels/*.whl && cd ..
-          # Make sure Rust tools are on the PATH for the Cython build
+            cd {project}/rust && rm -rf target/wheels &&
+            maturin build --release --interpreter python3 &&
+            pip install target/wheels/*.whl &&
+            python3 -c "import _qs_parsers, shutil; shutil.copy(_qs_parsers.__file__, '{project}/querysource/qs_parsers/')" &&
+            cd {project}
           CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH"
-          RUST_SUBPACKAGE_PATH: rust
           CIBW_BUILD: ${{ matrix.cibw-build }}
         run: |
           cibuildwheel --platform linux --output-dir dist

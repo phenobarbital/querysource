@@ -179,6 +179,7 @@ exclude = [
 
 [tool.setuptools.package-data]
 querysource = ["py.typed"]
+"querysource.qs_parsers" = ["*.so", "*.pyd"]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -189,3 +190,12 @@ filterwarnings = [
     "error",
     'ignore:The loop argument is deprecated since Python 3\.8, and scheduled for removal in Python 3\.10:DeprecationWarning:asyncio',
 ]
+
+# ---------------------------------------------------------------------------
+# Maturin (Rust extension) — used by `maturin develop` for local builds
+# ---------------------------------------------------------------------------
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+module-name = "querysource.qs_parsers._qs_parsers"
+bindings = "pyo3"
+features = ["pyo3/extension-module"]

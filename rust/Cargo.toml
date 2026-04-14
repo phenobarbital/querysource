@@ -5,7 +5,7 @@ edition = "2021"
 description = "Rust-based string processing for QuerySource parsers"
 
 [lib]
-name = "qs_parsers"
+name = "_qs_parsers"
 crate-type = ["cdylib"]
 
 [dependencies]

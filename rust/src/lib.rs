@@ -31,7 +31,7 @@ mod validators;
 /// - SafeDict: safe_format_map (placeholder replacement)
 /// - SQL: filter_conditions, group_by, order_by, limiting, process_fields, build_sql
 #[pymodule]
-fn qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // -- Validators --
     m.add_function(wrap_pyfunction!(validators::strtobool, m)?)?;
     m.add_function(wrap_pyfunction!(validators::is_integer, m)?)?;

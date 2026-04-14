@@ -11,7 +11,7 @@ from .abstract cimport AbstractParser
 
 # Try to import Rust extension for accelerated parsing
 try:
-    import qs_parsers as _rs
+    from querysource.qs_parsers import _qs_parsers as _rs
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
