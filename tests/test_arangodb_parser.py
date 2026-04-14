@@ -5,7 +5,7 @@
 import pytest
 
 try:
-    import qs_parsers
+    from querysource import qs_parsers
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
