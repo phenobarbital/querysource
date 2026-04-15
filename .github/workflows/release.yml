@@ -51,7 +51,7 @@ jobs:
             pip install target/wheels/*.whl &&
             python3 -c "import _qs_parsers._qs_parsers as _m, shutil; shutil.copy(_m.__file__, '{project}/querysource/qs_parsers/')" &&
             cd {project}
-          CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH"
+          CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH RUSTFLAGS='-C link-arg=-static-libgcc'"
           CIBW_BUILD: ${{ matrix.cibw-build }}
         run: |
           cibuildwheel --platform linux --output-dir dist
