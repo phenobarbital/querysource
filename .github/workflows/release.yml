@@ -50,14 +50,7 @@ jobs:
             pip install maturin &&
             cd {project}/rust && rm -rf target/wheels &&
             maturin build --release --manylinux off --interpreter python3 &&
-            python3 -c "
-            import zipfile, glob, os, shutil;
-            whl = glob.glob('target/wheels/*.whl')[0];
-            zf = zipfile.ZipFile(whl);
-            so = [n for n in zf.namelist() if n.endswith('.so') and '_qs_parsers' in n][0];
-            zf.extract(so, '/tmp/_qs');
-            shutil.copy2(os.path.join('/tmp/_qs', so), '{project}/querysource/qs_parsers/');
-            " &&
+            python3 -c "import zipfile,glob,os,shutil;whl=glob.glob('target/wheels/*.whl')[0];zf=zipfile.ZipFile(whl);so=[n for n in zf.namelist() if n.endswith('.so') and '_qs_parsers' in n][0];zf.extract(so,'/tmp/_qs');shutil.copy2(os.path.join('/tmp/_qs',so),'{project}/querysource/qs_parsers/')" &&
             cd {project}
           CIBW_ENVIRONMENT: "PATH=/root/.cargo/bin:$PATH"
           CIBW_BUILD: ${{ matrix.cibw-build }}
