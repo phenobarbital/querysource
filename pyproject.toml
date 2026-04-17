@@ -81,7 +81,7 @@ dependencies = [
     # Scientific computing - compatible versions
     "statsmodels==0.14.2",
     "pmdarima==2.0.4",
-    "scikit-learn==1.5.1",
+    "scikit-learn>=1.6.1",
     "pygal==3.0.5",
     "pandas_bokeh==0.5.5",
     "plotly==5.22.0",
