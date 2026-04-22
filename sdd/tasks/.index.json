@@ -1,9 +1,15 @@
 {
-  "feature": "refactor-tools-imports",
-  "feature_id": "FEAT-089",
-  "spec": "sdd/specs/refactor-tools-imports.spec.md",
-  "created_at": "2026-04-07T18:00:00+00:00",
+  "feature": "querysource-slug-list-pagination",
+  "feature_id": "FEAT-090",
+  "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
+  "created_at": "2026-04-22T12:00:00+00:00",
   "previous_features": [
+    {
+      "feature": "refactor-tools-imports",
+      "feature_id": "FEAT-089",
+      "spec": "sdd/specs/refactor-tools-imports.spec.md",
+      "created_at": "2026-04-07T18:00:00+00:00"
+    },
     {
       "feature": "planogram-new-types",
       "feature_id": "FEAT-085",
@@ -11038,6 +11044,62 @@
       "started_at": "2026-04-07T13:38:18.298337",
       "file": "sdd/tasks/active/TASK-623-import-validation-test-suite.md",
       "completed_at": "2026-04-07T13:46:51.217673"
+    },
+    {
+      "id": "TASK-624",
+      "slug": "pagination-models-and-sql-builders",
+      "title": "Pagination models and SQL builders (_pagination.py)",
+      "feature_id": "FEAT-090",
+      "feature": "querysource-slug-list-pagination",
+      "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Pure module, no external blockers; blocks TASK-625 and TASK-626, so must run first in the feature chain",
+      "assigned_to": null,
+      "started_at": null,
+      "file": "sdd/tasks/active/TASK-624-pagination-models-and-sql-builders.md"
+    },
+    {
+      "id": "TASK-625",
+      "slug": "querymanager-get-pagination-branch",
+      "title": "Wire pagination into QueryManager.get()",
+      "feature_id": "FEAT-090",
+      "feature": "querysource-slug-list-pagination",
+      "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-624"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Imports symbols created in TASK-624; modifies manager.py which TASK-626 tests",
+      "assigned_to": null,
+      "started_at": null,
+      "file": "sdd/tasks/active/TASK-625-querymanager-get-pagination-branch.md"
+    },
+    {
+      "id": "TASK-626",
+      "slug": "pagination-tests-and-docs",
+      "title": "Pagination unit + integration tests and CHANGES.md",
+      "feature_id": "FEAT-090",
+      "feature": "querysource-slug-list-pagination",
+      "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-624",
+        "TASK-625"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Integration tests exercise the full stack produced by TASK-624 + TASK-625",
+      "assigned_to": null,
+      "started_at": null,
+      "file": "sdd/tasks/active/TASK-626-pagination-tests-and-docs.md"
     }
   ]
 }
