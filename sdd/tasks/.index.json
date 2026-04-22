@@ -11090,7 +11090,7 @@
       "feature_id": "FEAT-090",
       "feature": "querysource-slug-list-pagination",
       "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11101,7 +11101,8 @@
       "parallelism_notes": "Integration tests exercise the full stack produced by TASK-624 + TASK-625",
       "assigned_to": null,
       "started_at": "2026-04-22T16:31:38Z",
-      "file": "sdd/tasks/active/TASK-626-pagination-tests-and-docs.md"
+      "file": "sdd/tasks/completed/TASK-626-pagination-tests-and-docs.md",
+      "completed_at": "2026-04-22T17:08:15Z"
     }
   ]
 }

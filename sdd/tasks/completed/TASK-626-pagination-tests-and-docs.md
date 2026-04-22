@@ -375,10 +375,34 @@ Single-slug, `:meta`, `:insert`, and non-GET verbs are unchanged.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-04-22
 **Notes**:
+- Created `tests/handlers/__init__.py`, `tests/handlers/conftest.py` and
+  `tests/handlers/test_querymanager_pagination.py`.
+- 34 tests total — all pass locally with `pytest tests/handlers/ -v`:
+  * 11 unit tests on `PaginationParams` (defaults, bounds, sort / fields
+    allowlist, CSV parsing, offset math, direction parsing).
+  * 13 unit tests on the SQL builders (`build_where_clause`,
+    `build_order_by`, `build_count_sql`, `build_page_sql`) including
+    injection drops, ILIKE search, quote escaping, LIMIT/OFFSET, bad
+    identifier / negative limit rejection.
+  * 1 round-trip test on the `PaginatedResponse` envelope.
+  * 9 HTTP integration tests using an in-process `aiohttp` `TestClient`
+    and a `FakeQSConnection` stand-in for the `qs_connection` pool.
+- **Deviation from spec**: the repo's existing test harness (`tests/test_api.py`)
+  drives a *live* remote API — there is no in-process integration harness to
+  inherit from. To satisfy the spec's "≥ 7 integration test cases" bullet
+  without adding a live-Postgres dependency to CI, the integration tests use
+  a lightweight fake pool (`FakeQSConnection` / `FakeConn`) that records the
+  SQL issued by `_paginate_list` and serves canned rows. This covers the HTTP
+  contract, header set, envelope shape, routing to the single-slug / `:meta`
+  branches, and the 400 / 204 edge cases. A follow-up smoke test against a
+  live staging DB is recommended (see spec §5 "p95 < 300 ms").
+- `CHANGES.rst` has a new "Unreleased — FEAT-090" entry documenting the
+  envelope, parameters, headers and the breaking change.
+- No residual test pollution — the fake pool is recreated per test.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: integration tests use an in-process aiohttp
+client + fake pool instead of a live-Postgres harness (no such harness
+exists in this repo). See Notes above.
