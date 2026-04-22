@@ -3,7 +3,7 @@
 **Feature ID**: FEAT-090
 **Date**: 2026-04-22
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.x
 
 ---
@@ -546,15 +546,15 @@ No new dependencies.
 
 ## 8. Open Questions
 
-- [ ] Should the response envelope be `{data, meta}` (proposed) or the
-      flatter `{items, total, page, page_size}`? — *Owner: Jesus Lara*
-- [ ] Do any internal clients other than the UI call
+- [x] Should the response envelope be `{data, meta}` (proposed) or the
+      flatter `{items, total, page, page_size}`? — *Owner: Jesus Lara*: proposed.
+- [x] Do any internal clients other than the UI call
       `GET /api/v1/management/queries` expecting a bare array? If yes, we may
-      need a transitional `?envelope=false` escape hatch. — *Owner: Jesus Lara*
-- [ ] Should `search` match `query_slug` + `description` + `program_slug`, or
-      also `source`? — *Owner: Jesus Lara*
-- [ ] Default sort: `updated_at:desc` (proposed) vs `query_slug:asc` — which
-      matches the UI's current expectation? — *Owner: Jesus Lara*
+      need a transitional `?envelope=false` escape hatch. — *Owner: Jesus Lara*: no other client expect the total list.
+- [x] Should `search` match `query_slug` + `description` + `program_slug`, or
+      also `source`? — *Owner: Jesus Lara*: match all.
+- [x] Default sort: `updated_at:desc` (proposed) vs `query_slug:asc` — which
+      matches the UI's current expectation? — *Owner: Jesus Lara*: both can be possible based on a flag?
 
 ---
 

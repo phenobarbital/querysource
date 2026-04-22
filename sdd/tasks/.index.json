@@ -11052,14 +11052,14 @@
       "feature_id": "FEAT-090",
       "feature": "querysource-slug-list-pagination",
       "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Pure module, no external blockers; blocks TASK-625 and TASK-626, so must run first in the feature chain",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-04-22T16:31:38Z",
       "file": "sdd/tasks/active/TASK-624-pagination-models-and-sql-builders.md"
     },
     {
@@ -11069,7 +11069,7 @@
       "feature_id": "FEAT-090",
       "feature": "querysource-slug-list-pagination",
       "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11078,7 +11078,7 @@
       "parallel": false,
       "parallelism_notes": "Imports symbols created in TASK-624; modifies manager.py which TASK-626 tests",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-04-22T16:31:38Z",
       "file": "sdd/tasks/active/TASK-625-querymanager-get-pagination-branch.md"
     },
     {
@@ -11088,7 +11088,7 @@
       "feature_id": "FEAT-090",
       "feature": "querysource-slug-list-pagination",
       "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11098,7 +11098,7 @@
       "parallel": false,
       "parallelism_notes": "Integration tests exercise the full stack produced by TASK-624 + TASK-625",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-04-22T16:31:38Z",
       "file": "sdd/tasks/active/TASK-626-pagination-tests-and-docs.md"
     }
   ]
