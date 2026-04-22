@@ -2,18 +2,32 @@
 QueryManager.
 
 Managing query raws on Table Query Util.
+
+GET /api/v1/management/queries supports paginated listing via
+``page`` / ``page_size`` / ``sort`` / ``search`` query-string parameters —
+see :mod:`querysource.handlers._pagination` and the FEAT-090 spec.
 """
 # for aiohttp
+from math import ceil
 from aiohttp.web import View
 from navconfig.logging import logging
 from datamodel.exceptions import ValidationError
 from asyncdb.exceptions import (
     NoDataFound
 )
+from pydantic import ValidationError as PydanticValidationError
 from ..models import QueryModel
 # Output
 from ..utils.handlers import QueryView
 from ..types.validators import Entity
+from ._pagination import (
+    PaginationParams,
+    PaginatedResponse,
+    build_where_clause,
+    build_order_by,
+    build_count_sql,
+    build_page_sql,
+)
 
 class QueryManager(QueryView):
     _model: QueryModel = None
@@ -83,44 +97,39 @@ class QueryManager(QueryView):
         except KeyError:
             query_slug = None
         try:
-            if 'fields' in qp:
-                args = {
-                    "fields": qp['fields']
-                }
-            else:
-                args = {
-                    "fields": [
-                        "query_slug", "description", "conditions", "is_cached",
-                        "cache_refresh", "program_slug", "provider", "dwh",
-                        "created_at", "created_by", "updated_at", "updated_by"
-                    ]
-                }
-            try:
-                del qp['fields']
-            except KeyError:
-                pass
+            # Default projection for the list branch when the caller does
+            # not supply ``?fields=``. The single-slug / :meta / :insert
+            # branches ignore ``default_fields``.
+            default_fields = [
+                "query_slug", "description", "conditions", "is_cached",
+                "cache_refresh", "program_slug", "provider", "dwh",
+                "created_at", "created_by", "updated_at", "updated_by"
+            ]
             db = self.request.app['qs_connection']
-            async with await db.acquire() as conn:
-                QueryModel.Meta.connection = conn
-                if query_slug:
+            if query_slug:
+                async with await db.acquire() as conn:
+                    QueryModel.Meta.connection = conn
                     query = await QueryModel.get(**{"query_slug": query_slug})
                     if meta == 'insert':
                         # converting query into an INSERT INTO sentence
                         sentence = self.get_query_insert(query)
-                        print('INSERT > ', sentence)
+                        self.logger.debug('INSERT > %s', sentence)
                         response = {
                             "slug": query_slug,
                             "sql": sentence
                         }
                         return self.json_response(response)
-                elif len(qp) > 0:
-                    args = {**args, **qp}
-                    print('ARGS ', args)
-                    query = await QueryModel.filter(**qp)
-                else:
-                    query = await QueryModel.all(**args)
-                    query = [row.to_dict() for row in query]
-                return self.json_response(query)
+                    return self.json_response(query)
+            # List-pagination branch: no slug, no :meta, no :insert.
+            # ``qp['fields']`` (if present) is parsed + allowlist-validated
+            # by ``PaginationParams.from_query_string`` inside
+            # ``_paginate_list``. Remaining qp keys flow as equality filters
+            # and are rejected (400) by ``build_where_clause`` when they
+            # are not in the QueryModel allowlist.
+            self.logger.debug('QP %s', qp)
+            return await self._paginate_list(
+                qp, {"fields": default_fields}
+            )
         except NoDataFound as err:
             headers = {
                 'X-STATUS': 'EMPTY',
@@ -132,6 +141,114 @@ class QueryManager(QueryView):
             return self.error(
                 reason=f"Error getting Query Slug: {err}",
                 exception=err
+            )
+
+    async def _paginate_list(self, qp: dict, default_args: dict):
+        """Paginated list fetch for ``GET /api/v1/management/queries``.
+
+        Implements the FEAT-090 spec § 3 Module 3. Parses pagination /
+        sort / search params from ``qp``, builds a WHERE / ORDER BY / LIMIT
+        / OFFSET SQL pair via :mod:`._pagination`, and runs them through the
+        shared ``qs_connection`` pool.
+
+        Args:
+            qp: Parsed query-string parameters (already stripped of
+                ``fields`` by the caller). Keys not consumed by
+                :class:`PaginationParams` are treated as equality filters.
+            default_args: Default kwargs pre-built by ``get()`` — notably
+                ``default_args['fields']`` holds the projection list used
+                when the caller does not supply ``?fields=``.
+
+        Returns:
+            aiohttp response:
+                * ``200`` with ``{data, meta}`` envelope + pagination
+                  headers on non-empty results.
+                * ``204`` with pagination headers when ``total == 0``.
+                * ``400`` on validation errors.
+                * ``500`` on unexpected DB errors.
+        """
+        try:
+            params = PaginationParams.from_query_string(qp)
+        except (ValueError, PydanticValidationError) as err:
+            return self.error(
+                response={"message": f"Invalid pagination params: {err}"},
+                status=400,
+            )
+
+        # Pagination-reserved keys must not leak into the WHERE clause.
+        reserved = {"page", "page_size", "sort", "search", "fields"}
+        extra_filters = {k: v for k, v in qp.items() if k not in reserved}
+
+        # Resolve the projection list. ``params.fields`` was already
+        # allowlist-validated by the Pydantic model; fall back to the
+        # defaults computed by ``get()``.
+        fields = (
+            params.fields
+            or default_args.get("fields")
+            or list(QueryModel.columns(QueryModel).keys())
+        )
+
+        schema = QueryModel.Meta.schema
+        table = QueryModel.Meta.name
+
+        try:
+            where = build_where_clause(params, extra_filters)
+            order_by = build_order_by(params)
+            count_sql = build_count_sql(schema, table, where)
+            page_sql = build_page_sql(
+                schema,
+                table,
+                fields,
+                where,
+                order_by,
+                limit=params.page_size,
+                offset=params.offset,
+            )
+        except ValueError as err:
+            return self.error(
+                response={"message": f"Invalid filter/sort: {err}"},
+                status=400,
+            )
+
+        db = self.request.app['qs_connection']
+        try:
+            async with await db.acquire() as conn:
+                total = await conn.fetchval(count_sql) or 0
+                total = int(total)
+                total_pages = ceil(total / params.page_size) if total else 0
+                headers = {
+                    "X-Total-Count": str(total),
+                    "X-Page": str(params.page),
+                    "X-Page-Size": str(params.page_size),
+                    "X-Total-Pages": str(total_pages),
+                }
+                if total == 0:
+                    return self.no_content(headers=headers)
+                # ``fetch_all`` is the correct raw-SQL fetcher on the
+                # asyncdb pg driver (see
+                # ``asyncdb/drivers/pg.py:893``). ``conn.fetch(number=1)``
+                # is a cursor-advance helper that expects an integer, not
+                # a SQL string. ``fetch_all`` may return ``None`` on empty
+                # results — TOCTOU-safe ``(rows or [])`` below.
+                rows = await conn.fetch_all(page_sql)
+                data = [dict(row) for row in (rows or [])]
+                response = PaginatedResponse(
+                    data=data,
+                    meta={
+                        "page": params.page,
+                        "page_size": params.page_size,
+                        "total": total,
+                        "total_pages": total_pages,
+                    },
+                ).model_dump()
+                return self.json_response(response, headers=headers)
+        except Exception as err:  # pragma: no cover - defensive catch-all
+            self.logger.exception(
+                "Error paginating Query Slug list: %s", err
+            )
+            return self.error(
+                reason=f"Error paginating Query Slug list: {err}",
+                exception=err,
             )
 
     async def patch(self):
