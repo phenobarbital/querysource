@@ -95,7 +95,7 @@ QueryManager._paginate_list()      (NEW helper)
          │
          ├── async with db.acquire() as conn:
          │       total = await conn.fetchval(count_sql)
-         │       rows  = await conn.fetch(page_sql)
+         │       rows  = await conn.fetch_all(page_sql)
          │
          └── json_response(PaginatedResponse(...), headers={X-Total-Count, X-Page, X-Page-Size})
 ```
@@ -455,7 +455,14 @@ r = self.app.router.add_view(
 # Connection acquisition pattern (verified: manager.py:102-104)
 db = self.request.app['qs_connection']
 async with await db.acquire() as conn:
-    # conn is an asyncdb pg connection — supports .fetch(sql), .fetchval(sql), .fetchrow(sql)
+    # conn is an asyncdb pg connection. For raw SQL:
+    #   await conn.fetch_all(sql)   -> list[asyncpg.Record] | None   (pg.py:893)
+    #   await conn.fetchval(sql)    -> scalar                        (pg.py:932)
+    #   await conn.fetch_one(sql)   -> single row | None             (pg.py:916)
+    #   await conn.query(sql)       -> (result, error) pair          (pg.py:772)
+    # NOTE: ``conn.fetch(number=1)`` is a cursor-advance helper that
+    # takes an integer row count, NOT a SQL string. Do not use it
+    # with raw SELECT statements — use fetch_all instead.
     ...
 ```
 
@@ -464,7 +471,7 @@ async with await db.acquire() as conn:
 | New Component | Connects To | Via | Verified At |
 |---|---|---|---|
 | `_pagination.PaginationParams` | `QueryManager.get()` | instantiated from `self.query_parameters(self.request)` | `querysource/handlers/manager.py:62` |
-| `_pagination.build_*_sql()` | pg connection | `await conn.fetch(sql)` / `await conn.fetchval(sql)` | `querysource/handlers/manager.py:102-104` |
+| `_pagination.build_*_sql()` | pg connection | `await conn.fetch_all(sql)` / `await conn.fetchval(sql)` | `querysource/handlers/manager.py:102-104` |
 | column allowlist | `QueryModel.columns(QueryModel)` | dict keys | `querysource/models.py:48` + asyncdb `Model.columns` |
 | safe value coercion | `Entity.toSQL(val, type)` / `Entity.quoteString(...)` | static calls | `querysource/handlers/manager.py:46-49` |
 
@@ -489,13 +496,20 @@ async with await db.acquire() as conn:
 - ~~`from querysource.handlers.pagination import ...`~~ — file does not exist
   yet; it is created by this feature as `querysource/handlers/_pagination.py`
   (underscore-prefixed, since it is an internal helper).
+- ~~`await conn.fetch(sql)` for raw SELECTs~~ — ``asyncdb.drivers.pg.fetch``
+  is a cursor-advance helper with signature ``async def fetch(self,
+  number=1)`` (verified: `pg.py:985`). It takes an integer row count, not
+  a SQL string. Use ``await conn.fetch_all(sentence)`` instead
+  (``pg.py:893``). An earlier revision of this spec incorrectly listed
+  ``conn.fetch(sql)`` as the raw-fetch method — that was wrong and has
+  been corrected above.
 
 ---
 
 ## 7. Implementation Notes & Constraints
 
 ### Patterns to Follow
-- Async-first throughout — all DB calls via `await conn.fetch / fetchval`.
+- Async-first throughout — all DB calls via `await conn.fetch_all / fetchval`.
 - Pydantic for all structured input (`PaginationParams`) and output
   (`PaginatedResponse`).
 - Replace `print(...)` debug statements in the handler with `self.logger.debug`
