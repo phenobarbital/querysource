@@ -139,13 +139,21 @@ class TestSqlBuilders:
         assert "'db'" in where  # quoted
 
     def test_build_where_clause_rejects_injection(self) -> None:
-        where = build_where_clause(
-            PaginationParams(),
-            {"query_slug; DROP TABLE": "x"},
-        )
-        # Unknown key is dropped — no SQL fragment produced.
-        assert "DROP TABLE" not in where
-        assert where == ""
+        # Unknown filter keys must raise — spec §7 requires 400, not a
+        # silent drop. The caller (``_paginate_list``) converts the
+        # ``ValueError`` into an HTTP 400 response.
+        with pytest.raises(ValueError, match="unknown filter column"):
+            build_where_clause(
+                PaginationParams(),
+                {"query_slug; DROP TABLE": "x"},
+            )
+
+    def test_build_where_clause_rejects_unknown_scalar_filter(self) -> None:
+        with pytest.raises(ValueError, match="unknown filter column"):
+            build_where_clause(
+                PaginationParams(),
+                {"password": "hunter2"},
+            )
 
     def test_build_where_clause_escapes_search_quotes(self) -> None:
         # Search value with a single quote must be escaped — the quote
@@ -308,7 +316,7 @@ class TestQueryManagerListPagination:
         assert body["meta"]["page_size"] == 10
         assert len(body["data"]) == 10
         # Verify the LIMIT/OFFSET produced by the builder.
-        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch"]
+        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch_all"]
         assert calls, "expected at least one fetch() call"
         sql = calls[-1][1]
         assert "LIMIT 10" in sql
@@ -327,7 +335,7 @@ class TestQueryManagerListPagination:
             "/api/v1/management/queries?sort=query_slug:asc&page_size=3"
         )
         assert resp.status == 200
-        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch"]
+        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch_all"]
         sql = calls[-1][1]
         assert 'ORDER BY "query_slug" ASC' in sql
 
@@ -352,7 +360,7 @@ class TestQueryManagerListPagination:
         assert all(
             "fixture_slug" in r["query_slug"] for r in body["data"]
         )
-        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch"]
+        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch_all"]
         assert calls
         assert "ILIKE" in calls[-1][1].upper()
 
@@ -367,7 +375,7 @@ class TestQueryManagerListPagination:
         assert resp.status == 400
         # No DB work should have happened.
         assert all(
-            c[0] not in ("fetch", "fetchval")
+            c[0] not in ("fetch_all", "fetchval")
             for c in fake_qs_connection.calls
         )
 
@@ -381,7 +389,7 @@ class TestQueryManagerListPagination:
         )
         assert resp.status == 400
         assert all(
-            c[0] not in ("fetch", "fetchval")
+            c[0] not in ("fetch_all", "fetchval")
             for c in fake_qs_connection.calls
         )
 
@@ -450,5 +458,103 @@ class TestQueryManagerListPagination:
         assert "meta" not in body or "page" not in body.get("meta", {})
         # No SQL was issued.
         assert not [
-            c for c in fake_qs_connection.calls if c[0] == "fetch"
+            c for c in fake_qs_connection.calls if c[0] == "fetch_all"
         ]
+
+    async def test_fields_csv_parameter_is_honoured(
+        self,
+        test_client,
+        fake_qs_connection,
+        seeded_query_slugs,
+    ) -> None:
+        """Regression test for the pre-fix bug where ``?fields=`` was stripped
+        from ``qp`` by ``get()`` before ``_paginate_list`` saw it, causing
+        ``PaginationParams._validate_fields`` to be bypassed and the raw CSV
+        string to be iterated char-by-char in ``build_page_sql``.
+        """
+        fake_qs_connection.fetchval_handler = 3
+        fake_qs_connection.fetch_handler = lambda _sql: [
+            {"query_slug": r["query_slug"], "description": r["description"]}
+            for r in seeded_query_slugs[:3]
+        ]
+        resp = await test_client.get(
+            "/api/v1/management/queries"
+            "?fields=query_slug,description&page_size=3"
+        )
+        assert resp.status == 200
+        fetch_calls = [
+            c for c in fake_qs_connection.calls if c[0] == "fetch_all"
+        ]
+        assert fetch_calls
+        sql = fetch_calls[-1][1]
+        # Only the two requested columns appear in the projection.
+        assert '"query_slug"' in sql
+        assert '"description"' in sql
+        assert '"conditions"' not in sql  # from default list — excluded
+        assert '"cache_refresh"' not in sql
+
+    async def test_fields_csv_with_unknown_column_returns_400(
+        self,
+        test_client,
+        fake_qs_connection,
+    ) -> None:
+        resp = await test_client.get(
+            "/api/v1/management/queries?fields=query_slug,not_a_real_col"
+        )
+        assert resp.status == 400
+        # No DB work should have happened.
+        assert all(
+            c[0] not in ("fetch_all", "fetchval")
+            for c in fake_qs_connection.calls
+        )
+
+    async def test_unknown_filter_key_returns_400(
+        self,
+        test_client,
+        fake_qs_connection,
+    ) -> None:
+        """Spec §7: unknown filter columns must be rejected with 400,
+        not silently dropped.
+        """
+        resp = await test_client.get(
+            "/api/v1/management/queries?password=hunter2"
+        )
+        assert resp.status == 400
+        assert all(
+            c[0] not in ("fetch_all", "fetchval")
+            for c in fake_qs_connection.calls
+        )
+
+    async def test_known_filter_key_is_applied(
+        self,
+        test_client,
+        fake_qs_connection,
+        seeded_query_slugs,
+    ) -> None:
+        fake_qs_connection.fetchval_handler = 120
+        fake_qs_connection.fetch_handler = lambda _sql: seeded_query_slugs[:5]
+        resp = await test_client.get(
+            "/api/v1/management/queries?provider=db&page_size=5"
+        )
+        assert resp.status == 200
+        calls = [c for c in fake_qs_connection.calls if c[0] == "fetch_all"]
+        assert calls
+        sql = calls[-1][1]
+        assert '"provider" = \'db\'' in sql
+
+    async def test_non_integer_page_returns_400(
+        self,
+        test_client,
+        fake_qs_connection,
+    ) -> None:
+        """Non-integer ``page`` / ``page_size`` must produce a 400, not a
+        500 from an uncaught ``TypeError`` / ``ValueError``.
+        """
+        resp = await test_client.get(
+            "/api/v1/management/queries?page=not-a-number"
+        )
+        assert resp.status == 400
+        assert all(
+            c[0] not in ("fetch_all", "fetchval")
+            for c in fake_qs_connection.calls
+        )

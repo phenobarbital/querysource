@@ -144,10 +144,15 @@ class PaginationParams(BaseModel):
         """
         data: dict[str, Any] = {}
 
-        if "page" in qs:
-            data["page"] = int(qs["page"])
-        if "page_size" in qs:
-            data["page_size"] = int(qs["page_size"])
+        try:
+            if "page" in qs:
+                data["page"] = int(qs["page"])
+            if "page_size" in qs:
+                data["page_size"] = int(qs["page_size"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"'page' and 'page_size' must be integers: {exc}"
+            ) from exc
 
         if "sort" in qs and qs["sort"]:
             sort_value = str(qs["sort"]).strip()
@@ -250,9 +255,12 @@ def build_where_clause(
     """Return a SQL WHERE clause (including the leading ``WHERE``) or ``""``.
 
     The clause merges:
-        * Equality predicates for every key in ``extra_filters`` that is in
-          :data:`FILTERABLE_COLUMNS` (unknown keys are silently dropped — they
-          can never reach the SQL string).
+        * Equality predicates for every key in ``extra_filters``. Every key
+          MUST be in :data:`FILTERABLE_COLUMNS` — unknown keys raise
+          ``ValueError`` (callers convert to HTTP 400). This matches the
+          spec §7 "kwargs filter passthrough" requirement: "any filter key
+          NOT in the QueryModel.columns allowlist MUST be rejected (400)
+          rather than silently forwarded".
         * An ``ILIKE '%term%'`` predicate over :data:`SEARCHABLE_COLUMNS`
           when ``params.search`` is set (combined with ``OR`` inside a
           parenthesised group).
@@ -264,14 +272,18 @@ def build_where_clause(
 
     Returns:
         The WHERE clause (possibly empty).
+
+    Raises:
+        ValueError: If any key of ``extra_filters`` is not in
+            :data:`FILTERABLE_COLUMNS`.
     """
     predicates: list[str] = []
 
+    unknown = [k for k in extra_filters if k not in FILTERABLE_COLUMNS]
+    if unknown:
+        raise ValueError(f"unknown filter column(s): {unknown}")
+
     for key, value in extra_filters.items():
-        if key not in FILTERABLE_COLUMNS:
-            # Silently drop unknown keys — they never touch SQL.
-            logger.debug("Dropping unknown filter key: %r", key)
-            continue
         coerced = _coerce_value(key, value)
         if coerced == "NULL":
             predicates.append(f"{_quote_ident(key)} IS NULL")

@@ -97,22 +97,14 @@ class QueryManager(QueryView):
         except KeyError:
             query_slug = None
         try:
-            if 'fields' in qp:
-                args = {
-                    "fields": qp['fields']
-                }
-            else:
-                args = {
-                    "fields": [
-                        "query_slug", "description", "conditions", "is_cached",
-                        "cache_refresh", "program_slug", "provider", "dwh",
-                        "created_at", "created_by", "updated_at", "updated_by"
-                    ]
-                }
-            try:
-                del qp['fields']
-            except KeyError:
-                pass
+            # Default projection for the list branch when the caller does
+            # not supply ``?fields=``. The single-slug / :meta / :insert
+            # branches ignore ``default_fields``.
+            default_fields = [
+                "query_slug", "description", "conditions", "is_cached",
+                "cache_refresh", "program_slug", "provider", "dwh",
+                "created_at", "created_by", "updated_at", "updated_by"
+            ]
             db = self.request.app['qs_connection']
             if query_slug:
                 async with await db.acquire() as conn:
@@ -129,10 +121,15 @@ class QueryManager(QueryView):
                         return self.json_response(response)
                     return self.json_response(query)
             # List-pagination branch: no slug, no :meta, no :insert.
-            # Any remaining qp keys are treated as filter kwargs by
-            # ``_paginate_list`` (validated against the QueryModel allowlist).
-            self.logger.debug('ARGS %s', {**args, **qp})
-            return await self._paginate_list(qp, args)
+            # ``qp['fields']`` (if present) is parsed + allowlist-validated
+            # by ``PaginationParams.from_query_string`` inside
+            # ``_paginate_list``. Remaining qp keys flow as equality filters
+            # and are rejected (400) by ``build_where_clause`` when they
+            # are not in the QueryModel allowlist.
+            self.logger.debug('QP %s', qp)
+            return await self._paginate_list(
+                qp, {"fields": default_fields}
+            )
         except NoDataFound as err:
             headers = {
                 'X-STATUS': 'EMPTY',
@@ -227,8 +224,14 @@ class QueryManager(QueryView):
                 }
                 if total == 0:
                     return self.no_content(headers=headers)
-                rows = await conn.fetch(page_sql)
-                data = [dict(row) for row in rows]
+                # ``fetch_all`` is the correct raw-SQL fetcher on the
+                # asyncdb pg driver (see
+                # ``asyncdb/drivers/pg.py:893``). ``conn.fetch(number=1)``
+                # is a cursor-advance helper that expects an integer, not
+                # a SQL string. ``fetch_all`` may return ``None`` on empty
+                # results — TOCTOU-safe ``(rows or [])`` below.
+                rows = await conn.fetch_all(page_sql)
+                data = [dict(row) for row in (rows or [])]
                 response = PaginatedResponse(
                     data=data,
                     meta={

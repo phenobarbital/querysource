@@ -32,9 +32,18 @@ from querysource.models import QueryModel
 class FakeConn:
     """Minimal asyncdb-pg connection stand-in.
 
-    Records every SQL string passed to :meth:`fetch` / :meth:`fetchval` so
-    tests can assert what was built, and returns canned results supplied via
-    the parent :class:`FakeQSConnection`.
+    Records every SQL string passed to :meth:`fetch_all` / :meth:`fetchval`
+    so tests can assert what was built, and returns canned results supplied
+    via the parent :class:`FakeQSConnection`.
+
+    The method names mirror the real ``asyncdb.drivers.pg`` connection:
+        * ``fetch_all(sentence: str)`` — returns ``list[asyncpg.Record]``
+          or ``None``. This is what raw ``SELECT`` statements should use.
+        * ``fetchval(sentence: str)`` — single scalar.
+        * ``fetch(number: int = 1)`` — cursor-advance helper (NOT a
+          SQL-string fetcher). Intentionally left unimplemented here so
+          any regression that re-introduces the wrong call site fails
+          loudly during tests.
     """
 
     def __init__(self, pool: "FakeQSConnection") -> None:
@@ -47,8 +56,8 @@ class FakeConn:
             return handler(sql)
         return handler
 
-    async def fetch(self, sql: str) -> list[dict]:
-        self._pool.calls.append(("fetch", sql))
+    async def fetch_all(self, sql: str) -> list[dict]:
+        self._pool.calls.append(("fetch_all", sql))
         handler = self._pool.fetch_handler
         if callable(handler):
             return handler(sql)
