@@ -331,10 +331,19 @@ values = ', '.join([Entity.quoteString(str(a), no_dblquoting=False) for a in val
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-04-22
 **Notes**:
+- Created `querysource/handlers/_pagination.py` with all required constants,
+  models, and SQL builders per the spec skeleton.
+- Added `SEARCHABLE_COLUMNS = ("query_slug", "description", "program_slug",
+  "source")` — includes `source` per spec §8 Open Question #3 answer ("match all").
+- All SQL builders validate identifiers against allowlists (double-quoted
+  identifiers) and route scalar values through `Entity.toSQL` + `Entity.quoteString`.
+- `_validate_bare_identifier()` added as defence in depth for schema / table
+  names even though those come from `QueryModel.Meta` (static).
+- Sanity checks pass: defaults, rejections (oversize page_size, zero page,
+  unknown sort field, unknown fields CSV entry), search ILIKE, filter drop
+  for out-of-allowlist keys, LIMIT/OFFSET interpolation.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
