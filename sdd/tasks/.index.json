@@ -11070,7 +11070,7 @@
       "feature_id": "FEAT-090",
       "feature": "querysource-slug-list-pagination",
       "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11080,7 +11080,8 @@
       "parallelism_notes": "Imports symbols created in TASK-624; modifies manager.py which TASK-626 tests",
       "assigned_to": null,
       "started_at": "2026-04-22T16:31:38Z",
-      "file": "sdd/tasks/active/TASK-625-querymanager-get-pagination-branch.md"
+      "file": "sdd/tasks/completed/TASK-625-querymanager-get-pagination-branch.md",
+      "completed_at": "2026-04-22T17:04:33Z"
     },
     {
       "id": "TASK-626",

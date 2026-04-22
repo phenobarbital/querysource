@@ -346,10 +346,28 @@ pytest tests/ -v -k "queries or manager or slug" --no-header -q || true
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-04-22
 **Notes**:
+- Added `_paginate_list(self, qp, default_args)` to `QueryManager` per the
+  skeleton in the task. It acquires its own `qs_connection`, runs the
+  COUNT + page SQL produced by `build_*_sql()`, and returns a
+  `PaginatedResponse` envelope plus `X-Total-*` headers.
+- Replaced the `elif len(qp) > 0` / `else` branches in `get()` with a
+  single delegation to `_paginate_list(qp, args)`. Filter kwargs now flow
+  through the same paginated path (and are allowlisted by
+  `build_where_clause`).
+- Moved the `async with await db.acquire()` inside the `if query_slug:`
+  branch so the pagination path handles its own acquire — this keeps the
+  two paths cleanly separated.
+- Replaced `print('INSERT > ...')` and `print('ARGS ...')` in `get()` with
+  `self.logger.debug(...)` using lazy-format args. The `self.logger` is
+  provided by `BaseView.__init__` via `_logger_name = 'QS.Manager'`.
+- `total == 0` returns `204 No Content` with pagination headers, matching
+  spec §7 "Empty-result semantics".
+- Imports added: `math.ceil`, `pydantic.ValidationError as
+  PydanticValidationError`, and the six helpers from `._pagination`.
+- Other `print()` statements in `patch`/`put`/`post`/`delete`/`get_model`
+  were left untouched per the task's "NOT in scope" list.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
