@@ -1,7 +1,7 @@
 # QuerySource Makefile
 # This Makefile provides a set of commands to manage the QuerySource project.
 
-.PHONY: venv install develop setup dev release format lint test clean distclean lock sync
+.PHONY: venv install develop setup dev release format lint test clean distclean lock sync build-rust
 
 # Python version to use
 PYTHON_VERSION := 3.11
@@ -22,7 +22,7 @@ venv:
 	@echo 'run `source .venv/bin/activate` to start develop with QuerySource.'
 
 # Install production dependencies using lock file
-install:
+install: build-rust
 	uv sync --frozen --no-dev --extra analytics --extra vectors
 	uv pip install navigator-api[uvloop,locale]
 	@echo "Production dependencies installed. Use 'make develop' for development setup."
@@ -36,8 +36,13 @@ else
 endif
 
 # Install all dependencies including dev dependencies
-develop:
+develop: build-rust
 	uv sync --frozen --extra analytics --extra dev
+
+# Build the Rust-accelerated parser extension (querysource.qs_parsers._qs_parsers)
+build-rust:
+	@command -v maturin >/dev/null 2>&1 || uv pip install maturin
+	maturin develop --release
 
 # Alternative: install without lock file (faster for development)
 develop-fast:
@@ -187,5 +192,6 @@ help:
 	@echo "  detect-tools - Show detected tools"
 	@echo "  install-uv   - Install uv"
 	@echo "  build-inplace - Build Cython extensions in place"
+	@echo "  build-rust   - Build the Rust parser extension via maturin"
 	@echo ""
 	@echo "Current setup: $(TOOL_INFO)"
