@@ -68,7 +68,7 @@ dependencies = [
     # NAV libraries - using compatible versions
     "proxylists>=0.14.0",
     "async-notify[all]>=1.4.0",
-    "navconfig[uvloop,default]>=1.7.13",
+    "navconfig[default,uvloop]==2.1.3",
     "navigator-api[uvloop,locale]>=2.12.22",
     "jsonschema>=4.22.0",
     # Backoff Support
@@ -184,3 +184,12 @@ manifest-path = "rust/Cargo.toml"
 module-name = "querysource.qs_parsers._qs_parsers"
 bindings = "pyo3"
 features = ["pyo3/extension-module"]
+
+# ---------------------------------------------------------------------------
+# uv install settings
+# ---------------------------------------------------------------------------
+# Force copy mode: hardlink fallback has been observed to leave native
+# extension packages (orjson, pytomlpp, …) without their compiled .so,
+# producing ModuleNotFoundError: No module named '<pkg>.<native>' at import.
+[tool.uv]
+link-mode = "copy"
