@@ -71,14 +71,13 @@ class Connection:
         self._connection = None
         if loop:
             self._loop = loop
+        elif 'loop' in kwargs and kwargs['loop'] is not None:
+            self._loop = kwargs['loop']
         else:
             try:
-                self._loop: asyncio.AbstractEventLoop = kwargs.get(
-                    'loop',
-                    asyncio.get_event_loop()
-                )
+                self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
             except RuntimeError:
-                self._loop = asyncio.get_running_loop()
+                self._loop = asyncio.new_event_loop()
         self._dsn: str = kwargs.get('dsn', asyncpg_url)
         self._default_driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(name='QS.Connection')
@@ -92,10 +91,14 @@ class Connection:
 
     def get_redis(self, dsn=QUERYSET_REDIS):
         ### redis connection:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = self._loop
         return AsyncDB(
             'redis',
             dsn=dsn,
-            loop=asyncio.get_event_loop()
+            loop=loop
         )
 
     def set_connection(self, conn):
@@ -108,11 +111,11 @@ class Connection:
             loop = evt
         else:
             try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
+                loop = asyncio.get_running_loop()
+            except RuntimeError as ex:
                 raise RuntimeError(
-                    "No Event Loop available"
-                )
+                    "get_connection must be called from a running event loop"
+                ) from ex
         return AsyncDB(
             driver,
             dsn=asyncpg_url,
@@ -390,9 +393,9 @@ class Connection:
         evt: asyncio.AbstractEventLoop = None,
         max_retries: int = 3
     ) -> BaseModel:
-        db = self.get_connection(driver='pg', evt=evt)
         attempt = 0
         while attempt < max_retries:
+            db = self.get_connection(driver='pg', evt=evt)
             try:
                 async with await db.connection() as conn:
                     QueryModel.Meta.connection = conn

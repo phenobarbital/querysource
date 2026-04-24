@@ -105,23 +105,37 @@ class MultiQS(BaseQuery):
         """
         tasks = {}
         if self.slug:
-            try:
-                query = await self.get_slug(slug=self.slug)
+            query = await self.get_slug(slug=self.slug)
+            slug_data = None
+            query_raw = getattr(query, 'query_raw', None) or ''
+            if isinstance(query_raw, str) and query_raw.strip():
                 try:
-                    if slug_data := self._encoder.load(query.query_raw):
-                        self._options = slug_data
-                        self._queries = slug_data.pop('queries', {})
-                        self._files = slug_data.pop('files', {})
-                        # TODO: making replacements based on POST data.
-                except Exception as exc:
-                    self.logger.error(
-                        f"Unable to decode JSON from Slug {self.slug}: {exc}"
-                    )
-                    raise DriverError(
-                        f"Unable to decode JSON from Slug {self.slug}: {exc}"
-                    ) from exc
-            except Exception:
-                raise
+                    slug_data = self._encoder.load(query_raw)
+                except Exception:
+                    # query_raw is not a multi-query JSON payload
+                    # (e.g. plain SQL) — fall back to single-query mode.
+                    slug_data = None
+            if isinstance(slug_data, dict) and (
+                'queries' in slug_data or 'files' in slug_data
+            ):
+                self._options = slug_data
+                self._queries = slug_data.pop('queries', {})
+                self._files = slug_data.pop('files', {})
+                # TODO: making replacements based on POST data.
+            else:
+                # Single-query slug: wrap it for the multi-query executor
+                # so the provider layer handles it like the v2 endpoint.
+                slug_conditions = (
+                    dict(self._conditions)
+                    if isinstance(self._conditions, dict)
+                    else {}
+                )
+                self._queries = {
+                    self.slug: {"slug": self.slug, **slug_conditions}
+                }
+                if isinstance(self._conditions, dict):
+                    self._conditions.clear()
+                self._options = {}
         if self._queries:
             for name, query in self._queries.items():
                 conditions = self._conditions.pop(name, {})
