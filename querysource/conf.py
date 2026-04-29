@@ -401,6 +401,11 @@ GENSIM_DATA_DIR = config.get(
 )
 os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
 
+# PBAC (FEAT-091) — Policy-Based Access Control settings
+QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
+QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
+QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:
