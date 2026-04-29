@@ -11196,7 +11196,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -11206,7 +11206,8 @@
       "parallelism_notes": "Sequential per spec \u2014 first of the three handler enforcement modules; establishes the contract that TASK-632 and TASK-633 mirror.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-631-pbac-queryservice-enforcement.md"
+      "completed_at": "2026-04-30T02:15:00+00:00",
+      "file": "sdd/tasks/completed/TASK-631-pbac-queryservice-enforcement.md"
     },
     {
       "id": "TASK-632",

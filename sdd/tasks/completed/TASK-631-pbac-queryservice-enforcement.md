@@ -256,12 +256,13 @@ The mandatory check is that `_enforce_pbac` runs before `get_source`.)
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: Three _enforce_pbac calls wired into QueryService.query(). slug:execute
+check inserted immediately after slug parsing, before get_source(). datasource:use
+and driver:use checks inserted after build_provider() succeeds. ResourceType shim
+created at querysource/auth/_resource_types.py. 2/2 smoke tests pass.
+**Datasource attribute path used**: query._qs._definition.provider (via getattr chain)
+**Driver attribute path used**: query._provider.driver (via getattr chain)
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Datasource attribute path used**:
-**Driver attribute path used**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
