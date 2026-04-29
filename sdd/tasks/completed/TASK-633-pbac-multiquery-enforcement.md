@@ -348,11 +348,14 @@ class TestMultiQSConstructor:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: _preflight_multiquery helper added to QueryHandler. Calls
+Guardian.filter_resources() for slugs and files separately, then uses
+_enforce_pbac for has_raw_query. Fail-closed on Guardian internal exceptions.
+MultiQS.__init__ extended with user_session=None kwarg stored as _user_session.
+8/8 smoke tests pass.
+**Raw-query detection method**: has_raw_query = (no slug AND no _queries AND no _files)
+OR options has 'query' key without named queries/files/slug.
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Raw-query detection method**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -11237,7 +11237,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11248,7 +11248,8 @@
       "parallelism_notes": "Sequential after TASK-632 \u2014 final handler-enforcement task; also extends MultiQS.__init__.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-633-pbac-multiquery-enforcement.md"
+      "completed_at": "2026-04-30T02:45:00+00:00",
+      "file": "sdd/tasks/completed/TASK-633-pbac-multiquery-enforcement.md"
     },
     {
       "id": "TASK-634",
