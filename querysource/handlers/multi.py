@@ -18,8 +18,85 @@ from ..conf import (
     CSV_DEFAULT_DELIMITER,
     CSV_DEFAULT_QUOTING
 )
+from ..auth import ResourceType
 
 class QueryHandler(AbstractHandler):
+
+    async def _preflight_multiquery(
+        self,
+        request: web.Request,
+        slugs: list,
+        files: list,
+        has_raw_query: bool,
+    ) -> None:
+        """All-or-nothing PBAC pre-flight for MultiQuery.
+
+        Calls Guardian.filter_resources() once per non-empty resource-type
+        bucket. If any one component is denied, raises web.HTTPNotFound
+        immediately — the entire MultiQuery is rejected.
+
+        Args:
+            request: The current aiohttp web request.
+            slugs: List of slug/query names to check with slug:execute.
+            files: List of file keys to check with slug:execute (files are
+                treated as named-query resources).
+            has_raw_query: True if the payload contains any raw inline query;
+                triggers a single raw_query:execute check.
+
+        Raises:
+            web.HTTPNotFound: When any component is denied, or when the
+                user session is absent.
+        """
+        guardian = request.app.get('security')
+        if guardian is None:
+            return  # PBAC disabled — fast-path no-op
+
+        session = await self._get_user_session(request)
+        if session is None:
+            self.logger.info("MultiQuery PBAC denied: no user session")
+            raise web.HTTPNotFound()
+
+        try:
+            if slugs:
+                r = await guardian.filter_resources(
+                    resources=slugs,
+                    request=request,
+                    resource_type=ResourceType.SLUG,
+                    action="slug:execute",
+                )
+                if r.denied:
+                    self.logger.info(
+                        "MultiQuery PBAC denied: slugs=%s", r.denied
+                    )
+                    raise web.HTTPNotFound()
+
+            if files:
+                r = await guardian.filter_resources(
+                    resources=files,
+                    request=request,
+                    resource_type=ResourceType.SLUG,
+                    action="slug:execute",
+                )
+                if r.denied:
+                    self.logger.info(
+                        "MultiQuery PBAC denied: files=%s", r.denied
+                    )
+                    raise web.HTTPNotFound()
+
+            if has_raw_query:
+                await self._enforce_pbac(
+                    request,
+                    resource_type=ResourceType.RAW_QUERY,
+                    resource_name="raw_query",
+                    action="raw_query:execute",
+                )
+        except web.HTTPNotFound:
+            raise  # already the correct exception
+        except Exception as exc:  # Guardian internal errors (AccessDenied, etc.)
+            self.logger.warning(
+                "MultiQuery PBAC pre-flight error (fail-closed): %s", exc
+            )
+            raise web.HTTPNotFound() from exc
 
     async def columns(self, request: web.Request) -> web.StreamResponse:
         raise self.no_content(
@@ -125,13 +202,30 @@ class QueryHandler(AbstractHandler):
             "download": download,
             "writer_options": writer_options,
         }
-        ## Step 1: Running all Queries and Files on QueryObject
+        ## Step 1: PBAC pre-flight (all-or-nothing) before thread fan-out.
+        # Detect raw inline query: any non-slug, non-file query component.
+        _has_raw = bool(
+            not slug and not _queries and not _files
+        ) or bool(
+            isinstance(options, dict) and options.get('query') and
+            not _queries and not _files and not slug
+        )
+        await self._preflight_multiquery(
+            request,
+            slugs=list((_queries or {}).keys()),
+            files=list((_files or {}).keys()),
+            has_raw_query=_has_raw,
+        )
+        _user_session = request.get('user_session')  # memoized by _get_user_session above
+
+        ## Step 1b: Running all Queries and Files on QueryObject
         qs = MultiQS(
             slug=slug,
             queries=_queries,
             files=_files,
             query=options,
-            conditions=data
+            conditions=data,
+            user_session=_user_session,
         )
         try:
             result, options = await qs.query()
