@@ -1007,23 +1007,24 @@ from navigator_auth import rs_pep                                               
       and before the handler route registrations, so any consuming app gets PBAC
       wired automatically when `QS_PBAC_ENABLED=True`. The consuming app does not
       need to call `setup_pbac()` itself.
-- [ ] For non-Postgres drivers (MySQL, Oracle, BigQuery, REST, Mongo, etc.), do we
+- [x] For non-Postgres drivers (MySQL, Oracle, BigQuery, REST, Mongo, etc.), do we
       ship the `params_for(session)` credential-resolver hook in **this** spec, or
       apply it only to Postgres in v1 and roll out per driver afterwards? — *Owner:
-      Jesus Lara*.
-- [ ] Confirm the env-var prefix convention for the credential resolver. The proposal
+      Jesus Lara*.: resolve on this spec.
+- [x] Confirm the env-var prefix convention for the credential resolver. The proposal
       uses `<DATASOURCE_PREFIX>_<USERNAME>_*` where prefix comes from the registered
       datasource (e.g., `PG_*` for `postgres` → user override is `PG_<USER>_*`). For
       `pg_admin` whose default prefix is `DB_*`, the user override would be
-      `DB_<USER>_*`. Acceptable? — *Owner: Jesus Lara*.
-- [ ] How are admin operations in `DatasourceView` (POST/PUT/DELETE — not just GET)
+      `DB_<USER>_*`. Acceptable? — *Owner: Jesus Lara*.: Acceptable
+- [x] How are admin operations in `DatasourceView` (POST/PUT/DELETE — not just GET)
       gated? In scope for this spec or covered separately? The current brainstorm only
-      addresses the `GET` list filtering — *Owner: Jesus Lara*.
-- [ ] Default policy content: should `defaults.yaml` ship a hard `deny` baseline
+      addresses the `GET` list filtering — *Owner: Jesus Lara*.: covered separately.
+- [x] Default policy content: should `defaults.yaml` ship a hard `deny` baseline
       (forcing operators to add their own allow policies before any user can run any
       slug), or include a permissive "any authenticated user → execute non-sensitive
       slugs" policy? Hard deny is safer; permissive is friendlier for upgrade paths —
-      *Owner: Jesus Lara*.
-- [ ] Should the PBAC enforcement layer also gate the existing `dry_run` endpoint
+      *Owner: Jesus Lara*.: for current v1 a permissive "any authenticated user → execute non-sensitive
+      slugs"
+- [x] Should the PBAC enforcement layer also gate the existing `dry_run` endpoint
       (`QueryExecutor.dry_run` at executor.py:104)? It does not execute the query but
-      does parse and validate it; an attacker could use it to probe slug existence. — *Owner: Jesus Lara*.
+      does parse and validate it; an attacker could use it to probe slug existence. — *Owner: Jesus Lara*.: enforce also dry_run-
