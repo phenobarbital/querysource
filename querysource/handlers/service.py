@@ -25,6 +25,7 @@ from ..conf import (
     CSV_DEFAULT_DELIMITER,
     CSV_DEFAULT_QUOTING
 )
+from ..auth import ResourceType
 from .abstract import AbstractHandler
 
 
@@ -182,6 +183,13 @@ class QueryService(AbstractHandler):
             return self.NotFound(
                 message="QS: Error with parameters.", exception=err
             )
+        # PBAC: enforce slug:execute before any DB/source work begins.
+        await self._enforce_pbac(
+            request,
+            resource_type=ResourceType.SLUG,
+            resource_name=slug,
+            action="slug:execute",
+        )
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             _format = params['queryformat']
@@ -280,6 +288,29 @@ class QueryService(AbstractHandler):
                         message="Unknown Error on Query",
                         exception=ex
                     ) from ex
+                # PBAC: enforce datasource:use and driver:use after provider is resolved.
+                _ds_name = getattr(
+                    getattr(getattr(query, '_qs', None), '_definition', None),
+                    'provider',
+                    'db'
+                ) or 'db'
+                _drv_name = getattr(
+                    getattr(query, '_provider', None),
+                    'driver',
+                    'db'
+                ) or 'db'
+                await self._enforce_pbac(
+                    request,
+                    resource_type=ResourceType.DATASOURCE,
+                    resource_name=_ds_name,
+                    action="datasource:use",
+                )
+                await self._enforce_pbac(
+                    request,
+                    resource_type=ResourceType.DRIVER,
+                    resource_name=_drv_name,
+                    action="driver:use",
+                )
                 # query columns
                 if not queryformat:
                     if ctype := query.accepts():

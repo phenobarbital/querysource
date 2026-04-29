@@ -16,5 +16,6 @@ logger = logging.getLogger(__name__)
 
 from querysource.auth.credentials import CredentialResolver, ResolvedCredentials  # noqa: E402
 from querysource.auth.pbac import setup_pbac  # noqa: E402
+from querysource.auth._resource_types import ResourceType  # noqa: E402
 
-__all__ = ("CredentialResolver", "ResolvedCredentials", "setup_pbac", "logger")
+__all__ = ("CredentialResolver", "ResolvedCredentials", "setup_pbac", "ResourceType", "logger")
