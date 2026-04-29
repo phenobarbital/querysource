@@ -96,7 +96,10 @@ Follow ai-parrot's `parrot/auth/pbac.py` design point-for-point:
 
 - New `querysource/auth/pbac.py` exposing `setup_pbac(app, policy_dir, cache_ttl)`,
   initializing `PDP` + `PolicyEvaluator` + `Guardian` and registering them on the aiohttp
-  app under `app['security']`, `app['abac']`, `app['policy_evaluator']`.
+  app under `app['security']`, `app['abac']`, `app['policy_evaluator']`. Invoked from
+  `QuerySource.setup(app)` at `querysource/services.py:80` (after `connection.setup`
+  and `TemplateParser.setup`, before handler route registrations), gated by
+  `QS_PBAC_ENABLED`. Consuming apps get PBAC wired automatically — no extra call needed.
 - New `AbstractHandler` helpers: `_get_user_session(request)` (extracts via
   `navigator_session.get_session()` and caches on `request['user_session']`) and
   `_enforce_pbac(request, resource_type, resource_name, action)` (calls
@@ -363,11 +366,17 @@ same coordination ai-parrot already does, so the muscle exists.
 
 ### Internal Behavior
 
-**Startup wiring (in the consuming app, e.g. `navigator-api`):**
-1. App reads `QS_PBAC_ENABLED` from `querysource.conf`.
-2. If `False`: skip PBAC setup entirely; `app['security']` is not registered;
-   `_enforce_pbac` becomes a no-op fast-path.
-3. If `True`: call `querysource.auth.pbac.setup_pbac(app, policy_dir=QS_POLICY_PATH,
+**Startup wiring (inside `QuerySource.setup(app)`):**
+1. Consuming app instantiates and calls `QuerySource(lazy=False, loop=...).setup(app)`
+   as today (see `querysource/services.py:80`).
+2. Inside `QuerySource.setup`, after the existing `connection.setup(app)` and
+   `TemplateParser.setup(app)` calls and **before** the route registrations for
+   `QueryService` / `QueryExecutor` / `QueryHandler` / `QueryManager`, QS reads
+   `QS_PBAC_ENABLED` from `querysource.conf`.
+3. If `False`: skip PBAC setup entirely; `app['security']` is not registered;
+   `_enforce_pbac` becomes a no-op fast-path. Existing deployments behave exactly as
+   today.
+4. If `True`: call `querysource.auth.pbac.setup_pbac(app, policy_dir=QS_POLICY_PATH,
    cache_ttl=QS_PBAC_CACHE_TTL)`. This:
    - Builds `YAMLStorage(policy_dir)`, `PolicyLoader.load_from_directory()`,
      `PolicyEvaluator(default_effect=DENY, cache_ttl_seconds=cache_ttl)`,
@@ -375,9 +384,14 @@ same coordination ai-parrot already does, so the muscle exists.
    - Registers `app['security']` (Guardian), `app['abac']` (PDP),
      `app['policy_evaluator']` (PolicyEvaluator), and an `app['credential_resolver']`
      for the driver layer.
-   - Attaches the `abac_middleware` only if the consuming app explicitly enables it
-     (QS itself doesn't auto-install middleware — handlers enforce explicitly because
-     resource extraction is dynamic).
+   - Idempotent on re-entry: if `app['security']` is already populated by a parent
+     stack (e.g., `navigator-api` invoked navigator-auth's `PDP.setup(app)` first),
+     QS reuses that instance instead of re-creating one.
+   - Does **not** install the `abac_middleware`. QuerySource handlers enforce
+     explicitly because resource extraction is dynamic (slug from URL, datasource
+     from payload, etc.) and a single middleware decision per request is the wrong
+     granularity. The consuming app may still install navigator-auth's middleware
+     for its own routes — they coexist.
 
 **Per-request (single-query — `QueryService` path):**
 1. `QueryService.query()` extracts the slug from `request.match_info`.
@@ -477,9 +491,11 @@ same coordination ai-parrot already does, so the muscle exists.
 ## Capabilities
 
 ### New Capabilities
-- `pbac-bootstrap` — `querysource.auth.pbac.setup_pbac()`, settings (`QS_PBAC_ENABLED`,
-  `QS_POLICY_PATH`, `QS_PBAC_CACHE_TTL`), and aiohttp app registration of `Guardian` /
-  `PDP` / `PolicyEvaluator` / `CredentialResolver`.
+- `pbac-bootstrap` — `querysource.auth.pbac.setup_pbac()` invoked from
+  `QuerySource.setup(app)` at `querysource/services.py:80`, gated by `QS_PBAC_ENABLED`.
+  Adds settings (`QS_PBAC_ENABLED`, `QS_POLICY_PATH`, `QS_PBAC_CACHE_TTL`) and registers
+  `app['security']` (Guardian) / `app['abac']` (PDP) / `app['policy_evaluator']` /
+  `app['credential_resolver']`.
 - `pbac-handler-helpers` — `AbstractHandler._get_user_session` and
   `AbstractHandler._enforce_pbac`; consistent 404-on-deny semantics.
 - `pbac-query-execution-gate` — slug-execute, raw-query-execute, datasource-use, and
@@ -516,6 +532,7 @@ same coordination ai-parrot already does, so the muscle exists.
 | Affected Component | Impact Type | Notes |
 |---|---|---|
 | `querysource/conf.py` | extends | Add `QS_PBAC_ENABLED`, `QS_POLICY_PATH`, `QS_PBAC_CACHE_TTL` |
+| `querysource/services.py` | modifies | `QuerySource.setup(app)` calls `setup_pbac(app, ...)` after `connection.setup` and before route registrations, gated by `QS_PBAC_ENABLED` |
 | `querysource/auth/__init__.py` | new | Module entry point |
 | `querysource/auth/pbac.py` | new | `setup_pbac()`, lazy imports of navigator-auth |
 | `querysource/auth/credentials.py` | new | `CredentialResolver` |
@@ -732,6 +749,19 @@ cache_ttl = int(config.get('PBAC_CACHE_TTL', fallback=30))
 #### `querysource` — integration points
 
 ```python
+# /home/jesuslara/proyectos/parallel/querysource/querysource/services.py:45
+class QuerySource(metaclass=Singleton):
+    def __init__(self, **kwargs):                                       # line 60
+        self.lazy: bool = kwargs.get('lazy', False)
+        self._loop: asyncio.AbstractEventLoop = kwargs.get('loop', asyncio.get_event_loop())
+        self.connection = QueryConnection(loop=self._loop, lazy=self.lazy)
+        # ...iterates providers, filters, variables...
+    def setup(self, app: web.Application) -> web.Application:           # line 80
+        # registers QueryService, QueryExecutor, QueryHandler, QueryManager,
+        # LoggingService routes. PBAC bootstrap is added here, after
+        # connection.setup(app) and TemplateParser.setup(app), before route
+        # registrations, gated by QS_PBAC_ENABLED.
+
 # /home/jesuslara/proyectos/parallel/querysource/querysource/handlers/abstract.py:18
 class AbstractHandler(BaseHandler):  # BaseHandler from navigator.views
     def post_init(self, *args, **kwargs):
@@ -965,15 +995,18 @@ from navigator_auth import rs_pep                                               
 
 ## Open Questions
 
-- [ ] Exact `navigator-auth` version pin. ai-parrot uses `>=0.19.0` (as referenced in
-      its brainstorm). Confirm whether the editable local checkout is at or beyond that
-      version, and whether any newer version is required for the upstream
-      `ResourceType`/`ActionType` additions to land — *Owner: Jesus Lara*.
-- [ ] Should `setup_pbac()` be invoked **inside** QuerySource (so any consuming app
-      gets it for free when it imports QuerySource) or **by the consuming app**
-      (`navigator-api`) explicitly? ai-parrot does the latter via `app.py`. QuerySource
-      doesn't have an `app.py` of its own — it's a library — so the answer probably
-      *must* be the latter, but confirm — *Owner: Jesus Lara*.
+- [x] ~~Exact `navigator-auth` version pin~~ — **Resolved**: pin to
+      `navigator-auth>=0.20.0` in `pyproject.toml`. The upstream PR adding the new
+      `ResourceType`/`ActionType` values targets that version.
+- [x] ~~Where is `setup_pbac()` invoked?~~ — **Resolved**: QuerySource invokes it
+      itself. QuerySource (the library) is distinct from any aiohttp integration —
+      its central startup hook is `QuerySource.setup(app)` at
+      `querysource/services.py:80` (a `Singleton`-pattern class instantiated as
+      `QuerySource(lazy=False, loop=...).setup(app)`). PBAC bootstrap is called from
+      inside that method, after `connection.setup(app)` and `TemplateParser.setup(app)`
+      and before the handler route registrations, so any consuming app gets PBAC
+      wired automatically when `QS_PBAC_ENABLED=True`. The consuming app does not
+      need to call `setup_pbac()` itself.
 - [ ] For non-Postgres drivers (MySQL, Oracle, BigQuery, REST, Mongo, etc.), do we
       ship the `params_for(session)` credential-resolver hook in **this** spec, or
       apply it only to Postgres in v1 and roll out per driver afterwards? — *Owner:
