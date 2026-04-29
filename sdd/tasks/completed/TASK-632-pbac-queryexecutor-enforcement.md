@@ -270,12 +270,13 @@ class TestQueryExecutorPbacSmoke:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: _enforce_payload helper added to QueryExecutor. Called from both
+query() and dry_run() before any execution. The Query model has no slug field,
+so slug detection uses data.get('slug'); otherwise raw_query:execute is enforced.
+5/5 smoke tests pass.
+**Slug payload key**: data.get('slug') (from raw payload dict)
+**Datasource/driver attribute paths**: query._query.datasource / query._query.driver
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Slug payload key**:
-**Datasource/driver attribute paths**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
