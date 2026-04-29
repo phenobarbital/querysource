@@ -3,7 +3,7 @@
 **Feature ID**: FEAT-091
 **Date**: 2026-04-29
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.0.0
 
 > Source brainstorm: `sdd/proposals/pbac-support.brainstorm.md`
@@ -960,36 +960,47 @@ allow safe parallel work plus a vertical seam that must stay sequential.
 
 ## 8. Open Questions
 
-> Five questions were resolved in the brainstorm (call site, version pin,
-> resolution model, group-tier dropped, profile-from-policy accepted). The
-> remaining are listed below; each should be resolved before or during
-> implementation.
+> All open questions were resolved during /sdd-spec discovery on 2026-04-30.
+> No questions remain blocking implementation.
 
-- [ ] **Driver rollout scope**: ship `params_for(session)` only on Postgres in
-      v1, or extend to MySQL/Oracle/BigQuery/Mongo/REST simultaneously? The
-      spec currently scopes to Postgres only (Non-Goals §1). Confirm before
-      decomposition. — *Owner: Jesus Lara*.
-- [ ] **Env-var prefix per datasource**: confirm
-      `<DATASOURCE_PREFIX>_<USERNAME>_*` where the prefix is the datasource's
-      declared env-var prefix (`PG_*` for `postgres`, `DB_*` for `pg_admin`).
-      A `pg_admin` user override would therefore be `DB_<USER>_*`. Acceptable?
-      — *Owner: Jesus Lara*.
-- [ ] **`DatasourceView` mutating verbs**: PBAC for `POST/PUT/DELETE` on
-      `DatasourceView` is currently a non-goal. Defer to a follow-up spec or
-      scope into v1? — *Owner: Jesus Lara*.
-- [ ] **Default policy posture**: should `defaults.yaml` ship with a strict
-      `deny` baseline (operators must add allow policies before any user can
-      run any slug), or include a permissive "any authenticated user →
-      execute non-sensitive slugs" policy out of the box? Strict is safer;
-      permissive is friendlier for upgrade paths. — *Owner: Jesus Lara*.
-- [ ] **Dry-run gating**: the spec gates `QueryExecutor.dry_run` with the same
-      checks as `.query()` to prevent slug-existence probing. Confirm — or do
-      we want `dry_run` to remain unauthenticated for diagnostics? — *Owner:
-      Jesus Lara*.
-- [ ] **Performance budget — measurement methodology**: 5% p95 delta on
-      1,000 warm-cache executions is the proposed gate. Confirm test rig
-      (CI runner image, dataset size, parallelism) so the budget is
-      reproducible. — *Owner: Jesus Lara*.
+- [x] ~~**Driver rollout scope**~~ — **Resolved (2026-04-30)**: Postgres only in
+      v1 (`pg.py` / `postgres` / `pg_admin`). MySQL/Oracle/BigQuery/Mongo/REST
+      will be a follow-up spec once the per-user credential pattern is
+      validated end-to-end on Postgres. The Non-Goal in §1 stands.
+- [x] ~~**Env-var prefix per datasource**~~ — **Resolved (2026-04-30)**: confirm
+      `<DATASOURCE_PREFIX>_<USERNAME>_*` where the prefix is declared by each
+      registered datasource as a `credential_prefix` class attribute on the
+      driver model (e.g. `postgresDriver.credential_prefix = "PG"`,
+      `pg_adminDriver.credential_prefix = "DB"`). The `CredentialResolver`
+      reads this attribute when invoked from the driver's `params_for(session)`
+      method. Per-user override key for `pg_admin` users is therefore
+      `DB_<USERNAME>_*`.
+- [x] ~~**`DatasourceView` mutating verbs**~~ — **Resolved (2026-04-30)**: out
+      of scope for v1. POST/PUT/DELETE on `DatasourceView`, the QueryManager
+      CRUD verbs, and any other admin endpoints are covered by a follow-up
+      spec that addresses admin-write endpoints together with their audit
+      story. v1 stays focused on read/execute paths only.
+- [x] ~~**Default policy posture**~~ — **Resolved (2026-04-30)**: strict deny
+      baseline. `defaults.yaml` ships `version: "1.0"`, `defaults.effect: deny`,
+      and a single `superuser`/`admin` allow policy with priority 100 +
+      `enforcing: true`. Operators must add allow policies for normal users
+      before anything works with `QS_PBAC_ENABLED=True`. Mitigation: include a
+      copy-pasteable example block (commented-out) in `slugs.yaml` showing
+      how to grant `analysts` access to all slugs, so adopting operators have
+      a starting point.
+- [x] ~~**Dry-run gating**~~ — **Resolved (2026-04-30)**: `QueryExecutor.dry_run`
+      enforces the same checks as `.query()`. Without this, an attacker could
+      probe slug existence by attempting `dry_run` against guesses (200 vs 404
+      leaks the slug catalog). The hide-existence guarantee requires both
+      endpoints to behave identically on denial.
+- [x] ~~**Performance budget — measurement methodology**~~ — **Resolved
+      (2026-04-30)**: 1,000 sequential warm-cache slug executions on the CI
+      runner against the existing fixture
+      (`postgres://qs_data:12345678@127.0.0.1:5432/navigator_dev`, see
+      `tests/test_api.py`). p95 wall-clock delta `< 5%` between PBAC-on and
+      PBAC-off. Single-process, single-thread; cache is warmed by 10 throwaway
+      requests before measurement starts. Test rig lives in
+      `tests/perf/test_pbac_overhead.py`.
 
 ---
 
@@ -998,3 +1009,4 @@ allow safe parallel work plus a vertical seam that must stay sequential.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-04-29 | Jesus Lara / Claude | Initial draft from `pbac-support.brainstorm.md`. FEAT-091, target version 5.0.0, 15 modules, mixed worktree isolation across 4 parallel-friendly streams. |
+| 1.0 | 2026-04-30 | Jesus Lara / Claude | All 6 open questions resolved (driver scope = Postgres-only v1; env-var prefix via `credential_prefix` class attr; `DatasourceView` mutating verbs out of scope; strict-deny default policy posture; `dry_run` gated identically to `.query()`; perf rig pinned). Status promoted to `approved`. |
