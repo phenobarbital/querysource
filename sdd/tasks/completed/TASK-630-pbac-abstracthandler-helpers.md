@@ -372,10 +372,12 @@ class TestEnforcePbac:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: Both helpers implemented as specified. _get_user_session memoizes
+via _SENTINEL. _enforce_pbac fast-path no-op when app['security'] absent,
+fail-closed (HTTP 404) when PBAC enabled but no session or evaluator. All
+nav-auth imports are lazy. 8/8 unit tests pass. Compiled Cython .so files
+symlinked into worktree for test runner compatibility.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
