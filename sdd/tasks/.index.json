@@ -11135,7 +11135,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11145,7 +11145,8 @@
       "parallelism_notes": "Touches only querysource/auth/credentials.py and __init__; can run alongside TASK-635, TASK-639, TASK-640 once TASK-627 is done.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-628-pbac-credential-resolver.md"
+      "file": "sdd/tasks/active/TASK-628-pbac-credential-resolver.md",
+      "completed_at": "2026-04-29T23:38:25.310246+00:00"
     },
     {
       "id": "TASK-629",
