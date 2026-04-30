@@ -119,3 +119,27 @@ class TestResolve:
         result = resolver.resolve("PG", {"user_id": "svc1"})
         assert result is not None
         assert result.source == "user-override"
+
+
+class TestResolverWarnings:
+    def test_partial_set_warning_dedup(self, monkeypatch, caplog):
+        """Same partial set hit twice -> warning logged at most once per resolver instance."""
+        import logging
+        from querysource.auth import CredentialResolver
+        # Provide only one of the five required keys so partial-set is triggered
+        monkeypatch.setenv("PG_BOB_HOST", "h")
+        for k in ("PG_BOB_PORT", "PG_BOB_USER", "PG_BOB_PASSWORD", "PG_BOB_DATABASE"):
+            monkeypatch.delenv(k, raising=False)
+        # Remove default tier too so we get None (can't fall through)
+        for k in ("PG_HOST", "PG_PORT", "PG_USER", "PG_PASSWORD", "PG_DATABASE"):
+            monkeypatch.delenv(k, raising=False)
+        resolver = CredentialResolver()
+        with caplog.at_level(logging.WARNING):
+            resolver.resolve("PG", {"username": "bob"})
+            resolver.resolve("PG", {"username": "bob"})
+        # There should be at most one warning for this (prefix, user, missing-keys) tuple.
+        relevant = [r for r in caplog.records
+                    if "PG_BOB" in r.message or "partial" in r.message.lower()]
+        assert len(relevant) <= 1, (
+            f"Expected at most 1 partial-set warning, got {len(relevant)}: {[r.message for r in relevant]}"
+        )
