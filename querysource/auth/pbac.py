@@ -29,7 +29,6 @@ def setup_pbac(
     app: web.Application,
     policy_dir: str = "policies",
     cache_ttl: int = 300,
-    default_effect: Optional[object] = None,
 ) -> "tuple[Optional[PDP], Optional[PolicyEvaluator], Optional[Guardian]]":
     """Initialise navigator-auth PBAC and register it on the aiohttp app.
 
@@ -51,8 +50,6 @@ def setup_pbac(
         app: The aiohttp ``web.Application``.
         policy_dir: Path to directory containing ``*.yaml`` policy files.
         cache_ttl: Policy-decision cache TTL in seconds (default 300).
-        default_effect: Default ``PolicyEffect`` when no policy matches.
-            Defaults to ``PolicyEffect.DENY``.
 
     Returns:
         ``(pdp, evaluator, guardian)`` — all non-None on success.
@@ -74,15 +71,11 @@ def setup_pbac(
     try:
         from navigator_auth.abac.pdp import PDP
         from navigator_auth.abac.guardian import Guardian
-        from navigator_auth.abac.policies.evaluator import PolicyEvaluator, PolicyLoader
-        from navigator_auth.abac.policies.abstract import PolicyEffect
+        from navigator_auth.abac.policies.evaluator import PolicyLoader
         from navigator_auth.abac.storages.yaml_storage import YAMLStorage
     except ImportError as exc:
         _log.error("PBAC bootstrap failed: navigator-auth not importable: %s", exc)
         return (None, None, None)
-
-    if default_effect is None:
-        default_effect = PolicyEffect.DENY
 
     # ── Load policies from YAML directory ─────────────────────────────────
     try:
@@ -106,9 +99,14 @@ def setup_pbac(
         # Prefer the PDP's internal evaluator (already loaded with policies).
         evaluator = pdp._evaluator  # noqa: SLF001
 
-        # Set TTL and default effect on the evaluator we're going to use.
+        # Set TTL on the evaluator we're going to use.
         evaluator._cache_ttl_seconds = cache_ttl  # noqa: SLF001
-        evaluator._default_effect = default_effect  # noqa: SLF001
+        # NOTE: do NOT set evaluator._default_effect to a PolicyEffect enum here.
+        # The Rust-backed evaluator requires a string, not a Python enum; the
+        # evaluator already defaults to "deny" via its own internal constant.
+        # Setting it to PolicyEffect.DENY causes a PyO3 type error at evaluation
+        # time: "argument 'default_effect': 'PolicyEffect' object cannot be
+        # converted to 'PyString'".
 
         # Load the policies into the evaluator (PDP.__init__ may not do it if
         # policies were passed as a list — call explicitly to be safe).
