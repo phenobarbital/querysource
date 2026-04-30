@@ -256,11 +256,14 @@ class TestDatasourceViewPbacFilter:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: _pbac_filter helper added to DatasourceView. Wired into get() after
+the datasources+default_sources merge. Split by 'default' key to separate
+DB-backed datasources from default-driver entries. Filter each separately with
+DATASOURCE:datasource:list and DRIVER:driver:list respectively. Fail-open on
+guardian errors (listing endpoint). 6/6 smoke tests pass.
+**Drivers route entry point**: default_sources() items within DatasourceView.get(),
+identified by 'default': True flag; no separate route for driver listing.
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Drivers route entry point**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
