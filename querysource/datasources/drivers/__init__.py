@@ -23,6 +23,7 @@ from .arangodb import arangodbDriver
 from .elastic import elasticDriver
 from .iceberg import icebergDriver
 from .delta import deltaDriver
+from .pg_admin import pg_adminDriver
 
 
 ## List of Supported Drivers:
@@ -110,6 +111,10 @@ SUPPORTED = {
     "delta": {
         "name": "DeltaTable (Delta Lake)",
         "driver": deltaDriver
+    },
+    "pg_admin": {
+        "name": "PostgreSQL (Admin)",
+        "driver": pg_adminDriver
     }
 }
 
