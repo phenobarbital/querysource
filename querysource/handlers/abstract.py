@@ -1,9 +1,12 @@
+import inspect
 import traceback
+from typing import Optional
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPException
 from navconfig import DEBUG
 from navconfig.logging import logging
 from navigator.views import BaseHandler
+from navigator_session import get_session, SessionData
 # Queries:
 from ..queries.qs import QS
 # Output Formats:
@@ -14,6 +17,10 @@ from ..exceptions import (
 from ..utils.events import enable_uvloop
 
 enable_uvloop()
+
+# Sentinel used to distinguish "not yet cached" from "cached as None".
+_SENTINEL = object()
+
 
 class AbstractHandler(BaseHandler):
 
@@ -212,3 +219,137 @@ class AbstractHandler(BaseHandler):
             raise QueryException(
                 f"Error getting QS provider for slug {slug}, error: {err}"
             ) from err
+
+    # ── FEAT-091: PBAC helpers ────────────────────────────────────────────
+
+    async def _get_user_session(
+        self,
+        request: web.Request,
+    ) -> Optional[SessionData]:
+        """Extract and memoize the user session from the current request.
+
+        Uses navigator_session.get_session(). Memoizes the result on
+        ``request['user_session']`` so subsequent calls within the same
+        request are free. Returns ``None`` when navigator_session is
+        unavailable or no session exists.
+
+        Args:
+            request: The current aiohttp web request.
+
+        Returns:
+            SessionData or None.
+        """
+        cached = request.get('user_session', _SENTINEL)
+        if cached is not _SENTINEL:
+            return cached
+        try:
+            session = await get_session(request, new=False)
+        except RuntimeError:
+            self.logger.error('QS: User Session system is not installed.')
+            session = None
+        request['user_session'] = session
+        return session
+
+    async def _enforce_pbac(
+        self,
+        request: web.Request,
+        resource_type,
+        resource_name: str,
+        action: str,
+    ) -> None:
+        """Evaluate a single PBAC decision; raise web.HTTPNotFound on deny.
+
+        Fast-path no-op when PBAC is not active (``app['security']`` absent).
+        Fail-closed: if PBAC is enabled but no session can be extracted, the
+        request is denied with 404.
+
+        Args:
+            request: The current aiohttp web request.
+            resource_type: navigator_auth ResourceType (or string shim value).
+            resource_name: The resource identifier string.
+            action: The action string, e.g. ``"slug:execute"``.
+
+        Raises:
+            web.HTTPNotFound: When the evaluator denies access, or when
+                PBAC is enabled but the request has no user session.
+        """
+        guardian = request.app.get('security')
+        if guardian is None:
+            return  # PBAC disabled — fast-path no-op
+
+        # Fail-closed: callers must always supply a real resource_name.
+        # A ``None`` (or empty) name means the route bound a missing path
+        # parameter (e.g. ``slug`` was not in args) — short-circuit to 404
+        # instead of feeding ``None`` into navigator-auth, where it could
+        # match the wrong policy or raise an internal error.
+        if not resource_name:
+            self.logger.info(
+                "PBAC denied (missing resource_name): %s action=%s",
+                resource_type,
+                action,
+            )
+            raise web.HTTPNotFound()
+
+        session = await self._get_user_session(request)
+        if session is None:
+            # Fail-closed: no session → deny
+            self.logger.info(
+                "PBAC denied (no session): %s/%s action=%s",
+                resource_type,
+                resource_name,
+                action,
+            )
+            raise web.HTTPNotFound()
+
+        evaluator = request.app.get('policy_evaluator')
+        if evaluator is None:
+            # Bootstrap inconsistency — Guardian set but no evaluator.
+            self.logger.error(
+                "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
+            )
+            raise web.HTTPNotFound()
+
+        # Lazy-import navigator-auth EvalContext (only when PBAC is active).
+        from navigator_auth.abac.context import EvalContext
+        from navigator_auth.abac.policies.environment import Environment
+        from navigator_auth.conf import AUTH_SESSION_OBJECT
+
+        userinfo = (
+            session.get(AUTH_SESSION_OBJECT, {})
+            if hasattr(session, 'get') else {}
+        )
+        if not isinstance(userinfo, dict):
+            userinfo = {}
+        user = userinfo if userinfo else None
+
+        ctx = EvalContext(
+            request=request,
+            user=user,
+            userinfo=userinfo,
+            session=session,
+        )
+
+        # ``PolicyEvaluator.check_access`` is currently synchronous in
+        # navigator-auth (Rust-backed). The defensive ``iscoroutine`` await
+        # below guarantees forward-compatibility if upstream ever flips it
+        # to ``async def`` — without that guard, a coroutine return value
+        # would be truthy and silently bypass enforcement.
+        result = evaluator.check_access(
+            ctx=ctx,
+            resource_type=resource_type,
+            resource_name=resource_name,
+            action=action,
+            env=Environment(),
+        )
+        if inspect.iscoroutine(result):
+            result = await result
+        if not result.allowed:
+            self.logger.info(
+                "PBAC denied: %s/%s action=%s policy=%s reason=%s",
+                resource_type,
+                resource_name,
+                action,
+                getattr(result, 'matched_policy', None),
+                getattr(result, 'reason', None),
+            )
+            raise web.HTTPNotFound()

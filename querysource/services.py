@@ -39,8 +39,12 @@ from .conf import (
     ENABLE_QS_SCHEDULER,
     USE_VECTORS,
     vector_models,
-    GENSIM_DATA_DIR
+    GENSIM_DATA_DIR,
+    QS_PBAC_ENABLED,
+    QS_POLICY_PATH,
+    QS_PBAC_CACHE_TTL,
 )
+from .auth import setup_pbac
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -87,6 +91,32 @@ class QuerySource(metaclass=Singleton):
         ## Start the template System
         tpl = TemplateParser()
         tpl.setup(app=app)
+
+        # ── FEAT-091: PBAC bootstrap ──────────────────────────────────────
+        # Runs after connection and template setup, before route registration.
+        # setup_pbac() is idempotent: safe if setup() is called more than once.
+        _svc_logger = logging.getLogger("querysource.services")
+        if QS_PBAC_ENABLED:
+            _pdp, _evaluator, _guardian = setup_pbac(
+                self.app,
+                policy_dir=QS_POLICY_PATH,
+                cache_ttl=QS_PBAC_CACHE_TTL,
+            )
+            if _guardian is not None:
+                _svc_logger.info(
+                    "QS PBAC enabled (policy_dir=%s, cache_ttl=%ds)",
+                    QS_POLICY_PATH, QS_PBAC_CACHE_TTL,
+                )
+            else:
+                _svc_logger.warning(
+                    "QS_PBAC_ENABLED=True but PBAC bootstrap returned None. "
+                    "Policy enforcement is OFF for this process. "
+                    "Check QS_POLICY_PATH and navigator-auth installation."
+                )
+        else:
+            _svc_logger.debug("QS PBAC disabled (QS_PBAC_ENABLED=False)")
+        # ──────────────────────────────────────────────────────────────────
+
         ## making the registration of handlers (services and managers)
         qs = QueryService()
         routes = []

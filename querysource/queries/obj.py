@@ -69,6 +69,22 @@ class QueryObject(BaseQuery):
         create queries based on a query_slug,
         a raw query or an Object Query.
         """
+        # FEAT-091: extract app + session for per-user credential resolution.
+        _pbac_app = None
+        _pbac_session = None
+        if self._request is not None:
+            try:
+                _pbac_app = self._request.app
+            except Exception:
+                _pbac_app = None
+            try:
+                from querysource.handlers.abstract import _SENTINEL
+                _cached = self._request.get('user_session', _SENTINEL)
+                if _cached is not _SENTINEL:
+                    _pbac_session = _cached
+            except Exception:
+                _pbac_session = None
+
         if self._type == 'slug':  # slug-based provider:
             self._logger.debug(
                 f'Starting Slug-based Query: {self._query!s}'
@@ -84,7 +100,9 @@ class QueryObject(BaseQuery):
                 raise
             ### getting the connection and the provider from Slug:
             try:
-                conn, provider = await self.get_provider(objquery)
+                conn, provider = await self.get_provider(
+                    objquery, session=_pbac_session, app=_pbac_app
+                )
             except (QueryException, DriverError) as ex:
                 raise QueryException(
                     str(ex)
@@ -139,11 +157,15 @@ class QueryObject(BaseQuery):
                     exception=ex
                 )
             if datasource := self._qs.datasource:
-                _, self._qs.connection = await self.datasource(datasource)
+                _, self._qs.connection = await self.datasource(
+                    datasource, session=_pbac_session, app=_pbac_app
+                )
             elif driver := self._qs.driver:
                 ## using a default driver:
                 try:
-                    _, self._qs.connection = await self.default_driver(driver)
+                    _, self._qs.connection = await self.default_driver(
+                        driver, session=_pbac_session, app=_pbac_app
+                    )
                 except (RuntimeError, QueryException) as ex:
                     return self.Error(
                         message=str(ex),

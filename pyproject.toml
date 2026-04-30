@@ -171,6 +171,9 @@ addopts = [
     "--strict-config",
     "--strict-markers",
 ]
+markers = [
+    "perf: performance regression tests (opt-in via -m perf)",
+]
 filterwarnings = [
     "error",
     'ignore:The loop argument is deprecated since Python 3\.8, and scheduled for removal in Python 3\.10:DeprecationWarning:asyncio',
@@ -193,3 +196,6 @@ features = ["pyo3/extension-module"]
 # producing ModuleNotFoundError: No module named '<pkg>.<native>' at import.
 [tool.uv]
 link-mode = "copy"
+
+[tool.uv.sources]
+navigator-auth = { path = "../../navigator/navigator-auth", editable = true }

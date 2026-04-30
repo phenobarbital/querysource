@@ -1,8 +1,8 @@
 {
-  "feature": "querysource-slug-list-pagination",
-  "feature_id": "FEAT-090",
-  "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
-  "created_at": "2026-04-22T12:00:00+00:00",
+  "feature": "pbac-support",
+  "feature_id": "FEAT-091",
+  "spec": "sdd/specs/pbac-support.spec.md",
+  "created_at": "2026-04-29T23:13:16Z",
   "previous_features": [
     {
       "feature": "refactor-tools-imports",
@@ -170,6 +170,12 @@
       "feature": "rest-api-for-lyria-music",
       "spec": "sdd/specs/rest-api-for-lyria-music.spec.md",
       "created_at": "2026-02-19T21:46:12+01:00"
+    },
+    {
+      "feature": "querysource-slug-list-pagination",
+      "feature_id": "FEAT-090",
+      "spec": "sdd/specs/querysource-slug-list-pagination.spec.md",
+      "created_at": "2026-04-22T12:00:00+00:00"
     }
   ],
   "tasks": [
@@ -11103,6 +11109,350 @@
       "started_at": "2026-04-22T16:31:38Z",
       "file": "sdd/tasks/completed/TASK-626-pagination-tests-and-docs.md",
       "completed_at": "2026-04-22T17:08:15Z"
+    },
+    {
+      "id": "TASK-627",
+      "slug": "pbac-settings-and-auth-package",
+      "title": "PBAC settings and auth-package skeleton",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Foundation block; everything else depends on this. No internal parallelism.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "file": "sdd/tasks/active/TASK-627-pbac-settings-and-auth-package.md",
+      "completed_at": "2026-04-29T23:36:55.271569+00:00"
+    },
+    {
+      "id": "TASK-628",
+      "slug": "pbac-credential-resolver",
+      "title": "Per-user credential resolver",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-627"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Touches only querysource/auth/credentials.py and __init__; can run alongside TASK-635, TASK-639, TASK-640 once TASK-627 is done.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "file": "sdd/tasks/active/TASK-628-pbac-credential-resolver.md",
+      "completed_at": "2026-04-29T23:38:25.310246+00:00"
+    },
+    {
+      "id": "TASK-629",
+      "slug": "pbac-bootstrap",
+      "title": "PBAC bootstrap (setup_pbac)",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-627",
+        "TASK-628"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Sequential after TASK-628 because it imports CredentialResolver from the same package.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "file": "sdd/tasks/active/TASK-629-pbac-bootstrap.md",
+      "completed_at": "2026-04-29T23:40:16.332765+00:00"
+    },
+    {
+      "id": "TASK-630",
+      "slug": "pbac-abstracthandler-helpers",
+      "title": "AbstractHandler PBAC helpers (_get_user_session, _enforce_pbac)",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-629"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Gates handler enforcement (TASK-631..634); must land before any handler edits.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:00:00+00:00",
+      "file": "sdd/tasks/completed/TASK-630-pbac-abstracthandler-helpers.md"
+    },
+    {
+      "id": "TASK-631",
+      "slug": "pbac-queryservice-enforcement",
+      "title": "QueryService PBAC enforcement",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-630"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Sequential per spec \u2014 first of the three handler enforcement modules; establishes the contract that TASK-632 and TASK-633 mirror.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:15:00+00:00",
+      "file": "sdd/tasks/completed/TASK-631-pbac-queryservice-enforcement.md"
+    },
+    {
+      "id": "TASK-632",
+      "slug": "pbac-queryexecutor-enforcement",
+      "title": "QueryExecutor PBAC enforcement (incl. dry_run)",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-630",
+        "TASK-631"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Sequential after TASK-631 to keep enforcement contract uniform across the three execution handlers.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:30:00+00:00",
+      "file": "sdd/tasks/completed/TASK-632-pbac-queryexecutor-enforcement.md"
+    },
+    {
+      "id": "TASK-633",
+      "slug": "pbac-multiquery-enforcement",
+      "title": "MultiQuery PBAC enforcement (all-or-nothing pre-flight)",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-630",
+        "TASK-632"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Sequential after TASK-632 \u2014 final handler-enforcement task; also extends MultiQS.__init__.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:45:00+00:00",
+      "file": "sdd/tasks/completed/TASK-633-pbac-multiquery-enforcement.md"
+    },
+    {
+      "id": "TASK-634",
+      "slug": "pbac-datasource-list-filtering",
+      "title": "Datasource & driver list filtering",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-630"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Touches a single file (datasources/handlers/datasource.py) the handler-enforcement tasks don't modify. Parallel with TASK-631..633 once TASK-630 is done.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T03:00:00+00:00",
+      "file": "sdd/tasks/completed/TASK-634-pbac-datasource-list-filtering.md"
+    },
+    {
+      "id": "TASK-635",
+      "slug": "pg-admin-datasource",
+      "title": "pg_admin datasource registration",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "New file plus 1-line registration in SUPPORTED. No code dependencies; fully parallel with all other streams.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T03:15:00+00:00",
+      "file": "sdd/tasks/completed/TASK-635-pg-admin-datasource.md"
+    },
+    {
+      "id": "TASK-636",
+      "slug": "pg-params-for-session",
+      "title": "Postgres params_for(session) hook + credential_prefix",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-628",
+        "TASK-635"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Depends on resolver (TASK-628) and pg_admin (TASK-635); modifies pg.py + postgres.py + pg_admin.py.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-636-pg-params-for-session.md"
+    },
+    {
+      "id": "TASK-637",
+      "slug": "driver-factory-session-plumbing",
+      "title": "Driver factory session plumbing",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-636"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Sequential after TASK-636; threads request session through to driver instantiation across qs.py and multi/__init__.py.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-637-driver-factory-session-plumbing.md"
+    },
+    {
+      "id": "TASK-638",
+      "slug": "pbac-querysource-setup-wiring",
+      "title": "QuerySource.setup() PBAC wiring",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-629"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Single insertion point in services.py:setup; depends only on bootstrap (TASK-629) but typically lands last so the integration test stack is complete.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-638-pbac-querysource-setup-wiring.md"
+    },
+    {
+      "id": "TASK-639",
+      "slug": "pbac-default-policies",
+      "title": "Default policy YAML files",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Pure data files under policies/. No code dependencies; fully parallel with all streams.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-639-pbac-default-policies.md"
+    },
+    {
+      "id": "TASK-640",
+      "slug": "navauth-resourcetype-additions",
+      "title": "navigator-auth upstream \u2014 new ResourceType / ActionType values",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Lives in a separate repository (navigator-auth). Fully parallel with every QuerySource task \u2014 coordinate via release tag (0.20.0) only.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-640-navauth-resourcetype-additions.md"
+    },
+    {
+      "id": "TASK-641",
+      "slug": "pbac-unit-tests",
+      "title": "PBAC unit tests \u2014 auth package",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-628",
+        "TASK-629",
+        "TASK-630"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Fills gaps in the inline-with-task tests; runs after the three foundation modules.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:30:00Z",
+      "file": "sdd/tasks/completed/TASK-641-pbac-unit-tests.md"
+    },
+    {
+      "id": "TASK-642",
+      "slug": "pbac-integration-tests",
+      "title": "PBAC integration tests (handler enforcement, list filtering, multi-query)",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "L",
+      "depends_on": [
+        "TASK-631",
+        "TASK-632",
+        "TASK-633",
+        "TASK-634",
+        "TASK-637",
+        "TASK-638",
+        "TASK-639"
+      ],
+      "parallel": false,
+      "parallelism_notes": "End-to-end tests that exercise the full PBAC stack; depends on every implementation module.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T02:45:00Z",
+      "file": "sdd/tasks/completed/TASK-642-pbac-integration-tests.md"
+    },
+    {
+      "id": "TASK-643",
+      "slug": "pbac-perf-regression",
+      "title": "PBAC performance regression test",
+      "feature_id": "FEAT-091",
+      "feature": "pbac-support",
+      "spec": "sdd/specs/pbac-support.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-642"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Reuses TASK-642's fixtures; runs last to validate the < 5% p95 budget.",
+      "assigned_to": null,
+      "started_at": "2026-04-29T23:33:51.465339+00:00",
+      "completed_at": "2026-04-30T03:00:00Z",
+      "file": "sdd/tasks/completed/TASK-643-pbac-perf-regression.md"
     }
   ]
 }

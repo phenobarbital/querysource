@@ -1,0 +1,24 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# Add allow policies for non-admin groups here.
+# Raw queries grant inline SQL execution — grant sparingly.
+policies: []
+
+# ─── Example (uncomment and customise) ──────────────────────────────────────
+# policies:
+#   - name: data_engineers_raw_queries
+#     effect: allow
+#     description: "Data engineers can run inline raw queries."
+#     resources:
+#       - "raw_query"
+#     actions:
+#       - "raw_query:execute"
+#     subjects:
+#       groups:
+#         - data-engineers
+#     priority: 50
+#     enforcing: true
+# ────────────────────────────────────────────────────────────────────────────

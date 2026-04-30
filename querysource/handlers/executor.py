@@ -11,6 +11,7 @@ from ..exceptions import (
     QueryError
 )
 from ..queries.executor import Executor
+from ..auth import ResourceType
 from .abstract import AbstractHandler
 
 
@@ -25,6 +26,61 @@ class QueryExecutor(AbstractHandler):
             'X-STATUS': 'OK',
             'X-MESSAGE': 'Query Execution'
         }
+
+    async def _enforce_payload(
+        self,
+        request: web.Request,
+        data: dict,
+        query: "Executor",
+    ) -> None:
+        """Run pre-execution PBAC checks for executor payloads.
+
+        Branches on slug vs raw-query based on the ``slug`` key in ``data``.
+        Then enforces datasource and driver checks using resolved attrs on the
+        query object after ``Executor.start()`` has populated ``_query``.
+
+        Args:
+            request: The current aiohttp web request.
+            data: Raw payload dict from ``get_payload()``.
+            query: ``Executor`` instance after ``start()`` has been called.
+
+        Raises:
+            web.HTTPNotFound: When any PBAC check denies access.
+        """
+        # Slug check vs raw-query check.
+        slug = (data or {}).get('slug') if isinstance(data, dict) else None
+        if slug:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.SLUG,
+                resource_name=slug,
+                action="slug:execute",
+            )
+        else:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.RAW_QUERY,
+                resource_name="raw_query",
+                action="raw_query:execute",
+            )
+        # Datasource + driver checks (best-effort: attrs populated by start()).
+        inner = getattr(query, '_query', None)
+        ds = getattr(inner, 'datasource', None)
+        drv = getattr(inner, 'driver', None)
+        if ds:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.DATASOURCE,
+                resource_name=ds,
+                action="datasource:use",
+            )
+        if drv:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.DRIVER,
+                resource_name=drv,
+                action="driver:use",
+            )
 
     async def get_payload(self, request: web.Request) -> dict:
         data = None
@@ -75,6 +131,8 @@ class QueryExecutor(AbstractHandler):
                 reason={"message": str(ex)},
                 status=500
             )
+        # PBAC: enforce before any query execution starts.
+        await self._enforce_payload(request, payload, query)
         try:
             obj = await query.query()
             return self.json_response(
@@ -124,6 +182,8 @@ class QueryExecutor(AbstractHandler):
                     reason={"message": str(ex)},
                     status=500
                 )
+            # PBAC: enforce before any dry_run execution starts.
+            await self._enforce_payload(request, data, query)
             try:
                 obj = await query.dry_run()
                 return self.json_response(

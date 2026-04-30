@@ -15,6 +15,7 @@ class postgresDriver(pgDriver):
     driver: str = 'postgres'
     name: str = 'postgres'
     defaults: str = asyncpg_url
+    credential_prefix: str = "PG"  # FEAT-091: explicit override (matches pgDriver default)
 
 try:
     postgres_default = postgresDriver(

@@ -1,0 +1,24 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# Add allow policies for non-admin groups here.
+policies: []
+
+# ─── Example (uncomment and customise) ──────────────────────────────────────
+# policies:
+#   - name: analysts_run_finance_slugs
+#     effect: allow
+#     description: "Analysts can execute all finance-prefixed slugs."
+#     resources:
+#       - "slug:finance_*"
+#     actions:
+#       - "slug:execute"
+#       - "slug:list"
+#     subjects:
+#       groups:
+#         - analysts
+#     priority: 30
+#     enforcing: false
+# ────────────────────────────────────────────────────────────────────────────

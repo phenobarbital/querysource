@@ -181,8 +181,21 @@ class Connection:
         except KeyError:
             return False
 
-    async def default_driver(self, driver: str) -> Any:
+    async def default_driver(
+        self,
+        driver: str,
+        session=None,
+        app=None,
+    ) -> Any:
         """Get a default driver connection.
+
+        Args:
+            driver: Driver name string.
+            session: Optional user session for per-user credential resolution
+                (FEAT-091 PBAC). When both ``session`` and ``app`` are
+                provided and the driver exposes ``params_for()``, that method
+                is called instead of ``params()``.
+            app: Optional aiohttp Application mapping.
         """
         if not (self.supported_drivers(driver)):
             raise ConfigError(
@@ -221,10 +234,15 @@ class Connection:
         driver_type = default.driver_type
         if driver_type == 'asyncdb':
             try:
+                # FEAT-091: use per-user credentials when resolver is available.
+                if session is not None and app is not None and hasattr(default, 'params_for'):
+                    conn_params = default.params_for(session, app)
+                else:
+                    conn_params = default.params()
                 return driver_type, AsyncDB(
                     default.driver,
                     dsn=default.dsn,
-                    params=default.params()
+                    params=conn_params
                 )
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
@@ -237,9 +255,15 @@ class Connection:
             ## Other Components.
             return None
 
-    async def get_provider(self, entry: dict):
+    async def get_provider(self, entry: dict, session=None, app=None):
         """
         Getting a connection from Provider.
+
+        Args:
+            entry: Provider entry dict (must have a ``provider`` attribute).
+            session: Optional user session for per-user credential resolution
+                (FEAT-091 PBAC).
+            app: Optional aiohttp Application mapping.
         """
         try:
             provider = entry.provider
@@ -257,7 +281,7 @@ class Connection:
             ## TODO: return a QS Provider for REST/External operations
             return [None, _provider]
         if (await self.get_datasource(provider)):
-            source, conn = await self.datasource(provider)
+            source, conn = await self.datasource(provider, session=session, app=app)
             ### get provider from datasource type:
             provider = source.driver
             _provider = self.load_provider(provider)
@@ -267,7 +291,7 @@ class Connection:
             _provider = self.load_provider(provider)
             # can we use a default driver?
             try:
-                _, conn = await self.default_driver(provider)
+                _, conn = await self.default_driver(provider, session=session, app=app)
             except (AttributeError, TypeError, ValueError) as ex:
                 print(ex)
                 conn = None
@@ -363,7 +387,15 @@ class Connection:
                     f"Error: No QuerySource Provider {provider} was found: {ex}"
                 ) from ex
 
-    async def datasource(self, name: str = 'default'):
+    async def datasource(self, name: str = 'default', session=None, app=None):
+        """Return (source_driver, AsyncDB_connection) for a named datasource.
+
+        Args:
+            name: Datasource name as registered in DATASOURCES.
+            session: Optional user session for per-user credential resolution
+                (FEAT-091 PBAC).
+            app: Optional aiohttp Application mapping.
+        """
         try:
             source = DATASOURCES[name]
         except KeyError:
@@ -373,10 +405,15 @@ class Connection:
             # TODO: adding support for other drivers
             driver = source.driver
             try:
+                # FEAT-091: use per-user credentials when resolver is available.
+                if session is not None and app is not None and hasattr(source, 'params_for'):
+                    conn_params = source.params_for(session, app)
+                else:
+                    conn_params = source.params()
                 return source, AsyncDB(
                     driver,
                     dsn=source.dsn,
-                    params=source.params()
+                    params=conn_params
                 )
             except (DriverError, ProviderError) as ex:
                 raise QueryException(
