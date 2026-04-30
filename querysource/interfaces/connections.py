@@ -69,15 +69,21 @@ class Connection:
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs):
         self._connection = None
-        if loop:
-            self._loop = loop
-        elif 'loop' in kwargs and kwargs['loop'] is not None:
-            self._loop = kwargs['loop']
+        # Loop binding is intentionally lazy. If we are already running inside
+        # an event loop (typical when constructed from a coroutine), capture
+        # it. Otherwise leave it as None — callers that need it must obtain
+        # the running loop themselves at the actual call site (where it is
+        # safe). NEVER create a new event loop here: doing so binds asyncdb
+        # objects to a loop that is not the one aiohttp will run with,
+        # causing "got Future attached to a different loop" failures.
+        explicit = loop or kwargs.get('loop')
+        if explicit is not None:
+            self._loop = explicit
         else:
             try:
-                self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+                self._loop: Optional[asyncio.AbstractEventLoop] = asyncio.get_running_loop()
             except RuntimeError:
-                self._loop = asyncio.new_event_loop()
+                self._loop = None
         self._dsn: str = kwargs.get('dsn', asyncpg_url)
         self._default_driver: str = kwargs.get('driver', 'pg')
         self.logger = logging.getLogger(name='QS.Connection')
@@ -137,10 +143,14 @@ class Connection:
             }
             args['server_settings']['application_name'] = 'QS.Read'
         try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = self._loop
+        try:
             connection = AsyncDB(
                 driver,
                 dsn=dsn,
-                loop=self._loop,
+                loop=loop,
                 params=params,
                 **args
             )

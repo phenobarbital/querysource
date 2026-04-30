@@ -65,9 +65,22 @@ class QuerySource(metaclass=Singleton):
         if hasattr(self, '__initialized__') and self.__initialized__ is True:
             return
         self.lazy: bool = kwargs.get('lazy', False)
-        self._loop: asyncio.AbstractEventLoop = kwargs.get('loop', asyncio.get_event_loop())
+        # Deprecated: passing loop= is no longer needed. We capture the running
+        # loop lazily — first inside __init__ if we happen to be in async
+        # context, otherwise inside qs_start (the aiohttp on_startup hook).
+        # This avoids binding asyncdb pools to a loop that is not the one
+        # aiohttp will run with.
+        if kwargs.get('loop') is not None:
+            logging.getLogger("querysource.services").warning(
+                "QuerySource(loop=...) is deprecated; loop is captured "
+                "automatically from the running event loop."
+            )
+        try:
+            self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
         ### Connection Object:
-        self.connection = QueryConnection(loop=self._loop, lazy=self.lazy)
+        self.connection = QueryConnection(lazy=self.lazy)
         ### Loading all providers when started:
         path = Path(__file__).parent.joinpath('providers')
         for (_, name, ispkg) in iter_modules([str(path)]):
@@ -249,7 +262,7 @@ class QuerySource(metaclass=Singleton):
         # QSScheduler (conditional — gated by ENABLE_QS_SCHEDULER)
         if ENABLE_QS_SCHEDULER:
             from .scheduler import QSScheduler
-            self._scheduler = QSScheduler(loop=self._loop)
+            self._scheduler = QSScheduler()
             self._scheduler.setup(self.app)
 
         # Loading Vector Models at Startup:
@@ -267,7 +280,12 @@ class QuerySource(metaclass=Singleton):
         return self.app
 
     def event_loop(self):
-        return self._loop
+        if self._loop is not None:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return None
 
     def load_library(self, function: str) -> Callable:
         classpath, fn = function.rsplit('.', 1)
@@ -283,8 +301,9 @@ class QuerySource(metaclass=Singleton):
         return func
 
     async def qs_start(self, app: WebApp) -> None:
-        if not self._loop:
-            self._loop = asyncio.get_event_loop()
+        # We are inside aiohttp's running loop here — capture it once so any
+        # later sync caller of event_loop() gets the right one.
+        self._loop = asyncio.get_running_loop()
 
     async def qs_stop(self, app: WebApp) -> None:
         pass

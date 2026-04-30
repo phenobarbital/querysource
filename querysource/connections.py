@@ -66,6 +66,9 @@ class QueryConnection(Connection, metaclass=Singleton):
         self.lazy: bool = kwargs.get('lazy', False)
         self._redis: Callable = None
         self._memcached: Callable = None
+        # Cache (redis/memcached) AsyncDB instances are constructed eagerly
+        # but without an explicit loop — they bind to the running loop on
+        # first connect, which is aiohttp's loop.
         self.start_cache(QUERYSET_REDIS)
         self._json = JSONContent()
     async def __aenter__(self) -> "QueryConnection":
@@ -84,13 +87,11 @@ class QueryConnection(Connection, metaclass=Singleton):
         self._redis = AsyncDB(
             'redis',
             dsn=dsn,
-            loop=self._loop
         )
         # memcached connection:
         self._memcached = AsyncDB(
             'memcache',
             params=MEMCACHE_SERVICE,
-            loop=self._loop
         )
 
     def pool(self):
@@ -167,12 +168,9 @@ class QueryConnection(Connection, metaclass=Singleton):
          Create the connection to the database cache (redis).
          Also, reading the existing datasources in a list.
         """
-        if not self._loop:
-            self._loop = asyncio.get_event_loop()
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = self._loop
+        # We are guaranteed to be inside aiohttp's running loop here.
+        loop = asyncio.get_running_loop()
+        self._loop = loop
         if self.lazy is True:
             self.logger.debug(':: Starting QuerySource in Lazy Mode ::')
             # # lazy mode: create a simple database connector

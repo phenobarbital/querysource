@@ -286,6 +286,16 @@ class QueryHandler(AbstractHandler):
             _grouping = data.pop('grouping', None)
         except (AttributeError, TypeError):
             _grouping = None
+        # MultiQuery-specific keys are processed by MultiQS (or come from a
+        # saved slug echoed back as body) and must NOT be treated as inline
+        # filter conditions.
+        if isinstance(data, dict):
+            for _mq_key in (
+                'queries', 'files',
+                'Info', 'Join', 'Concat', 'Melt', 'Merge',
+                'Transform', 'Filter', 'GroupBy', 'Output', 'Processors',
+            ):
+                data.pop(_mq_key, None)
         if data:  # already have information to be passed to data
             _filter = {}
             try:
@@ -295,15 +305,16 @@ class QueryHandler(AbstractHandler):
                     f = data.pop('where_cond', {})
                     if f:
                         _filter['filter'] = f
-                if data is not None:
+                if data:
                     ft = {
                         "filter": {
                             **data
                         }
                     }
                     _filter = {**_filter, **ft}
-                f = Filter(data=result, **_filter)
-                result = await f.run()
+                if _filter:
+                    f = Filter(data=result, **_filter)
+                    result = await f.run()
             except (QueryException, Exception) as ex:
                 raise self.Error(
                     message=f"Error on Filtering: {ex!s}",
