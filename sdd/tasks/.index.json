@@ -11296,7 +11296,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11307,7 +11307,8 @@
       "parallelism_notes": "Depends on resolver (TASK-628) and pg_admin (TASK-635); modifies pg.py + postgres.py + pg_admin.py.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-636-pg-params-for-session.md"
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-636-pg-params-for-session.md"
     },
     {
       "id": "TASK-637",

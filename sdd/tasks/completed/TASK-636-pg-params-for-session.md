@@ -329,11 +329,9 @@ class TestCredentialPrefix:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: All 10 tests pass. `params()` method unchanged. `credential_prefix` added to all three classes. Resolver exception path wrapped in its own try/except (separate from session extraction) for cleaner fallback semantics.
+**`credential_profile` extraction path used**: `session.get('user', {}).get('credential_profile')` with fallback to `session.get('userinfo', {}).get('credential_profile')` — passed as `None` if absent.
 
-**Completed by**:
-**Date**:
-**Notes**:
-**`credential_profile` extraction path used**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: Added extra try/except around `resolver.resolve()` call (separate from session-extraction block) to ensure resolver exceptions also fall back cleanly. Spec said "never raise from params_for" so this is a tightening, not a deviation.
