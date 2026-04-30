@@ -96,11 +96,27 @@ def setup_pbac(
         # PDP creates its own internal PolicyEvaluator; we set up externally too.
         pdp = PDP(storage=storage, policies=policies)
 
-        # Prefer the PDP's internal evaluator (already loaded with policies).
-        evaluator = pdp._evaluator  # noqa: SLF001
+        # Use the PDP's public ``evaluator`` property (returns the same internal
+        # PolicyEvaluator the PDP uses internally). Falls back to the private
+        # ``_evaluator`` attribute for older navigator-auth versions where the
+        # property did not yet exist.
+        evaluator = getattr(pdp, "evaluator", None)
+        if evaluator is None:
+            evaluator = pdp._evaluator  # noqa: SLF001
 
-        # Set TTL on the evaluator we're going to use.
-        evaluator._cache_ttl_seconds = cache_ttl  # noqa: SLF001
+        # Set TTL on the evaluator. The real attribute used by the cache lookup
+        # is ``_cache_ttl`` (see PolicyEvaluator.__init__). We guard with
+        # ``hasattr`` so a future rename in navigator-auth raises a loud warning
+        # instead of silently no-op'ing the cache TTL setting.
+        if hasattr(evaluator, "_cache_ttl"):
+            evaluator._cache_ttl = cache_ttl  # noqa: SLF001
+        else:
+            _log.warning(
+                "PBAC: PolicyEvaluator has no '_cache_ttl' attribute; "
+                "cache TTL setting (%ds) will be ignored. Verify navigator-auth "
+                "version compatibility.",
+                cache_ttl,
+            )
         # NOTE: do NOT set evaluator._default_effect to a PolicyEffect enum here.
         # The Rust-backed evaluator requires a string, not a Python enum; the
         # evaluator already defaults to "deny" via its own internal constant.

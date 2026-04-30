@@ -1,3 +1,4 @@
+import inspect
 import traceback
 from typing import Optional
 from aiohttp import web
@@ -276,6 +277,19 @@ class AbstractHandler(BaseHandler):
         if guardian is None:
             return  # PBAC disabled — fast-path no-op
 
+        # Fail-closed: callers must always supply a real resource_name.
+        # A ``None`` (or empty) name means the route bound a missing path
+        # parameter (e.g. ``slug`` was not in args) — short-circuit to 404
+        # instead of feeding ``None`` into navigator-auth, where it could
+        # match the wrong policy or raise an internal error.
+        if not resource_name:
+            self.logger.info(
+                "PBAC denied (missing resource_name): %s action=%s",
+                resource_type,
+                action,
+            )
+            raise web.HTTPNotFound()
+
         session = await self._get_user_session(request)
         if session is None:
             # Fail-closed: no session → deny
@@ -315,6 +329,11 @@ class AbstractHandler(BaseHandler):
             session=session,
         )
 
+        # ``PolicyEvaluator.check_access`` is currently synchronous in
+        # navigator-auth (Rust-backed). The defensive ``iscoroutine`` await
+        # below guarantees forward-compatibility if upstream ever flips it
+        # to ``async def`` — without that guard, a coroutine return value
+        # would be truthy and silently bypass enforcement.
         result = evaluator.check_access(
             ctx=ctx,
             resource_type=resource_type,
@@ -322,6 +341,8 @@ class AbstractHandler(BaseHandler):
             action=action,
             env=Environment(),
         )
+        if inspect.iscoroutine(result):
+            result = await result
         if not result.allowed:
             self.logger.info(
                 "PBAC denied: %s/%s action=%s policy=%s reason=%s",

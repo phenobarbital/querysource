@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 import uuid
 from importlib import import_module
@@ -19,6 +20,11 @@ from ..models import DataSource
 from ..drivers import SUPPORTED
 from ...interfaces.connections import DATASOURCES
 from ...auth import ResourceType
+
+# Module-level fallback logger for paths that may run before BaseView's
+# ``_logger`` attribute is initialised (e.g. during unit tests that construct
+# the view without going through the full request lifecycle).
+_PBAC_LOGGER = logging.getLogger("querysource.datasources.handlers.datasource")
 
 
 class DatasourceView(BaseView):
@@ -64,8 +70,18 @@ class DatasourceView(BaseView):
                 action=action,
             )
             allowed = set(result.allowed)
-        except Exception:
-            # Fail-open for listing endpoints: if guardian errors, return unfiltered.
+        except Exception as exc:
+            # Fail-open for listing endpoints: if guardian errors, return
+            # unfiltered. We log a warning so operators can detect a broken
+            # guardian — silent fail-open would hide policy-engine outages.
+            log = getattr(self, "_logger", None) or _PBAC_LOGGER
+            log.warning(
+                "PBAC list filtering failed (%s/%s): %s. "
+                "Returning unfiltered list (fail-open).",
+                resource_type,
+                action,
+                exc,
+            )
             return items
         return [item for item in items if item.get(name_key) in allowed]
 
