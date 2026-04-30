@@ -27,6 +27,19 @@ from ...auth import ResourceType
 _PBAC_LOGGER = logging.getLogger("querysource.datasources.handlers.datasource")
 
 
+def _item_get(item, key, default=None):
+    """Read ``key`` from either a dict or an asyncdb Model instance.
+
+    Why: ``DataSource.all()`` returns Model instances whose ``.get`` is the
+    classmethod that fetches a row by primary key — calling ``item.get('x')``
+    on it raises ``TypeError``. ``default_sources()`` on the other hand
+    returns plain dicts, so we need a uniform accessor.
+    """
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
 class DatasourceView(BaseView):
     """API View for managing datasources.
     """
@@ -59,7 +72,7 @@ class DatasourceView(BaseView):
             return items  # PBAC disabled — return all
         if not items:
             return items
-        names = [item.get(name_key) for item in items if item.get(name_key)]
+        names = [_item_get(item, name_key) for item in items if _item_get(item, name_key)]
         if not names:
             return items
         try:
@@ -83,7 +96,7 @@ class DatasourceView(BaseView):
                 exc,
             )
             return items
-        return [item for item in items if item.get(name_key) in allowed]
+        return [item for item in items if _item_get(item, name_key) in allowed]
 
     def model(self):
         return DataSource
@@ -192,8 +205,8 @@ class DatasourceView(BaseView):
                         # PBAC: filter datasources and default drivers silently.
                         # DB-backed datasources filtered by datasource:list.
                         # Default-driver entries (default=True) filtered by driver:list.
-                        db_items = [r for r in result if not r.get('default')]
-                        drv_items = [r for r in result if r.get('default')]
+                        db_items = [r for r in result if not _item_get(r, 'default')]
+                        drv_items = [r for r in result if _item_get(r, 'default')]
                         db_items = await self._pbac_filter(
                             self.request, db_items, "name",
                             ResourceType.DATASOURCE, "datasource:list",

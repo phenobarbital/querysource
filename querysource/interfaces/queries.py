@@ -63,18 +63,16 @@ class AbstractQuery(Connection):
         self._logger = logging.getLogger(f'QS.{__name__}')
         self.slug = slug
         self.semaphore = asyncio.Semaphore(int(SEMAPHORE_LIMIT))
-        # trying to configure the asyncio loop
-        if loop:
+        # Loop binding: prefer an explicit loop, then the running loop. Do not
+        # create a new loop here — that would bind downstream asyncdb objects
+        # to a loop different from the one aiohttp runs with.
+        if loop is not None:
             self._loop = loop
         else:
             try:
-                self._loop = asyncio.get_event_loop()
+                self._loop = asyncio.get_running_loop()
             except RuntimeError:
-                self._logger.warning(
-                    "Couldn't get event loop for current thread. Creating a new event loop"
-                )
-                self._loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self._loop)
+                self._loop = None
         Connection.__init__(self, loop=self._loop, **kwargs)
         self._result: Union[dict, list] = None
         self._output_format: Any = None
