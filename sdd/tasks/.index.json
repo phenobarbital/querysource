@@ -11337,7 +11337,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -11347,7 +11347,8 @@
       "parallelism_notes": "Single insertion point in services.py:setup; depends only on bootstrap (TASK-629) but typically lands last so the integration test stack is complete.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-638-pbac-querysource-setup-wiring.md"
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-638-pbac-querysource-setup-wiring.md"
     },
     {
       "id": "TASK-639",

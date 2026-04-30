@@ -252,10 +252,8 @@ class TestQuerySourceSetupPbac:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude (SDD Worker)
+**Date**: 2026-04-30
+**Notes**: Inserted PBAC bootstrap after `tpl.setup(app=app)` and before first route registration (`qs = QueryService()`). Fail-open semantics preserved — warning logged when bootstrap returns None, app continues normally. 3 tests pass.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
