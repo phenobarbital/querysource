@@ -25,6 +25,63 @@ except ImportError:
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
 
+cdef Py_ssize_t _find_kw_at_depth(str sql, str keyword, int target_depth):
+    """Locate ``keyword`` at the given parenthesis depth.
+
+    Skips content inside single-quoted string literals (with `''` escapes).
+    Mirrors `find_keyword_at_depth` in rust/src/sql_parser.rs and is used to
+    pick the *outer* GROUP BY in queries that contain CTEs or subqueries
+    with their own GROUP BY clause. Returns -1 if no match is found.
+    """
+    cdef Py_ssize_t i = 0
+    cdef Py_ssize_t n = len(sql)
+    cdef Py_ssize_t kw_len = len(keyword)
+    cdef int depth = 0
+    cdef bint in_string = False
+    cdef str keyword_upper = keyword.upper()
+    cdef str c
+    while i < n:
+        c = sql[i]
+        if in_string:
+            if c == "'":
+                if i + 1 < n and sql[i + 1] == "'":
+                    i += 2
+                    continue
+                in_string = False
+            i += 1
+            continue
+        if c == "'":
+            in_string = True
+            i += 1
+            continue
+        if c == "(":
+            depth += 1
+            i += 1
+            continue
+        if c == ")":
+            depth -= 1
+            i += 1
+            continue
+        if depth == target_depth and i + kw_len <= n:
+            if sql[i:i + kw_len].upper() == keyword_upper:
+                if (i == 0 or not sql[i - 1].isalnum()) and \
+                   (i + kw_len >= n or not sql[i + kw_len].isalnum()):
+                    return i
+        i += 1
+    return -1
+
+
+cdef Py_ssize_t _find_first_kw_at_depth(str sql, tuple keywords, int target_depth):
+    """Earliest occurrence of any keyword in ``keywords`` at ``target_depth``."""
+    cdef Py_ssize_t best = -1
+    cdef Py_ssize_t pos
+    for kw in keywords:
+        pos = _find_kw_at_depth(sql, kw, target_depth)
+        if pos != -1 and (best == -1 or pos < best):
+            best = pos
+    return best
+
+
 cdef class SQLParser(AbstractParser):
     """ SQL Parser. """
     def __init__(
@@ -44,10 +101,6 @@ cdef class SQLParser(AbstractParser):
             self.tablename = '{schema}.{table}'
         else:
             self.tablename = '{table}'
-        # Group Pattern:
-        self._group_pattern = re.compile(
-            r"GROUP\s+BY\s+(.*?)(?=\b(?:FROM|HAVING|ORDER|LIMIT|WHERE)\b|$)"
-        )
         # DOTALL to handle multiline SELECT clauses
         self._select_pattern = re.compile(
             r"(SELECT\s+)(.*?)(?=\bFROM\b)",
@@ -177,17 +230,34 @@ cdef class SQLParser(AbstractParser):
             return _rs.group_by(sql, list(self.grouping))
         # --- Cython fallback ---
         # TODO: adding GROUP BY GROUPING SETS OR ROLLUP
+        cdef Py_ssize_t gb_pos
+        cdef Py_ssize_t after_gb
+        cdef Py_ssize_t end_pos
+        cdef Py_ssize_t suffix_match
         if self.grouping:
-            match = self._group_pattern.search(sql)
-            if match:
-                # Extract the current group by columns
+            # Only consider the *outer* GROUP BY (depth 0). A GROUP BY nested
+            # inside a CTE or subquery must not be modified — appending columns
+            # to it would splice the inner GROUP BY into the outer FROM clause.
+            gb_pos = _find_kw_at_depth(sql, "GROUP BY", 0)
+            if gb_pos != -1:
+                after_gb = gb_pos + 8  # len("GROUP BY")
+                suffix_match = _find_first_kw_at_depth(
+                    sql[after_gb:],
+                    ("HAVING", "ORDER", "LIMIT", "WHERE"),
+                    0,
+                )
+                end_pos = after_gb + suffix_match if suffix_match != -1 else len(sql)
                 current_columns = [
-                    col.strip() for col in match.group(1).split(",")
+                    col.strip() for col in sql[after_gb:end_pos].split(",")
                 ]
-                # Add the additional columns to the current columns
-                all_columns = current_columns + self.grouping
-                # Reconstruct the SQL query with the modified GROUP BY clause
-                sql = sql[:match.start(1)] + ", ".join(all_columns) + sql[match.end(1):]
+                all_columns = current_columns + list(self.grouping)
+                sql = (
+                    sql[:gb_pos].rstrip()
+                    + " GROUP BY "
+                    + ", ".join(all_columns)
+                    + " "
+                    + sql[end_pos:].lstrip()
+                ).strip()
             else:
                 if isinstance(self.grouping, str):
                     sql = f"{sql} GROUP BY {self.grouping}"

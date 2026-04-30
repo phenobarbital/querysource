@@ -41,11 +41,85 @@ fn find_keyword(upper_sql: &str, keyword: &str) -> Option<usize> {
     None
 }
 
-/// Find the earliest occurrence of any keyword in a string, returning its offset.
-fn find_first_keyword(upper_sql: &str, keywords: &[&str]) -> Option<usize> {
+/// Find a keyword at a specific parenthesis depth, skipping content inside
+/// single-quoted string literals. Used to locate the *outer* GROUP BY in
+/// queries that contain CTEs or subqueries with their own GROUP BY.
+///
+/// Case-insensitive and word-boundary aware over ASCII; non-ASCII bytes
+/// inside identifiers are treated as non-alphanumeric (the same behavior as
+/// `is_ascii_alphanumeric`).
+fn find_keyword_at_depth(sql: &str, keyword: &str, target_depth: i32) -> Option<usize> {
+    let raw = sql.as_bytes();
+    let kw_upper: Vec<u8> = keyword.bytes().map(|b| b.to_ascii_uppercase()).collect();
+    let kw_len = kw_upper.len();
+    let n = raw.len();
+
+    let mut depth: i32 = 0;
+    let mut in_string = false;
+    let mut i = 0;
+    while i < n {
+        let c = raw[i];
+        if in_string {
+            if c == b'\'' {
+                // SQL standard: '' inside a string literal is an escaped quote
+                if i + 1 < n && raw[i + 1] == b'\'' {
+                    i += 2;
+                    continue;
+                }
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'\'' => {
+                in_string = true;
+                i += 1;
+                continue;
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b')' => {
+                depth -= 1;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        if depth == target_depth && i + kw_len <= n {
+            let mut matched = true;
+            for k in 0..kw_len {
+                if raw[i + k].to_ascii_uppercase() != kw_upper[k] {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                let before_ok = i == 0 || !raw[i - 1].is_ascii_alphanumeric();
+                let after_ok =
+                    i + kw_len >= n || !raw[i + kw_len].is_ascii_alphanumeric();
+                if before_ok && after_ok {
+                    return Some(i);
+                }
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Earliest occurrence of any of `keywords` at the given parenthesis depth.
+fn find_first_keyword_at_depth(
+    sql: &str,
+    keywords: &[&str],
+    target_depth: i32,
+) -> Option<usize> {
     keywords
         .iter()
-        .filter_map(|kw| find_keyword(upper_sql, kw))
+        .filter_map(|kw| find_keyword_at_depth(sql, kw, target_depth))
         .min()
 }
 
@@ -235,14 +309,16 @@ pub fn group_by(sql: &str, grouping: Vec<String>) -> String {
         return sql.to_string();
     }
 
-    let upper = sql.to_uppercase();
-    if let Some(gb_pos) = find_keyword(&upper, "GROUP BY") {
-        // Find the column list after GROUP BY
+    // Only consider an *outer* GROUP BY (depth 0). A GROUP BY nested inside a
+    // CTE or subquery must not be modified — appending columns to it would
+    // splice the inner CTE's GROUP BY into the outer FROM clause.
+    if let Some(gb_pos) = find_keyword_at_depth(sql, "GROUP BY", 0) {
         let after_gb = gb_pos + 8; // len("GROUP BY")
-        // Columns end at the next keyword or end of string
-        let end_pos = find_first_keyword(&upper[after_gb..], &["HAVING", "ORDER", "LIMIT", "WHERE"])
-            .map(|p| after_gb + p)
-            .unwrap_or(sql.len());
+        let suffix = &sql[after_gb..];
+        let end_pos =
+            find_first_keyword_at_depth(suffix, &["HAVING", "ORDER", "LIMIT", "WHERE"], 0)
+                .map(|p| after_gb + p)
+                .unwrap_or(sql.len());
 
         let current_cols: Vec<&str> =
             sql[after_gb..end_pos].split(',').map(|c| c.trim()).collect();
@@ -544,6 +620,47 @@ mod tests {
     fn test_group_by_empty() {
         let result = group_by("SELECT * FROM t", vec![]);
         assert_eq!(result, "SELECT * FROM t");
+    }
+
+    #[test]
+    fn test_group_by_skips_cte_inner_group_by() {
+        // Regression: a GROUP BY inside a CTE must not be modified — we must
+        // append a new outer GROUP BY instead.
+        let sql = "WITH agg AS (\n    SELECT a, b, SUM(c) AS s FROM t GROUP BY a, b\n)\nSELECT a, SUM(s) FROM agg WHERE a > 0";
+        let result = group_by(sql, vec!["a".to_string()]);
+        // The CTE's inner GROUP BY must remain intact
+        assert!(
+            result.contains("FROM t GROUP BY a, b"),
+            "inner GROUP BY corrupted: {result}"
+        );
+        // A new outer GROUP BY is appended at the end
+        assert!(result.trim_end().ends_with("GROUP BY a"));
+        // No spurious comma-injection into the FROM clause
+        assert!(!result.contains("FROM agg, a"));
+    }
+
+    #[test]
+    fn test_group_by_extends_outer_group_by() {
+        // Outer GROUP BY at depth 0 should still be extended.
+        let sql = "SELECT a, b FROM t GROUP BY a";
+        let result = group_by(sql, vec!["b".to_string()]);
+        assert_eq!(result, "SELECT a, b FROM t GROUP BY a, b");
+    }
+
+    #[test]
+    fn test_group_by_outer_with_subquery() {
+        // A subquery's GROUP BY must be ignored; the outer GROUP BY is extended.
+        let sql = "SELECT a FROM t WHERE a IN (SELECT b FROM u GROUP BY b) GROUP BY a";
+        let result = group_by(sql, vec!["c".to_string()]);
+        assert!(result.contains("(SELECT b FROM u GROUP BY b)"));
+        assert!(result.contains("GROUP BY a, c"));
+    }
+
+    #[test]
+    fn test_find_keyword_at_depth_skips_string_literals() {
+        // A keyword inside a single-quoted literal must not match.
+        let sql = "SELECT 'GROUP BY x' AS lit FROM t";
+        assert_eq!(find_keyword_at_depth(sql, "GROUP BY", 0), None);
     }
 
     #[test]
