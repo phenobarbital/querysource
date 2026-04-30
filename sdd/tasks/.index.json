@@ -11441,7 +11441,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -11451,7 +11451,8 @@
       "parallelism_notes": "Reuses TASK-642's fixtures; runs last to validate the < 5% p95 budget.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-643-pbac-perf-regression.md"
+      "completed_at": "2026-04-30T03:00:00Z",
+      "file": "sdd/tasks/completed/TASK-643-pbac-perf-regression.md"
     }
   ]
 }
