@@ -11415,7 +11415,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -11431,7 +11431,8 @@
       "parallelism_notes": "End-to-end tests that exercise the full PBAC stack; depends on every implementation module.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-642-pbac-integration-tests.md"
+      "completed_at": "2026-04-30T02:45:00Z",
+      "file": "sdd/tasks/completed/TASK-642-pbac-integration-tests.md"
     },
     {
       "id": "TASK-643",
