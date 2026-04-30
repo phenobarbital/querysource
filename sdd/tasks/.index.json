@@ -11278,7 +11278,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -11286,7 +11286,8 @@
       "parallelism_notes": "New file plus 1-line registration in SUPPORTED. No code dependencies; fully parallel with all other streams.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-635-pg-admin-datasource.md"
+      "completed_at": "2026-04-30T03:15:00+00:00",
+      "file": "sdd/tasks/completed/TASK-635-pg-admin-datasource.md"
     },
     {
       "id": "TASK-636",
