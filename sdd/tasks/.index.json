@@ -11317,7 +11317,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -11327,7 +11327,8 @@
       "parallelism_notes": "Sequential after TASK-636; threads request session through to driver instantiation across qs.py and multi/__init__.py.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-637-driver-factory-session-plumbing.md"
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-637-driver-factory-session-plumbing.md"
     },
     {
       "id": "TASK-638",

@@ -209,16 +209,20 @@ Adjust skip → real assertions in the same task.)
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
+**Completed by**: Claude (SDD Worker)
+**Date**: 2026-04-30
 **Driver factory call chain (traced)**:
-1. `Handler.<method>`
-2. `Handler.get_source(request, slug, ...)`
-3. `QS.build_provider(...)`
-4. ...
-**Plumbing approach chosen**: kwarg | request-stash | other (describe)
-**Notes**:
+1. `Handler.query(request)` / `Handler.slug(request)` in `handlers/service.py`
+2. `await query.build_provider()` where `query` is a `QS` instance
+3. `QS.build_provider()` in `queries/qs.py` — extracts `_pbac_app` from `self._request.app` and `_pbac_session` from `self._request['user_session']`
+4. `await self.connection.get_provider(entry, session=_pbac_session, app=_pbac_app)` — `Connection.get_provider()` in `interfaces/connections.py`
+5. `await self.datasource(provider, session=session, app=app)` — calls `source.params_for(session, app)` if `hasattr(source, 'params_for')`
+6. OR `await self.default_driver(provider, session=session, app=app)` — same `params_for` check
+7. `pgDriver.params_for(session, app)` — resolves per-user credentials via `app['credential_resolver']`
 
-**Deviations from spec**: none | describe if any
+Also plumbed in `QueryObject.build_provider()` (`queries/obj.py`) for the multi-query `ThreadQuery` path.
+
+**Plumbing approach chosen**: hybrid — request-stash for session extraction at `build_provider()` entry point; kwargs for forwarding through `get_provider()`, `datasource()`, `default_driver()`. This avoids changing the `build_provider()` signature (legacy callers unaffected) while keeping the connection layer reusable.
+**Notes**: The 3 test failures in `tests/auth/test_pbac_bootstrap.py` are pre-existing and unrelated to this task (upstream `navigator_auth.models.Permission` dataclass ordering bug in the dev checkout).
+
+**Deviations from spec**: Added plumbing to `QueryObject.build_provider()` in `obj.py` (not explicitly listed in spec files) because `ThreadQuery` uses `QueryObject`, which has the same `get_provider`/`datasource`/`default_driver` call sites. This is additive and consistent with the spec's intent.
