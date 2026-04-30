@@ -18,11 +18,56 @@ from ...exceptions import ParserError
 from ..models import DataSource
 from ..drivers import SUPPORTED
 from ...interfaces.connections import DATASOURCES
+from ...auth import ResourceType
 
 
 class DatasourceView(BaseView):
     """API View for managing datasources.
     """
+
+    async def _pbac_filter(
+        self,
+        request: web.Request,
+        items: list,
+        name_key: str,
+        resource_type,
+        action: str,
+    ) -> list:
+        """Filter a list of dicts by PBAC; silent no-op when PBAC disabled.
+
+        Returns the filtered list (may be empty). Never raises on empty results.
+        Status 200 is the caller's responsibility.
+
+        Args:
+            request: The current aiohttp web request.
+            items: List of result dicts to filter.
+            name_key: Key name to use for extracting resource names.
+            resource_type: ResourceType (or string shim) for the check.
+            action: PBAC action string (e.g. "datasource:list").
+
+        Returns:
+            Filtered list containing only allowed items.
+        """
+        guardian = request.app.get('security')
+        if guardian is None:
+            return items  # PBAC disabled — return all
+        if not items:
+            return items
+        names = [item.get(name_key) for item in items if item.get(name_key)]
+        if not names:
+            return items
+        try:
+            result = await guardian.filter_resources(
+                resources=names,
+                request=request,
+                resource_type=resource_type,
+                action=action,
+            )
+            allowed = set(result.allowed)
+        except Exception:
+            # Fail-open for listing endpoints: if guardian errors, return unfiltered.
+            return items
+        return [item for item in items if item.get(name_key) in allowed]
 
     def model(self):
         return DataSource
@@ -128,6 +173,20 @@ class DatasourceView(BaseView):
                         default = self.default_sources()
                         if not filtering:
                             result = result + default
+                        # PBAC: filter datasources and default drivers silently.
+                        # DB-backed datasources filtered by datasource:list.
+                        # Default-driver entries (default=True) filtered by driver:list.
+                        db_items = [r for r in result if not r.get('default')]
+                        drv_items = [r for r in result if r.get('default')]
+                        db_items = await self._pbac_filter(
+                            self.request, db_items, "name",
+                            ResourceType.DATASOURCE, "datasource:list",
+                        )
+                        drv_items = await self._pbac_filter(
+                            self.request, drv_items, "name",
+                            ResourceType.DRIVER, "driver:list",
+                        )
+                        result = db_items + drv_items
                         return self.json_response(response=result, headers=headers)
                     except (ValidationError) as ex:
                         error = {

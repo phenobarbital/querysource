@@ -65,6 +65,7 @@ class MultiQS(BaseQuery):
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
+            user_session: Optional[object] = None,
             **kwargs
     ):
         super(MultiQS, self).__init__(
@@ -98,6 +99,8 @@ class MultiQS(BaseQuery):
                     'Slug, Queries and Files are all empty.'
                 )
             )
+        # PBAC: store user session for downstream driver credential resolution (TASK-637).
+        self._user_session = user_session
 
     async def query(self):
         """

@@ -1,0 +1,24 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# Add allow policies for non-admin groups here.
+policies: []
+
+# ─── Example (uncomment and customise) ──────────────────────────────────────
+# policies:
+#   - name: analysts_use_pg_driver
+#     effect: allow
+#     description: "Analysts may use the pg (asyncpg) driver."
+#     resources:
+#       - "driver:pg"
+#     actions:
+#       - "driver:use"
+#       - "driver:list"
+#     subjects:
+#       groups:
+#         - analysts
+#     priority: 30
+#     enforcing: false
+# ────────────────────────────────────────────────────────────────────────────

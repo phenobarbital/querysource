@@ -1,0 +1,24 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# Add allow policies for non-admin groups here.
+policies: []
+
+# ─── Example (uncomment and customise) ──────────────────────────────────────
+# policies:
+#   - name: analysts_use_postgres
+#     effect: allow
+#     description: "Analysts may use the read-only postgres datasource."
+#     resources:
+#       - "datasource:postgres"
+#     actions:
+#       - "datasource:use"
+#       - "datasource:list"
+#     subjects:
+#       groups:
+#         - analysts
+#     priority: 30
+#     enforcing: false
+# ────────────────────────────────────────────────────────────────────────────
