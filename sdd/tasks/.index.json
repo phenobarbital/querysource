@@ -11357,7 +11357,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -11365,7 +11365,8 @@
       "parallelism_notes": "Pure data files under policies/. No code dependencies; fully parallel with all streams.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-639-pbac-default-policies.md"
+      "completed_at": "2026-04-30T00:00:00Z",
+      "file": "sdd/tasks/completed/TASK-639-pbac-default-policies.md"
     },
     {
       "id": "TASK-640",
