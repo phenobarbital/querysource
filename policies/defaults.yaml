@@ -1,0 +1,31 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+policies:
+  - name: admin_full_access
+    effect: allow
+    description: >
+      Superuser and admin groups have unrestricted access to all
+      QuerySource resources. Without this policy, no user can execute
+      any slug, raw query, datasource, or driver.
+    resources:
+      - "slug:*"
+      - "datasource:*"
+      - "driver:*"
+      - "raw_query"
+    actions:
+      - "slug:execute"
+      - "slug:list"
+      - "datasource:use"
+      - "datasource:list"
+      - "driver:use"
+      - "driver:list"
+      - "raw_query:execute"
+    subjects:
+      groups:
+        - superuser
+        - admin
+    priority: 100
+    enforcing: true

@@ -1,0 +1,33 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# Per-user exemptions for codebase owners and service accounts.
+# Use this file for user-level (not group-level) allow rules.
+policies: []
+
+# ─── Example (uncomment and customise) ──────────────────────────────────────
+# policies:
+#   - name: service_account_full_access
+#     effect: allow
+#     description: "Service account used by CI/CD has unrestricted access."
+#     resources:
+#       - "slug:*"
+#       - "datasource:*"
+#       - "driver:*"
+#       - "raw_query"
+#     actions:
+#       - "slug:execute"
+#       - "slug:list"
+#       - "datasource:use"
+#       - "datasource:list"
+#       - "driver:use"
+#       - "driver:list"
+#       - "raw_query:execute"
+#     subjects:
+#       users:
+#         - ci-service@example.com
+#     priority: 90
+#     enforcing: true
+# ────────────────────────────────────────────────────────────────────────────
