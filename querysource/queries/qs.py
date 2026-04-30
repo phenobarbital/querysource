@@ -141,6 +141,26 @@ class QS(BaseQuery):
             raise EmptySentence(
                 "QS Error: Cannot run with Empty Query/Sentence."
             )
+        # FEAT-091: extract app + session for per-user credential resolution.
+        # Both are passed to get_provider() / datasource() / default_driver().
+        # When PBAC is disabled (no request, no credential_resolver), the
+        # Connection methods fall back to the legacy params() path.
+        _pbac_app = None
+        _pbac_session = None
+        if self._request is not None:
+            try:
+                _pbac_app = self._request.app
+            except Exception:
+                _pbac_app = None
+            try:
+                # Prefer the already-cached value written by _get_user_session().
+                from querysource.handlers.abstract import _SENTINEL
+                _cached = self._request.get('user_session', _SENTINEL)
+                if _cached is not _SENTINEL:
+                    _pbac_session = _cached
+            except Exception:
+                _pbac_session = None
+
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f':: QS Slug: {self._query!s}')
             try:
@@ -153,7 +173,9 @@ class QS(BaseQuery):
                 raise
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.get_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(
+                    objquery, session=_pbac_session, app=_pbac_app
+                )
                 self._logger.notice(
                     f"Found Provider: {self._provider!s} with Connection: {self._conn!s} in {self._program}."
                 )
@@ -219,7 +241,9 @@ class QS(BaseQuery):
             objquery = AttrDict({"provider": self._driver})
             ### getting the connection and the provider from Slug:
             try:
-                self._conn, self._provider = await self.connection.get_provider(objquery)
+                self._conn, self._provider = await self.connection.get_provider(
+                    objquery, session=_pbac_session, app=_pbac_app
+                )
             except (QueryException, DriverError) as ex:
                 raise QueryError(
                     str(ex)
@@ -272,7 +296,9 @@ class QS(BaseQuery):
                 )
                 driver = 'rest'
             try:
-                self._conn, self._provider = await self.connection.get_provider(driver)
+                self._conn, self._provider = await self.connection.get_provider(
+                    driver, session=_pbac_session, app=_pbac_app
+                )
             except (QueryException, DriverError) as ex:
                 raise QueryException(
                     str(ex)
