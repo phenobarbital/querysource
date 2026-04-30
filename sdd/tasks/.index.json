@@ -11393,7 +11393,7 @@
       "feature_id": "FEAT-091",
       "feature": "pbac-support",
       "spec": "sdd/specs/pbac-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -11405,7 +11405,8 @@
       "parallelism_notes": "Fills gaps in the inline-with-task tests; runs after the three foundation modules.",
       "assigned_to": null,
       "started_at": "2026-04-29T23:33:51.465339+00:00",
-      "file": "sdd/tasks/active/TASK-641-pbac-unit-tests.md"
+      "completed_at": "2026-04-30T02:30:00Z",
+      "file": "sdd/tasks/completed/TASK-641-pbac-unit-tests.md"
     },
     {
       "id": "TASK-642",

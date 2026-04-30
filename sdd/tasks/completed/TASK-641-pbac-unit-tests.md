@@ -247,10 +247,14 @@ See Implementation Notes — all tests live in the listed extension files.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-04-30
+**Tests added (count)**: 7 new tests across 4 files (1 new file: tests/conftest.py)
 
-**Completed by**:
-**Date**:
-**Tests added (count)**:
+**Deviations from spec**:
 
-**Deviations from spec**: none | describe if any
+- `test_none_tuple_does_not_populate_app_keys`: Rather than calling `setup_pbac` with a non-existent path (which succeeds with 0 policies in the real implementation), the test uses `patch.dict(sys.modules, ...)` to block navigator-auth imports, triggering the ImportError path that returns `(None, None, None)`. This correctly tests the "bootstrap failure" scenario the spec intends.
+
+- `test_module_does_not_eager_import_navauth` (pre-existing, modified): Added `finally` block to restore navigator-auth from sys.modules snapshot after the test. This was necessary to prevent test contamination that caused downstream tests calling `setup_pbac` or `_enforce_pbac` to fail with the upstream `Permission` dataclass ordering bug when navigator-auth was re-imported fresh.
+
+- 119 tests pass, 1 xfailed (PolicyLoader YAML schema incompatibility for `test_default_policies_load.py::test_yaml_policies_loadable` — pre-existing from TASK-639).
