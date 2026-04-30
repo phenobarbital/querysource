@@ -315,6 +315,59 @@ class TestGroupBy:
         result = qs_parsers.group_by("SELECT * FROM t", [])
         assert result == "SELECT * FROM t"
 
+    def test_skips_cte_inner_group_by(self):
+        # Regression: a GROUP BY inside a CTE must not be modified — the
+        # parser must append a new outer GROUP BY instead. Previously, the
+        # parser found the CTE's GROUP BY first and spliced ", program" into
+        # the outer FROM clause.
+        sql = (
+            "WITH agg AS (\n"
+            "    SELECT a, b, SUM(c) AS s FROM t GROUP BY a, b\n"
+            ")\n"
+            "SELECT a, SUM(s) FROM agg WHERE a > 0"
+        )
+        result = qs_parsers.group_by(sql, ["a"])
+        assert "FROM t GROUP BY a, b" in result, f"inner GROUP BY corrupted: {result}"
+        assert result.rstrip().endswith("GROUP BY a")
+        assert "FROM agg, a" not in result
+
+    def test_extends_outer_group_by(self):
+        # Outer-level GROUP BY at depth 0 still gets extended.
+        sql = "SELECT a, b FROM t GROUP BY a"
+        result = qs_parsers.group_by(sql, ["b"])
+        assert result == "SELECT a, b FROM t GROUP BY a, b"
+
+    def test_outer_group_by_with_subquery(self):
+        # A subquery's GROUP BY is ignored; the outer one is extended.
+        sql = "SELECT a FROM t WHERE a IN (SELECT b FROM u GROUP BY b) GROUP BY a"
+        result = qs_parsers.group_by(sql, ["c"])
+        assert "(SELECT b FROM u GROUP BY b)" in result
+        assert "GROUP BY a, c" in result
+
+    def test_user_reported_cte_with_aggregated_block(self):
+        # The exact-shape regression reported by the user: a multi-CTE query
+        # where the `aggregated` CTE has its own GROUP BY. Adding a new
+        # outer grouping must NOT corrupt the inner CTE.
+        sql = (
+            "WITH data AS (SELECT 1 AS x), "
+            "aggregated AS (\n"
+            "    SELECT month_start, program, SUM(hours) AS hours\n"
+            "    FROM data\n"
+            "    WHERE program IS NOT NULL\n"
+            "    GROUP BY month_start, program\n"
+            ")\n"
+            "SELECT program, sum(hours) AS total_hours\n"
+            "FROM aggregated\n"
+            "WHERE month_start >= '2026-01-01'::date"
+        )
+        result = qs_parsers.group_by(sql, ["program"])
+        # The CTE's inner GROUP BY must be preserved verbatim
+        assert "GROUP BY month_start, program\n)" in result
+        # The outer FROM clause must NOT be polluted with ", program"
+        assert "FROM aggregated, program" not in result
+        # A new outer GROUP BY is appended at the end
+        assert result.rstrip().endswith("GROUP BY program")
+
 
 class TestOrderBy:
     """Tests for order_by()."""
