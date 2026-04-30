@@ -26,6 +26,7 @@ class pg_adminDriver(pgDriver):  # noqa: N801 — follows postgresDriver naming 
     driver: str = 'pg_admin'
     name: str = 'pg_admin'
     defaults: str = default_dsn
+    credential_prefix: str = "DB"  # FEAT-091: resolves from DB* env vars
 
 
 try:
