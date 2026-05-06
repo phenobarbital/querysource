@@ -444,12 +444,16 @@ class Connection:
         while attempt < max_retries:
             db = self.get_connection(driver='pg', evt=evt)
             try:
+                # Pass ``_connection=conn`` so the per-call connection is
+                # used directly instead of mutating ``QueryModel.Meta.connection``.
+                # The class-level slot is shared by every coroutine, which
+                # caused intermittent ``ConnectionMissing`` under FlowTask
+                # concurrency.
                 async with await db.connection() as conn:
-                    QueryModel.Meta.connection = conn
                     self.logger.notice(
                         f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
                     )
-                    return await QueryModel.get(query_slug=slug)
+                    return await QueryModel.get(query_slug=slug, _connection=conn)
             except DriverError as ex:
                 if attempt < max_retries - 1:
                     # Exponential backoff with jitter
@@ -478,12 +482,7 @@ class Connection:
 
     async def get_slug(self, slug: str, program: str = None, evt: asyncio.AbstractEventLoop = None):
         start = datetime.now()
-        try:
-            obj = await self.get_query_slug(slug, evt=evt)
-        except Exception:  # pylint: disable=W0706
-            raise
-        finally:
-            QueryModel.Meta.connection = None
+        obj = await self.get_query_slug(slug, evt=evt)
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
