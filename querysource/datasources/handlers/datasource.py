@@ -188,11 +188,10 @@ class DatasourceView(BaseView):
         if not ds:
             try:
                 async with await db.connection() as conn:
-                    DataSource.Meta.connection = conn
                     if not filtering:
-                        fn = partial(DataSource.all, fields=fields)
+                        fn = partial(DataSource.all, _connection=conn, fields=fields)
                     else:
-                        fn = partial(DataSource.filter, **filtering, fields=fields)
+                        fn = partial(DataSource.filter, _connection=conn, **filtering, fields=fields)
                     try:
                         result = await fn()
                         headers = {
@@ -236,9 +235,8 @@ class DatasourceView(BaseView):
         else:
             # filter by one single driver:
             async with await db.connection() as conn:
-                DataSource.Meta.connection = conn
                 try:
-                    result = await DataSource.get(name=ds)
+                    result = await DataSource.get(name=ds, _connection=conn)
                     try:
                         # TODO: removing "secrets"
                         result.credentials['password'] = '(hidden)'
@@ -378,8 +376,7 @@ class DatasourceView(BaseView):
         try:
             db = self.get_connection()
             async with await db.connection() as conn:
-                datasource.Meta.connection = conn
-                result = await datasource.insert()
+                result = await datasource.insert(_connection=conn)
                 if not result:
                     headers = {
                         'X-STATUS': 'ERROR',
@@ -475,14 +472,13 @@ class DatasourceView(BaseView):
         try:
             db = self.get_connection()
             async with await db.connection() as conn:
-                DataSource.Meta.connection = conn
                 try:
-                    datasource = await DataSource.get(**ds)
+                    datasource = await DataSource.get(_connection=conn, **ds)
                     headers = {
                         'X-STATUS': 'OK',
                         'X-MESSAGE': f'{datasource.name} Information'
                     }
-                    await datasource.delete()
+                    await datasource.delete(_connection=conn)
                     try:
                         del DATASOURCES[datasource.name]
                     except KeyError:
@@ -592,10 +588,9 @@ class DatasourceView(BaseView):
             found = False
             db = self.get_connection()
             async with await db.connection() as conn:
-                DataSource.Meta.connection = conn
                 if ds is not None:
                     try:
-                        dt = await DataSource.get(**ds)
+                        dt = await DataSource.get(_connection=conn, **ds)
                         attributes = {**dt.to_dict(), **data}
                         datasource = DataSource(**attributes)
                         found = True
@@ -645,10 +640,10 @@ class DatasourceView(BaseView):
                 ### Saving Datasource:
                 try:
                     if found:
-                        result = await datasource.update()
+                        result = await datasource.update(_connection=conn)
                         status = 202
                     else:
-                        result = await datasource.insert()
+                        result = await datasource.insert(_connection=conn)
                         status = 201
                     # if was inserted, then datasource will be updated:
                     try:

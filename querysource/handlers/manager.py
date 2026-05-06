@@ -108,8 +108,7 @@ class QueryManager(QueryView):
             db = self.request.app['qs_connection']
             if query_slug:
                 async with await db.acquire() as conn:
-                    QueryModel.Meta.connection = conn
-                    query = await QueryModel.get(**{"query_slug": query_slug})
+                    query = await QueryModel.get(query_slug=query_slug, _connection=conn)
                     if meta == 'insert':
                         # converting query into an INSERT INTO sentence
                         sentence = self.get_query_insert(query)
@@ -284,11 +283,10 @@ class QueryManager(QueryView):
             async with await db.acquire() as conn:
                 qry = self.get_model(**parameters)
 
-                qry.Meta.connection = conn
-                slug = await qry.get(**parameters)
+                slug = await qry.get(_connection=conn, **parameters)
                 for k, v in data.items():
                     setattr(slug, k, v)
-                update = await slug.update()
+                update = await slug.update(_connection=conn)
             if update:
                 return self.json_response(update)
             else:
@@ -347,9 +345,8 @@ class QueryManager(QueryView):
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
-                QueryModel.Meta.connection = conn
-                slug = await QueryModel.get(**parameters)
-                result = await slug.delete()
+                slug = await QueryModel.get(_connection=conn, **parameters)
+                result = await slug.delete(_connection=conn)
             if result:
                 msg = {
                     "result": result
@@ -426,7 +423,6 @@ class QueryManager(QueryView):
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
-                QueryModel.Meta.connection = conn
                 # first: try to get if Slug exists:
                 try:
                     qry = self.get_model(**data)  # pylint: disable=E1102
@@ -443,15 +439,15 @@ class QueryManager(QueryView):
                 st = 204
                 try:
                     ## try to get an existing slug, or insert if none
-                    slug = await QueryModel.get(query_slug=qry.query_slug)
+                    slug = await QueryModel.get(query_slug=qry.query_slug, _connection=conn)
                     if slug:
                         ## try to update slug:
                         for k, v in data.items():
                             setattr(slug, k, v)
-                        result = await slug.update()
+                        result = await slug.update(_connection=conn)
                         st = 202
                 except NoDataFound:
-                    result = await qry.insert()
+                    result = await qry.insert(_connection=conn)
                     st = 201
                 # Saving Slug in redis cache:
                 return self.json_response(result, status=st)
@@ -494,7 +490,6 @@ class QueryManager(QueryView):
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
-                QueryModel.Meta.connection = conn
                 ### first, validate data:
                 try:
                     qry = self.get_model(**data)  # pylint: disable=E1102
@@ -508,15 +503,15 @@ class QueryManager(QueryView):
                         status=406
                     )
                 try:
-                    slug = await QueryModel.get(**slug)
+                    slug = await QueryModel.get(_connection=conn, **slug)
                     ## try to update slug:
                     for k, v in data.items():
                         setattr(slug, k, v)
-                    result = await slug.update()
+                    result = await slug.update(_connection=conn)
                     return self.json_response(result, status=202)
                 except NoDataFound:
                     logging.warning(f"No Query slug was found: {slug}")
-                    result = await qry.insert()
+                    result = await qry.insert(_connection=conn)
                     return self.json_response(result, status=201)
         except Exception as err:
             print('ERROR ', err)
