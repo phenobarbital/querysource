@@ -409,9 +409,7 @@ class TestZammadSearchQuery:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-**Deviations from spec**: none
+**Completed by**: Claude Sonnet 4.6
+**Date**: 2026-05-13
+**Notes**: Three runtime fixes beyond the original spec: (1) `type` must be read from `definition.params` — the task YAML does not pass `type` in conditions, it lives in the query slug params; (2) ISO date normalization guards against double-Z when the pattern framework already emits dates with Z suffix; (3) pagination stops early when `tickets_count < per_page` to avoid an unnecessary empty-page request.
+**Deviations from spec**: added early-exit pagination (spec only described empty-response stop)

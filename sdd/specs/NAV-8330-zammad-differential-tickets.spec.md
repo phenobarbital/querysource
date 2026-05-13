@@ -3,7 +3,7 @@
 **Feature ID**: FEAT-092
 **Date**: 2026-05-13
 **Author**: wcabrera
-**Status**: draft
+**Status**: approved
 **Jira**: NAV-8330
 **Target version**: next
 
@@ -430,7 +430,7 @@ No new packages required.
 
 - [x] **Zammad Search API syntax** — `GET /api/v1/tickets/search?query=updated_at:[FROM TO]` confirmed working for TROC, Apple, Bose, and Pokémon instances. `per_page` param also confirmed. — *Owner: wcabrera*
 - [x] **YAML task update scope** — Out of scope for this ticket. — *Owner: wcabrera*
-- [ ] **Date format in query string** — Confirm whether `"%Y-%m-%d %H:%M:%S"` is accepted as-is or must be converted to ISO 8601 (`T`/`Z`) before embedding in the Zammad search query. — *Owner: wcabrera*
+- [x] **Date format in query string** — Confirm whether `"%Y-%m-%d %H:%M:%S"` is accepted as-is or must be converted to ISO 8601 (`T`/`Z`) before embedding in the Zammad search query. — *Owner: wcabrera*: not work, but its out of scope, the formated date depends of the ETL.
 
 ---
 

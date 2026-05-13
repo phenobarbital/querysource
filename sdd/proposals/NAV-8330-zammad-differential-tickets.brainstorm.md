@@ -312,7 +312,7 @@ from ...exceptions import DataNotFound
 
 ## Open Questions
 
-- [ ] **Zammad Search API syntax** — Verify that `GET /api/v1/tickets/search?query=updated_at:>DATETIME` is the correct endpoint and query format for all four Zammad instances (TROC, Apple, Bose, Pokémon). Check if Elasticsearch is enabled on each instance. — *Owner: wcabrera*
-- [ ] **Search endpoint pagination** — Confirm whether `/api/v1/tickets/search` uses `per_page` or `limit` for page size. The list endpoint uses `per_page`; search endpoints sometimes differ. — *Owner: wcabrera*
-- [ ] **Pokémon instance** — The Pokémon client uses `datasource: zammad_poke` with `file_sql: pokemon_tickets.sql` in the YAML (step 13), which is a different integration pattern. Confirm whether it also needs the differential filter or is out of scope. — *Owner: wcabrera*
-- [ ] **YAML update scope** — Is updating `troc_dhw_tickets.yaml` in scope for this ticket, or only the provider? The YAML lives in `navigator-new/tasks`, a different repo/directory. — *Owner: wcabrera*
+- [x] **Zammad Search API syntax** — Verify that `GET /api/v1/tickets/search?query=updated_at:>DATETIME` is the correct endpoint and query format for all four Zammad instances (TROC, Apple, Bose, Pokémon). Check if Elasticsearch is enabled on each instance. — *Owner: wcabrera*: the correct endpoint is like `GET /api/v1/tickets/search?query=updated_at:[2026-05-10T12:00:00.000Z TO 2026-05-13T00:00:00.000Z]` and its works for TROC, Apple, Bose and Pokemon.
+- [x] **Search endpoint pagination** — Confirm whether `/api/v1/tickets/search` uses `per_page` or `limit` for page size. The list endpoint uses `per_page`; search endpoints sometimes differ. — *Owner: wcabrera*: the search endpoint use `per_page` and `page`, its works.
+- [x] **Pokémon instance** — The Pokémon client uses `datasource: zammad_poke` with `file_sql: pokemon_tickets.sql` in the YAML (step 13), which is a different integration pattern. Confirm whether it also needs the differential filter or is out of scope. — *Owner: wcabrera*: its out of scope.
+- [x] **YAML update scope** — Is updating `troc_dhw_tickets.yaml` in scope for this ticket, or only the provider? The YAML lives in `navigator-new/tasks`, a different repo/directory. — *Owner: wcabrera*: its out of scope.

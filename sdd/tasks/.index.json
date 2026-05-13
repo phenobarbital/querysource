@@ -11467,15 +11467,16 @@
       "feature_id": "FEAT-092",
       "feature": "NAV-8330-zammad-differential-tickets",
       "spec": "sdd/specs/NAV-8330-zammad-differential-tickets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Single file change; no parallelism benefit.",
       "assigned_to": null,
-      "started_at": null,
-      "file": "sdd/tasks/active/TASK-644-zammad-search-type.md"
+      "started_at": "2026-05-13T15:46:54.156732+00:00",
+      "completed_at": "2026-05-13T21:30:00.000000+00:00",
+      "file": "sdd/tasks/completed/TASK-644-zammad-search-type.md"
     }
   ]
 }
