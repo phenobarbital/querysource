@@ -58,8 +58,13 @@ class zammad(restSource):
         api_token = self._env.get(api_token, fallback=api_token)
         self._headers['Authorization'] = f'Bearer {api_token}'
 
-        # Determine query type and configure base_url accordingly
-        zammad_type = self._conditions.pop('type', 'tickets')
+        # Determine query type: conditions override, then definition.params, then default
+        zammad_type = self._conditions.pop('type', None)
+        if zammad_type is None:
+            try:
+                zammad_type = definition.params.get('type', 'tickets')
+            except AttributeError:
+                zammad_type = 'tickets'
         if zammad_type not in ('tickets', 'search'):
             raise ValueError(
                 f"Zammad: Unknown type {zammad_type!r}. Valid values: 'tickets', 'search'"
@@ -72,10 +77,15 @@ class zammad(restSource):
             if not firstdate:
                 raise ValueError("Zammad: type 'search' requires a 'firstdate' condition")
             if not lastdate:
-                lastdate = datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S')
-            # Zammad search API uses Elasticsearch syntax; convert to ISO 8601
-            first_iso = firstdate.replace(' ', 'T') + 'Z'
-            last_iso = lastdate.replace(' ', 'T') + 'Z'
+                lastdate = datetime.now(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+            # Normalize to ISO 8601 with Z (handle dates with space or T separator,
+            # and dates that already carry a Z from the pattern framework)
+            first_iso = firstdate.replace(' ', 'T')
+            if not first_iso.endswith('Z'):
+                first_iso += 'Z'
+            last_iso = lastdate.replace(' ', 'T')
+            if not last_iso.endswith('Z'):
+                last_iso += 'Z'
             query_str = f'updated_at:[{first_iso} TO {last_iso}]'
             encoded = quote(query_str, safe='')
             self.base_url = (
@@ -137,5 +147,8 @@ class zammad(restSource):
                 tickets = list(result.get('assets', {}).get('Ticket', {}).values())
                 if not tickets:
                     return self._result
-                self._args['page'] += 1
                 self._result += tickets
+                # If fewer than per_page tickets were returned this is the last page
+                if result.get('tickets_count', 0) < 100:
+                    return self._result
+                self._args['page'] += 1

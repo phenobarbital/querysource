@@ -116,15 +116,14 @@ class TestZammadSearchQuery:
             "lastdate": "2026-05-13 14:00:00",
         })
         z.build_url = MagicMock(return_value="http://fake/search?query=...")
-        z.request = AsyncMock(side_effect=[
-            (SEARCH_RESPONSE_PAGE, None),
-            (SEARCH_RESPONSE_EMPTY, None),
-        ])
+        z.request = AsyncMock(return_value=(SEARCH_RESPONSE_PAGE, None))
         result = await z._search_query()
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["id"] == 8080
         assert result[0]["title"] == "Kiosk failure"
+        # tickets_count=1 < per_page=100 → only one request needed
+        z.request.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_stops_on_empty_tickets_count(self):
@@ -153,6 +152,20 @@ class TestZammadSearchQuery:
 
     @pytest.mark.asyncio
     async def test_search_paginates_multiple_pages(self):
+        # Page 1: full page (tickets_count == per_page) → triggers page 2
+        page1_full = {
+            "tickets": [8080],
+            "tickets_count": 100,
+            "assets": {
+                "Ticket": {
+                    "8080": {
+                        "id": 8080, "title": "Kiosk failure",
+                        "updated_at": "2026-05-12T23:13:43.025Z",
+                    }
+                }
+            },
+        }
+        # Page 2: partial page (tickets_count < per_page) → stops here
         page2 = {
             "tickets": [9090],
             "tickets_count": 1,
@@ -169,11 +182,11 @@ class TestZammadSearchQuery:
         })
         z.build_url = MagicMock(return_value="http://fake/search?query=...")
         z.request = AsyncMock(side_effect=[
-            (SEARCH_RESPONSE_PAGE, None),
+            (page1_full, None),
             (page2, None),
-            (SEARCH_RESPONSE_EMPTY, None),
         ])
         result = await z._search_query()
         assert len(result) == 2
         ids = {r["id"] for r in result}
         assert ids == {8080, 9090}
+        assert z.request.call_count == 2
