@@ -91,12 +91,15 @@ class MultiQS(BaseQuery):
             ## Getting data from Queries or Files
             self._queries = query.pop('queries', {})
             self._files = query.pop('files', {})
-        if not (self.slug or self._queries or self._files):
+            self._sources = query.pop('sources', [])
+        else:
+            self._sources = []
+        if not (self.slug or self._queries or self._files or self._sources):
             # Check if both are effectively empty
             raise DriverError(
                 (
                     'Invalid Options passed to MultiQuery. '
-                    'Slug, Queries and Files are all empty.'
+                    'Slug, Queries, Files and Sources are all empty.'
                 )
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
@@ -162,6 +165,19 @@ class MultiQS(BaseQuery):
                 )
                 t.start()
                 tasks[name] = t
+        if self._sources:
+            from .sources import SOURCE_REGISTRY  # noqa: PLC0415
+            for entry in self._sources:
+                for source_type, config in entry.items():
+                    cls = SOURCE_REGISTRY.get(source_type)
+                    if cls is None:
+                        raise DriverError(
+                            f"Unknown source type: {source_type!r}. "
+                            f"Available: {list(SOURCE_REGISTRY.keys())}"
+                        )
+                    t = cls(source_type, config, self._request, self._queue)
+                    t.start()
+                    tasks[source_type] = t
 
         ## then, run all jobs:
         try:

@@ -58,6 +58,16 @@ class ThreadSource(threading.Thread, ABC):
                 pass
         return value
 
+    @property
+    def slug(self) -> str:
+        """Return a slug-like identifier for this source.
+
+        Defaults to ``self._name``.  Subclasses (e.g. :class:`ThreadQuery`)
+        may override this to expose the query slug.  This property is used by
+        :class:`~querysource.queries.multi.MultiQS` error-handling code.
+        """
+        return self._name
+
     @abstractmethod
     async def fetch(self) -> pd.DataFrame:
         """Fetch data and return as a DataFrame.
