@@ -12,7 +12,7 @@ from ..exceptions import (
 )
 from .abstract import AbstractHandler
 from ..queries import MultiQS
-from ..outputs.tables import TableOutput
+from ..outputs.destinations import get_destination
 from ..queries.multi.operators import Filter, GroupBy
 from ..conf import (
     CSV_DEFAULT_DELIMITER,
@@ -341,13 +341,12 @@ class QueryHandler(AbstractHandler):
             )
         if isinstance(data, dict):
             if 'Output' in data:
-                ## Optionally saving result into Database (using Pandas)
+                ## Optionally saving result to destination (registry-based dispatch)
                 for step in options['Output']:
-                    obj = None
                     for step_name, component in step.items():
-                        if step_name in ('tableOutput', 'TableOutput'):
-                            obj = TableOutput(data=result, **component)
-                            result = await obj.run()
+                        destination_cls = get_destination(step_name)
+                        obj = destination_cls(data=result, **component)
+                        result = await obj.run()
         ### Step 6: passing Result to DataOutput
         try:
             if result is None or isinstance(result, DataFrame) and result.empty:

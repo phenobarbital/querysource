@@ -14,7 +14,7 @@ from .transformations import (
     GoogleMaps,
 )
 from .operators.filter import Filter
-from ...outputs.tables import TableOutput
+from ...outputs.destinations import get_destination
 from .sources import ThreadQuery, ThreadFile
 
 
@@ -375,14 +375,13 @@ class MultiQS(BaseQuery):
         if self._return_all is False and (isinstance(result, dict) and len(result) == 1):
             # reduce to one single Dataframe:
             result = list(result.values())[0]
-        ### Step 5: Optionally saving result into Database (using Pandas)
+        ### Step 5: Optionally saving result to destination (registry-based dispatch)
         if _output:
             for step in _output:
-                obj = None
                 for step_name, component in step.items():
-                    if step_name in ('tableOutput', 'TableOutput'):
-                        obj = TableOutput(data=result, **component)
-                        result = await obj.run()
+                    destination_cls = get_destination(step_name)
+                    obj = destination_cls(data=result, **component)
+                    result = await obj.run()
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"
