@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from pandas import DataFrame
 from datamodel.parsers.json import json_encoder
 from ....exceptions import (

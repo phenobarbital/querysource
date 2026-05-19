@@ -1,8 +1,7 @@
 import pandas as pd
 from pandas import DataFrame
 from ....exceptions import (
-    DriverError,
-    QueryException
+    DriverError
 )
 from .abstract import AbstractOperator
 

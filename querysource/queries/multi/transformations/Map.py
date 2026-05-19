@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from typing import Union
-import inspect
 import pandas as pd
 import copy
 from ....exceptions import (

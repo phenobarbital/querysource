@@ -1,14 +1,12 @@
-import re
 from pandas import DataFrame
 import numpy as np
 from .....exceptions import (
     DataNotFound,
-    DriverError,
-    QueryException
+    DriverError
 )
 from .....types import is_empty
 from .....types.dt import filters as dffunctions
-from .....types.dt.filters import create_filter, valid_operators
+from .....types.dt.filters import create_filter
 from ..abstract import AbstractOperator
 
 class Filter(AbstractOperator):
