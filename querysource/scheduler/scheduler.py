@@ -12,7 +12,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from aiohttp import web
-from asyncdb import AsyncDB
+from asyncdb import AsyncDB, AsyncPool
 from navconfig.logging import logging
 
 from querysource.conf import (
@@ -185,16 +185,23 @@ class QSScheduler:
         if not self._loop:
             self._loop = asyncio.get_event_loop()
         # Create own PostgreSQL pool
-        self._db = AsyncDB(
+        self._db = AsyncPool(
             "pg",
             dsn=default_dsn,
             loop=self._loop,
         )
+        # Starts the pool (establishes initial connections)
+        try:
+            await self._db.connect()
+            self.logger.info("QS Scheduler DB pool started")
+        except Exception as exc:
+            self.logger.error(f"Failed to start QS Scheduler DB pool: {exc}")
+            self._db = None
         # Create the scheduler
         self._scheduler = self._create_scheduler()
         # Query public.queries for schedulable rows
         try:
-            async with await self._db.connection() as conn:
+            async with await self._db.acquire() as conn:
                 sql = (
                     "SELECT query_slug, attributes, cache_options, is_cached "
                     "FROM public.queries "
