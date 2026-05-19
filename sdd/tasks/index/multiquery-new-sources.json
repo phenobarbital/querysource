@@ -112,7 +112,7 @@
       "feature_id": "FEAT-093",
       "feature": "multiquery-new-sources",
       "spec": "sdd/specs/multiquery-new-sources.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -122,8 +122,8 @@
       "parallelism_notes": "Creates new file s3.py — no shared state with other source tasks",
       "assigned_to": null,
       "started_at": "2026-05-19T21:31:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-649-source-s3.md"
+      "completed_at": "2026-05-19T21:39:02+00:00",
+      "file": "sdd/tasks/completed/TASK-649-source-s3.md"
     },
     {
       "id": "TASK-650",
