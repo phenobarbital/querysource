@@ -132,7 +132,7 @@
       "feature_id": "FEAT-093",
       "feature": "multiquery-new-sources",
       "spec": "sdd/specs/multiquery-new-sources.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -142,8 +142,8 @@
       "parallelism_notes": "Creates new file table.py — no shared state with other source tasks",
       "assigned_to": null,
       "started_at": "2026-05-19T21:31:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-650-source-table.md"
+      "completed_at": "2026-05-19T21:40:44+00:00",
+      "file": "sdd/tasks/completed/TASK-650-source-table.md"
     },
     {
       "id": "TASK-651",
