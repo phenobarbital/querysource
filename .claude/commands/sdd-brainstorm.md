@@ -39,6 +39,42 @@ If the user provided notes, extract these from context. Otherwise, ask briefly.
 **DO NOT skip this step.** Before writing anything, conduct at least **two full rounds**
 of questions-and-answers with the user to deeply understand the feature.
 
+**Round 0 — Flow type (always ask first; FEAT-145):**
+
+Ask exactly two questions before Round 1:
+
+1. Is this a regular **feature** or a **hotfix**?
+   - `feature` lands on `dev` (default) or, during a release freeze, on `staging`.
+     Features NEVER land on `main`.
+   - `hotfix` lands on `main`. After the PR to `main` merges, the change is
+     propagated back to `staging` and `dev` automatically by
+     `.github/workflows/sync-down.yml` (FEAT-187).
+2. If `feature`, which base branch? (default: `dev`; use `staging` during a release
+   freeze; for sub-features pick the parent feature branch.)
+   If `hotfix`, base is fixed to `main` — no choice.
+
+Record the answers; they will populate the YAML frontmatter at the top of the
+generated brainstorm doc. Validation rules:
+- `type: hotfix` REQUIRES `base_branch: main`.
+- `type: feature` with `base_branch: main` is NOT allowed — use `staging` or `dev`.
+
+**Validation:** if `TYPE == "feature"` and `BASE_BRANCH == "main"`, abort:
+```
+⚠️  type='feature' cannot base on 'main'. Features land on dev (default)
+   or staging (during a release freeze). For changes that must base on
+   main, set type='hotfix' in the document frontmatter.
+```
+
+```yaml
+---
+type: feature | hotfix
+base_branch: dev | staging   # for type=feature (defaults to dev)
+                              # or 'main' (mandatory for type=hotfix)
+---
+```
+
+If the user does not answer, default to `type: feature, base_branch: dev`.
+
 **Round 1 — Clarify intent and scope:**
 Ask 3–5 targeted questions about:
 - The core use case and expected behavior.
@@ -78,7 +114,7 @@ you reference in the brainstorm, you MUST:
 
 1. **Read the actual source file** and record exact signatures (class name, method names,
    parameter types, return types) with file path and line numbers.
-2. **Verify imports** — confirm `from parrot.X import Y` actually works by checking
+2. **Verify imports** — confirm `from querysource.X import Y` actually works by checking
    `__init__.py` files and module structure.
 3. **Capture user-provided code** — if the user pasted code snippets during discovery
    (Steps 2–3), preserve them verbatim in the Code Context section.
@@ -125,12 +161,21 @@ Evaluate the feature's decomposition potential for parallel development:
 - **Rationale**: Brief explanation of why the recommended isolation makes sense.
 
 ### 10. Save and Commit
-1. Read the template at `sdd/templates/brainstorm.md`.
+1. Read the template at `sdd/templates/brainstorm.md`. The template already
+   contains a YAML frontmatter block at the top (FEAT-145).
 2. Create `sdd/proposals/<feature-name>.brainstorm.md` with today's date.
+   **Update the frontmatter `type` and `base_branch` values to match the
+   user's Round 0 answers.** Do NOT strip the frontmatter.
 3. Set `Status: exploration`.
-4. **Commit:**
+4. **Commit (ONLY the brainstorm file — NEVER unrelated changes):**
    ```bash
+   # Unstage everything first to ensure a clean staging area
+   git reset HEAD
+   # Stage ONLY the brainstorm file — NEVER use "git add ." or "git add -A"
    git add sdd/proposals/<feature-name>.brainstorm.md
+   # Verify ONLY the brainstorm file is staged
+   git diff --cached --name-only
+   # If ANY other files appear, run "git reset HEAD" and start over
    git commit -m "sdd: add brainstorm for <feature-name>"
    ```
 

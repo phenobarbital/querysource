@@ -10,24 +10,50 @@ Decompose an approved Feature Specification into atomic, assignable implementati
 ## Guardrails
 - Only decompose specs with `status: approved`.
 - Each task must be independently implementable and testable.
-- Check `sdd/tasks/.index.json` for existing tasks to avoid duplication.
+- Check `sdd/tasks/index/<feature>.json` for existing tasks to avoid duplication.
 - Do NOT write implementation code — tasks are plans, not code.
 - Mark tasks that can run in parallel worktrees with `parallel: true`.
-- **Must run on `dev` branch** (or the integration branch). Not inside a worktree.
-- **Always commit task files and index to `dev`** before creating the worktree.
+- **Must run on the spec's `base_branch`** (read from frontmatter — `dev` for features, `main` for hotfixes). Not inside a worktree.
+- **Always commit task files and per-spec index to `base_branch`** before creating the worktree.
 
 ## Steps
 
-### 1. Verify Branch
-Confirm you are on the integration branch (`dev`), NOT inside a worktree:
+### 1. Sync the Base Branch (FEAT-145)
+
+Read the spec's frontmatter to determine the base branch, switch to it, and pull from origin:
+
 ```bash
-git branch --show-current  # should be "dev"
+META=$(python -c "from pathlib import Path; from scripts.sdd.sdd_meta import parse; m = parse(Path('<spec-path>')); print(m.type, m.base_branch)")
+TYPE=$(echo "$META" | awk '{print $1}')
+BASE=$(echo "$META" | awk '{print $2}')
+
+git checkout "$BASE"
+git pull --ff-only origin "$BASE"
 ```
-If not on `dev`, warn:
+
+For `type: hotfix`, `BASE` MUST be `main`. For `type: feature`, `BASE` defaults
+to `dev` and may be `staging` (during a release freeze) or any non-main branch
+(sub-features extend a parent feature branch — see `CLAUDE.md`).
+
+**Validation:** if `TYPE == "feature"` and `BASE_BRANCH == "main"`, abort:
 ```
-⚠️  /sdd-task should run on the dev branch so all worktrees can see the tasks.
-   Current branch: <branch>
-   Switch to dev first: git checkout dev && git pull origin dev
+⚠️  type='feature' cannot base on 'main'. Features land on dev (default)
+   or staging (during a release freeze). For changes that must base on
+   main, set type='hotfix' in the document frontmatter.
+```
+
+Note: `staging` is a valid `base_branch` for `type: feature` during a release freeze
+(FEAT-187). Use `base_branch: staging` when decomposing stabilization fixes for a
+frozen release candidate.
+
+**Abort conditions (do NOT stash or auto-resolve):**
+- Working tree dirty: `⚠️  Cannot sync <BASE>: working tree has uncommitted changes. Stash or commit first, then re-run /sdd-task.`
+- `--ff-only` fails: `⚠️  Cannot fast-forward <BASE>. Reconcile manually (git pull --rebase or merge), then re-run /sdd-task.`
+
+**Refuse** if the user is currently inside a worktree:
+```
+⚠️  /sdd-task must run from the main repo on <BASE>, not inside a worktree.
+   cd back to the main repo and re-run.
 ```
 
 ### 2. Read the Spec
@@ -57,7 +83,7 @@ For EACH task, you MUST populate its `## Codebase Contract` section:
 3. **Add task-specific references**: if the task touches files not covered by the spec's
    contract, read those files now and add their signatures.
 4. **Be precise about scope**: only include imports/signatures the task actually needs.
-   A task that modifies `parrot/tools/` does not need signatures from `parrot/loaders/`.
+   A task that modifies `querysource/providers/` does not need signatures from `querysource/outputs/`.
 5. **Include the "Does NOT Exist" section**: this is the strongest anti-hallucination
    measure. List plausible-sounding things that an agent might assume exist but don't.
 
@@ -70,9 +96,32 @@ explicit, verified code anchors.
 2. Read the task template at `sdd/templates/task.md`.
 3. For each task, create `sdd/tasks/active/TASK-<NNN>-<slug>.md` using the template.
 
-Create or update `sdd/tasks/.index.json` with the schema:
+**CRITICAL — Task file header must include the Feature ID:**
+The `**Feature**:` line at the top of every task file MUST combine the formal
+Feature ID and the human-readable feature title, separated by an em-dash:
+```
+**Feature**: FEAT-<NNN> — <Feature Title>
+```
+Example: `**Feature**: FEAT-015 — PlaywrightDriver`
+
+Do NOT use the kebab-case slug alone (e.g., `**Feature**: playwrightdriver`) —
+this loses the ability to trace which formal feature the task belongs to.
+The slug is already captured in the `feature` field of `.index.json`; the
+task header must surface the Feature ID for humans scanning the file.
+
+Create or update the **per-spec index** at `sdd/tasks/index/<feature>.json`
+(NOT the legacy monolith — that file is preserved as a historical artifact
+and ignored by all FEAT-145 commands). Schema:
+
 ```json
 {
+  "feature": "<feature-slug>",
+  "feature_id": "FEAT-<NNN>",
+  "spec": "sdd/specs/<feature-slug>.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "<ISO-8601>",
+  "completed_at": null,
   "tasks": [
     {
       "id": "TASK-<NNN>",
@@ -89,21 +138,48 @@ Create or update `sdd/tasks/.index.json` with the schema:
       "parallelism_notes": "<rationale>",
       "assigned_to": null,
       "started_at": null,
+      "completed_at": null,
       "file": "sdd/tasks/active/TASK-<NNN>-<slug>.md"
     }
   ]
 }
 ```
 
+**Header fields (`type`, `base_branch`)** are populated from the spec's
+frontmatter (resolved in §1 above). If `sdd/tasks/index/<feature>.json`
+already exists (created by the migration script for older specs), append
+the new tasks to its `tasks[]` array — do NOT overwrite the header.
+
+**Index location helper:**
+```bash
+INDEX="sdd/tasks/index/<feature-slug>.json"
+mkdir -p "$(dirname "$INDEX")"
+```
+
 **Field clarification:**
 - `feature_id`: Formal Feature ID from the spec (e.g., `"FEAT-014"`).
 - `feature`: Kebab-case slug (e.g., `"videoreel-visual-changes"`).
 
-### 5. Commit Tasks and Index to `dev`
+### 5. Commit Tasks and Per-Spec Index to `<BASE>`
+
+> **CRITICAL — Only commit the per-spec index and the new task files. NEVER
+> commit unrelated changes.** Other files may be modified or unstaged in the
+> working directory — do NOT touch them. Follow the exact sequence below.
 
 ```bash
-git add sdd/tasks/.index.json
+# 1. Unstage everything first to ensure a clean staging area
+git reset HEAD
+
+# 2. Stage ONLY the per-spec index and new task files — NEVER use "git add ." or "git add -A"
+git add sdd/tasks/index/<feature-slug>.json
 git add sdd/tasks/active/TASK-*
+
+# 3. Verify ONLY task files are staged (nothing else)
+git diff --cached --name-only
+# Expected: sdd/tasks/index/<feature-slug>.json and sdd/tasks/active/TASK-*.md only
+# If ANY other files appear, run "git reset HEAD" and start over
+
+# 4. Commit
 git commit -m "sdd: add <N> tasks for FEAT-<ID> — <feature-name>"
 ```
 

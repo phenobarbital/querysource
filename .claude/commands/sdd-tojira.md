@@ -184,7 +184,7 @@ Default: `28800` (8h = 1 day) if no tasks exist.
 ```
 jira_create_issue(
     project_key="NAV",
-    summary="[FEAT-071] jira-oauth — OAuth 2.0 support for JiraToolkit",
+    summary="[FEAT-071] jira-oauth — OAuth 2.0 support for jiraDriver",
     issue_type="Story",
     description="<formatted description>",
     components="Nav-AI",
@@ -200,7 +200,7 @@ curl -s -u "$JIRA_USERNAME:$JIRA_API_TOKEN" \
   -d '{
     "fields": {
       "project": {"key": "NAV"},
-      "summary": "[FEAT-071] jira-oauth — OAuth 2.0 support for JiraToolkit",
+      "summary": "[FEAT-071] jira-oauth — OAuth 2.0 support for jiraDriver",
       "issuetype": {"name": "Story"},
       "description": {"type": "doc", "version": 1, "content": [...]},
       "components": [{"name": "Nav-AI"}],
@@ -272,7 +272,7 @@ If they do, only create the missing ones:
     NAV-8038 — [TASK-002] CredentialResolver abstraction
 
     Missing from Jira (will create):
-    TASK-003 — JiraToolkit OAuth integration
+    TASK-003 — jiraDriver OAuth integration
     TASK-004 — Redis token storage
 
     Proceed? (y/N)
@@ -322,7 +322,7 @@ grep -q "^\*\*Jira\*\*:" sdd/specs/<feature>.spec.md && echo "Already linked"
 
 If not present, add after the title:
 ```markdown
-# FEAT-071 — OAuth 2.0 support for JiraToolkit
+# FEAT-071 — OAuth 2.0 support for jiraDriver
 
 **Jira**: [NAV-8036](https://trocglobal.atlassian.net/browse/NAV-8036)
 **Status**: approved
@@ -346,9 +346,15 @@ Add Jira keys to each task entry in `sdd/tasks/.index.json`:
 ### 8. Commit Changes
 
 ```bash
+# CRITICAL: Unstage everything first — NEVER commit unrelated changes
+git reset HEAD
+# Stage ONLY the modified SDD files — NEVER use "git add ." or "git add -A"
 git add sdd/specs/<feature-name>.spec.md
 # If subtasks were created:
 git add sdd/tasks/.index.json
+# Verify ONLY the expected files are staged
+git diff --cached --name-only
+# If ANY unrelated files appear, run "git reset HEAD" and start over
 git commit -m "sdd: export FEAT-<ID> to Jira <JIRA_KEY>"
 ```
 
@@ -368,7 +374,7 @@ Skip commit if nothing changed (spec already had jira key, no new subtasks).
    Subtasks created:
      NAV-8037 — [TASK-001] OAuth callback handler [S/4h]
      NAV-8038 — [TASK-002] CredentialResolver abstraction [M/8h]
-     NAV-8039 — [TASK-003] JiraToolkit OAuth integration [M/8h]
+     NAV-8039 — [TASK-003] jiraDriver OAuth integration [M/8h]
      NAV-8040 — [TASK-004] Redis token storage [S/4h]
 
    Spec updated and committed.
@@ -416,7 +422,7 @@ The `jira:` metadata in the spec enables:
 
 ## Reference
 - Jira tool (MCP): `mcp_mcp-atlassian_jira_create_issue`
-- Jira tool (ai-parrot): `JiraToolkit.jira_create_issue()`
+- Jira tool (querysource): `jiraDriver.jira_create_issue()`
 - Spec template: `sdd/templates/spec.md`
 - Task index: `sdd/tasks/.index.json`
 - SDD methodology: `sdd/WORKFLOW.md`
