@@ -77,16 +77,21 @@ class ThreadSource(threading.Thread, ABC):
     def run(self) -> None:
         """Thread entry point.
 
-        Creates a new asyncio event loop, calls ``fetch()``, puts the result
-        into the shared queue, and handles any exceptions by storing them in
-        ``self.exc``.  The event loop is always closed in the ``finally``
-        block.
+        Creates a new asyncio event loop, calls ``fetch()``, and — if
+        ``fetch()`` returns a non-``None`` value — puts the result into the
+        shared queue.  Subclasses whose ``fetch()`` already writes to the
+        queue internally (e.g. :class:`ThreadQuery`) can return ``None`` to
+        skip the automatic queue-put step.
+
+        Exceptions are captured in ``self.exc``; the event loop is always
+        closed in the ``finally`` block.
         """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            df = loop.run_until_complete(self.fetch())
-            loop.run_until_complete(self._queue.put({self._name: df}))
+            result = loop.run_until_complete(self.fetch())
+            if result is not None:
+                loop.run_until_complete(self._queue.put({self._name: result}))
         except Exception as ex:  # noqa: BLE001
             self.exc = ex
         finally:
