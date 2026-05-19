@@ -92,5 +92,5 @@ class ThreadFile(ThreadSource):
         else:
             raise ValueError(f"Unsupported MIME type: {self._mime}")
 
-        df.infer_objects()
+        df = df.infer_objects()
         return df

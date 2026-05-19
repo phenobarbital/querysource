@@ -6,14 +6,13 @@ pandas DataFrame.
 
 Dependency: ``asyncdb`` (already a project dependency).
 """
+import asyncio
 import re
 
 import pandas as pd
 from aiohttp import web
 
 from .base import ThreadSource
-
-import asyncio
 
 # Driver alias normalisation map (matches ai-parrot TableSource pattern)
 DRIVER_ALIASES: dict[str, str] = {
@@ -95,6 +94,9 @@ class SourceTable(ThreadSource):
         if not self._filter:
             return ""
 
+        # Security: column names validated against SQL_IDENTIFIER_RE (alphanumeric + underscore).
+        # String values use SQL-standard single-quote escaping ('').
+        # Do not add new value types without careful security review.
         clauses: list[str] = []
         for col, val in self._filter.items():
             if not SQL_IDENTIFIER_RE.match(col):

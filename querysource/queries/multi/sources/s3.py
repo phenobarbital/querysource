@@ -6,8 +6,8 @@ Supports CSV, compressed CSV (.gz), and Excel (.xlsx / .xls) files.
 Optional dependency: ``aioboto3``.
 Install with: ``pip install querysource[s3]``
 """
+import asyncio
 import gzip
-import logging
 from io import BytesIO
 from pathlib import Path
 
@@ -16,10 +16,6 @@ from aiohttp import web
 
 from .base import ThreadSource
 from .file import excel_based
-
-import asyncio
-
-logger = logging.getLogger(__name__)
 
 # Warn if a downloaded file exceeds this size (100 MB).
 _SIZE_WARNING_BYTES = 100 * 1024 * 1024
@@ -82,7 +78,7 @@ class SourceS3(ThreadSource):
     def _parse_content(self, content: bytes, filename: str) -> pd.DataFrame:
         """Decompress (if needed) and parse bytes as a DataFrame."""
         if len(content) > _SIZE_WARNING_BYTES:
-            logger.warning(
+            self.logger.warning(
                 "SourceS3: downloaded %d bytes (%.1f MB) — consider streaming "
                 "for files larger than 100 MB.",
                 len(content),
@@ -125,7 +121,7 @@ class SourceS3(ThreadSource):
                 keep_default_na=False,
             )
 
-        df.infer_objects()
+        df = df.infer_objects()
         return df
 
     async def fetch(self) -> pd.DataFrame:

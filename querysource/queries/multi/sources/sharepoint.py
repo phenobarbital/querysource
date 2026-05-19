@@ -6,6 +6,7 @@ via the Microsoft Graph API and returns it as a pandas DataFrame.
 Optional dependencies: ``msgraph-sdk``, ``azure-identity``, ``httpx``.
 Install with: ``pip install querysource[sharepoint]``
 """
+import asyncio
 from io import BytesIO
 from pathlib import Path
 
@@ -14,8 +15,6 @@ from aiohttp import web
 
 from .base import ThreadSource
 from .file import excel_based
-
-import asyncio
 
 
 class SourceSharepoint(ThreadSource):
@@ -101,7 +100,7 @@ class SourceSharepoint(ThreadSource):
                 na_filter=True,
                 keep_default_na=False,
             )
-        df.infer_objects()
+        df = df.infer_objects()
         return df
 
     async def fetch(self) -> pd.DataFrame:
@@ -128,92 +127,98 @@ class SourceSharepoint(ThreadSource):
                 "pip install httpx"
             ) from exc
 
+        if not self._tenant_name or self._tenant_name == 'SHAREPOINT_TENANT_NAME':
+            raise ValueError(
+                "SharePoint tenant_name must be configured (via credentials or "
+                "navconfig SHAREPOINT_TENANT_NAME)."
+            )
+
         credential = ClientSecretCredential(
             self._tenant_id,
             self._client_id,
             self._client_secret,
         )
-        scopes = ["https://graph.microsoft.com/.default"]
-        client = GraphServiceClient(credentials=credential, scopes=scopes)
+        try:
+            scopes = ["https://graph.microsoft.com/.default"]
+            client = GraphServiceClient(credentials=credential, scopes=scopes)
 
-        # Resolve the site ID
-        site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
-        if site_host and self._site:
-            site = await client.sites.by_site_id(
-                f"{site_host}:/sites/{self._site}"
-            ).get()
-        else:
-            raise RuntimeError(
-                "SharePoint tenant_name and site must be specified to locate the site."
+            # Resolve the site ID
+            site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
+            if site_host and self._site:
+                site = await client.sites.by_site_id(
+                    f"{site_host}:/sites/{self._site}"
+                ).get()
+            else:
+                raise RuntimeError(
+                    "SharePoint tenant_name and site must be specified to locate the site."
+                )
+
+            site_id = site.id
+
+            # Get drives (document libraries) for the site
+            drives_response = await client.sites.by_site_id(site_id).drives.get()
+            drives = drives_response.value if drives_response else []
+
+            # Parse the directory: split on "/" to get library name and subfolder
+            parts = self._directory.split('/', 1) if self._directory else []
+            library_name = parts[0] if parts else 'Documents'
+            subfolder = parts[1] if len(parts) > 1 else ''
+
+            # Find the matching drive (case-insensitive)
+            drive = None
+            for d in drives:
+                if d.name and d.name.lower() == library_name.lower():
+                    drive = d
+                    break
+            if drive is None and drives:
+                drive = drives[0]  # fallback to first drive
+
+            if drive is None:
+                raise RuntimeError(
+                    f"No document library found for site '{self._site}' "
+                    f"matching '{library_name}'."
+                )
+
+            drive_id = drive.id
+
+            # Navigate to the subfolder and find the file
+            if subfolder:
+                path_encoded = subfolder.rstrip('/')
+                item = await (
+                    client.drives.by_drive_id(drive_id)
+                    .items.by_drive_item_id(f"root:/{path_encoded}/{self._filename}:")
+                    .get()
+                )
+            else:
+                item = await (
+                    client.drives.by_drive_id(drive_id)
+                    .items.by_drive_item_id(f"root:/{self._filename}:")
+                    .get()
+                )
+
+            if item is None or not hasattr(item, 'id'):
+                raise RuntimeError(
+                    f"File '{self._filename}' not found in SharePoint directory "
+                    f"'{self._directory}'."
+                )
+
+            # Get the download URL from the item's additional data
+            download_url = (
+                item.additional_data.get('@microsoft.graph.downloadUrl')
+                if item.additional_data
+                else None
             )
+            if not download_url:
+                raise RuntimeError(
+                    f"Could not obtain download URL for file '{self._filename}'."
+                )
 
-        site_id = site.id
+            # Download the file content using httpx
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                response = await http_client.get(download_url)
+                response.raise_for_status()
+                content = response.content
 
-        # Get drives (document libraries) for the site
-        drives_response = await client.sites.by_site_id(site_id).drives.get()
-        drives = drives_response.value if drives_response else []
-
-        # Parse the directory: split on "/" to get library name and subfolder
-        parts = self._directory.split('/', 1) if self._directory else []
-        library_name = parts[0] if parts else 'Documents'
-        subfolder = parts[1] if len(parts) > 1 else ''
-
-        # Find the matching drive (case-insensitive)
-        drive = None
-        for d in drives:
-            if d.name and d.name.lower() == library_name.lower():
-                drive = d
-                break
-        if drive is None and drives:
-            drive = drives[0]  # fallback to first drive
-
-        if drive is None:
-            raise RuntimeError(
-                f"No document library found for site '{self._site}' "
-                f"matching '{library_name}'."
-            )
-
-        drive_id = drive.id
-
-        # Navigate to the subfolder and find the file
-        if subfolder:
-            path_encoded = subfolder.rstrip('/')
-            item = await (
-                client.drives.by_drive_id(drive_id)
-                .items.by_drive_item_id(f"root:/{path_encoded}/{self._filename}:")
-                .get()
-            )
-        else:
-            item = await (
-                client.drives.by_drive_id(drive_id)
-                .items.by_drive_item_id(f"root:/{self._filename}:")
-                .get()
-            )
-
-        if item is None or not hasattr(item, 'id'):
-            raise RuntimeError(
-                f"File '{self._filename}' not found in SharePoint directory "
-                f"'{self._directory}'."
-            )
-
-        # Get the download URL from the item's additional data
-        download_url = (
-            item.additional_data.get('@microsoft.graph.downloadUrl')
-            if item.additional_data
-            else None
-        )
-        if not download_url:
-            raise RuntimeError(
-                f"Could not obtain download URL for file '{self._filename}'."
-            )
-
-        # Download the file content using httpx
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            response = await http_client.get(download_url)
-            response.raise_for_status()
-            content = response.content
-
-        # Clean up the credential
-        await credential.close()
-
-        return self._parse_file_content(content)
+            return self._parse_file_content(content)
+        finally:
+            await credential.close()

@@ -134,6 +134,16 @@ vectors = [
     "gensim>=4.4.0",
 ]
 
+sharepoint = [
+    "msgraph-sdk>=1.0",
+    "azure-identity>=1.0",
+    "httpx>=0.24",
+]
+
+s3 = [
+    "aioboto3>=12.0",
+]
+
 dev = [
     "pytest>=5.4.0",
     "coverage",

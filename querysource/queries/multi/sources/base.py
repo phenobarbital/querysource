@@ -1,6 +1,8 @@
 import asyncio
+import logging
 import threading
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import pandas as pd
 from aiohttp import web
@@ -26,10 +28,11 @@ class ThreadSource(threading.Thread, ABC):
     ) -> None:
         super().__init__()
         self._queue = queue
-        self.exc: Exception | None = None
+        self.exc: Optional[Exception] = None
         self._name = name
         self._options = options
         self._request = request
+        self.logger = logging.getLogger(__name__)
 
     def resolve_credential(self, key: str, value: str) -> str:
         """Resolve a credential value via navconfig or return the literal.
@@ -52,7 +55,7 @@ class ThreadSource(threading.Thread, ABC):
             try:
                 from navconfig import config  # noqa: PLC0415
                 resolved = config.get(value)
-                if resolved is not None:
+                if resolved:
                     return resolved
             except ImportError:
                 pass
@@ -103,6 +106,7 @@ class ThreadSource(threading.Thread, ABC):
             if result is not None:
                 loop.run_until_complete(self._queue.put({self._name: result}))
         except Exception as ex:  # noqa: BLE001
+            self.logger.error("ThreadSource %r failed: %s", self._name, ex, exc_info=True)
             self.exc = ex
         finally:
             try:

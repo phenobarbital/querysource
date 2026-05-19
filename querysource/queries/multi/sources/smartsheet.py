@@ -5,7 +5,7 @@ and parses it into a pandas DataFrame.
 
 Dependencies: ``aiohttp`` (already a project dependency).
 """
-import ssl
+import asyncio
 from io import BytesIO
 
 import aiohttp
@@ -13,8 +13,6 @@ import pandas as pd
 from aiohttp import web
 
 from .base import ThreadSource
-
-import asyncio
 
 
 class SourceSmartSheet(ThreadSource):
@@ -76,15 +74,9 @@ class SourceSmartSheet(ThreadSource):
             "Accept": "application/vnd.ms-excel",
         }
 
-        # Build a TLS 1.2+ SSL context (matching the flowtask pattern).
-        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers=headers, ssl=ssl_ctx) as resp:
+            async with session.get(url, headers=headers) as resp:
                 if resp.status == 429:
                     raise RuntimeError("SmartSheet API rate limit exceeded (HTTP 429).")
                 if resp.status == 401:
@@ -96,5 +88,5 @@ class SourceSmartSheet(ThreadSource):
                 content = await resp.read()
 
         df = pd.read_excel(BytesIO(content), engine="openpyxl")
-        df.infer_objects()
+        df = df.infer_objects()
         return df

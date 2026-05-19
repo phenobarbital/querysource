@@ -6,7 +6,7 @@ from .sharepoint import SourceSharepoint
 from .smartsheet import SourceSmartSheet
 from .table import SourceTable
 
-__all__ = (
+__all__ = [
     "ThreadSource",
     "ThreadQuery",
     "ThreadFile",
@@ -15,7 +15,7 @@ __all__ = (
     "SourceS3",
     "SourceTable",
     "SOURCE_REGISTRY",
-)
+]
 
 #: Registry mapping source type names (as used in YAML config) to their classes.
 #: Used by :class:`~querysource.queries.multi.MultiQS` for dynamic dispatch.

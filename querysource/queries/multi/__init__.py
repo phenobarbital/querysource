@@ -122,11 +122,12 @@ class MultiQS(BaseQuery):
                     # (e.g. plain SQL) — fall back to single-query mode.
                     slug_data = None
             if isinstance(slug_data, dict) and (
-                'queries' in slug_data or 'files' in slug_data
+                'queries' in slug_data or 'files' in slug_data or 'sources' in slug_data
             ):
                 self._options = slug_data
                 self._queries = slug_data.pop('queries', {})
                 self._files = slug_data.pop('files', {})
+                self._sources = slug_data.pop('sources', [])
                 # TODO: making replacements based on POST data.
             else:
                 # Single-query slug: wrap it for the multi-query executor
@@ -175,14 +176,23 @@ class MultiQS(BaseQuery):
                             f"Unknown source type: {source_type!r}. "
                             f"Available: {list(SOURCE_REGISTRY.keys())}"
                         )
-                    t = cls(source_type, config, self._request, self._queue)
+                    idx = sum(
+                        1 for k in tasks
+                        if k == source_type or k.startswith(f"{source_type}_")
+                    )
+                    name = source_type if idx == 0 else f"{source_type}_{idx}"
+                    t = cls(name, config, self._request, self._queue)
                     t.start()
-                    tasks[source_type] = t
+                    tasks[name] = t
 
         ## then, run all jobs:
         try:
             for t in tasks.values():
-                t.join()
+                t.join(timeout=30)
+                if t.is_alive():
+                    raise self.Error(
+                        message=f"Source {t.slug!r} timed out after 30 seconds.",
+                    )
                 if t.exc:
                     ## raise exception for this Query
                     if isinstance(t.exc, ParserError):
@@ -209,7 +219,7 @@ class MultiQS(BaseQuery):
                             exception=t.exc
                         )
             result = {}
-        except (QueryException, DriverError) as ex:
+        except (QueryException, DriverError):
             raise
         except Exception as ex:
             raise self.Error(
@@ -331,7 +341,7 @@ class MultiQS(BaseQuery):
                                 obj = clobj(data=result, **component)
                                 async with obj as o:
                                     result = await o.run()
-                            except ImportError as exc:
+                            except ImportError:
                                 raise
                             except DataNotFound as ex:
                                 raise self.Error(

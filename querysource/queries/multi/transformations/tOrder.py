@@ -2,8 +2,7 @@ from typing import Union
 from pandas import DataFrame
 from ....exceptions import (
     DriverError,
-    QueryException,
-    DataNotFound
+    QueryException
 )
 from .tPandas import tPandas
 
