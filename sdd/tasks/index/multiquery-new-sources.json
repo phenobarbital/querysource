@@ -175,7 +175,7 @@
       "feature_id": "FEAT-093",
       "feature": "multiquery-new-sources",
       "spec": "sdd/specs/multiquery-new-sources.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -191,8 +191,8 @@
       "parallelism_notes": "Updates sources/__init__.py to import all modules — must run after all source classes exist",
       "assigned_to": null,
       "started_at": "2026-05-19T21:31:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-652-source-registry-exports.md"
+      "completed_at": "2026-05-19T21:41:20+00:00",
+      "file": "sdd/tasks/completed/TASK-652-source-registry-exports.md"
     }
   ]
 }
