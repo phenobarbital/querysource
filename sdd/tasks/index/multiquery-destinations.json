@@ -137,7 +137,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -147,8 +147,8 @@
       "parallelism_notes": "Only needs the registry (TASK-653). Can run in parallel with individual destinations since it modifies different files (multi/__init__.py and handlers/multi.py)",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-659-output-dispatch-integration.md"
+      "completed_at": "2026-05-19T22:04:52+00:00",
+      "file": "sdd/tasks/completed/TASK-659-output-dispatch-integration.md"
     }
   ]
 }
