@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-094
 **Date**: 2026-05-19
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 6.0.0
 
 ---
@@ -546,12 +546,12 @@ Output:
 
 ## 8. Open Questions
 
-- [ ] Should `ToSharepoint` support both Excel and CSV output formats based on filename extension, or always default to Excel? — *Owner: Jesus*
-- [ ] For the `Table` destination, should auto-table-creation use SQLAlchemy DDL (via the existing PgOutput reflection) or raw CREATE TABLE statements via asyncdb? — *Owner: Jesus*
-- [ ] Should `DWH` be a separate destination class or a mode/flag on the `Table` destination (since both write DataFrames to databases)? — *Owner: Jesus*
-- [ ] What is the desired behavior when a destination fails mid-pipeline with multiple destinations? Should subsequent destinations still execute, or should the pipeline abort? — *Owner: Jesus*
-- [ ] Should credentials in the `Table` destination accept a `dsn` string as an alternative to individual driver/host/port params? — *Owner: Jesus*
-- [ ] For `ToS3`, should the output format (CSV, Parquet, Excel) be inferred from the filename extension or require an explicit `format` parameter? — *Owner: Jesus*
+- [x] Should `ToSharepoint` support both Excel and CSV output formats based on filename extension, or always default to Excel? — *Owner: Jesus*: both based on filename extension.
+- [ ] For the `Table` destination, should auto-table-creation use SQLAlchemy DDL (via the existing PgOutput reflection) or raw CREATE TABLE statements via asyncdb? — *Owner: Jesus*: statements via AsyncDB, because we are expecting using Table with other drivers as DocumentDB or BigQuery, auto-table-creation need to be agnostic to databse driver.
+- [ ] Should `DWH` be a separate destination class or a mode/flag on the `Table` destination (since both write DataFrames to databases)? — *Owner: Jesus*: Yes
+- [ ] What is the desired behavior when a destination fails mid-pipeline with multiple destinations? Should subsequent destinations still execute, or should the pipeline abort? — *Owner: Jesus*: still execute.
+- [ ] Should credentials in the `Table` destination accept a `dsn` string as an alternative to individual driver/host/port params? — *Owner: Jesus*: Yes.
+- [ ] For `ToS3`, should the output format (CSV, Parquet, Excel) be inferred from the filename extension or require an explicit `format` parameter? — *Owner: Jesus*: format can be provided, infer from filename if missing.
 
 ---
 
