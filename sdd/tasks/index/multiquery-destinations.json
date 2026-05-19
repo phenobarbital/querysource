@@ -52,7 +52,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Independent of ToSharepoint, Table, and DWH — each destination touches only its own file + registry entry",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-655-to-s3-destination.md"
+      "completed_at": "2026-05-19T22:00:05+00:00",
+      "file": "sdd/tasks/completed/TASK-655-to-s3-destination.md"
     },
     {
       "id": "TASK-656",
