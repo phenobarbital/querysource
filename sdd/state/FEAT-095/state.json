@@ -1,0 +1,58 @@
+{
+  "feat_id": "FEAT-095",
+  "title": "MultiQuery Documentation System",
+  "type": "feature",
+  "mode": "enrichment",
+  "base_branch": "dev",
+  "started_at": "2026-05-20T00:00:00Z",
+  "updated_at": "2026-05-20T00:10:00Z",
+  "phase": "synthesis_complete",
+  "budget": {
+    "profile": "default",
+    "files_read": 35,
+    "grep_calls": 20,
+    "git_calls": 5,
+    "depth": 2,
+    "wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 32,
+    "grep_calls": 18,
+    "git_calls": 3,
+    "depth_reached": 2,
+    "wall_seconds": 280
+  },
+  "truncated": false,
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "summary_oneline": "MultiQuery documentation system with base class normalization, CLI generation, HTTP API for listing and validation"
+  },
+  "phases": {
+    "plan": {
+      "approved_by_user": true
+    },
+    "research": {
+      "completed_at": "2026-05-20T00:08:00Z",
+      "duration_seconds": 240,
+      "files_read": 32,
+      "findings_count": 5,
+      "queries_skipped": 0
+    },
+    "synthesis": {
+      "completed_at": "2026-05-20T00:10:00Z",
+      "overall_confidence": "high",
+      "claims_high": 5,
+      "claims_medium": 2,
+      "claims_low": 0,
+      "unknowns_count": 2
+    },
+    "qa": {
+      "status": "pending"
+    },
+    "output": {
+      "proposal_path": null,
+      "commit_sha": null
+    }
+  }
+}
