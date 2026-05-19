@@ -52,7 +52,7 @@
       "feature_id": "FEAT-093",
       "feature": "multiquery-new-sources",
       "spec": "sdd/specs/multiquery-new-sources.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Modifies query.py only — can run in parallel with TASK-645 (file.py) and TASK-647–650 (new files)",
       "assigned_to": null,
       "started_at": "2026-05-19T21:31:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-646-refactor-thread-query.md"
+      "completed_at": "2026-05-19T21:36:18+00:00",
+      "file": "sdd/tasks/completed/TASK-646-refactor-thread-query.md"
     },
     {
       "id": "TASK-647",
