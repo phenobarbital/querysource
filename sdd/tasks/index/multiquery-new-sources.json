@@ -14,7 +14,7 @@
       "feature_id": "FEAT-093",
       "feature": "multiquery-new-sources",
       "spec": "sdd/specs/multiquery-new-sources.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Foundation task — all other tasks depend on this base class",
       "assigned_to": null,
       "started_at": "2026-05-19T21:31:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-644-thread-source-base.md"
+      "completed_at": "2026-05-19T21:33:50+00:00",
+      "file": "sdd/tasks/completed/TASK-644-thread-source-base.md"
     },
     {
       "id": "TASK-645",
