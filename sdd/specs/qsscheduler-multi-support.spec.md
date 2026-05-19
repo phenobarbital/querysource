@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-092
 **Date**: 2026-05-20
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.x
 
 > Predecessor specs: FEAT-008 (`querysource-scheduler.spec.md`) introduced
@@ -611,31 +611,31 @@ class QueryModel(Model):                                       # line 48
 > Resolved (`[x]`) items are pinned for audit; unresolved (`[ ]`) items
 > are deferrable to implementation. None of these block the spec.
 
-- [ ] Should `_load_scheduled_queries` log an `INFO`/`WARN` line when a
+- [x] Should `_load_scheduled_queries` log an `INFO`/`WARN` line when a
       `provider='multi'` row has `query_raw` that does not parse as
       multi-query JSON, even though MultiQS will silently fall back to
       single-query mode? Round-2 chose "silent fallback"; a single
       info-level log per startup is cheap insurance and would not
-      change behavior. — *Owner: Jesus Lara*
-- [ ] Where should `attributes.scheduler.output` be documented as
+      change behavior. — *Owner: Jesus Lara*: yes.
+- [x] Where should `attributes.scheduler.output` be documented as
       reserved-but-unused so future implementers don't re-litigate its
       shape? Candidates: the QSScheduler README/runbook, a docstring
       on `scheduled_multiqs_job`, or the module docstring at the top
       of `querysource/scheduler/scheduler.py`. Resolving this picks
-      where Module 4 (§3) actually writes. — *Owner: Jesus Lara*
-- [ ] Should there be a dedicated smoke-test fixture
+      where Module 4 (§3) actually writes. — *Owner: Jesus Lara*: three, README + docstring + module docstring.
+- [x] Should there be a dedicated smoke-test fixture
       (`tests/scheduler/test_multi_routing.py`) that seeds a
       `provider='multi'` row in a test schema and asserts both the
       routing decision AND that `_load_cache_refresh_jobs` skipped it?
       Strongly recommended; deferred unless we hit a gap in the unit
-      tests of §4. — *Owner: Jesus Lara*
-- [ ] Should v1 of `scheduled_multiqs_job` accept an optional
+      tests of §4. — *Owner: Jesus Lara*: Ok
+- [x] Should v1 of `scheduled_multiqs_job` accept an optional
       `conditions` kwarg (so a single multi-slug can be scheduled
       multiple times with different conditions, mirroring what
       `QS(slug, conditions={...})` allows for single queries)? The
       brief said "v1 has no conditions"; the current schedule schema
       has no place to specify per-job conditions anyway. Decide before
-      tasks for any v2 expansion. — *Owner: Jesus Lara*
+      tasks for any v2 expansion. — *Owner: Jesus Lara*: be a v2 expansion, but add the suggestions as TODO in docstring.
 
 ---
 
