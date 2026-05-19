@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-093
 **Date**: 2026-05-19
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 6.0.0
 
 ---
@@ -510,10 +510,10 @@ class ThreadFile(threading.Thread):
 
 > Questions that must be resolved before or during implementation.
 
-- [ ] Should optional dependencies (msgraph-sdk, aioboto3) be listed as extras in pyproject.toml (e.g., `pip install querysource[sharepoint]`)? — *Owner: Jesus Lara*
-- [ ] Should `SourceSharepoint` support site-relative URLs in addition to library/directory paths? — *Owner: Jesus Lara*
-- [ ] For `SourceTable`, should we support custom SQL in addition to `table + filter`? (e.g., a `query` key with raw SQL) — *Owner: Jesus Lara*
-- [ ] Should there be a timeout per source (e.g., SharePoint downloads can be slow)? If so, what's the default? — *Owner: Jesus Lara*
+- [ ] Should optional dependencies (msgraph-sdk, aioboto3) be listed as extras in pyproject.toml (e.g., `pip install querysource[sharepoint]`)? — *Owner: Jesus Lara*: yes
+- [ ] Should `SourceSharepoint` support site-relative URLs in addition to library/directory paths? — *Owner: Jesus Lara*: yes
+- [ ] For `SourceTable`, should we support custom SQL in addition to `table + filter`? (e.g., a `query` key with raw SQL) — *Owner: Jesus Lara*: no, ThreadQuery already do that.
+- [ ] Should there be a timeout per source (e.g., SharePoint downloads can be slow)? If so, what's the default? — *Owner: Jesus Lara*: 30 seconds timeout.
 
 ---
 
