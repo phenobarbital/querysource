@@ -340,13 +340,21 @@ class QueryHandler(AbstractHandler):
                 }
             )
         if isinstance(data, dict):
-            if 'Output' in data:
+            if 'Output' in options:
                 ## Optionally saving result to destination (registry-based dispatch)
                 for step in options['Output']:
                     for step_name, component in step.items():
-                        destination_cls = get_destination(step_name)
-                        obj = destination_cls(data=result, **component)
-                        result = await obj.run()
+                        try:
+                            destination_cls = get_destination(step_name)
+                            obj = destination_cls(data=result, **component)
+                            result = await obj.run()
+                        except Exception as dest_err:
+                            self.logger.error(
+                                "QueryHandler: output destination '%s' failed: %s",
+                                step_name,
+                                dest_err,
+                            )
+                            # Per spec: continue to next destination on failure
         ### Step 6: passing Result to DataOutput
         try:
             if result is None or isinstance(result, DataFrame) and result.empty:

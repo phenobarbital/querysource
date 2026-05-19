@@ -155,6 +155,18 @@ class TableDestination(AbstractDestination):
     def constraint(self):
         return None
 
+    def get_schema(self) -> str:
+        return self._schema
+
+    def primary_keys(self) -> list:
+        return self._pk
+
+    def constraints(self):
+        return None
+
+    def foreign_keys(self):
+        return None
+
     # ------------------------------------------------------------------
     # Write helpers
     # ------------------------------------------------------------------
@@ -235,7 +247,8 @@ class TableDestination(AbstractDestination):
                 # Clean NA strings
                 u = df.select_dtypes(include=["object", "string"])
                 df[u.columns] = u.replace(["<NA>", "None"], None)
-                df.to_sql(
+                await asyncio.to_thread(
+                    df.to_sql,
                     name=self._table,
                     con=engine.engine(),
                     **options,

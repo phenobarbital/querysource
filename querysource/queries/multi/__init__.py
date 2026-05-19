@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 from aiohttp import web
 from ...exceptions import (
@@ -193,7 +194,7 @@ class MultiQS(BaseQuery):
                             exception=t.exc
                         )
             result = {}
-        except (QueryException, DriverError) as ex:
+        except (QueryException, DriverError):
             raise
         except Exception as ex:
             raise self.Error(
@@ -315,7 +316,7 @@ class MultiQS(BaseQuery):
                                 obj = clobj(data=result, **component)
                                 async with obj as o:
                                     result = await o.run()
-                            except ImportError as exc:
+                            except ImportError:
                                 raise
                             except DataNotFound as ex:
                                 raise self.Error(
@@ -379,9 +380,17 @@ class MultiQS(BaseQuery):
         if _output:
             for step in _output:
                 for step_name, component in step.items():
-                    destination_cls = get_destination(step_name)
-                    obj = destination_cls(data=result, **component)
-                    result = await obj.run()
+                    try:
+                        destination_cls = get_destination(step_name)
+                        obj = destination_cls(data=result, **component)
+                        result = await obj.run()
+                    except Exception as dest_err:
+                        logging.error(
+                            "MultiQS: output destination '%s' failed: %s",
+                            step_name,
+                            dest_err,
+                        )
+                        # Per spec: continue to next destination on failure
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"

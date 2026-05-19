@@ -11,7 +11,7 @@ from navconfig.logging import logging
 
 
 # Pattern to detect navconfig variable names (ALL_CAPS_SNAKE_CASE)
-_NAVCONFIG_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]+$')
+_NAVCONFIG_PATTERN = re.compile(r'^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$')
 
 
 class AbstractDestination(ABC):

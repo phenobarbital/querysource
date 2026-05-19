@@ -138,29 +138,34 @@ class ToSharepoint(AbstractDestination):
 
     async def _resolve_site_id(self, graph_client) -> str:
         """Return the Graph site-id for :attr:`_site`."""
-        # Use hostname:path format for site lookup
-        # e.g. "contoso.sharepoint.com:/sites/MySite"
-        # We derive the tenant hostname from the tenant_id (GUID) by looking at
-        # the token — but for client-creds we don't have the tenant name here.
-        # In practice callers provide `site` as the display name and we do a
-        # search or use the well-known /sites/{site} path.
+        # Primary lookup: tenant:path format
         try:
             site_path = f"root:/sites/{self._site}:"
             site = await graph_client.sites.by_site_id(site_path).get()
-            return site.id
+            if site and site.id:
+                return site.id
         except Exception:
-            # Fallback: search by name
-            try:
-                result = await graph_client.sites.with_url(
-                    f"https://graph.microsoft.com/v1.0/sites?search={self._site}"
-                ).get()
-                if result and result.value:
-                    return result.value[0].id
-            except Exception:
-                pass
-            raise OutputError(
-                f"ToSharepoint: could not resolve SharePoint site '{self._site}'."
+            pass
+
+        # Fallback: search by display name using $search query parameter
+        try:
+            from msgraph.generated.sites.sites_request_builder import SitesRequestBuilder
+            from kiota_abstractions.base_request_configuration import RequestConfiguration
+
+            query_params = SitesRequestBuilder.SitesRequestBuilderGetQueryParameters(
+                search=self._site
             )
+            config = RequestConfiguration(query_parameters=query_params)
+            result = await graph_client.sites.get(request_configuration=config)
+            if result and result.value:
+                return result.value[0].id
+        except Exception:
+            pass
+
+        raise OutputError(
+            f"ToSharepoint: could not resolve SharePoint site '{self._site}'. "
+            f"Verify the site name and credentials."
+        )
 
     async def _get_drive_id(self, graph_client, site_id: str) -> str:
         """Return the document library drive-id for *site_id*."""
@@ -172,6 +177,11 @@ class ToSharepoint(AbstractDestination):
                     if drive.name.lower() in ("documents", "shared documents"):
                         return drive.id
                 return drives.value[0].id
+            raise OutputError(
+                f"ToSharepoint: no document libraries found for site '{site_id}'."
+            )
+        except OutputError:
+            raise
         except Exception as err:
             raise OutputError(
                 f"ToSharepoint: failed to resolve document library: {err}"
@@ -343,59 +353,52 @@ class ToSharepoint(AbstractDestination):
         """
         graph_client = self._build_graph_client()
 
-        try:
-            site_id = await self._resolve_site_id(graph_client)
-            drive_id = await self._get_drive_id(graph_client, site_id)
+        site_id = await self._resolve_site_id(graph_client)
+        drive_id = await self._get_drive_id(graph_client, site_id)
 
-            # Parse directory: first segment is the library name, rest is the path
-            parts = self._directory.split("/", 1)
-            library_part = parts[0]
-            path_part = parts[1] if len(parts) > 1 else ""
+        # Parse directory: first segment is the library name, rest is the path
+        parts = self._directory.split("/", 1)
+        library_part = parts[0]
+        path_part = parts[1] if len(parts) > 1 else ""
 
-            # Find the specific library drive if name was given
-            if library_part:
-                try:
-                    drives = await graph_client.sites.by_site_id(site_id).drives.get()
-                    for drive in (drives.value or []):
-                        if drive.name.lower() == library_part.lower() or (
-                            library_part.lower() == "shared documents"
-                            and drive.name.lower() == "documents"
-                        ):
-                            drive_id = drive.id
-                            break
-                    else:
-                        path_part = self._directory  # fallback: treat whole dir as path
-                except Exception:
-                    path_part = self._directory
-
-            parent_id = await self._ensure_folder(graph_client, drive_id, path_part)
-
-            if len(content) <= _SMALL_FILE_THRESHOLD:
-                self.logger.info(
-                    "ToSharepoint: small-file upload (%d bytes) → %s/%s",
-                    len(content),
-                    self._directory,
-                    filename,
-                )
-                await self._upload_bytes_small(
-                    graph_client, drive_id, parent_id, filename, content
-                )
-            else:
-                self.logger.info(
-                    "ToSharepoint: large-file upload (%d bytes) → %s/%s",
-                    len(content),
-                    self._directory,
-                    filename,
-                )
-                await self._upload_bytes_large(
-                    graph_client, drive_id, parent_id, filename, content
-                )
-        finally:
-            # GraphServiceClient has no explicit close, but clean up adapter
+        # Find the specific library drive if name was given
+        if library_part:
             try:
-                await graph_client._request_adapter.base_url  # no-op, just reference
+                drives = await graph_client.sites.by_site_id(site_id).drives.get()
+                for drive in (drives.value or []):
+                    if drive.name.lower() == library_part.lower() or (
+                        library_part.lower() == "shared documents"
+                        and drive.name.lower() == "documents"
+                    ):
+                        drive_id = drive.id
+                        break
+                else:
+                    path_part = self._directory  # fallback: treat whole dir as path
             except Exception:
-                pass
+                path_part = self._directory
+
+        parent_id = await self._ensure_folder(graph_client, drive_id, path_part)
+
+        if len(content) <= _SMALL_FILE_THRESHOLD:
+            self.logger.info(
+                "ToSharepoint: small-file upload (%d bytes) → %s/%s",
+                len(content),
+                self._directory,
+                filename,
+            )
+            await self._upload_bytes_small(
+                graph_client, drive_id, parent_id, filename, content
+            )
+        else:
+            self.logger.info(
+                "ToSharepoint: large-file upload (%d bytes) → %s/%s",
+                len(content),
+                self._directory,
+                filename,
+            )
+            await self._upload_bytes_large(
+                graph_client, drive_id, parent_id, filename, content
+            )
 
     # ------------------------------------------------------------------
     # AbstractDestination interface

@@ -169,18 +169,14 @@ class TestToS3:
             )
         assert dest._bucket == "my-bucket"
 
-    def test_missing_bucket_raises_on_upload(self, sample_df):
+    @pytest.mark.asyncio
+    async def test_missing_bucket_raises_on_upload(self, sample_df):
         """Missing bucket raises OutputError during upload."""
         from querysource.exceptions import OutputError
-
-        async def _run():
-            dest = ToS3(
-                data=sample_df,
-                credentials={},
-                destination={"file": "f.csv"},
-            )
-            await dest._upload_to_s3(b"data", "key")
-
-        import asyncio
+        dest = ToS3(
+            data=sample_df,
+            credentials={},
+            destination={"file": "f.csv"},
+        )
         with pytest.raises(OutputError, match="bucket"):
-            asyncio.get_event_loop().run_until_complete(_run())
+            await dest._upload_to_s3(b"data", "key")

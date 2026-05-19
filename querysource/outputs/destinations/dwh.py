@@ -179,6 +179,18 @@ class DWHDestination(AbstractDestination):
     def constraint(self):
         return None
 
+    def get_schema(self) -> str:
+        return self._schema
+
+    def primary_keys(self) -> list:
+        return self._pk
+
+    def constraints(self):
+        return None
+
+    def foreign_keys(self):
+        return None
+
     # -----------------------------------------------------------------------
     # DocumentDB write
     # -----------------------------------------------------------------------
@@ -297,7 +309,7 @@ class DWHDestination(AbstractDestination):
 
         try:
             async with session.resource("dynamodb") as dynamodb:
-                table = await dynamodb.Table(self._table)
+                table = dynamodb.Table(self._table)
 
                 if self._method == "truncate":
                     await self._dynamo_truncate(table, self._pk)
@@ -415,17 +427,21 @@ def _clean_dynamo_record(record: dict) -> dict:
     Convert float values in *record* to :class:`~decimal.Decimal` so they are
     accepted by DynamoDB.  DynamoDB's Python SDK rejects raw ``float`` values.
 
+    NaN and None values are replaced with empty string ``""`` since DynamoDB
+    cannot store NULL or NaN in item attributes.
+
     :param record: Dict record from ``DataFrame.to_dict(orient='records')``.
     :returns: Cleaned dict with floats converted to Decimal.
     """
+    import math
     from decimal import Decimal
     cleaned: dict = {}
     for k, v in record.items():
-        if isinstance(v, float):
-            cleaned[k] = Decimal(str(v))
-        elif v is None or (isinstance(v, float) and v != v):  # NaN check
-            # DynamoDB cannot store None/NULL in attributes; skip or use empty str
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            # DynamoDB cannot store NULL or NaN
             cleaned[k] = ""
+        elif isinstance(v, float):
+            cleaned[k] = Decimal(str(v))
         else:
             cleaned[k] = v
     return cleaned

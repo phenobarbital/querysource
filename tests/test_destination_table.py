@@ -171,3 +171,53 @@ class TestTableDestination:
         for alias in DRIVER_MAP:
             dest = TableDestination(data=df, driver=alias, schema="s", table="t")
             assert dest._normalized_driver in ("postgresql", "mysql", "bigquery")
+
+
+class TestTableDestinationParentProtocol:
+    """Verify parent-protocol methods required by AbstractOutput engines."""
+
+    def test_get_schema_returns_schema(self, sample_df, pg_table_config):
+        dest = TableDestination(data=sample_df, **pg_table_config)
+        assert dest.get_schema() == "troc"
+
+    def test_primary_keys_returns_pk_list(self, sample_df, pg_table_config):
+        dest = TableDestination(data=sample_df, **pg_table_config)
+        assert dest.primary_keys() == ["store_id"]
+
+    def test_constraints_returns_none(self, sample_df, pg_table_config):
+        dest = TableDestination(data=sample_df, **pg_table_config)
+        assert dest.constraints() is None
+
+    def test_foreign_keys_returns_none(self, sample_df, pg_table_config):
+        dest = TableDestination(data=sample_df, **pg_table_config)
+        assert dest.foreign_keys() is None
+
+    @pytest.mark.asyncio
+    async def test_write_to_table_calls_to_sql_for_sqlalchemy_engine(self, sample_df, pg_table_config):
+        """_write_to_table calls df.to_sql with engine.db_upsert as method for non-external engines."""
+        dest = TableDestination(data=sample_df, **pg_table_config)
+
+        mock_engine = MagicMock()
+        mock_engine.is_external = False
+        mock_engine.engine.return_value = MagicMock()  # SQLAlchemy engine
+        mock_engine.db_upsert = MagicMock()
+        mock_engine.columns = []
+
+        to_sql_calls = []
+
+        def fake_to_sql(name, con, **kwargs):
+            to_sql_calls.append({
+                "name": name,
+                "method": kwargs.get("method"),
+                "if_exists": kwargs.get("if_exists"),
+                "schema": kwargs.get("schema"),
+            })
+
+        with patch.object(sample_df, "to_sql", side_effect=fake_to_sql):
+            import asyncio as _asyncio
+            await dest._write_to_table(sample_df, mock_engine)
+
+        assert len(to_sql_calls) == 1
+        assert to_sql_calls[0]["name"] == "stores"
+        assert to_sql_calls[0]["method"] is mock_engine.db_upsert
+        assert to_sql_calls[0]["schema"] == "troc"

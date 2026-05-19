@@ -11,11 +11,14 @@ function for safe registry lookups.
 New destinations register themselves by importing their class and adding an
 entry to ``DESTINATION_REGISTRY`` at the bottom of this file.
 """
+import logging as _logging
 from typing import Union
 import pandas as pd
 from ..tables import TableOutput
 from ...exceptions import OutputError
 from .abstract import AbstractDestination
+
+_pkg_logger = _logging.getLogger(__name__)
 
 
 class TableOutputAdapter(AbstractDestination):
@@ -60,25 +63,33 @@ try:
     from .sharepoint import ToSharepoint
     DESTINATION_REGISTRY["ToSharepoint"] = ToSharepoint
 except ImportError:
-    pass  # msgraph-sdk / azure-identity not installed
+    _pkg_logger.debug(
+        "ToSharepoint destination not available: msgraph-sdk or azure-identity not installed"
+    )
 
 try:
     from .s3 import ToS3
     DESTINATION_REGISTRY["ToS3"] = ToS3
 except ImportError:
-    pass  # aioboto3 not installed
+    _pkg_logger.debug(
+        "ToS3 destination not available: aioboto3 not installed"
+    )
 
 try:
     from .table import TableDestination
     DESTINATION_REGISTRY["Table"] = TableDestination
 except ImportError:
-    pass
+    _pkg_logger.debug(
+        "Table destination not available"
+    )
 
 try:
     from .dwh import DWHDestination
     DESTINATION_REGISTRY["DWH"] = DWHDestination
 except ImportError:
-    pass
+    _pkg_logger.debug(
+        "DWH destination not available"
+    )
 
 
 def get_destination(step_name: str) -> type[AbstractDestination]:

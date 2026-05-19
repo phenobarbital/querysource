@@ -70,12 +70,17 @@ class TestCredentialResolution:
         assert result == {}
 
     def test_single_uppercase_char_not_treated_as_var(self):
-        """Single uppercase letter is NOT matched (pattern requires 2+ chars)."""
+        """Single uppercase letter is NOT matched (pattern requires at least one underscore)."""
         dest = ConcreteDestination(data=pd.DataFrame())
         result = dest.resolve_credentials({"key": "A"})
-        # "A" matches ^[A-Z][A-Z0-9_]+$ ? — no, needs at least 2 chars total.
-        # Actually "A" is length 1; [A-Z0-9_]+ requires 1+ more → total min 2.
         assert result["key"] == "A"
+
+    def test_two_char_uppercase_not_treated_as_var(self):
+        """Two-char uppercase like 'US' should NOT be resolved as navconfig var."""
+        dest = ConcreteDestination(data=pd.DataFrame())
+        # "US" is a valid literal (e.g., region code) — should not be resolved
+        result = dest.resolve_credentials({"region": "US"})
+        assert result["region"] == "US"
 
     def test_lowercase_value_not_treated_as_var(self):
         """Lowercase values are not resolved as navconfig vars."""

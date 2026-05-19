@@ -165,6 +165,26 @@ class TestDWHDestination:
         mock_dyn.assert_called_once()
 
 
+class TestDWHDestinationParentProtocol:
+    """Verify parent-protocol methods required by BigQueryOutput."""
+
+    def test_get_schema_returns_schema(self, sample_df, bigquery_config):
+        dest = DWHDestination(data=sample_df, **bigquery_config)
+        assert dest.get_schema() == "analytics"
+
+    def test_primary_keys_returns_pk_list(self, sample_df, bigquery_config):
+        dest = DWHDestination(data=sample_df, **bigquery_config)
+        assert dest.primary_keys() == ["date", "store_id"]
+
+    def test_constraints_returns_none(self, sample_df, bigquery_config):
+        dest = DWHDestination(data=sample_df, **bigquery_config)
+        assert dest.constraints() is None
+
+    def test_foreign_keys_returns_none(self, sample_df, bigquery_config):
+        dest = DWHDestination(data=sample_df, **bigquery_config)
+        assert dest.foreign_keys() is None
+
+
 class TestCleanDynamoRecord:
     def test_float_converted_to_decimal(self):
         from decimal import Decimal
