@@ -92,7 +92,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -103,8 +103,8 @@
       "parallelism_notes": "Depends on TASK-656 (Table) for shared driver normalization and engine patterns",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-657-dwh-destination.md"
+      "completed_at": "2026-05-19T22:03:56+00:00",
+      "file": "sdd/tasks/completed/TASK-657-dwh-destination.md"
     },
     {
       "id": "TASK-658",
