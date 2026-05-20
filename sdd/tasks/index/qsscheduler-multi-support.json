@@ -14,7 +14,7 @@
       "feature_id": "FEAT-092",
       "feature": "qsscheduler-multi-support",
       "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Per-spec isolation (single worktree, sequential tasks). Although this task only touches jobs.py and could in theory run alongside TASK-646 (which only touches a different method in scheduler.py), the spec's Worktree Strategy section calls for per-spec sequential execution to avoid worktree proliferation.",
       "assigned_to": null,
       "started_at": "2026-05-20T00:06:24+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-644-scheduled-multiqs-job-callable.md"
+      "completed_at": "2026-05-20T00:10:25+00:00",
+      "file": "sdd/tasks/completed/TASK-644-scheduled-multiqs-job-callable.md"
     },
     {
       "id": "TASK-645",
