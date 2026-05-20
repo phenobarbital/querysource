@@ -32,7 +32,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Modifies files that TASK-660 creates; must run after TASK-660",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-661-refactor-abstract-classes.md"
+      "completed_at": "2026-05-20T02:53:02+00:00",
+      "file": "sdd/tasks/completed/TASK-661-refactor-abstract-classes.md"
     },
     {
       "id": "TASK-662",
