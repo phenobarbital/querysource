@@ -52,7 +52,7 @@
       "feature_id": "FEAT-092",
       "feature": "qsscheduler-multi-support",
       "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Shares scheduler.py with TASK-645. Sequential to avoid merge friction on the same file. Logically independent of TASK-644.",
       "assigned_to": null,
       "started_at": "2026-05-20T00:06:24+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-646-cache-refresh-multi-skip-guard.md"
+      "completed_at": "2026-05-20T00:14:59+00:00",
+      "file": "sdd/tasks/completed/TASK-646-cache-refresh-multi-skip-guard.md"
     },
     {
       "id": "TASK-647",
