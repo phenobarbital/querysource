@@ -203,7 +203,7 @@ class QSScheduler:
         try:
             async with await self._db.acquire() as conn:
                 sql = (
-                    "SELECT query_slug, attributes, cache_options, is_cached "
+                    "SELECT query_slug, attributes, cache_options, provider, is_cached "
                     "FROM public.queries "
                     "WHERE (attributes IS NOT NULL AND attributes != '{}') "
                     "   OR (cache_options IS NOT NULL AND cache_options != '{}')"
