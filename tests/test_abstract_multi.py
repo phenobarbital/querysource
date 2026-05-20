@@ -53,6 +53,22 @@ class TestAbstractMultiContextManager:
                 raise ValueError("test error")
 
 
+class ConcreteStepWithPrivateAttr(AbstractMulti):
+    """A step with private attrs to verify they don't leak into schema.
+
+    Usage: Tests that private attributes are excluded from get_attributes().
+    """
+    _category = "TestCategory"
+    _private_field: str = "hidden"
+    public_field: str = "visible"
+
+    def __init__(self, data, **kwargs):
+        super().__init__(data, **kwargs)
+
+    async def run(self):
+        return self.data
+
+
 class TestGetAttributes:
     def test_returns_typed_list(self):
         attrs = ConcreteStep.get_attributes()
@@ -75,6 +91,22 @@ class TestGetAttributes:
     def test_returns_list(self):
         attrs = ConcreteStep.get_attributes()
         assert isinstance(attrs, list)
+
+    def test_private_attrs_not_in_schema(self):
+        """Private attrs like _category, _backend must NOT appear in schema output."""
+        attrs = ConcreteStep.get_attributes()
+        names = [a["name"] for a in attrs]
+        assert "_category" not in names
+        assert "_backend" not in names
+
+    def test_private_attrs_excluded_even_when_annotated(self):
+        """Annotated private attrs must be excluded from get_attributes() output."""
+        attrs = ConcreteStepWithPrivateAttr.get_attributes()
+        names = [a["name"] for a in attrs]
+        # Private annotated attr must not leak
+        assert "_private_field" not in names
+        # Public annotated attr must be included
+        assert "public_field" in names
 
 
 class TestGetSchema:

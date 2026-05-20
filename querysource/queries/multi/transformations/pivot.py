@@ -23,7 +23,7 @@ class pivot(AbstractTransform):
             ``pivot_table``; optional for ``pivot``.
         aggfunc: Aggregation function for duplicate entries (e.g. ``'sum'``, ``'mean'``).
             Only applies when ``type`` is ``'pivot_table'``.
-        type: Pivot variant — ``'pivot'`` or ``'pivot_table'``. Default: ``'crosstab'``.
+        type: Pivot variant — ``'pivot'`` or ``'pivot_table'``. Default: ``'pivot'``.
         multilevel: If ``True``, keep multi-level column headers. Default: ``False``.
         fill_value: Value to use for missing entries in the pivot result.
         pd_args: Extra keyword arguments passed to the underlying pandas call.
@@ -48,11 +48,11 @@ class pivot(AbstractTransform):
 
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.reset_index: bool = kwargs.pop('reset_index', True)
-        self._type = kwargs.pop('type', 'crosstab')
+        self._type = kwargs.pop('type', 'pivot')
         self._multilevel = kwargs.pop('multilevel', False)
         self._pd_args = kwargs.pop('pd_args', {})
         self._fill_value = kwargs.pop('fill_value', None)
-        super(pivot, self).__init__(data, **kwargs)
+        super().__init__(data, **kwargs)
         if not hasattr(self, 'index'):
             raise DriverError(
                 "Crosstab Transform: Missing Index on definition"

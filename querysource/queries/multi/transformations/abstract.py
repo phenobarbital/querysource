@@ -1,13 +1,16 @@
 from typing import Union
 from abc import abstractmethod
+import logging
 import pandas as pd
-from navconfig.logging import logging
+from navconfig.logging import logging as navconfig_logging
 from ....exceptions import (
     DataNotFound,
     DriverError,
     QueryException
 )
 from ..abstract import AbstractMulti
+
+_logger = logging.getLogger(__name__)
 
 
 class AbstractTransform(AbstractMulti):
@@ -23,15 +26,15 @@ class AbstractTransform(AbstractMulti):
 
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self._backend = 'pandas'
-        self.logger = logging.getLogger(f'QS.Transform.{self.__class__.__name__}')
+        self.logger = navconfig_logging.getLogger(f'QS.Transform.{self.__class__.__name__}')
         super().__init__(data, **kwargs)
 
     def _print_info(self, df: pd.DataFrame) -> None:
-        """Print column type/sample information for a DataFrame."""
-        print(df.head())
-        print('::: Printing Column Information === ')
+        """Log column type/sample information for a DataFrame."""
+        _logger.debug('%s', df.head())
+        _logger.debug('::: Printing Column Information === ')
         for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
+            _logger.debug('%s -> %s -> %s', column, t, df[column].iloc[0])
 
     async def start(self):
         """Validate input data before running the transformation."""
