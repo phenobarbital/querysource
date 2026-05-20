@@ -201,3 +201,10 @@ When you pick up this task:
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
 **Deviations from spec**: none | describe if any
+
+---
+
+**Completed by**: SDD Worker (Claude)
+**Date**: 2026-05-19
+**Notes**: Implemented AbstractDestination ABC with credential resolution (navconfig variable pattern detection), TableOutputAdapter wrapper, DESTINATION_REGISTRY dict with tableOutput/TableOutput backward-compatible entries, and get_destination() factory that raises OutputError for unknown names. All 18 unit tests pass.
+**Deviations from spec**: none

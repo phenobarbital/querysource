@@ -258,3 +258,9 @@ When you pick up this task:
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
 **Deviations from spec**: none | describe if any
+
+---
+**Completed by**: SDD Worker (Claude)
+**Date**: 2026-05-20
+**Notes**: Implemented DWHDestination supporting bigquery/documentdb/dynamodb drivers, all write methods. BigQuery reuses BigQueryOutput engine; DocumentDB uses asyncdb mongo driver; DynamoDB uses aioboto3 with batch put_item. All 15 tests pass.
+**Deviations from spec**: none
