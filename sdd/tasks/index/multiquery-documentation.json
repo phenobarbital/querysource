@@ -72,7 +72,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -82,8 +82,8 @@
       "parallelism_notes": "Creates new file registry.py — no file overlap with TASK-662. Can run in parallel with TASK-662 after TASK-661 completes.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-663-component-registry.md"
+      "completed_at": "2026-05-20T03:04:17+00:00",
+      "file": "sdd/tasks/completed/TASK-663-component-registry.md"
     },
     {
       "id": "TASK-664",
