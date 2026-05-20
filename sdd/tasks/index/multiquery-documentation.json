@@ -92,7 +92,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -102,8 +102,8 @@
       "parallelism_notes": "Creates new files in querysource/cli/ — no file overlap with TASK-665. Can run in parallel with TASK-665 after TASK-663 completes.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-664-cli-generate-docs.md"
+      "completed_at": "2026-05-20T03:05:45+00:00",
+      "file": "sdd/tasks/completed/TASK-664-cli-generate-docs.md"
     },
     {
       "id": "TASK-665",
