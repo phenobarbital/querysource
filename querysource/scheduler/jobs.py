@@ -7,14 +7,21 @@ Three async callable job types for APScheduler:
   MultiQS (result tuple discarded).
 - cache_refresh_job: Executes a single-source query to refresh its cache.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 from navconfig.logging import logging
+
+if TYPE_CHECKING:
+    from querysource.scheduler.notifications import NotificationManager
 
 logger = logging.getLogger("QSScheduler.Jobs")
 
 
 async def scheduled_query_job(
     slug: str,
-    notification_manager=None,
+    notification_manager: Optional["NotificationManager"] = None,
     **kwargs
 ) -> None:
     """Execute a scheduled query by slug. Result is discarded.
@@ -30,7 +37,7 @@ async def scheduled_query_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            f"Scheduled job failed for slug '{slug}': {exc}"
+            "Scheduled job failed for slug '%s': %s", slug, exc
         )
         if notification_manager:
             notification_manager.notify(
@@ -42,7 +49,7 @@ async def scheduled_query_job(
 
 async def scheduled_multiqs_job(
     slug: str,
-    notification_manager=None,
+    notification_manager: Optional["NotificationManager"] = None,
     **kwargs
 ) -> None:
     """Execute a scheduled multi-query by slug. Result is discarded.
@@ -61,8 +68,8 @@ async def scheduled_multiqs_job(
     loader at startup (which logs a DEBUG line) but is not passed to
     this callable.
 
-    TODO: v2 may accept an optional conditions kwarg (parity with
-    QS(slug, conditions=...)).
+    Currently accepts only ``slug``; condition-based filtering is not yet
+    supported.
 
     Args:
         slug: The multi-query slug to execute.
@@ -75,7 +82,7 @@ async def scheduled_multiqs_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            f"Scheduled multi-query job failed for slug '{slug}': {exc}"
+            "Scheduled multi-query job failed for slug '%s': %s", slug, exc
         )
         if notification_manager:
             notification_manager.notify(
@@ -87,7 +94,7 @@ async def scheduled_multiqs_job(
 
 async def cache_refresh_job(
     slug: str,
-    notification_manager=None,
+    notification_manager: Optional["NotificationManager"] = None,
     **kwargs
 ) -> None:
     """Execute a query to refresh its cache.
@@ -106,7 +113,7 @@ async def cache_refresh_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            f"Cache refresh job failed for slug '{slug}': {exc}"
+            "Cache refresh job failed for slug '%s': %s", slug, exc
         )
         if notification_manager:
             notification_manager.notify(

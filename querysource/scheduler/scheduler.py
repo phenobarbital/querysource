@@ -151,7 +151,8 @@ class QSScheduler:
                 except json.JSONDecodeError:
                     payload = None
                 if not (isinstance(payload, dict)
-                        and ("queries" in payload or "files" in payload)):
+                        and ("queries" in payload or "files" in payload
+                             or "sources" in payload)):
                     self.logger.warning(
                         "Multi-query slug '%s' has query_raw that is not a multi-query "
                         "JSON payload — MultiQS will fall back to single-query mode "
@@ -195,6 +196,12 @@ class QSScheduler:
     def _load_cache_refresh_jobs(self, rows: list) -> int:
         """Register CacheRefreshJob for rows with cache_options schedule and is_cached=True.
 
+        Note:
+            Multi-slugs (provider='multi') are skipped unconditionally: they
+            never receive a ``cache_<slug>`` job because sub-slug caches are
+            written by normal QS execution if ``is_cached=True`` is set on
+            each sub-slug row.
+
         Args:
             rows: Query rows from public.queries.
 
@@ -203,7 +210,7 @@ class QSScheduler:
         """
         count = 0
         for row in rows:
-            if row.get("provider") == "multi":  # Multi-slugs never get a cache_<slug> job.
+            if row.get("provider") == "multi":
                 continue
             slug = row["query_slug"]
             is_cached = row.get("is_cached", False)

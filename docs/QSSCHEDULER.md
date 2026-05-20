@@ -12,8 +12,9 @@ config flag and uses an in-memory job store (jobs rebuild on every restart).
 | Multi-query     | `multi_<slug>`  | `attributes.scheduler` + `provider='multi'`         | `MultiQS(slug=...).query()`  |
 | Cache refresh   | `cache_<slug>`  | `cache_options` + `is_cached=True`                  | `QS(slug=...).query()`       |
 
-Multi-query slugs do **not** receive a cache-refresh job; their sub-slug
-caches are refreshed inside the MultiQS pipeline itself.
+Multi-query slugs do **not** receive a cache-refresh job; sub-slug caches
+are written by normal QS execution if `is_cached=True` is set on each
+sub-slug row.
 
 ## Scheduling a single query
 
@@ -101,3 +102,17 @@ sub-query fan-out will see it silently run only the plain SQL.
 | `QS_SCHEDULER_COALESCE` | `True` | Coalesce missed firings into one. |
 
 No new flag is introduced by multi-query support (FEAT-092).
+
+## Troubleshooting
+
+**All jobs are missing after startup**
+
+If the database pool fails to connect at scheduler startup, all job
+registration is silently skipped and the scheduler logs:
+
+```
+ERROR  QSScheduler: Failed to query schedulable rows: <error detail>
+```
+
+Verify that `default_dsn` is correctly configured and that the PostgreSQL
+server is reachable before the aiohttp app starts.

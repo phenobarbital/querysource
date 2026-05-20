@@ -1,9 +1,7 @@
 """Unit tests for QSScheduler job definitions."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-@pytest.mark.asyncio
 class TestScheduledQueryJob:
     @patch("querysource.queries.qs.QS")
     async def test_executes_query(self, mock_qs_cls):
@@ -60,7 +58,6 @@ class TestScheduledQueryJob:
         mock_instance.query.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 class TestCacheRefreshJob:
     @patch("querysource.queries.qs.QS")
     async def test_executes_query(self, mock_qs_cls):
@@ -106,7 +103,6 @@ class TestCacheRefreshJob:
         await cache_refresh_job(slug="broken_slug")
 
 
-@pytest.mark.asyncio
 class TestScheduledMultiQSJob:
 
     async def test_calls_multiqs_with_slug_only(self):
