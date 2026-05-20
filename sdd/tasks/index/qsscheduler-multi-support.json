@@ -94,7 +94,7 @@
       "feature_id": "FEAT-092",
       "feature": "qsscheduler-multi-support",
       "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -106,8 +106,8 @@
       "parallelism_notes": "Documentation lags the production changes so behaviors are stable when described. Could in theory be parallel with TASK-647; kept sequential per per-spec isolation strategy.",
       "assigned_to": null,
       "started_at": "2026-05-20T00:06:24+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-648-qsscheduler-readme-multi-support.md"
+      "completed_at": "2026-05-20T00:17:42+00:00",
+      "file": "sdd/tasks/completed/TASK-648-qsscheduler-readme-multi-support.md"
     }
   ]
 }
