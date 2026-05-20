@@ -1,6 +1,6 @@
 """Unit tests for querysource.scheduler.scheduler (QSScheduler Core)."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 
 class TestTriggerParsing:
@@ -172,3 +172,136 @@ class TestQSSchedulerInit:
         cb = MagicMock()
         qs.add_notification_callback(cb)
         assert cb in qs._notification_manager._callbacks
+
+
+# ---------------------------------------------------------------------------
+# TASK-645: Provider routing tests
+# ---------------------------------------------------------------------------
+
+def _row(provider="db", attrs=None, query_raw=None):
+    return {
+        "query_slug": "test_slug",
+        "attributes": attrs if attrs is not None else {
+            "scheduler": {"schedule_type": "interval",
+                          "schedule": {"minutes": 30}}
+        },
+        "cache_options": {},
+        "provider": provider,
+        "is_cached": False,
+        "query_raw": query_raw,
+    }
+
+
+@pytest.fixture
+def sched():
+    """Fresh QSScheduler instance with a mocked APScheduler and logger."""
+    from querysource.scheduler.scheduler import QSScheduler
+    qs = QSScheduler.__new__(QSScheduler)
+    qs.logger = MagicMock()
+    qs._timezone = "UTC"
+    qs._notification_manager = MagicMock()
+    qs._scheduler = MagicMock()
+    return qs
+
+
+class TestLoadScheduledQueriesProviderRouting:
+
+    def test_routes_multi_provider_to_new_job(self, sched):
+        """provider='multi' row registers scheduled_multiqs_job with id multi_<slug>."""
+        from querysource.scheduler.jobs import scheduled_multiqs_job
+        sched._load_scheduled_queries([_row(provider="multi",
+                                            query_raw='{"queries":{}}')])
+        args, kwargs = sched._scheduler.add_job.call_args
+        assert args[0] is scheduled_multiqs_job
+        assert kwargs["id"] == "multi_test_slug"
+        assert kwargs["name"] == "Scheduled multi-query: test_slug"
+
+    def test_keeps_single_query_path_for_non_multi(self, sched):
+        """provider='db' row registers scheduled_query_job with id query_<slug>."""
+        from querysource.scheduler.jobs import scheduled_query_job
+        sched._load_scheduled_queries([_row(provider="db")])
+        args, kwargs = sched._scheduler.add_job.call_args
+        assert args[0] is scheduled_query_job
+        assert kwargs["id"] == "query_test_slug"
+
+    def test_skips_row_without_scheduler_attribute(self, sched):
+        """provider='multi' row with no attributes.scheduler is skipped."""
+        sched._load_scheduled_queries([_row(provider="multi", attrs={})])
+        sched._scheduler.add_job.assert_not_called()
+
+    def test_warns_on_misconfigured_multi(self, sched):
+        """provider='multi' with plain-SQL query_raw triggers a WARNING log."""
+        sched._load_scheduled_queries([
+            _row(provider="multi", query_raw="SELECT 1"),
+        ])
+        # logger is a MagicMock; check it was called with the expected substring.
+        warning_calls = [str(call) for call in sched.logger.warning.call_args_list]
+        assert any(
+            "MultiQS will fall back to single-query mode" in call
+            for call in warning_calls
+        )
+
+    def test_debug_log_for_reserved_output_subkey(self, sched):
+        """attributes.scheduler.output present triggers a DEBUG log; not passed into kwargs."""
+        attrs = {"scheduler": {
+            "schedule_type": "interval",
+            "schedule": {"minutes": 30},
+            "output": {"type": "tableOutput"},
+        }}
+        sched._load_scheduled_queries([
+            _row(provider="multi",
+                 attrs=attrs,
+                 query_raw='{"queries":{}}'),
+        ])
+        debug_calls = [str(call) for call in sched.logger.debug.call_args_list]
+        assert any(
+            "attributes.scheduler.output" in call
+            for call in debug_calls
+        )
+        _, kwargs = sched._scheduler.add_job.call_args
+        assert "output" not in kwargs["kwargs"]
+
+
+# ---------------------------------------------------------------------------
+# TASK-646: Cache-refresh multi-skip tests
+# ---------------------------------------------------------------------------
+
+def _cache_row(provider="db"):
+    return {
+        "query_slug": "cached_slug",
+        "attributes": {},
+        "cache_options": {
+            "schedule_type": "interval",
+            "schedule": {"minutes": 30},
+        },
+        "provider": provider,
+        "is_cached": True,
+        "query_raw": None,
+    }
+
+
+class TestLoadCacheRefreshJobsMultiSkip:
+
+    def test_skips_multi_rows(self):
+        """provider='multi' row with is_cached=True produces no cache_<slug> job."""
+        from querysource.scheduler.scheduler import QSScheduler
+        sched = QSScheduler.__new__(QSScheduler)
+        sched.logger = MagicMock()
+        sched._timezone = "UTC"
+        sched._notification_manager = MagicMock()
+        sched._scheduler = MagicMock()
+        count = sched._load_cache_refresh_jobs([_cache_row(provider="multi")])
+        sched._scheduler.add_job.assert_not_called()
+        assert count == 0
+
+    def test_unchanged_for_single_query(self):
+        """provider='db' row with is_cached=True still registers cache_<slug> job."""
+        from querysource.scheduler.scheduler import QSScheduler
+        sched = QSScheduler.__new__(QSScheduler)
+        sched.logger = MagicMock()
+        sched._timezone = "UTC"
+        sched._notification_manager = MagicMock()
+        sched._scheduler = sched._create_scheduler()
+        count = sched._load_cache_refresh_jobs([_cache_row(provider="db")])
+        assert sched._scheduler.get_job("cache_cached_slug") is not None
+        assert count == 1

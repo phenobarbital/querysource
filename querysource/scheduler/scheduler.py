@@ -2,8 +2,20 @@
 
 Creates scheduled jobs from public.queries definitions.
 Gated behind ENABLE_QS_SCHEDULER config flag.
+
+Job routing:
+    - provider='multi'  -> scheduled_multiqs_job (id: multi_<slug>)
+    - otherwise         -> scheduled_query_job   (id: query_<slug>)
+
+Cache-refresh jobs (id: cache_<slug>) are registered ONLY for
+non-multi rows where is_cached=True.
+
+Reserved JSON sub-key:
+    attributes.scheduler.output -- parsed but ignored in v1; reserved
+    for a future result-handling patch (see FEAT-092).
 """
 import asyncio
+import json
 from collections.abc import Callable
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -21,7 +33,11 @@ from querysource.conf import (
     QS_SCHEDULER_COALESCE,
     default_dsn,
 )
-from querysource.scheduler.jobs import scheduled_query_job, cache_refresh_job
+from querysource.scheduler.jobs import (
+    scheduled_query_job,
+    cache_refresh_job,
+    scheduled_multiqs_job,
+)
 from querysource.scheduler.notifications import NotificationManager
 
 logger = logging.getLogger("QSScheduler")
@@ -89,6 +105,10 @@ class QSScheduler:
     def _load_scheduled_queries(self, rows: list) -> int:
         """Register ScheduledQueryJob for rows with attributes.scheduler.
 
+        Routes by provider:
+            - provider='multi' -> scheduled_multiqs_job (id: multi_<slug>)
+            - otherwise        -> scheduled_query_job   (id: query_<slug>)
+
         Args:
             rows: Query rows from public.queries.
 
@@ -112,6 +132,51 @@ class QSScheduler:
             trigger = self._parse_trigger(schedule_type, schedule)
             if trigger is None:
                 continue
+
+            provider = row.get("provider")
+            if provider == "multi":
+                # Reserved output sub-key — parse, log at DEBUG, do NOT pass into kwargs.
+                reserved_output = scheduler_def.get("output")
+                if reserved_output:
+                    self.logger.debug(
+                        "Query '%s' declares reserved attributes.scheduler.output — "
+                        "ignored in v1 (forward-compatible).",
+                        slug,
+                    )
+
+                # Misconfig WARN (Q1 resolution from spec §8).
+                raw = row.get("query_raw") or ""
+                try:
+                    payload = json.loads(raw) if isinstance(raw, str) and raw.strip() else None
+                except json.JSONDecodeError:
+                    payload = None
+                if not (isinstance(payload, dict)
+                        and ("queries" in payload or "files" in payload
+                             or "sources" in payload)):
+                    self.logger.warning(
+                        "Multi-query slug '%s' has query_raw that is not a multi-query "
+                        "JSON payload — MultiQS will fall back to single-query mode "
+                        "at runtime.",
+                        slug,
+                    )
+
+                job_id = f"multi_{slug}"
+                self._scheduler.add_job(
+                    scheduled_multiqs_job,
+                    trigger=trigger,
+                    id=job_id,
+                    name=f"Scheduled multi-query: {slug}",
+                    replace_existing=True,
+                    kwargs={
+                        "slug": slug,
+                        "notification_manager": self._notification_manager,
+                    },
+                )
+                self.logger.info("Registered scheduled multi-query job: %s", job_id)
+                count += 1
+                continue
+
+            # Single-query path — unchanged.
             job_id = f"query_{slug}"
             self._scheduler.add_job(
                 scheduled_query_job,
@@ -131,6 +196,12 @@ class QSScheduler:
     def _load_cache_refresh_jobs(self, rows: list) -> int:
         """Register CacheRefreshJob for rows with cache_options schedule and is_cached=True.
 
+        Note:
+            Multi-slugs (provider='multi') are skipped unconditionally: they
+            never receive a ``cache_<slug>`` job because sub-slug caches are
+            written by normal QS execution if ``is_cached=True`` is set on
+            each sub-slug row.
+
         Args:
             rows: Query rows from public.queries.
 
@@ -139,6 +210,8 @@ class QSScheduler:
         """
         count = 0
         for row in rows:
+            if row.get("provider") == "multi":
+                continue
             slug = row["query_slug"]
             is_cached = row.get("is_cached", False)
             if not is_cached:
@@ -203,7 +276,8 @@ class QSScheduler:
         try:
             async with await self._db.acquire() as conn:
                 sql = (
-                    "SELECT query_slug, attributes, cache_options, is_cached "
+                    "SELECT query_slug, attributes, cache_options, provider, is_cached, "
+                    "       query_raw "
                     "FROM public.queries "
                     "WHERE (attributes IS NOT NULL AND attributes != '{}') "
                     "   OR (cache_options IS NOT NULL AND cache_options != '{}')"

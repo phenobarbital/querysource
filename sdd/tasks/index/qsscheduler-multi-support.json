@@ -1,0 +1,113 @@
+{
+  "feature": "qsscheduler-multi-support",
+  "feature_id": "FEAT-092",
+  "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-05-20T00:00:00Z",
+  "completed_at": null,
+  "tasks": [
+    {
+      "id": "TASK-644",
+      "slug": "scheduled-multiqs-job-callable",
+      "title": "Implement scheduled_multiqs_job callable",
+      "feature_id": "FEAT-092",
+      "feature": "qsscheduler-multi-support",
+      "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Per-spec isolation (single worktree, sequential tasks). Although this task only touches jobs.py and could in theory run alongside TASK-646 (which only touches a different method in scheduler.py), the spec's Worktree Strategy section calls for per-spec sequential execution to avoid worktree proliferation.",
+      "assigned_to": null,
+      "started_at": "2026-05-20T00:06:24+00:00",
+      "completed_at": "2026-05-20T00:10:25+00:00",
+      "file": "sdd/tasks/completed/TASK-644-scheduled-multiqs-job-callable.md"
+    },
+    {
+      "id": "TASK-645",
+      "slug": "load-scheduled-queries-provider-routing",
+      "title": "Route _load_scheduled_queries by provider; WARN on misconfig; update module docstring",
+      "feature_id": "FEAT-092",
+      "feature": "qsscheduler-multi-support",
+      "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-644"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Imports scheduled_multiqs_job from TASK-644. Must land after TASK-644 to keep imports valid. Shares scheduler.py with TASK-646, so also sequential with that task.",
+      "assigned_to": null,
+      "started_at": "2026-05-20T00:06:24+00:00",
+      "completed_at": "2026-05-20T00:13:47+00:00",
+      "file": "sdd/tasks/completed/TASK-645-load-scheduled-queries-provider-routing.md"
+    },
+    {
+      "id": "TASK-646",
+      "slug": "cache-refresh-multi-skip-guard",
+      "title": "Exclude provider='multi' rows from _load_cache_refresh_jobs",
+      "feature_id": "FEAT-092",
+      "feature": "qsscheduler-multi-support",
+      "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-645"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Shares scheduler.py with TASK-645. Sequential to avoid merge friction on the same file. Logically independent of TASK-644.",
+      "assigned_to": null,
+      "started_at": "2026-05-20T00:06:24+00:00",
+      "completed_at": "2026-05-20T00:14:59+00:00",
+      "file": "sdd/tasks/completed/TASK-646-cache-refresh-multi-skip-guard.md"
+    },
+    {
+      "id": "TASK-647",
+      "slug": "multi-routing-smoke-test",
+      "title": "Smoke / integration test for multi-query routing",
+      "feature_id": "FEAT-092",
+      "feature": "qsscheduler-multi-support",
+      "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-644",
+        "TASK-645",
+        "TASK-646"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Verifies the three production-code changes work together. Cannot run before all three are committed.",
+      "assigned_to": null,
+      "started_at": "2026-05-20T00:06:24+00:00",
+      "completed_at": "2026-05-20T00:16:21+00:00",
+      "file": "sdd/tasks/completed/TASK-647-multi-routing-smoke-test.md"
+    },
+    {
+      "id": "TASK-648",
+      "slug": "qsscheduler-readme-multi-support",
+      "title": "Document multi-query routing in QSScheduler README/runbook",
+      "feature_id": "FEAT-092",
+      "feature": "qsscheduler-multi-support",
+      "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-644",
+        "TASK-645",
+        "TASK-646"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Documentation lags the production changes so behaviors are stable when described. Could in theory be parallel with TASK-647; kept sequential per per-spec isolation strategy.",
+      "assigned_to": null,
+      "started_at": "2026-05-20T00:06:24+00:00",
+      "completed_at": "2026-05-20T00:17:42+00:00",
+      "file": "sdd/tasks/completed/TASK-648-qsscheduler-readme-multi-support.md"
+    }
+  ]
+}
