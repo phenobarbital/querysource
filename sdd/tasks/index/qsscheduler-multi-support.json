@@ -72,7 +72,7 @@
       "feature_id": "FEAT-092",
       "feature": "qsscheduler-multi-support",
       "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,8 +84,8 @@
       "parallelism_notes": "Verifies the three production-code changes work together. Cannot run before all three are committed.",
       "assigned_to": null,
       "started_at": "2026-05-20T00:06:24+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-647-multi-routing-smoke-test.md"
+      "completed_at": "2026-05-20T00:16:21+00:00",
+      "file": "sdd/tasks/completed/TASK-647-multi-routing-smoke-test.md"
     },
     {
       "id": "TASK-648",
