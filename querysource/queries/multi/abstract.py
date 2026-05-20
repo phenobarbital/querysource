@@ -4,7 +4,9 @@ AbstractMulti — Unified base class for all MultiQuery processing steps.
 Provides shared boilerplate (init, async context manager, lifecycle methods)
 and introspection classmethods for documentation generation.
 """
+import asyncio
 import inspect
+import json
 import logging
 import re
 import typing
@@ -14,6 +16,8 @@ from typing import Any, Union
 import pandas as pd
 
 from ...exceptions import QueryException
+
+logger = logging.getLogger(__name__)
 
 
 def _type_to_json_schema(type_str: str) -> dict:
@@ -28,6 +32,7 @@ def _type_to_json_schema(type_str: str) -> dict:
         "None": {"type": "null"},
         "Any": {},
     }
+    # Unknown/complex types default to string representation in schema output
     return mapping.get(type_str, {"type": "string"})
 
 
@@ -65,6 +70,9 @@ class AbstractMulti(ABC):
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         if exc_type is not None:
+            if exc_type is asyncio.CancelledError:
+                await self.close()
+                return False  # let cancellation propagate
             raise QueryException(
                 f"MultiQuery Error: {exc_value!s}"
             ) from exc_value
@@ -97,11 +105,11 @@ class AbstractMulti(ABC):
     # ------------------------------------------------------------------
 
     def _print_info(self, df: pd.DataFrame) -> None:
-        """Print column type/sample information for a DataFrame."""
-        print('::: Printing Column Information === ')
+        """Log column type/sample information for a DataFrame."""
+        logger.debug('::: Printing Column Information === ')
         for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
-        print()
+            logger.debug('%s -> %s -> %s', column, t, df[column].iloc[0])
+        logger.debug('')
 
     # ------------------------------------------------------------------
     # Introspection classmethods
@@ -133,9 +141,9 @@ class AbstractMulti(ABC):
             if name.startswith("__") or name in _skip:
                 continue
             if name.startswith("_"):
-                # Include private-prefixed class attrs but strip the leading _
-                # only if they are genuinely declared on this class
-                pass
+                # Skip private/dunder attrs — they are implementation details,
+                # not user-facing attributes that should appear in schema output.
+                continue
             type_str = _hint_to_str(hint)
             attrs[name] = {
                 "name": name,
@@ -261,7 +269,6 @@ class AbstractMulti(ABC):
                     i += 1
                 if json_lines:
                     try:
-                        import json
                         example = json.loads("\n".join(json_lines))
                     except Exception:
                         pass
@@ -318,4 +325,7 @@ def _parse_default(default_str: str | None) -> Any:
     # Strip quotes for string literals
     if (s.startswith("'") and s.endswith("'")) or (s.startswith('"') and s.endswith('"')):
         return s[1:-1]
+    # Handle tuple defaults like ('_x', '_y') — return as raw string
+    if s.startswith("(") and s.endswith(")"):
+        return s
     return s

@@ -7,6 +7,7 @@ HTTP endpoints.
 """
 from __future__ import annotations
 
+import functools
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -79,8 +80,12 @@ class ComponentRegistry:
     }
 
     @classmethod
+    @functools.lru_cache(maxsize=1)
     def discover_all(cls) -> dict[str, type]:
         """Discover all component classes by scanning filesystem and registries.
+
+        The result is cached after the first call (lru_cache maxsize=1) so
+        repeated calls within the same process do not re-scan the filesystem.
 
         Returns:
             Dict mapping component name to class object.
@@ -108,15 +113,8 @@ class ComponentRegistry:
         except (ImportError, AttributeError) as exc:
             logger.warning("Could not import Filter: %s", exc)
 
-        try:
-            get_op = get_operator_module("GroupBy")
-            components["GroupBy"] = get_op
-        except (ImportError, AttributeError):
-            try:
-                from querysource.queries.multi.operators.GroupBy import GroupBy
-                components["GroupBy"] = GroupBy
-            except (ImportError, AttributeError) as exc:
-                logger.warning("Could not import GroupBy: %s", exc)
+        # Note: GroupBy is already picked up by the glob("*.py") scan above;
+        # this fallback is intentionally removed to avoid double-registration.
 
         # 2. Scan transformations directory (dynamic .py files)
         transforms_dir = Path(__file__).parent / "transformations"
@@ -296,7 +294,7 @@ class ComponentRegistry:
                 # If both left and right are not specified, relies on data dict having 2+ entries
                 # We can only warn if explicitly checking references
                 n_sources = len(payload.get("queries", {})) + len(payload.get("files", {}))
-                if n_sources < 1 and not left:
+                if n_sources < 2 and not (left and right):
                     errors.append(ValidationError(
                         step=step_name,
                         field="left/right",

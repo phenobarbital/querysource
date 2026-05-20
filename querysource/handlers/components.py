@@ -7,12 +7,14 @@ Provides:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import asdict
 
 from aiohttp import web
 
 from .abstract import AbstractHandler
+from ..auth import ResourceType
 from ..queries.multi.registry import ComponentRegistry
 
 
@@ -36,9 +38,15 @@ class ComponentHandler(AbstractHandler):
         Returns:
             200 JSON response containing a list of component information objects.
         """
+        await self._enforce_pbac(
+            request,
+            resource_type=ResourceType.SLUG,
+            resource_name="components",
+            action="slug:read",
+        )
         try:
             category = request.rel_url.query.get("category")
-            catalog = ComponentRegistry.get_catalog()
+            catalog = await asyncio.to_thread(ComponentRegistry.get_catalog)
 
             if category:
                 catalog = [c for c in catalog if c.category == category]
@@ -74,6 +82,12 @@ class ComponentHandler(AbstractHandler):
             200 JSON response with ``{valid: bool, errors: [{step, field, message}]}``.
             400 JSON response if the body is not valid JSON.
         """
+        await self._enforce_pbac(
+            request,
+            resource_type=ResourceType.SLUG,
+            resource_name="validate",
+            action="slug:read",
+        )
         try:
             payload = await request.json()
         except Exception:

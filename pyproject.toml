@@ -154,6 +154,7 @@ dev = [
 
 [project.scripts]
 query = "querysource.__cli__:main"
+generate-multiquery-docs = "querysource.cli.generate_docs:main"
 
 [project.urls]
 Homepage = "https://github.com/phenobarbital/querysource/"

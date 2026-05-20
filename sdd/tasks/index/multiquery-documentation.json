@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-05-20T00:30:00Z",
-  "completed_at": null,
+  "completed_at": "2026-05-20T17:17:55+00:00",
   "tasks": [
     {
       "id": "TASK-660",
@@ -14,16 +14,16 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Foundation task — all other tasks depend on it",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-660-abstract-multi-base.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-660-abstract-multi-base.md"
     },
     {
       "id": "TASK-661",
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -41,9 +41,9 @@
       "parallel": false,
       "parallelism_notes": "Modifies files that TASK-660 creates; must run after TASK-660",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-661-refactor-abstract-classes.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-661-refactor-abstract-classes.md"
     },
     {
       "id": "TASK-662",
@@ -52,7 +52,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -61,9 +61,9 @@
       "parallel": true,
       "parallelism_notes": "Modifies operator/transform files (docstrings only) — no file overlap with TASK-663. Can run in parallel with TASK-663 after TASK-661 completes.",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-662-component-docstrings.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-662-component-docstrings.md"
     },
     {
       "id": "TASK-663",
@@ -72,7 +72,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -81,9 +81,9 @@
       "parallel": true,
       "parallelism_notes": "Creates new file registry.py — no file overlap with TASK-662. Can run in parallel with TASK-662 after TASK-661 completes.",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-663-component-registry.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-663-component-registry.md"
     },
     {
       "id": "TASK-664",
@@ -92,7 +92,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -101,9 +101,9 @@
       "parallel": true,
       "parallelism_notes": "Creates new files in querysource/cli/ — no file overlap with TASK-665. Can run in parallel with TASK-665 after TASK-663 completes.",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-664-cli-generate-docs.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-664-cli-generate-docs.md"
     },
     {
       "id": "TASK-665",
@@ -112,7 +112,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -121,9 +121,9 @@
       "parallel": true,
       "parallelism_notes": "Creates new file handlers/components.py — no file overlap with TASK-664. Can run in parallel with TASK-664 after TASK-663 completes.",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-665-http-component-handler.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-665-http-component-handler.md"
     },
     {
       "id": "TASK-666",
@@ -132,7 +132,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -141,9 +141,9 @@
       "parallel": false,
       "parallelism_notes": "Modifies services.py which TASK-665 handler must exist for; must run after TASK-665",
       "assigned_to": null,
-      "started_at": "2026-05-20T01:07:54+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-666-route-registration.md"
+      "started_at": null,
+      "completed_at": "2026-05-20T17:17:55+00:00",
+      "file": "sdd/tasks/completed/TASK-666-route-registration.md"
     }
   ]
 }
