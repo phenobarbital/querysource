@@ -166,6 +166,12 @@ class QuerySource(metaclass=Singleton):
         lg = LoggingService()
         r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)
         routes.append(r)
+        # DEPRECATED: redirect old un-namespaced path → new /qs/ path (307 Temporary)
+        async def _redirect_audit_log(request: web.Request) -> web.Response:
+            qs = f'?{request.query_string}' if request.query_string else ''
+            raise web.HTTPTemporaryRedirect(f'/api/v1/qs/audit_log{qs}')
+        r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
+        routes.append(r)
 
         ### Query Manager ###
         r = self.app.router.add_view(
@@ -264,6 +270,16 @@ class QuerySource(metaclass=Singleton):
         self.app.router.add_view("/api/v2/qs/variables/{program}", VariablesService)
         self.app.router.add_view(
             "/api/v2/qs/variables/{program}/{variable}", VariablesService
+        )
+        # DEPRECATED: redirect old un-namespaced paths → new /qs/ paths (307 Temporary)
+        async def _redirect_variables(request: web.Request) -> web.Response:
+            new_path = request.path.replace('/api/v2/variables', '/api/v2/qs/variables', 1)
+            qs = f'?{request.query_string}' if request.query_string else ''
+            raise web.HTTPTemporaryRedirect(f'{new_path}{qs}')
+        self.app.router.add_route("*", "/api/v2/variables", _redirect_variables)
+        self.app.router.add_route("*", "/api/v2/variables/{program}", _redirect_variables)
+        self.app.router.add_route(
+            "*", "/api/v2/variables/{program}/{variable}", _redirect_variables
         )
 
         ### Startup Event for QuerySource:
