@@ -10,6 +10,35 @@ from .....types.dt.filters import create_filter
 from ..abstract import AbstractOperator
 
 class Filter(AbstractOperator):
+    """Filter rows in a DataFrame based on declarative conditions or field mappings.
+
+    Applies one or more filter conditions to the DataFrame, supporting both
+    column-value comparisons and field renaming/selection. Conditions are
+    combined with a logical AND (``&``) or OR (``|``) operator.
+
+    Usage: Use in a MultiQuery pipeline to reduce a DataFrame to only the rows
+    that satisfy specified conditions, equivalent to SQL WHERE clauses.
+
+    Attributes:
+        conditions: List of condition dicts ``[{column, expression, value}, ...]``.
+        fields: Dict mapping new column names to source column names for field
+            selection/renaming, e.g. ``{"name": "full_name", "total": "revenue"}``.
+        filter: List of filter specification dicts (alternative to ``conditions``).
+        operator: Logical operator to combine conditions — ``'&'`` (AND) or ``'|'`` (OR).
+            Default: ``'&'``.
+
+    Example:
+        {
+            "Filter": {
+                "conditions": [
+                    {"column": "status", "expression": "==", "value": "active"},
+                    {"column": "revenue", "expression": ">", "value": 1000}
+                ],
+                "operator": "&"
+            }
+        }
+    """
+
     def __init__(self, data: dict, **kwargs) -> None:
         self.conditions = kwargs.pop('conditions', None)
         self.fields: dict = kwargs.pop('fields', {})

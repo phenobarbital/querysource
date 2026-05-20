@@ -8,6 +8,38 @@ from .abstract import AbstractTransform
 
 
 class crosstab(AbstractTransform):
+    """Compute a cross-tabulation (frequency or aggregation) from a DataFrame.
+
+    Creates a contingency table (cross-tab) from the specified row index and
+    column values, computing value counts or an aggregation function.
+
+    Usage: Use in a MultiQuery ``Transform`` step to pivot categorical data
+    into a frequency or summary table.
+
+    Attributes:
+        index: Column name(s) to use as the row index in the cross-tab. Required.
+        columns: Column name(s) to use as the cross-tab columns. Required.
+        values: Column to aggregate (optional — omit for frequency counts).
+        aggfunc: Aggregation function to apply to ``values``. Default: ``'count'``.
+        type: Cross-tab variant. Default: ``'crosstab'``.
+        reset_index: If ``True``, reset the result index. Default: ``True``.
+
+    Example:
+        {
+            "Transform": [
+                {
+                    "crosstab": {
+                        "index": "region",
+                        "columns": "product_category",
+                        "values": "revenue",
+                        "aggfunc": "sum",
+                        "reset_index": true
+                    }
+                }
+            ]
+        }
+    """
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.reset_index: bool = kwargs.pop('reset_index', True)
         self._type = kwargs.pop('type', 'crosstab')

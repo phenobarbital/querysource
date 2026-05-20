@@ -7,30 +7,33 @@ from ....exceptions import (
 from .tPandas import tPandas
 
 class tOrder(tPandas):
-    """
-        tOrder
+    """Sort a DataFrame by one or more columns in a MultiQuery pipeline.
 
-        Overview
+    Orders the input DataFrame by the specified column(s), with configurable
+    ascending/descending direction and NaN position.
 
-        The `tOrder` class is a component designed to order a Pandas DataFrame by a specified column.
-        It allows sorting the DataFrame either in ascending or descending order based on the specified column.
+    Usage: Use in a MultiQuery ``Transform`` step to sort the result of a prior
+    query or operator before returning or further processing.
 
-        Properties
+    Attributes:
+        columns: Column name or list of column names to sort by. Required.
+        ascending: Sort direction — ``True`` for ascending, ``False`` for descending.
+            Can be a single bool or a list (one per column). Default: ``True``.
+        na_position: Where to place NaN values — ``'first'`` or ``'last'``.
+            Default: ``'last'``.
 
-        .. table:: Properties
-        :widths: auto
-
-        +------------------+----------+-----------+-----------------------------------------------------------------------------------+
-        | Name             | Required | Type      | Description                                                                       |
-        +------------------+----------+-----------+-----------------------------------------------------------------------------------+
-        | columns          | Yes      | str       | The name of the column to sort the DataFrame by.                                  |
-        +------------------+----------+-----------+-----------------------------------------------------------------------------------+
-        | ascending        | No       | bool      | Specifies whether to sort the DataFrame in ascending order. Defaults to True.     |
-        +------------------+----------+-----------+-----------------------------------------------------------------------------------+
-
-        Return
-           The dataframe ordinated by the column give it in the order_by either ascending or descending.
-
+    Example:
+        {
+            "Transform": [
+                {
+                    "tOrder": {
+                        "columns": ["revenue", "date"],
+                        "ascending": [false, true],
+                        "na_position": "last"
+                    }
+                }
+            ]
+        }
     """  # noqa
 
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:

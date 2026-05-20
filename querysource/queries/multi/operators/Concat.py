@@ -6,8 +6,21 @@ from ....exceptions import (
 from .abstract import AbstractOperator
 
 class Concat(AbstractOperator):
-    """
-    Concat to Dataframes in one.
+    """Concatenate two or more DataFrames into a single DataFrame.
+
+    Stacks DataFrames vertically (row-wise) in the order they appear in the
+    data dictionary, resetting the index in the result.
+
+    Usage: Use in a MultiQuery pipeline to append rows from multiple DataFrames
+    that share the same schema, equivalent to SQL UNION ALL.
+
+    Attributes:
+        No configurable attributes — concatenates all DataFrames in the data dict.
+
+    Example:
+        {
+            "Concat": {}
+        }
     """
     async def start(self):
         dataset = []

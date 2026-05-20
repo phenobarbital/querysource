@@ -206,6 +206,20 @@ class QuerySource(metaclass=Singleton):
         )
         routes.append(r)
 
+        ## Component Documentation:
+        from .handlers.components import ComponentHandler  # noqa: PLC0415
+        ch = ComponentHandler()
+        r = self.app.router.add_get(
+            r'/api/v3/components',
+            ch.list_components
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            r'/api/v3/validate',
+            ch.validate_pipeline
+        )
+        routes.append(r)
+
         # querying directly to drivers
         # self.app.router.add_get('/api/v2/queries/{driver}/{method}', qs.query)
         # self.app.router.add_post('/api/v2/queries/{driver}/{method}', qs.query)

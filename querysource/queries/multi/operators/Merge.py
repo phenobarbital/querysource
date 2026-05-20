@@ -7,15 +7,33 @@ from ....exceptions import (
 from .abstract import AbstractOperator
 
 class Merge(AbstractOperator):
-    """
-    Merge two DataFrames with support for various join types including anti-join.
+    """Merge two DataFrames with support for various join types including anti-join.
 
-    Parameters:
-    - on: Column(s) to join on
-    - how: Join type (inner, left, right, outer, anti)
-    - left_on: Column(s) from left DataFrame
-    - right_on: Column(s) from right DataFrame
-    - suffixes: Suffixes for overlapping columns
+    Combines two DataFrames using pandas merge semantics. The left DataFrame is
+    identified by ``using``; the right is the remaining DataFrame in the data dict.
+    Supports standard SQL join types plus anti-join (rows in left that don't match right).
+
+    Usage: Use in a MultiQuery pipeline to combine two DataFrames on explicit column
+    keys, with fine-grained control over join columns and overlap handling.
+
+    Attributes:
+        on: Column(s) to join on (must exist in both DataFrames).
+        how: Join type — ``'inner'``, ``'left'``, ``'right'``, ``'outer'``, or ``'anti'``.
+            Default: ``'inner'``.
+        left_on: Column(s) from the left DataFrame (use with ``right_on`` instead of ``on``).
+        right_on: Column(s) from the right DataFrame (use with ``left_on`` instead of ``on``).
+        suffixes: 2-tuple of suffixes for overlapping column names. Default: ``('_x', '_y')``.
+        using: Name of the left DataFrame key in the data dictionary (required).
+
+    Example:
+        {
+            "Merge": {
+                "using": "employees",
+                "on": "department_id",
+                "how": "left",
+                "suffixes": ["_emp", "_dept"]
+            }
+        }
     """
     def __init__(self, data: dict, **kwargs) -> None:
         self._on = kwargs.pop('on', None)  # Column(s) to join on

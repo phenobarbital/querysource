@@ -30,47 +30,35 @@ numeric_required = {
 }
 
 class GroupBy(AbstractOperator):
-    """
-    GroupBy making the aggregation of columns based on a list of columns.
+    """Aggregate DataFrame columns grouped by one or more key columns.
 
-    Available Functions:
-    +----------+----------------------------------------------+
-    | Function | Description                                  |
-    +----------+----------------------------------------------+
-    | count    | Number of non-null observations              |
-    | sum      | Sum of values                                |
-    | mean     | Mean of values                               |
-    | mad      | Mean absolute deviation                      |
-    | median   | Arithmetic median of values                  |
-    | min      | Minimum                                      |
-    | max      | Maximum                                      |
-    | mode     | Mode, Most frequent value(s).                |
-    | size     | Total number of values, including nulls.     |
-    | abs      | Absolute Value                               |
-    | prod     | Product of values                            |
-    | std      | Unbiased standard deviation                  |
-    | var      | Unbiased variance (Variance of values.)      |
-    | sem      | Unbiased standard error of the mean          |
-    | nunique  | Count of unique values.                      |
-    | unique   | List of unique values.                       |
-    | first    | First value in a column.                     |
-    | last     | Last value in a column.                      |
-    | idxmax   | Index of the first occurrence of the maximum |
-    | idxmin   | Index of the first occurrence of the minimum |
-    +----------+----------------------------------------------+
+    Applies one or more aggregation functions (sum, mean, count, etc.) to
+    specified columns, grouped by the values in the ``by`` column list.
 
-    Will be supported on next version (functions with arguments)
-    +----------+----------------------------------------------+
-    | Function | Description                                  |
-    +----------+----------------------------------------------+
-    | skew     | Unbiased skewness (3rd moment)               |
-    | kurt     | Unbiased kurtosis (4th moment)               |
-    | quantile | Sample quantile (value at %)                 |
-    | cumsum   | Cumulative sum                               |
-    | cumprod  | Cumulative product                           |
-    | cummax   | Cumulative maximum                           |
-    | cummin   | Cumulative minimum                           |
-    +----------+----------------------------------------------+
+    Usage: Use in a MultiQuery pipeline to compute aggregate statistics on
+    a DataFrame, equivalent to SQL GROUP BY with aggregate functions.
+
+    Attributes:
+        columns: Dict mapping output column names to aggregation function names,
+            e.g. ``{"total": "sum", "avg_price": "mean"}``.
+        by: List of column names to group by, e.g. ``["region", "category"]``.
+        by_replace_nan: Value to replace NaN in ``by`` columns before grouping.
+
+    Available aggregation functions: ``count``, ``sum``, ``mean``, ``median``,
+    ``min``, ``max``, ``mode``, ``size``, ``abs``, ``prod``, ``std``, ``var``,
+    ``sem``, ``nunique``, ``unique``, ``first``, ``last``, ``idxmax``, ``idxmin``.
+
+    Example:
+        {
+            "GroupBy": {
+                "by": ["region", "product"],
+                "columns": {
+                    "total_revenue": "sum",
+                    "avg_price": "mean",
+                    "order_count": "count"
+                }
+            }
+        }
     """
     supported_functions = [
         'avg_first_last'
