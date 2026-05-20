@@ -52,7 +52,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Modifies operator/transform files (docstrings only) — no file overlap with TASK-663. Can run in parallel with TASK-663 after TASK-661 completes.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-662-component-docstrings.md"
+      "completed_at": "2026-05-20T03:01:25+00:00",
+      "file": "sdd/tasks/completed/TASK-662-component-docstrings.md"
     },
     {
       "id": "TASK-663",
