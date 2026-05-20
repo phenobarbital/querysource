@@ -177,8 +177,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-05-20
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

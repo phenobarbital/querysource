@@ -112,7 +112,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -122,8 +122,8 @@
       "parallelism_notes": "Creates new file handlers/components.py — no file overlap with TASK-664. Can run in parallel with TASK-664 after TASK-663 completes.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-665-http-component-handler.md"
+      "completed_at": "2026-05-20T03:06:49+00:00",
+      "file": "sdd/tasks/completed/TASK-665-http-component-handler.md"
     },
     {
       "id": "TASK-666",
