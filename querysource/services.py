@@ -164,7 +164,7 @@ class QuerySource(metaclass=Singleton):
 
         ### Logging Service:
         lg = LoggingService()
-        r = self.app.router.add_get('/api/v1/audit_log', lg.audit_log)
+        r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)
         routes.append(r)
 
         ### Query Manager ###
@@ -257,13 +257,13 @@ class QuerySource(metaclass=Singleton):
         ### Getting the QuerySource Extensions
         ### Getting the QuerySource variables
         # PROGRAM Variables
-        self.app.router.add_view("/api/v2/variables", VariablesService)
+        self.app.router.add_view("/api/v2/qs/variables", VariablesService)
         self.app.router.add_route(
             "*", "/api/v2/services/variables", VariablesService
         )
-        self.app.router.add_view("/api/v2/variables/{program}", VariablesService)
+        self.app.router.add_view("/api/v2/qs/variables/{program}", VariablesService)
         self.app.router.add_view(
-            "/api/v2/variables/{program}/{variable}", VariablesService
+            "/api/v2/qs/variables/{program}/{variable}", VariablesService
         )
 
         ### Startup Event for QuerySource:
