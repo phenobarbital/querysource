@@ -7,23 +7,34 @@ from ....exceptions import (
     DriverError,
     QueryException
 )
+from ..abstract import AbstractMulti
 
 
-class AbstractTransform:
+class AbstractTransform(AbstractMulti):
+    """Unified base class for all MultiQuery Transformations.
+
+    Inherits shared boilerplate (init, async context manager, lifecycle) from
+    AbstractMulti and adds transform-specific data validation in ``start()``.
+
+    Usage: Base class for all data-transformation steps in a MultiQuery pipeline.
+    """
+
+    _category = "Transformations"
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self._backend = 'pandas'
-        self.data = data
         self.logger = logging.getLogger(f'QS.Transform.{self.__class__.__name__}')
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        super().__init__(data, **kwargs)
 
-    def colum_info(self, df):
+    def _print_info(self, df: pd.DataFrame) -> None:
+        """Print column type/sample information for a DataFrame."""
         print(df.head())
         print('::: Printing Column Information === ')
         for column, t in df.dtypes.items():
             print(column, '->', t, '->', df[column].iloc[0])
 
     async def start(self):
+        """Validate input data before running the transformation."""
         ### TODO: making transformations over list of dataframes
         if isinstance(self.data, dict):
             for _, data in self.data.items():
@@ -39,23 +50,9 @@ class AbstractTransform:
                     )
         elif not isinstance(self.data, pd.DataFrame):
             raise DriverError(
-                f'Wrong type of data, required a Pandas dataframe: {type(data)}'
+                f'Wrong type of data, required a Pandas dataframe: {type(self.data)}'
             )
-
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            raise QueryException(
-                f"Operator Error: {exc_value!s}"
-            ) from exc_value
-        await self.close()
-
-    async def close(self):
-        pass
 
     @abstractmethod
     async def run(self):
-        pass
+        """Execute the transformation. Must be implemented by every concrete subclass."""

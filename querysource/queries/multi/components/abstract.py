@@ -8,30 +8,23 @@ They are responsible for making complex transformations and operations not cover
 """
 import pandas as pd
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from ....exceptions import QueryException
+from ..abstract import AbstractMulti
 
 
-class AbstractComponent(ABC):
+class AbstractComponent(AbstractMulti):
     """AbstractComponent.
 
     Abstract Class for Multi-Query Components.
+
+    Usage: Base class for optional complex transformation/operation steps in a MultiQuery pipeline.
     """
+
+    _category = "Components"
+
     def __init__(self, data: dict, **kwargs) -> None:
-        self.data = data
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            raise QueryException(
-                f"Component Error: {exc_value!s}"
-            ) from exc_value
-        await self.close()
+        super().__init__(data, **kwargs)
 
     @abstractmethod
     async def start(self):
@@ -42,14 +35,3 @@ class AbstractComponent(ABC):
     async def run(self):
         """Run the Component.
         """
-
-    async def close(self):
-        """Close the Component.
-        """
-        pass
-
-    def _print_info(self, df: pd.DataFrame):
-        print('::: Printing Column Information === ')
-        for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
-        print()
