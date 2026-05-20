@@ -260,3 +260,50 @@ class TestLoadScheduledQueriesProviderRouting:
         )
         _, kwargs = sched._scheduler.add_job.call_args
         assert "output" not in kwargs["kwargs"]
+
+
+# ---------------------------------------------------------------------------
+# TASK-646: Cache-refresh multi-skip tests
+# ---------------------------------------------------------------------------
+
+def _cache_row(provider="db"):
+    return {
+        "query_slug": "cached_slug",
+        "attributes": {},
+        "cache_options": {
+            "schedule_type": "interval",
+            "schedule": {"minutes": 30},
+        },
+        "provider": provider,
+        "is_cached": True,
+        "query_raw": None,
+    }
+
+
+class TestLoadCacheRefreshJobsMultiSkip:
+
+    def test_skips_multi_rows(self):
+        """provider='multi' row with is_cached=True produces no cache_<slug> job."""
+        from querysource.scheduler.scheduler import QSScheduler
+        sched = QSScheduler.__new__(QSScheduler)
+        sched.logger = MagicMock()
+        sched._timezone = "UTC"
+        sched._notification_manager = MagicMock()
+        sched._scheduler = MagicMock()
+        count = sched._load_cache_refresh_jobs([_cache_row(provider="multi")])
+        sched._scheduler.add_job.assert_not_called()
+        assert count == 0
+
+    def test_unchanged_for_single_query(self):
+        """provider='db' row with is_cached=True still registers cache_<slug> job."""
+        from querysource.scheduler.scheduler import QSScheduler
+        from querysource.scheduler.jobs import cache_refresh_job
+        sched = QSScheduler.__new__(QSScheduler)
+        sched.logger = MagicMock()
+        sched._timezone = "UTC"
+        sched._notification_manager = MagicMock()
+        sched._scheduler = sched._create_scheduler()
+        count = sched._load_cache_refresh_jobs([_cache_row(provider="db")])
+        args, kwargs = sched._scheduler.get_job("cache_cached_slug"), None
+        assert sched._scheduler.get_job("cache_cached_slug") is not None
+        assert count == 1

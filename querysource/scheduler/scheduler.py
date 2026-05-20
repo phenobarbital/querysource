@@ -203,6 +203,8 @@ class QSScheduler:
         """
         count = 0
         for row in rows:
+            if row.get("provider") == "multi":  # Multi-slugs never get a cache_<slug> job.
+                continue
             slug = row["query_slug"]
             is_cached = row.get("is_cached", False)
             if not is_cached:
