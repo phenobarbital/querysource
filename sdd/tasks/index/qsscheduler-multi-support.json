@@ -32,7 +32,7 @@
       "feature_id": "FEAT-092",
       "feature": "qsscheduler-multi-support",
       "spec": "sdd/specs/qsscheduler-multi-support.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Imports scheduled_multiqs_job from TASK-644. Must land after TASK-644 to keep imports valid. Shares scheduler.py with TASK-646, so also sequential with that task.",
       "assigned_to": null,
       "started_at": "2026-05-20T00:06:24+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-645-load-scheduled-queries-provider-routing.md"
+      "completed_at": "2026-05-20T00:13:47+00:00",
+      "file": "sdd/tasks/completed/TASK-645-load-scheduled-queries-provider-routing.md"
     },
     {
       "id": "TASK-646",
