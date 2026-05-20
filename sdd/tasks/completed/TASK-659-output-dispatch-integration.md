@@ -181,3 +181,9 @@ When you pick up this task:
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
 **Deviations from spec**: none | describe if any
+
+---
+**Completed by**: SDD Worker (Claude)
+**Date**: 2026-05-20
+**Notes**: Replaced hardcoded TableOutput dispatch in multi/__init__.py and handlers/multi.py with registry-based get_destination() lookup. Both files now use DESTINATION_REGISTRY for all destinations.
+**Deviations from spec**: 3 pre-existing ruff warnings in the files (F841 unused variables) not introduced by this task — not fixed per no-scope-creep rule.

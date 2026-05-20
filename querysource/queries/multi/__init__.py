@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 from aiohttp import web
 from ...exceptions import (
@@ -14,7 +15,7 @@ from .transformations import (
     GoogleMaps,
 )
 from .operators.filter import Filter
-from ...outputs.tables import TableOutput
+from ...outputs.destinations import get_destination
 from .sources import ThreadQuery, ThreadFile
 
 
@@ -401,14 +402,21 @@ class MultiQS(BaseQuery):
         if self._return_all is False and (isinstance(result, dict) and len(result) == 1):
             # reduce to one single Dataframe:
             result = list(result.values())[0]
-        ### Step 5: Optionally saving result into Database (using Pandas)
+        ### Step 5: Optionally saving result to destination (registry-based dispatch)
         if _output:
             for step in _output:
-                obj = None
                 for step_name, component in step.items():
-                    if step_name in ('tableOutput', 'TableOutput'):
-                        obj = TableOutput(data=result, **component)
+                    try:
+                        destination_cls = get_destination(step_name)
+                        obj = destination_cls(data=result, **component)
                         result = await obj.run()
+                    except Exception as dest_err:
+                        logging.error(
+                            "MultiQS: output destination '%s' failed: %s",
+                            step_name,
+                            dest_err,
+                        )
+                        # Per spec: continue to next destination on failure
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"

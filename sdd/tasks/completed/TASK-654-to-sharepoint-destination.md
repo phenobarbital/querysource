@@ -242,3 +242,9 @@ When you pick up this task:
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
 **Deviations from spec**: none | describe if any
+
+---
+**Completed by**: SDD Worker (Claude)
+**Date**: 2026-05-19
+**Notes**: Implemented ToSharepoint with Excel/CSV conversion, ClientSecretCredential auth, site/drive resolution, folder creation, small-file PUT and large-file resumable upload. All 10 unit tests pass.
+**Deviations from spec**: none

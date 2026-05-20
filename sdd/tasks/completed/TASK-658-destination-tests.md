@@ -180,3 +180,9 @@ When you pick up this task:
 **Notes**: What was implemented, any deviations from scope, issues encountered.
 
 **Deviations from spec**: none | describe if any
+
+---
+**Completed by**: SDD Worker (Claude)
+**Date**: 2026-05-20
+**Notes**: Created 14 integration tests covering registry completeness, backward compatibility (tableOutput/TableOutput), destination chaining pass-through, and E2E mock tests for all 4 new destinations. All 90 destination tests pass.
+**Deviations from spec**: none

@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-05-19T00:00:00Z",
-  "completed_at": null,
+  "completed_at": "2026-05-20T00:05:47+00:00",
   "tasks": [
     {
       "id": "TASK-653",
@@ -14,7 +14,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,9 @@
       "parallelism_notes": "Foundation task — all other tasks depend on this base class and the registry",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-653-abstract-destination.md"
+      "completed_at": "2026-05-19T21:52:12+00:00",
+      "file": "sdd/tasks/completed/TASK-653-abstract-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-654",
@@ -32,7 +33,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -42,8 +43,9 @@
       "parallelism_notes": "Independent of ToS3, Table, and DWH — each destination touches only its own file + registry entry",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-654-to-sharepoint-destination.md"
+      "completed_at": "2026-05-19T21:58:49+00:00",
+      "file": "sdd/tasks/completed/TASK-654-to-sharepoint-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-655",
@@ -52,7 +54,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,8 +64,9 @@
       "parallelism_notes": "Independent of ToSharepoint, Table, and DWH — each destination touches only its own file + registry entry",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-655-to-s3-destination.md"
+      "completed_at": "2026-05-19T22:00:05+00:00",
+      "file": "sdd/tasks/completed/TASK-655-to-s3-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-656",
@@ -72,7 +75,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -82,8 +85,9 @@
       "parallelism_notes": "Independent of ToSharepoint and ToS3. DWH depends on Table (shared patterns), but Table itself is independent.",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-656-table-destination.md"
+      "completed_at": "2026-05-19T22:02:01+00:00",
+      "file": "sdd/tasks/completed/TASK-656-table-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-657",
@@ -92,7 +96,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -103,8 +107,9 @@
       "parallelism_notes": "Depends on TASK-656 (Table) for shared driver normalization and engine patterns",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-657-dwh-destination.md"
+      "completed_at": "2026-05-19T22:03:56+00:00",
+      "file": "sdd/tasks/completed/TASK-657-dwh-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-658",
@@ -113,7 +118,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -127,8 +132,9 @@
       "parallelism_notes": "Must run after all destination implementations are complete — tests the full pipeline",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-658-destination-tests.md"
+      "completed_at": "2026-05-19T22:05:53+00:00",
+      "file": "sdd/tasks/completed/TASK-658-destination-tests.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-659",
@@ -137,7 +143,7 @@
       "feature_id": "FEAT-094",
       "feature": "multiquery-destinations",
       "spec": "sdd/specs/multiquery-destinations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -147,8 +153,9 @@
       "parallelism_notes": "Only needs the registry (TASK-653). Can run in parallel with individual destinations since it modifies different files (multi/__init__.py and handlers/multi.py)",
       "assigned_to": null,
       "started_at": "2026-05-19T21:38:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-659-output-dispatch-integration.md"
+      "completed_at": "2026-05-19T22:04:52+00:00",
+      "file": "sdd/tasks/completed/TASK-659-output-dispatch-integration.md",
+      "verification": "verified"
     }
   ]
 }
