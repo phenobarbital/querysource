@@ -7,6 +7,29 @@ from ....exceptions import (
 from .abstract import AbstractOperator
 
 class Melt(AbstractOperator):
+    """Unpivot a DataFrame from wide format to long format.
+
+    Melts the main DataFrame (identified by ``using``) by turning selected
+    columns into rows, then joins the result with a metadata DataFrame.
+
+    Usage: Use in a MultiQuery pipeline to reshape wide DataFrames into long
+    (tidy) format for further analysis or visualization.
+
+    Attributes:
+        id: Column(s) to use as identifier variables (kept fixed during melt).
+        na_cols: Column name(s) from which to drop null rows after the join.
+        using: Name of the primary DataFrame to melt (required).
+
+    Example:
+        {
+            "Melt": {
+                "using": "wide_data",
+                "id": "date",
+                "na_cols": "value"
+            }
+        }
+    """
+
     def __init__(self, data: dict, **kwargs) -> None:
         self._id_vars = kwargs.pop('id', None)
         self._na_cols = kwargs.pop('na_cols', None)

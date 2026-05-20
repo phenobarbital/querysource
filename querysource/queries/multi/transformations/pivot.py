@@ -8,6 +8,44 @@ from .abstract import AbstractTransform
 
 
 class pivot(AbstractTransform):
+    """Reshape a DataFrame using a pivot or pivot_table operation.
+
+    Converts a long-format DataFrame into a wide-format table by pivoting
+    values from one column into multiple columns.
+
+    Usage: Use in a MultiQuery ``Transform`` step to turn row-level records
+    into a column-per-category layout (e.g. monthly columns from a date column).
+
+    Attributes:
+        index: Column(s) to use as the pivot table row index. Required.
+        columns: Column whose unique values become the new column headers. Required.
+        values: Column whose values populate the pivot table cells. Required for
+            ``pivot_table``; optional for ``pivot``.
+        aggfunc: Aggregation function for duplicate entries (e.g. ``'sum'``, ``'mean'``).
+            Only applies when ``type`` is ``'pivot_table'``.
+        type: Pivot variant — ``'pivot'`` or ``'pivot_table'``. Default: ``'crosstab'``.
+        multilevel: If ``True``, keep multi-level column headers. Default: ``False``.
+        fill_value: Value to use for missing entries in the pivot result.
+        pd_args: Extra keyword arguments passed to the underlying pandas call.
+        reset_index: If ``True``, reset the result index. Default: ``True``.
+
+    Example:
+        {
+            "Transform": [
+                {
+                    "pivot": {
+                        "index": "product",
+                        "columns": "month",
+                        "values": "revenue",
+                        "aggfunc": "sum",
+                        "type": "pivot_table",
+                        "fill_value": 0
+                    }
+                }
+            ]
+        }
+    """
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.reset_index: bool = kwargs.pop('reset_index', True)
         self._type = kwargs.pop('type', 'crosstab')

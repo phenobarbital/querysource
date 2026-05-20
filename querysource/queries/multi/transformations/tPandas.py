@@ -10,19 +10,28 @@ from .abstract import AbstractTransform
 
 
 class tPandas(AbstractTransform):
-    """
-    tPandas
+    """Abstract base for Pandas-backed data transformations in a MultiQuery pipeline.
 
-        Overview
+    Provides a standard lifecycle (``start``/``run``/``close``) and delegates
+    the actual transformation to the abstract ``_run()`` method. Concrete subclasses
+    implement ``_run()`` to apply specific pandas operations (sort, crosstab, pivot, etc.).
 
-        The tPandas class is an abstract interface for performing various data transformations on Pandas DataFrames.
-        It provides foundational methods and structure for components that need to apply transformations, merges, or other
-        DataFrame operations within a task.
+    Usage: Subclass ``tPandas`` to implement custom DataFrame transformations.
+    End-users use concrete subclasses such as ``tOrder``, ``correlation``,
+    ``crosstab``, ``pivot``, ``Forecast``, and ``Map``.
 
-        This interface provides methods to initialize, transform, and debug Pandas DataFrame operations.
-        Concrete implementations using `tPandas` can define specific transformations. On execution, metrics
-        for rows and columns are recorded, and any transformation errors or data mismatches are raised as exceptions
-        with detailed error messages for effective debugging.
+    Attributes:
+        type: Transformation sub-type hint used by some subclasses.
+        condition: Optional filter condition applied before the transformation.
+        pd_args: Dict of extra keyword arguments passed through to the underlying
+            pandas operation, e.g. ``{"sort": false, "dropna": true}``.
+
+    Example:
+        {
+            "Transform": [
+                {"tOrder": {"column": "revenue", "ascending": false}}
+            ]
+        }
     """  # noqa
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:
         """Init Method."""

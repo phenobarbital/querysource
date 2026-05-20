@@ -12,7 +12,39 @@ from ....utils.getfunc import getFunction
 
 
 class Map(AbstractTransform):
-    """Map Transform: changing the shape of the data."""
+    """Rename, select, or compute columns in a DataFrame (shape mapping).
+
+    Applies a field mapping to rename columns, select a subset of columns,
+    or compute new columns via expressions. Supports replacing existing columns
+    in-place and optional index reset.
+
+    Usage: Use in a MultiQuery ``Transform`` step to reshape a DataFrame —
+    rename columns, select fields, or compute derived columns — before returning
+    the result.
+
+    Attributes:
+        fields: Dict mapping target column names to source column names or expressions,
+            e.g. ``{"name": "full_name", "total": "revenue + cost"}``. Required.
+        replace_columns: If ``True``, replace the DataFrame's existing columns with
+            the mapped output. Default: ``False``.
+        reset_index: If ``True``, reset the DataFrame index after mapping.
+            Default: ``False``.
+
+    Example:
+        {
+            "Transform": [
+                {
+                    "Map": {
+                        "fields": {
+                            "customer_name": "name",
+                            "total_amount": "revenue"
+                        },
+                        "reset_index": true
+                    }
+                }
+            ]
+        }
+    """
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.replace_columns: bool = kwargs.pop('replace_columns', False)
         try:

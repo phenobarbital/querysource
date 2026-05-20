@@ -9,6 +9,32 @@ from navigator.actions.google.maps import Route
 from ..abstract import AbstractTransform
 
 class GoogleMaps(AbstractTransform):
+    """Enrich a DataFrame with Google Maps route and travel-time data.
+
+    Calls the Google Maps Routes API for each row in the DataFrame, adding
+    route geometry, distance, and estimated travel time as new columns.
+
+    Usage: Use in a MultiQuery ``Transform`` step to augment location-based
+    data with real-world route information.
+
+    Attributes:
+        zoom: Map zoom level for any embedded map output. Default: ``10``.
+        map_scale: Scale factor for map output (1 or 2). Default: ``2``.
+        timestamp_key: Column name containing departure timestamps.
+            Default: ``'timestamp'``.
+        departure_time: Fixed departure time string (ISO format) to use when
+            the timestamp column is not present. Default: ``None``.
+        type: Route type to request — e.g. ``'get_route'``. Default: ``'get_route'``.
+
+    Example:
+        {
+            "GoogleMaps": {
+                "zoom": 12,
+                "timestamp_key": "departure_time",
+                "type": "get_route"
+            }
+        }
+    """
 
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:
         self.zoom: int = kwargs.get('zoom', 10)

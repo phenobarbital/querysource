@@ -8,8 +8,23 @@ from ....exceptions import (
 from .abstract import AbstractOperator
 
 class Info(AbstractOperator):
-    """
-    Extract and return detailed information about all DataFrames in the input dictionary.
+    """Extract and return detailed schema and sample information about all DataFrames.
+
+    Inspects every DataFrame in the data dictionary and returns a structured
+    summary including column names, data types, first-row values, row/column counts,
+    and the first 5 rows as sample data.
+
+    Usage: Use in a MultiQuery pipeline as a diagnostic/inspection step to
+    understand the shape and contents of intermediate DataFrames. Returns a
+    JSON-serializable dict keyed by DataFrame name.
+
+    Attributes:
+        No configurable attributes — inspects all DataFrames in the data dict.
+
+    Example:
+        {
+            "Info": {}
+        }
     """
     async def start(self):
         # Validate all inputs are DataFrames

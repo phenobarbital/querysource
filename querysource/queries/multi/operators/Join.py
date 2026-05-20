@@ -11,6 +11,32 @@ from .abstract import AbstractOperator
 
 
 class Join(AbstractOperator):
+    """Join two or more DataFrames on shared columns or index.
+
+    Performs SQL-style joins (inner, left, right, outer) between DataFrames
+    in the pipeline data dictionary.
+
+    Usage: Use in a MultiQuery pipeline to combine DataFrames by matching rows
+    on one or more columns, equivalent to SQL JOIN operations.
+
+    Attributes:
+        type: Join type — ``'inner'``, ``'left'``, ``'right'``, or ``'outer'``. Default: ``'inner'``.
+        left: Name of the left DataFrame key in the data dictionary.
+        right: Name of the right DataFrame key in the data dictionary.
+        join_conditions: List of join condition dicts specifying column-to-column comparisons.
+        on: Column name(s) to join on (alias: ``using``).
+
+    Example:
+        {
+            "Join": {
+                "type": "inner",
+                "left": "revenue",
+                "right": "costs",
+                "on": "date"
+            }
+        }
+    """
+
     def __init__(self, data: dict, **kwargs) -> None:
         self._type: str = kwargs.get('type', 'inner')
         # Left Operator
