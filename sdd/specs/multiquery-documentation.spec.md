@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-095
 **Date**: 2026-05-20
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.10.0
 
 ---
@@ -528,8 +528,8 @@ query = "querysource.__cli__:main"
 
 - [x] Schema format → **Resolved in proposal**: Both JSON Schema (draft-2020-12) AND simplified attribute dict.
 - [x] Validation depth → **Resolved in proposal**: Syntactic + structural (no semantic/data-type flow analysis).
-- [ ] Should `ComponentRegistry` hardcode the known operator/transform names or scan the filesystem (`operators/*.py`, `transformations/*.py`) to discover them dynamically? — *Owner: developer*
-- [ ] Should the debug helper rename (`colum_info` → `_print_info`) be done in this feature or deferred to avoid breaking changes? — *Owner: developer*
+- [ ] Should `ComponentRegistry` hardcode the known operator/transform names or scan the filesystem (`operators/*.py`, `transformations/*.py`) to discover them dynamically? — *Owner: developer*: scan the filesystem
+- [ ] Should the debug helper rename (`colum_info` → `_print_info`) be done in this feature or deferred to avoid breaking changes? — *Owner: developer*: be done in this feature.
 
 ---
 
