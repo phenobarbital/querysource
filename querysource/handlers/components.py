@@ -2,8 +2,8 @@
 ComponentHandler — HTTP handler for MultiQuery component documentation and pipeline validation.
 
 Provides:
-  - GET  /api/v3/components  — returns JSON catalog of all registered components
-  - POST /api/v3/validate    — validates a MultiQuery pipeline definition payload
+  - GET  /api/v3/qs/components  — returns JSON catalog of all registered components
+  - POST /api/v3/qs/validate    — validates a MultiQuery pipeline definition payload
 """
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ class ComponentHandler(AbstractHandler):
     """HTTP handler for component documentation and pipeline validation endpoints.
 
     Methods:
-        list_components: Handle GET /api/v3/components
-        validate_pipeline: Handle POST /api/v3/validate
+        list_components: Handle GET /api/v3/qs/components
+        validate_pipeline: Handle POST /api/v3/qs/validate
     """
 
     async def list_components(self, request: web.Request) -> web.Response:

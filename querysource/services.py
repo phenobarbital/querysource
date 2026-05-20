@@ -210,12 +210,12 @@ class QuerySource(metaclass=Singleton):
         from .handlers.components import ComponentHandler  # noqa: PLC0415
         ch = ComponentHandler()
         r = self.app.router.add_get(
-            r'/api/v3/components',
+            r'/api/v3/qs/components',
             ch.list_components
         )
         routes.append(r)
         r = self.app.router.add_post(
-            r'/api/v3/validate',
+            r'/api/v3/qs/validate',
             ch.validate_pipeline
         )
         routes.append(r)

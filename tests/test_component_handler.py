@@ -7,7 +7,7 @@ from aiohttp import web
 from querysource.handlers.components import ComponentHandler
 
 
-def _make_request(method="GET", path="/api/v3/components", query_string="", body=None):
+def _make_request(method="GET", path="/api/v3/qs/components", query_string="", body=None):
     """Build a minimal mock aiohttp request."""
     request = MagicMock(spec=web.Request)
     request.method = method
