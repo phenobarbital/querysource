@@ -132,7 +132,7 @@
       "feature_id": "FEAT-095",
       "feature": "multiquery-documentation",
       "spec": "sdd/specs/multiquery-documentation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -142,8 +142,8 @@
       "parallelism_notes": "Modifies services.py which TASK-665 handler must exist for; must run after TASK-665",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-666-route-registration.md"
+      "completed_at": "2026-05-20T03:07:44+00:00",
+      "file": "sdd/tasks/completed/TASK-666-route-registration.md"
     }
   ]
 }
