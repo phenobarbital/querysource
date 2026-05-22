@@ -14,7 +14,7 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Foundation task — every later task depends on the mixin existing.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:14:21+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-667-schema-introspectable-mixin.md"
+      "completed_at": "2026-05-22T16:18:11+00:00",
+      "file": "sdd/tasks/completed/TASK-667-schema-introspectable-mixin.md"
     },
     {
       "id": "TASK-668",
