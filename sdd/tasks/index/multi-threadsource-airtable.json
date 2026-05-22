@@ -92,7 +92,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -100,8 +100,8 @@
       "parallelism_notes": "Touches only querysource/conf.py — no overlap with the Interface/Source files. Can run in parallel with TASK-674 / TASK-675 / TASK-676.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-678-airtable-conf-constants.md"
+      "completed_at": "2026-05-22T17:01:53+00:00",
+      "file": "sdd/tasks/completed/TASK-678-airtable-conf-constants.md"
     },
     {
       "id": "TASK-679",
