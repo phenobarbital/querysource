@@ -141,6 +141,61 @@ class TestValidatePipeline:
         assert len(transform_errors) == 0
 
 
+class TestDestinationDiscovery:
+    def setup_method(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        ComponentRegistry.discover_all.cache_clear()
+
+    def test_scan_picks_up_migrated_destinations(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        components = ComponentRegistry.discover_all()
+        for cls_name in ("ToSharepoint", "ToS3", "TableDestination", "DWHDestination"):
+            assert cls_name in components, f"{cls_name} missing from discover_all()"
+
+    def test_merge_preserves_legacy_step_names(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        components = ComponentRegistry.discover_all()
+        for key in ("tableOutput", "TableOutput"):
+            assert key in components, f"Legacy registry key '{key}' missing"
+
+    def test_classify_destinations_via_issubclass(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        from querysource.queries.multi.destinations.sharepoint import ToSharepoint
+        assert ComponentRegistry._classify("ToSharepoint", ToSharepoint) == "Destinations"
+
+    def test_classify_table_output_adapter_via_issubclass(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        from querysource.outputs.destinations import TableOutputAdapter
+        assert ComponentRegistry._classify("tableOutput", TableOutputAdapter) == "Destinations"
+
+    def test_catalog_returns_populated_schema_for_real_destinations(self):
+        from querysource.queries.multi.registry import ComponentRegistry
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = {ci.name: ci for ci in ComponentRegistry.get_catalog()}
+        for name in ("ToSharepoint", "ToS3", "TableDestination", "DWHDestination"):
+            ci = catalog[name]
+            assert ci.category == "Destinations"
+            assert ci.json_schema.get("properties"), (
+                f"Expected populated JSON schema for {name}; got {ci.json_schema}"
+            )
+
+    def test_catalog_allows_empty_schema_for_table_output_adapter(self):
+        """TableOutputAdapter wraps a non-introspectable TableOutput; empty is OK.
+
+        The catalog uses the class name "TableOutputAdapter" (from get_description()),
+        not the YAML step-name keys ("tableOutput" / "TableOutput").
+        """
+        from querysource.queries.multi.registry import ComponentRegistry
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = {ci.name: ci for ci in ComponentRegistry.get_catalog()}
+        # get_catalog uses the class name from get_description(), not the step-name key
+        adapter_entry = catalog.get("TableOutputAdapter")
+        assert adapter_entry is not None, (
+            f"Expected 'TableOutputAdapter' in catalog; found keys: {list(catalog.keys())}"
+        )
+        assert adapter_entry.category == "Destinations"
+
+
 class TestDataModels:
     def test_attribute_info_creation(self):
         attr = AttributeInfo(name="col", type="str", default="x", required=True)

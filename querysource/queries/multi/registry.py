@@ -144,12 +144,23 @@ class ComponentRegistry:
         except (ImportError, AttributeError) as exc:
             logger.warning("Could not import SOURCE_REGISTRY: %s", exc)
 
-        # 4. Destinations (from DESTINATION_REGISTRY)
+        # 4. Destinations — new canonical folder wins on key collision, legacy fills gaps
         try:
-            from querysource.outputs.destinations import DESTINATION_REGISTRY
-            components.update(DESTINATION_REGISTRY)
+            from querysource.queries.multi.destinations import (
+                DESTINATION_REGISTRY as _local_destinations,
+            )
+            # Filesystem-discovered MultiQS-local destinations win on key collision
+            components.update(_local_destinations)
         except (ImportError, AttributeError) as exc:
-            logger.warning("Could not import DESTINATION_REGISTRY: %s", exc)
+            logger.warning("Could not import queries.multi.destinations registry: %s", exc)
+
+        try:
+            from querysource.outputs.destinations import DESTINATION_REGISTRY as _legacy_destinations
+            # Merge: only add entries not already provided by the new folder
+            for step_name, dest_cls in _legacy_destinations.items():
+                components.setdefault(step_name, dest_cls)
+        except (ImportError, AttributeError) as exc:
+            logger.warning("Could not import legacy DESTINATION_REGISTRY: %s", exc)
 
         return components
 
@@ -157,21 +168,21 @@ class ComponentRegistry:
     def get_catalog(cls) -> list[ComponentInfo]:
         """Return a list of ComponentInfo for all discovered components.
 
-        For components that inherit from AbstractMulti, uses the introspection
-        classmethods. For sources and destinations, builds ComponentInfo from
-        __doc__ and __init__ inspection.
+        For components that inherit from SchemaIntrospectable, uses the
+        introspection classmethods. For sources and destinations, builds
+        ComponentInfo from __doc__ and __init__ inspection.
 
         Returns:
             List of ComponentInfo dataclass instances.
         """
-        from querysource.queries.multi.abstract import AbstractMulti
+        from querysource.queries.multi._introspect import SchemaIntrospectable
 
         components = cls.discover_all()
         catalog: list[ComponentInfo] = []
 
         for name, comp_cls in components.items():
             try:
-                if isinstance(comp_cls, type) and issubclass(comp_cls, AbstractMulti):
+                if isinstance(comp_cls, type) and issubclass(comp_cls, SchemaIntrospectable):
                     # Use introspection classmethods
                     schema = comp_cls.get_schema()
                     desc = comp_cls.get_description()
@@ -233,11 +244,9 @@ class ComponentRegistry:
                 return "Destinations"
         except (ImportError, AttributeError):
             pass
-        # Heuristic from name
+        # Heuristic from name (kept as final fallback only)
         if name.endswith("Source"):
             return "Sources"
-        if name in ("tableOutput", "TableOutput", "ToSharepoint", "ToS3", "Table", "DWH"):
-            return "Destinations"
         return "Components"
 
     @classmethod
