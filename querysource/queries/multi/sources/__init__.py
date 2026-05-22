@@ -1,3 +1,4 @@
+from .airtable import AirtableSource
 from .base import ThreadSource
 from .file import FileSource
 from .query import ThreadQuery
@@ -10,6 +11,7 @@ __all__ = [
     "ThreadSource",
     "ThreadQuery",
     "FileSource",
+    "AirtableSource",
     "SharepointSource",
     "SmartSheetSource",
     "S3Source",
@@ -20,6 +22,7 @@ __all__ = [
 #: Registry mapping source type names (as used in YAML config) to their classes.
 #: Used by :class:`~querysource.queries.multi.MultiQS` for dynamic dispatch.
 SOURCE_REGISTRY: dict = {
+    "AirtableSource": AirtableSource,
     "SharepointSource": SharepointSource,
     "SmartSheetSource": SmartSheetSource,
     "S3Source": S3Source,

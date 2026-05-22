@@ -293,3 +293,8 @@ class TestAirtableReauthRequired:
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: Implemented as specified. AirtableInterface foundation (tokens, exception, URL parser, write stubs) and read methods (list_records, _refresh_tokens, _request_with_refresh, _auth_headers) combined into single commit since both tasks modify the same file and TASK-675 depends directly on TASK-674.
+**Deviations from spec**: Tests use `re.compile()` regex patterns instead of bare URL strings in `aioresponses` mock registrations, because aioresponses 0.7.8 matches the full URL including query parameters. The regex approach (`re.compile(r"https://api\.airtable\.com/v0/appX/tblY.*")`) is functionally equivalent and recommended for this version.

@@ -211,3 +211,8 @@ class TestSourceRegistry:
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: Added AirtableSource to SOURCE_REGISTRY and __all__ in sources/__init__.py. All 3 registry tests pass.
+**Deviations from spec**: None.

@@ -197,3 +197,8 @@ def test_redirect_uri_default_contains_callback_path(monkeypatch):
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: Added 6 Airtable env constants to conf.py + test file. All 3 tests pass.
+**Deviations from spec**: None.

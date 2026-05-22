@@ -3,6 +3,7 @@ import pytest
 
 from querysource.queries.multi.sources import (
     SOURCE_REGISTRY,
+    AirtableSource,
     FileSource,
     ThreadQuery,
     ThreadSource,
@@ -15,6 +16,9 @@ from querysource.queries.multi.sources import (
 
 
 class TestSourceRegistry:
+    def test_registry_contains_airtable(self):
+        assert "AirtableSource" in SOURCE_REGISTRY
+
     def test_registry_contains_sharepoint(self):
         assert "SharepointSource" in SOURCE_REGISTRY
 
@@ -27,8 +31,8 @@ class TestSourceRegistry:
     def test_registry_contains_table(self):
         assert "TableSource" in SOURCE_REGISTRY
 
-    def test_registry_has_exactly_four_sources(self):
-        assert len(SOURCE_REGISTRY) == 4
+    def test_registry_has_exactly_five_sources(self):
+        assert len(SOURCE_REGISTRY) == 5
 
     def test_registry_values_are_thread_source_subclasses(self):
         for name, cls in SOURCE_REGISTRY.items():
@@ -43,6 +47,7 @@ class TestSourceRegistry:
         assert "FileSource" not in SOURCE_REGISTRY
 
     def test_registry_classes_match_imported_classes(self):
+        assert SOURCE_REGISTRY["AirtableSource"] is AirtableSource
         assert SOURCE_REGISTRY["SharepointSource"] is SharepointSource
         assert SOURCE_REGISTRY["SmartSheetSource"] is SmartSheetSource
         assert SOURCE_REGISTRY["S3Source"] is S3Source
@@ -60,6 +65,9 @@ class TestSourceRegistry:
     def test_all_contains_source_registry(self):
         assert "SOURCE_REGISTRY" in __all__
 
+    def test_all_contains_airtable_source(self):
+        assert "AirtableSource" in __all__
+
     def test_all_contains_all_new_sources(self):
         assert "SharepointSource" in __all__
         assert "SmartSheetSource" in __all__
@@ -74,3 +82,6 @@ class TestSourceRegistry:
 
     def test_file_source_importable(self):
         assert FileSource is not None
+
+    def test_airtable_source_importable(self):
+        assert AirtableSource is not None

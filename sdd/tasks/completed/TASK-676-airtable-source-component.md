@@ -396,3 +396,8 @@ class TestFetchEmptyAndError:
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: AirtableSource implemented with full auth precedence (session OAuth -> PAT -> raise). Fixed relative import from `...interfaces.airtable` to `....interfaces.airtable` (4 levels up to reach querysource root from querysource.queries.multi.sources). Tests updated to mock resolve_credential directly since navconfig reads PAT from .env file in test environment.
+**Deviations from spec**: Tests use `monkeypatch.setattr(s, "resolve_credential", ...)` instead of `monkeypatch.setenv()` to avoid navconfig caching the real AIRTABLE_ACCESS_TOKEN from the project's .env file.

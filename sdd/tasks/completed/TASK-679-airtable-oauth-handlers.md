@@ -413,3 +413,8 @@ class TestCallbackView:
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: Implemented AirtableConnectView and AirtableCallbackView with full PKCE, CSRF protection, token exchange, and session writeback. All 8 tests pass.
+**Deviations from spec**: None. Tests added one extra test (test_missing_code_returns_400) beyond the spec's TestCallbackView examples for better coverage.

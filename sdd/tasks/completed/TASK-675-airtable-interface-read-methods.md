@@ -395,3 +395,8 @@ class TestRefresh401:
 **Date**:
 **Notes**:
 **Deviations from spec**:
+
+**Completed by**: SDD Worker (Claude Sonnet 4.6)
+**Date**: 2026-05-22
+**Notes**: Implemented list_records with pagination, 401-refresh, and PAT vs OAuth error handling. All tests pass.
+**Deviations from spec**: Same aioresponses regex pattern workaround as TASK-674.
