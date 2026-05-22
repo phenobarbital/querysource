@@ -144,6 +144,17 @@ class ComponentRegistry:
         except (ImportError, AttributeError) as exc:
             logger.warning("Could not import SOURCE_REGISTRY: %s", exc)
 
+        # SOURCE_REGISTRY only holds entries dispatched dynamically from the
+        # YAML `sources:` block. ThreadQuery (`queries:` block) and FileSource
+        # (`files:` block) are dispatched specially by MultiQS, but they are
+        # still valid catalog entries the components API must expose.
+        try:
+            from querysource.queries.multi.sources import FileSource, ThreadQuery
+            components.setdefault("ThreadQuery", ThreadQuery)
+            components.setdefault("FileSource", FileSource)
+        except (ImportError, AttributeError) as exc:
+            logger.warning("Could not import ThreadQuery/FileSource: %s", exc)
+
         # 4. Destinations — new canonical folder wins on key collision, legacy fills gaps
         try:
             from querysource.queries.multi.destinations import (
