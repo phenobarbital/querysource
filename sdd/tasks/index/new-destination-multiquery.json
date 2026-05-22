@@ -14,14 +14,14 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Foundation task — every later task depends on the mixin existing.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-667-schema-introspectable-mixin.md"
     },
@@ -32,14 +32,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
-      "depends_on": ["TASK-667"],
+      "depends_on": [
+        "TASK-667"
+      ],
       "parallel": false,
       "parallelism_notes": "Touches AbstractDestination after the mixin lands; sequential dependency.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-668-abstractdestination-mixin-refactor.md"
     },
@@ -50,14 +52,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
-      "depends_on": ["TASK-668"],
+      "depends_on": [
+        "TASK-668"
+      ],
       "parallel": false,
       "parallelism_notes": "Sets up the package that hosts the migrated classes — must precede TASK-670.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-669-destinations-subpackage-skeleton.md"
     },
@@ -68,14 +72,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-669"],
+      "depends_on": [
+        "TASK-669"
+      ],
       "parallel": false,
       "parallelism_notes": "Moves four files in lockstep; each move-and-shim pair must keep its test green before advancing.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-670-migrate-destinations-with-shims.md"
     },
@@ -86,14 +92,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
-      "depends_on": ["TASK-670"],
+      "depends_on": [
+        "TASK-670"
+      ],
       "parallel": false,
       "parallelism_notes": "Modifies the legacy aggregator after the new home exists.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-671-destinations-init-rewire.md"
     },
@@ -104,14 +112,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-671"],
+      "depends_on": [
+        "TASK-671"
+      ],
       "parallel": false,
       "parallelism_notes": "Requires the new folder + legacy aggregator to both be in their final state.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-672-component-registry-scan-and-classify.md"
     },
@@ -122,14 +132,16 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
-      "depends_on": ["TASK-672"],
+      "depends_on": [
+        "TASK-672"
+      ],
       "parallel": false,
       "parallelism_notes": "Final validation pass — runs after the full structural refactor lands.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T16:14:21+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-673-acceptance-validation.md"
     }
