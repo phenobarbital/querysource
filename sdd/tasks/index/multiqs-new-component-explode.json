@@ -14,7 +14,7 @@
       "feature_id": "FEAT-099",
       "feature": "multiqs-new-component-explode",
       "spec": "sdd/specs/multiqs-new-component-explode.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Must complete before TASK-688 (tests depend on the implementation)",
       "assigned_to": null,
       "started_at": "2026-05-22T23:48:53+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-687-texplode-component.md"
+      "completed_at": "2026-05-22T23:51:20+00:00",
+      "file": "sdd/tasks/completed/TASK-687-texplode-component.md"
     },
     {
       "id": "TASK-688",
