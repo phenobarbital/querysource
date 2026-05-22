@@ -67,7 +67,10 @@ def _parse_dt(value: Optional[str]) -> Optional[datetime]:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        logging.getLogger(__name__).debug(
+            "AirtableSource._parse_dt: could not parse %r as datetime: %s", value, e
+        )
         return None
 
 
@@ -86,8 +89,6 @@ class AirtableSource(ThreadSource):
             :meth:`~querysource.queries.multi.sources.base.ThreadSource.run`.
     """
 
-    BASE_URL: str = "https://api.airtable.com/v0"
-
     def __init__(
         self,
         name: str,
@@ -96,7 +97,7 @@ class AirtableSource(ThreadSource):
         queue: asyncio.Queue,
     ) -> None:
         super().__init__(name, options, request, queue)
-        self._logger = logging.getLogger(__name__)
+        # Note: self.logger is set by ThreadSource base class
 
         creds = options.get('credentials', {})
         source = options.get('source', {})
@@ -126,6 +127,10 @@ class AirtableSource(ThreadSource):
         Implements the auth precedence: session OAuth first, PAT fallback,
         raise on neither.
 
+        Session tokens are read from ``self._options.get('_prefetched_tokens')``
+        when available (injected by the caller on the main event loop before the
+        thread starts), or resolved via ``navigator_session`` as a fallback.
+
         Returns:
             A :class:`pandas.DataFrame` with one row per Airtable record
             (built from the ``fields`` dict of each record).  An empty table
@@ -147,7 +152,7 @@ class AirtableSource(ThreadSource):
         session_tokens = await self._resolve_session_tokens()
 
         if session_tokens is not None:
-            self._logger.debug(
+            self.logger.debug(
                 "AirtableSource %r: using session OAuth token.", self._name
             )
             client_id = self.resolve_credential(
@@ -172,7 +177,7 @@ class AirtableSource(ThreadSource):
                     "AirtableSource: no credentials available — provide a session OAuth token "
                     "or set AIRTABLE_ACCESS_TOKEN"
                 )
-            self._logger.info(
+            self.logger.info(
                 "AirtableSource %r: using AIRTABLE_ACCESS_TOKEN (PAT).", self._name
             )
             interface = AirtableInterface(
@@ -203,19 +208,43 @@ class AirtableSource(ThreadSource):
     # ── Private helpers ──────────────────────────────────────────────────────
 
     async def _resolve_session_tokens(self) -> Optional[AirtableTokens]:
-        """Read Airtable OAuth tokens from the request session, if available.
+        """Read Airtable OAuth tokens from options or the request session.
 
-        Lazy-imports ``navigator_session`` so this source works in deployments
-        where that package is not installed (falls back to PAT silently).
+        First checks ``self._options.get('_prefetched_tokens')`` — a dict
+        injected by the caller on the main event loop *before* the thread
+        starts (Fix 1: avoids cross-loop ``get_session`` calls).  Falls back
+        to calling ``navigator_session.get_session`` when no pre-fetched bundle
+        is available.
 
         Returns:
             :class:`~querysource.interfaces.airtable.AirtableTokens` when
             the session contains a valid ``airtable`` bundle, else ``None``.
         """
+        # ── Fast path: caller pre-fetched tokens on the main event loop ───────
+        prefetched = self._options.get('_prefetched_tokens')
+        if prefetched is not None:
+            access_token = prefetched.get('access_token')
+            if not access_token:
+                self.logger.warning(
+                    "AirtableSource: session 'airtable' bundle missing 'access_token'; "
+                    "falling back to PAT."
+                )
+                return None
+            return AirtableTokens(
+                access_token=access_token,
+                refresh_token=prefetched.get('refresh_token'),
+                expires_at=_parse_dt(prefetched.get('expires_at')),
+                scope=prefetched.get('scope'),
+                token_type=prefetched.get('token_type', 'Bearer'),
+            )
+
+        # ── Fallback: try get_session in the thread's event loop ──────────────
+        # NOTE: this path is only safe when the request is still alive and
+        # the session backend supports cross-loop access (e.g. cookie-based).
         try:
             from navigator_session import get_session  # noqa: PLC0415
         except ImportError:
-            self._logger.debug(
+            self.logger.debug(
                 "AirtableSource: navigator_session not installed; skipping session auth."
             )
             return None
@@ -223,7 +252,7 @@ class AirtableSource(ThreadSource):
         try:
             session = await get_session(self._request, new=False)
         except RuntimeError:
-            self._logger.debug(
+            self.logger.debug(
                 "AirtableSource: get_session() raised RuntimeError; skipping session auth."
             )
             return None
@@ -235,8 +264,16 @@ class AirtableSource(ThreadSource):
         if not bundle:
             return None
 
+        access_token = bundle.get('access_token')
+        if not access_token:
+            self.logger.warning(
+                "AirtableSource: session 'airtable' bundle missing 'access_token'; "
+                "falling back to PAT."
+            )
+            return None
+
         return AirtableTokens(
-            access_token=bundle['access_token'],
+            access_token=access_token,
             refresh_token=bundle.get('refresh_token'),
             expires_at=_parse_dt(bundle.get('expires_at')),
             scope=bundle.get('scope'),
@@ -254,7 +291,7 @@ class AirtableSource(ThreadSource):
             An ``async def`` callable matching :data:`~querysource.interfaces.airtable.TokenPersistFn`.
         """
         request = self._request
-        logger = self._logger
+        logger = self.logger
 
         async def writeback(new_tokens: AirtableTokens) -> None:
             try:
@@ -275,6 +312,7 @@ class AirtableSource(ThreadSource):
                     "scope": new_tokens.scope,
                     "token_type": new_tokens.token_type,
                 }
+                # navigator_session auto-commits on __setitem__; no explicit save() needed
             except RuntimeError as exc:
                 logger.warning(
                     "AirtableSource: session writeback failed (RuntimeError): %s", exc

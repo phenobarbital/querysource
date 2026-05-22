@@ -22,6 +22,7 @@ References
 """
 import base64
 import hashlib
+import html as html_lib
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -105,8 +106,16 @@ class AirtableConnectView(AbstractHandler):
             request: Incoming aiohttp request.
 
         Returns:
-            200 HTML consent page, or 503 when ``navigator_session`` is absent.
+            200 HTML consent page, or 503 when ``navigator_session`` is absent
+            or OAuth credentials are not configured.
         """
+        if not conf.AIRTABLE_CLIENT_ID or not conf.AIRTABLE_CLIENT_SECRET:
+            return web.Response(
+                status=503,
+                text="AIRTABLE_CLIENT_ID and AIRTABLE_CLIENT_SECRET must be configured.",
+                content_type="text/plain",
+            )
+
         session = await self._get_user_session(request)
         if session is None:
             return web.Response(
@@ -134,11 +143,11 @@ class AirtableConnectView(AbstractHandler):
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            "scope": "data.records:read data.recordComments:read schema.bases:read",
+            "scope": conf.AIRTABLE_OAUTH_SCOPES,
         }
         authorize_url = f"https://airtable.com/oauth2/v1/authorize?{urlencode(params)}"
 
-        html = _CONNECT_HTML.format(authorize_url=authorize_url)
+        html = _CONNECT_HTML.format(authorize_url=html_lib.escape(authorize_url))
         return web.Response(
             status=200,
             text=html,
@@ -165,8 +174,16 @@ class AirtableCallbackView(AbstractHandler):
 
         Returns:
             200 HTML on success; 400 on CSRF mismatch / token exchange failure;
-            503 when ``navigator_session`` is absent.
+            503 when ``navigator_session`` is absent or OAuth credentials are
+            not configured.
         """
+        if not conf.AIRTABLE_CLIENT_ID or not conf.AIRTABLE_CLIENT_SECRET:
+            return web.Response(
+                status=503,
+                text="AIRTABLE_CLIENT_ID and AIRTABLE_CLIENT_SECRET must be configured.",
+                content_type="text/plain",
+            )
+
         query = request.rel_url.query
         error = query.get('error')
         code = query.get('code')
@@ -242,6 +259,15 @@ class AirtableCallbackView(AbstractHandler):
                     )
                 payload = await resp.json()
 
+        # ── Validate token payload ───────────────────────────────────────────
+        access_token = payload.get("access_token")
+        if not access_token:
+            return web.Response(
+                status=400,
+                text=f"Token endpoint returned no access_token. Body: {str(payload)[:200]}",
+                content_type="text/plain",
+            )
+
         # ── Compute expires_at and persist tokens ────────────────────────────
         expires_in = payload.get("expires_in")
         expires_at_iso: str | None = None
@@ -251,7 +277,7 @@ class AirtableCallbackView(AbstractHandler):
             ).isoformat()
 
         session['airtable'] = {
-            "access_token": payload["access_token"],
+            "access_token": access_token,
             "refresh_token": payload.get("refresh_token"),
             "expires_at": expires_at_iso,
             "scope": payload.get("scope"),

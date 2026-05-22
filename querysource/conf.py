@@ -425,6 +425,13 @@ AIRTABLE_REDIRECT_URI = config.get(
     fallback='http://localhost:5000/api/v1/qs/integrations/airtable/callback',
 )
 
+# Space-separated OAuth2 scopes requested during the consent flow.
+# Override via AIRTABLE_OAUTH_SCOPES env var to add or restrict access.
+AIRTABLE_OAUTH_SCOPES = config.get(
+    'AIRTABLE_OAUTH_SCOPES',
+    fallback='data.records:read data.recordComments:read schema.bases:read'
+)
+
 # Feature flag — when False (the default), the /connect and /callback
 # routes are NOT registered by QuerySource.setup(). PAT-only operation
 # of AirtableSource still works regardless.

@@ -23,7 +23,7 @@ import aiohttp
 # Data models
 # ---------------------------------------------------------------------------
 
-@dataclass(slots=True)
+@dataclass(slots=True)  # requires Python 3.10+
 class AirtableTokens:
     """OAuth2 token bundle stored in ``session['airtable']``.
 
@@ -149,6 +149,20 @@ class AirtableInterface:
 
     # ── Auth helpers ─────────────────────────────────────────────────────────
 
+    def _is_token_expired(self) -> bool:
+        """Return ``True`` when the current token is expired (or about to expire).
+
+        Adds a 30-second buffer so a token expiring imminently is treated as
+        already expired, avoiding 401 errors on in-flight requests.
+
+        Returns:
+            ``True`` when ``expires_at`` is known and the token has expired
+            (within the 30-second buffer), ``False`` otherwise.
+        """
+        if self._tokens is None or self._tokens.expires_at is None:
+            return False
+        return datetime.now(tz=timezone.utc) >= self._tokens.expires_at - timedelta(seconds=30)
+
     def _auth_headers(self) -> dict[str, str]:
         """Return the ``Authorization`` header dict for the current token."""
         return {"Authorization": f"Bearer {self._tokens.access_token}"}
@@ -169,7 +183,10 @@ class AirtableInterface:
             aiohttp.ClientResponseError: On other non-2xx statuses.
         """
         if resp.status == 429:
-            raise RuntimeError("Airtable API rate limit exceeded (HTTP 429).")
+            retry_after = resp.headers.get("Retry-After", "unknown")
+            raise RuntimeError(
+                f"Airtable API rate limit exceeded (HTTP 429). Retry-After: {retry_after}s."
+            )
         resp.raise_for_status()
         return await resp.json()
 
@@ -244,6 +261,10 @@ class AirtableInterface:
         Returns:
             Parsed JSON response body.
         """
+        # Proactively refresh before the request if the token is already expired.
+        if self._is_oauth and self._is_token_expired():
+            await self._refresh_tokens(session)
+
         headers = kwargs.pop("headers", {})
         headers.update(self._auth_headers())
         async with session.request(method, url, headers=headers, **kwargs) as resp:
