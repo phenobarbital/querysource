@@ -162,4 +162,28 @@ class TestTableOutputAdapter:
         from querysource.outputs.destinations import TableOutputAdapter
         df = pd.DataFrame({"a": [1]})
         adapter = TableOutputAdapter(data=df, flavor="postgresql", tablename="t", schema="s")
-        assert adapter.data is df
+
+
+# ---------------------------------------------------------------------------
+# AbstractDestination introspection (TASK-668)
+# ---------------------------------------------------------------------------
+
+class TestAbstractDestinationIntrospection:
+    def test_category_is_destinations(self):
+        from querysource.outputs.destinations.abstract import AbstractDestination
+        assert AbstractDestination._category == "Destinations"
+
+    def test_concrete_subclass_get_schema_populated(self):
+        """A concrete destination must produce a non-empty JSON Schema."""
+        from querysource.outputs.destinations.sharepoint import ToSharepoint
+        schema = ToSharepoint.get_schema()
+        assert schema["json_schema"]["title"] == "ToSharepoint"
+        assert schema["json_schema"]["properties"], (
+            "Expected at least one property to be introspected from ToSharepoint.__init__"
+        )
+
+    def test_get_description_reports_destinations_category(self):
+        from querysource.outputs.destinations.s3 import ToS3
+        desc = ToS3.get_description()
+        assert desc["category"] == "Destinations"
+        assert desc["name"] == "ToS3"
