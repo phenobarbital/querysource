@@ -1,0 +1,178 @@
+{
+  "feat_id": "FEAT-096",
+  "mode": "investigation",
+  "overall_confidence": "medium",
+  "summary": "Add `AirtableSource` (read-only) to MultiQuery sources, plus an `AirtableInterface` that encapsulates the full Airtable API surface (read + future write). The Source extracts records from a table id or full Airtable URL and returns a pandas DataFrame, using either an OAuth2 user token stored in the navigator_session (if present on the inbound web.Request) or a Personal Access Token fallback from `AIRTABLE_ACCESS_TOKEN`. A new aiohttp route `/api/v1/qs/integrations/airtable/callback` is registered inside `QuerySource.setup()` to receive the OAuth2 redirect and persist `{access_token, refresh_token, expires_at, scope}` into the session under the key `airtable`. Implementation follows the exact pattern established by SmartSheetSource and SharepointSource (FEAT-093 workstream): inherit `ThreadSource`, async `fetch() -> DataFrame`, raw `aiohttp.ClientSession`, navconfig-resolved credentials. Two design points are NET-NEW and need explicit decisions: (a) where session-vault writes/reads happen since QuerySource has no prior 'vault' concept, and (b) hosting/ownership of the user-facing consent page.",
+  "localization": [
+    {
+      "path": "querysource/queries/multi/sources/airtable.py",
+      "symbol": "AirtableSource (new)",
+      "kind": "new file",
+      "evidence": ["F001", "F002", "F003"],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/queries/multi/sources/__init__.py",
+      "symbol": "SOURCE_REGISTRY",
+      "kind": "modify (add 1 entry + import + __all__)",
+      "evidence": ["F004"],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/interfaces/airtable.py",
+      "symbol": "AirtableInterface (new)",
+      "kind": "new file",
+      "evidence": ["F003", "F007"],
+      "confidence": "medium",
+      "note": "Location choice — querysource/interfaces/ is the established home for cross-cutting client interfaces (http.py, credentials.py). Could alternatively live as a private module under sources/airtable.py if exposure is undesirable."
+    },
+    {
+      "path": "querysource/handlers/integrations/airtable.py",
+      "symbol": "AirtableCallbackHandler (new) + AirtableConsentRedirect",
+      "kind": "new file/package",
+      "evidence": ["F005", "F009"],
+      "confidence": "medium",
+      "note": "Directory `querysource/handlers/integrations/` does not exist yet — created as part of this feature."
+    },
+    {
+      "path": "querysource/services.py",
+      "symbol": "QuerySource.setup",
+      "kind": "modify (register callback route + optional consent route)",
+      "lines": "97-310",
+      "evidence": ["F005"],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/conf.py",
+      "symbol": "AIRTABLE_* env constants + QS_AIRTABLE_OAUTH_ENABLED feature flag",
+      "kind": "modify (add new conf entries)",
+      "evidence": ["F005"],
+      "confidence": "medium"
+    },
+    {
+      "path": "pyproject.toml",
+      "symbol": "[project.optional-dependencies] airtable",
+      "kind": "modify (optional extras section)",
+      "evidence": ["F003"],
+      "confidence": "medium",
+      "note": "Only needed if we pick `pyairtable` over raw aiohttp. SmartSheet uses raw aiohttp and adds no deps."
+    }
+  ],
+  "constraints": [
+    {
+      "id": "C1",
+      "claim": "All multi-query sources must inherit `ThreadSource` and implement `async def fetch(self) -> pd.DataFrame`",
+      "evidence": ["F001", "F002", "F003"],
+      "confidence": "high"
+    },
+    {
+      "id": "C2",
+      "claim": "Constructor signature is fixed: `(name: str, options: dict, request: web.Request, queue: asyncio.Queue)`",
+      "evidence": ["F001", "F002", "F003"],
+      "confidence": "high"
+    },
+    {
+      "id": "C3",
+      "claim": "Credential values that look like env-var names must flow through `self.resolve_credential(key, value)` for navconfig resolution",
+      "evidence": ["F001", "F002", "F003"],
+      "confidence": "high"
+    },
+    {
+      "id": "C4",
+      "claim": "The new Source must be registered in `SOURCE_REGISTRY` and exported in `__all__` in `querysource/queries/multi/sources/__init__.py`",
+      "evidence": ["F004"],
+      "confidence": "high"
+    },
+    {
+      "id": "C5",
+      "claim": "Routes are registered inside `QuerySource.setup()` in `querysource/services.py`. The method name `configure()` referenced in the user prompt does not exist.",
+      "evidence": ["F005"],
+      "confidence": "high"
+    },
+    {
+      "id": "C6",
+      "claim": "Sessions are read via `navigator_session.get_session(request, new=False)`; the project pattern memoizes on `request['user_session']`. There is no 'vault' abstraction.",
+      "evidence": ["F006"],
+      "confidence": "high"
+    },
+    {
+      "id": "C7",
+      "claim": "Heavy/optional SDK dependencies are imported lazily inside `fetch()` and gated behind `pyproject.toml` extras (e.g. `querysource[sharepoint]`).",
+      "evidence": ["F003"],
+      "confidence": "high"
+    },
+    {
+      "id": "C8",
+      "claim": "Source `fetch()` returns `df.infer_objects()` (or equivalently typed DataFrame) — empty result must still be a valid DataFrame, not None.",
+      "evidence": ["F002", "F003"],
+      "confidence": "medium"
+    }
+  ],
+  "hypothesis_primary": {
+    "statement": "Implement `AirtableSource` as a thin ThreadSource wrapper around a new `AirtableInterface` class. The Interface holds all Airtable-specific logic (URL parsing, auth header selection, paginated record fetch, future write methods). The Source: (1) parses `options['source'].url` OR `options['source'].base_id + table_id` into base/table ids; (2) selects auth — first via `navigator_session.get_session(self._request)` checking `session['airtable']`, else `AIRTABLE_ACCESS_TOKEN` PAT via navconfig, else raises; (3) calls `interface.list_records(base_id, table_id)` and converts the list of records into a DataFrame.",
+    "confidence": "medium",
+    "supporting_evidence": ["F001", "F002", "F003", "F006"],
+    "reasoning": "The pattern is well-established by FEAT-093 commits (F008). The only net-new design is the dual-auth selection and the session-vault read/write — both are simple but require explicit choices documented in the proposal (not the spec).",
+    "risks": [
+      "Per-user session-vault writes have no precedent in querysource; design must specify whether navigator_session is the storage or whether a separate per-user secret table is needed (e.g. for token persistence across logouts)",
+      "OAuth refresh-token flow is not handled by any existing code; the AirtableInterface needs a refresh-on-401 retry loop and a way to persist new tokens back into the session",
+      "If navigator_session is not installed in a given deployment, the OAuth path must fail gracefully (cf. defensive logging at handlers/abstract.py:248) and the source must still work via PAT-only",
+      "The user-facing consent page (`Connect to Airtable` button) is outside querysource's UI scope — the proposal must call out who owns this and whether querysource just exposes a redirect endpoint or also serves a minimal HTML page"
+    ]
+  },
+  "scope": {
+    "in_scope": [
+      "New `AirtableSource` class (read-only: list_records → DataFrame)",
+      "New `AirtableInterface` class encapsulating read + (interface stubs for) write/create-table for future use",
+      "Source URL parser supporting `https://airtable.com/<baseId>/<tableId>[/<viewId>]` and bare base+table identifiers",
+      "Dual auth: OAuth2 token from session (preferred) → PAT from `AIRTABLE_ACCESS_TOKEN` (fallback) → raise",
+      "New aiohttp route `/api/v1/qs/integrations/airtable/callback` registered in `QuerySource.setup()` that exchanges the auth code for tokens and stores them in `session['airtable']`",
+      "Optional `/api/v1/qs/integrations/airtable/connect` initiate-redirect endpoint that builds Airtable's auth URL and 302s the browser",
+      "Pagination handling for Airtable's `offset`-based record pagination",
+      "Field-type normalization for Airtable column types (linked records, attachments, formulas) — at minimum: flatten to JSON-serializable scalars",
+      "Optional extras entry in `pyproject.toml` (only if a real Airtable SDK is chosen)",
+      "Feature flag `QS_AIRTABLE_OAUTH_ENABLED` defaulting to off so the new routes are opt-in"
+    ],
+    "out_of_scope": [
+      "Writing records, creating tables, modifying schemas via the Source (Interface will expose stubs but the MultiQuery Source layer will not call them — per user clarification in Phase 0 Q&A)",
+      "Hosting the user-facing consent page HTML — querysource only provides the OAuth callback + (optionally) the connect-redirect endpoint",
+      "Multi-tenant Airtable workspace selection UI",
+      "Persistent token storage outside of navigator_session (no new database table for tokens)",
+      "Migrating existing FEAT-091 CredentialResolver to handle OAuth tokens"
+    ]
+  },
+  "confidence_map": [
+    { "claim": "ThreadSource pattern + constructor signature are correct and stable", "level": "high" },
+    { "claim": "`SOURCE_REGISTRY` registration is the right hook", "level": "high" },
+    { "claim": "`QuerySource.setup()` (not `configure()`) is where to add routes", "level": "high" },
+    { "claim": "navigator_session is the right session backend", "level": "high" },
+    { "claim": "Per-user OAuth token writeback to session is the right storage", "level": "medium" },
+    { "claim": "Raw aiohttp.ClientSession is sufficient — no need for pyairtable SDK", "level": "medium" },
+    { "claim": "Refresh-token persistence on 401-retry inside AirtableInterface is the right design", "level": "low" },
+    { "claim": "Consent page is owned by frontend, not querysource", "level": "low" }
+  ],
+  "unknowns": [
+    {
+      "id": "U1",
+      "question": "When `session['airtable']` does not exist and only `AIRTABLE_ACCESS_TOKEN` (PAT) is configured: should that PAT be a global/server-wide credential (current FEAT-093 pattern, used by SmartSheet) or a per-user PAT (env-var name suffixed by username, à la FEAT-091 CredentialResolver)?",
+      "resolves_claims": ["C3", "scope.in_scope[3]"],
+      "user_answer": "Global server-wide PAT only — matches SmartSheet/FEAT-093 pattern."
+    },
+    {
+      "id": "U2",
+      "question": "Where does the user-facing 'Connect to Airtable' consent page live? Frontend-owned, or should querysource serve a minimal HTML page on `/api/v1/qs/integrations/airtable/connect`?",
+      "resolves_claims": ["scope.in_scope[5]", "hypothesis_primary.risks[3]"],
+      "user_answer": "QuerySource serves a minimal HTML page at /connect so the feature is self-contained."
+    },
+    {
+      "id": "U3",
+      "question": "When the OAuth access token in the session expires and refresh fails (or there is no refresh token), should the Source: (a) fall back silently to PAT, (b) raise with a clear 'reconnect required' error, or (c) attempt to clear the stale session entry and then fall back to PAT?",
+      "resolves_claims": ["C8", "hypothesis_primary.risks[1]"],
+      "user_answer": "Raise a typed `AirtableReauthRequired` exception so the frontend can prompt the user to reconnect."
+    }
+  ],
+  "recommended_next_command": {
+    "command": "/sdd-spec",
+    "rationale": "All three architectural unknowns were resolved by the user in Phase 5 Q&A (global PAT fallback, QS-served consent page, typed AirtableReauthRequired). Combined with high-confidence localization on the source-pattern hooks (ThreadSource, SOURCE_REGISTRY, QuerySource.setup()), the design is now concrete enough to draft a spec. The spec should hard-code the resolved decisions and call out the optional `pyairtable` SDK vs. raw-aiohttp choice as the only open implementation question."
+  }
+}

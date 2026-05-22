@@ -1,0 +1,58 @@
+{
+  "feat_id": "FEAT-096",
+  "title": "Multi-Query ThreadSource: Airtable",
+  "type": "feature",
+  "mode": "investigation",
+  "base_branch": "dev",
+  "started_at": "2026-05-22T15:27:20Z",
+  "updated_at": "2026-05-22T15:35:00Z",
+  "phase": "proposal_drafted",
+  "budget": {
+    "profile": "default",
+    "files_read": 40,
+    "grep_calls": 25,
+    "git_calls": 10,
+    "depth": 2,
+    "wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 11,
+    "grep_calls": 12,
+    "git_calls": 1,
+    "depth_reached": 1,
+    "wall_seconds": 270
+  },
+  "truncated": false,
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "summary_oneline": "New Airtable Source for MultiQuery extending ThreadSource, backed by AirtableInterface with OAuth2 + PAT auth"
+  },
+  "phases": {
+    "plan": { "approved_by_user": true },
+    "research": {
+      "completed_at": "2026-05-22T15:32:00Z",
+      "duration_seconds": 240,
+      "files_read": 11,
+      "findings_count": 9,
+      "queries_skipped": 4
+    },
+    "synthesis": {
+      "completed_at": "2026-05-22T15:34:00Z",
+      "overall_confidence": "medium",
+      "claims_high": 6,
+      "claims_medium": 4,
+      "claims_low": 2,
+      "unknowns_count": 3
+    },
+    "qa": {
+      "status": "complete",
+      "questions_total": 3,
+      "questions_answered": 3
+    },
+    "output": {
+      "proposal_path": "sdd/proposals/feat-096-multi-threadsource-airtable.proposal.md",
+      "commit_sha": null
+    }
+  }
+}
