@@ -152,7 +152,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [
@@ -162,8 +162,8 @@
       "parallelism_notes": "Touches only docs/sources/airtable.md (a new file) — no overlap with code paths. Can run in parallel with TASK-677 through TASK-680 once TASK-676 lands.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-681-airtable-documentation.md"
+      "completed_at": "2026-05-22T17:16:37+00:00",
+      "file": "sdd/tasks/completed/TASK-681-airtable-documentation.md"
     }
   ]
 }
