@@ -112,7 +112,7 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -122,8 +122,8 @@
       "parallelism_notes": "Requires the new folder + legacy aggregator to both be in their final state.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:14:21+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-672-component-registry-scan-and-classify.md"
+      "completed_at": "2026-05-22T16:34:52+00:00",
+      "file": "sdd/tasks/completed/TASK-672-component-registry-scan-and-classify.md"
     },
     {
       "id": "TASK-673",
