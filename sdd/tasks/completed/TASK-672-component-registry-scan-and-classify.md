@@ -299,3 +299,17 @@ class TestDestinationDiscovery:
 **Notes**:
 
 **Deviations from spec**: none | describe if any
+
+## Completion Note
+
+Completed by: Claude Sonnet 4.6
+Date: 2026-05-22
+Notes: discover_all step 4 now uses queries/multi/destinations DESTINATION_REGISTRY first,
+then merges legacy with setdefault. _classify drops hardcoded name list. get_catalog
+dispatches on SchemaIntrospectable. TestDestinationDiscovery class added (6 tests).
+Minor deviation: test_catalog_allows_empty_schema_for_table_output_adapter uses
+catalog key "TableOutputAdapter" (class name from get_description()) not "tableOutput"
+(step-name key), because get_catalog() creates entries by class name not registry key.
+All 30 tests pass.
+
+Deviations from spec: test uses "TableOutputAdapter" catalog key instead of "tableOutput"

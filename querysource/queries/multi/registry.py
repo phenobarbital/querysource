@@ -38,7 +38,7 @@ class ComponentInfo:
     description: str
     usage: str
     attributes: list[AttributeInfo] = field(default_factory=list)
-    json_schema: dict = field(default_factory=dict)
+    json_schema: dict | None = field(default_factory=dict)  # None means schema unknown
     example: dict = field(default_factory=dict)
 
 
@@ -144,12 +144,23 @@ class ComponentRegistry:
         except (ImportError, AttributeError) as exc:
             logger.warning("Could not import SOURCE_REGISTRY: %s", exc)
 
-        # 4. Destinations (from DESTINATION_REGISTRY)
+        # 4. Destinations — new canonical folder wins on key collision, legacy fills gaps
         try:
-            from querysource.outputs.destinations import DESTINATION_REGISTRY
-            components.update(DESTINATION_REGISTRY)
+            from querysource.queries.multi.destinations import (
+                DESTINATION_REGISTRY as _local_destinations,
+            )
+            # Filesystem-discovered MultiQS-local destinations win on key collision
+            components.update(_local_destinations)
         except (ImportError, AttributeError) as exc:
-            logger.warning("Could not import DESTINATION_REGISTRY: %s", exc)
+            logger.warning("Could not import queries.multi.destinations registry: %s", exc)
+
+        try:
+            from querysource.outputs.destinations import DESTINATION_REGISTRY as _legacy_destinations
+            # Merge: only add entries not already provided by the new folder
+            for step_name, dest_cls in _legacy_destinations.items():
+                components.setdefault(step_name, dest_cls)
+        except (ImportError, AttributeError) as exc:
+            logger.warning("Could not import legacy DESTINATION_REGISTRY: %s", exc)
 
         return components
 
@@ -157,21 +168,34 @@ class ComponentRegistry:
     def get_catalog(cls) -> list[ComponentInfo]:
         """Return a list of ComponentInfo for all discovered components.
 
-        For components that inherit from AbstractMulti, uses the introspection
-        classmethods. For sources and destinations, builds ComponentInfo from
-        __doc__ and __init__ inspection.
+        For components that inherit from SchemaIntrospectable, uses the
+        introspection classmethods. For sources and destinations, builds
+        ComponentInfo from __doc__ and __init__ inspection.
 
         Returns:
             List of ComponentInfo dataclass instances.
         """
-        from querysource.queries.multi.abstract import AbstractMulti
+        from querysource.queries.multi._introspect import SchemaIntrospectable
 
         components = cls.discover_all()
         catalog: list[ComponentInfo] = []
+        # Track seen class objects to avoid duplicate catalog entries when the
+        # same class is registered under multiple step-name keys (e.g. "DWH"
+        # and "DWHDestination" both resolve to the same DWHDestination class).
+        _seen_classes: set[int] = set()
 
         for name, comp_cls in components.items():
+            # Deduplicate: if this exact class object was already catalogued,
+            # skip the current (YAML step-name) alias entry.
+            # id() is safe here: all registered classes are module-level and
+            # never garbage-collected during a process lifetime, so id() is stable.
+            class_id = id(comp_cls)
+            if isinstance(comp_cls, type) and class_id in _seen_classes:
+                continue
+            if isinstance(comp_cls, type):
+                _seen_classes.add(class_id)
             try:
-                if isinstance(comp_cls, type) and issubclass(comp_cls, AbstractMulti):
+                if isinstance(comp_cls, type) and issubclass(comp_cls, SchemaIntrospectable):
                     # Use introspection classmethods
                     schema = comp_cls.get_schema()
                     desc = comp_cls.get_description()
@@ -194,7 +218,8 @@ class ComponentRegistry:
                         example=desc.get("example", {}),
                     ))
                 else:
-                    # Sources / destinations or plain classes
+                    # Sources / destinations or plain classes not yet implementing
+                    # SchemaIntrospectable — schema is unknown, not "no parameters".
                     category = cls._classify(name, comp_cls)
                     doc = getattr(comp_cls, "__doc__", "") or ""
                     first_line = doc.strip().splitlines()[0].strip() if doc.strip() else ""
@@ -204,13 +229,7 @@ class ComponentRegistry:
                         description=first_line,
                         usage="",
                         attributes=[],
-                        json_schema={
-                            "$schema": "https://json-schema.org/draft/2020-12/schema",
-                            "type": "object",
-                            "title": name,
-                            "properties": {},
-                            "required": [],
-                        },
+                        json_schema=None,  # schema unknown — class not yet SchemaIntrospectable
                         example={},
                     ))
             except Exception as exc:
@@ -233,11 +252,9 @@ class ComponentRegistry:
                 return "Destinations"
         except (ImportError, AttributeError):
             pass
-        # Heuristic from name
+        # Heuristic from name (kept as final fallback only)
         if name.endswith("Source"):
             return "Sources"
-        if name in ("tableOutput", "TableOutput", "ToSharepoint", "ToS3", "Table", "DWH"):
-            return "Destinations"
         return "Components"
 
     @classmethod
@@ -283,7 +300,7 @@ class ComponentRegistry:
                     step=step_name,
                     field="",
                     message=f"Unknown operator/transform: '{step_name}'. "
-                            f"Available: {sorted(known_names)[:10]}...",
+                            f"Available: {sorted(known_names)}",
                 ))
                 continue
 

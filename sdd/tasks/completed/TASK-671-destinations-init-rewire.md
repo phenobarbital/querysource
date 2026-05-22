@@ -205,3 +205,13 @@ def test_table_output_adapter_still_available():
 **Notes**:
 
 **Deviations from spec**: none | describe if any
+
+## Completion Note
+
+Completed by: Claude Sonnet 4.6
+Date: 2026-05-22
+Notes: Replaced four `from .X import Y` calls with `from querysource.queries.multi.destinations.X import Y`.
+Added 3 new tests to test_multi_destinations_subpackage.py.
+All 28 tests pass.
+
+Deviations from spec: none

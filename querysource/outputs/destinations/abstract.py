@@ -9,12 +9,14 @@ from typing import Union
 import pandas as pd
 from navconfig.logging import logging
 
+from querysource.queries.multi._introspect import SchemaIntrospectable
+
 
 # Pattern to detect navconfig variable names (ALL_CAPS_SNAKE_CASE)
 _NAVCONFIG_PATTERN = re.compile(r'^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$')
 
 
-class AbstractDestination(ABC):
+class AbstractDestination(SchemaIntrospectable, ABC):
     """
     AbstractDestination.
 
@@ -22,6 +24,8 @@ class AbstractDestination(ABC):
     Subclasses must implement :meth:`run` to write data to their target backend
     and return the original data (pass-through) for pipeline chaining.
     """
+
+    _category: str = "Destinations"
 
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.data = data

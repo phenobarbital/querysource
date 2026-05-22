@@ -60,7 +60,7 @@ DESTINATION_REGISTRY: dict[str, type[AbstractDestination]] = {
 # New destinations are imported and registered below as their tasks complete.
 # (Each destination module appends its entry here.)
 try:
-    from .sharepoint import ToSharepoint
+    from querysource.queries.multi.destinations.sharepoint import ToSharepoint
     DESTINATION_REGISTRY["ToSharepoint"] = ToSharepoint
 except ImportError:
     _pkg_logger.debug(
@@ -68,7 +68,7 @@ except ImportError:
     )
 
 try:
-    from .s3 import ToS3
+    from querysource.queries.multi.destinations.s3 import ToS3
     DESTINATION_REGISTRY["ToS3"] = ToS3
 except ImportError:
     _pkg_logger.debug(
@@ -76,7 +76,7 @@ except ImportError:
     )
 
 try:
-    from .table import TableDestination
+    from querysource.queries.multi.destinations.table import TableDestination
     DESTINATION_REGISTRY["Table"] = TableDestination
 except ImportError:
     _pkg_logger.debug(
@@ -84,7 +84,7 @@ except ImportError:
     )
 
 try:
-    from .dwh import DWHDestination
+    from querysource.queries.multi.destinations.dwh import DWHDestination
     DESTINATION_REGISTRY["DWH"] = DWHDestination
 except ImportError:
     _pkg_logger.debug(

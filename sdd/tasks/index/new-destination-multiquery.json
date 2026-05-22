@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-05-22T00:00:00Z",
-  "completed_at": "2026-05-22T22:10:56+00:00",
+  "completed_at": "2026-05-22T16:48:18+00:00",
   "tasks": [
     {
       "id": "TASK-667",
@@ -21,9 +21,9 @@
       "parallel": false,
       "parallelism_notes": "Foundation task — every later task depends on the mixin existing.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-667-schema-introspectable-mixin.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:18:11+00:00",
+      "file": "sdd/tasks/completed/TASK-667-schema-introspectable-mixin.md"
     },
     {
       "id": "TASK-668",
@@ -41,9 +41,9 @@
       "parallel": false,
       "parallelism_notes": "Touches AbstractDestination after the mixin lands; sequential dependency.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-668-abstractdestination-mixin-refactor.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:20:47+00:00",
+      "file": "sdd/tasks/completed/TASK-668-abstractdestination-mixin-refactor.md"
     },
     {
       "id": "TASK-669",
@@ -61,9 +61,9 @@
       "parallel": false,
       "parallelism_notes": "Sets up the package that hosts the migrated classes — must precede TASK-670.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-669-destinations-subpackage-skeleton.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:21:31+00:00",
+      "file": "sdd/tasks/completed/TASK-669-destinations-subpackage-skeleton.md"
     },
     {
       "id": "TASK-670",
@@ -81,9 +81,9 @@
       "parallel": false,
       "parallelism_notes": "Moves four files in lockstep; each move-and-shim pair must keep its test green before advancing.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-670-migrate-destinations-with-shims.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:31:54+00:00",
+      "file": "sdd/tasks/completed/TASK-670-migrate-destinations-with-shims.md"
     },
     {
       "id": "TASK-671",
@@ -101,9 +101,9 @@
       "parallel": false,
       "parallelism_notes": "Modifies the legacy aggregator after the new home exists.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-671-destinations-init-rewire.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:32:53+00:00",
+      "file": "sdd/tasks/completed/TASK-671-destinations-init-rewire.md"
     },
     {
       "id": "TASK-672",
@@ -121,9 +121,9 @@
       "parallel": false,
       "parallelism_notes": "Requires the new folder + legacy aggregator to both be in their final state.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-672-component-registry-scan-and-classify.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:34:52+00:00",
+      "file": "sdd/tasks/completed/TASK-672-component-registry-scan-and-classify.md"
     },
     {
       "id": "TASK-673",
@@ -141,9 +141,10 @@
       "parallel": false,
       "parallelism_notes": "Final validation pass — runs after the full structural refactor lands.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-673-acceptance-validation.md"
+      "started_at": "2026-05-22T16:14:21+00:00",
+      "completed_at": "2026-05-22T16:48:18+00:00",
+      "file": "sdd/tasks/completed/TASK-673-acceptance-validation.md"
     }
-  ]
+  ],
+  "status": "done"
 }

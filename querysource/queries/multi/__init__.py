@@ -15,7 +15,6 @@ from .transformations import (
     GoogleMaps,
 )
 from .operators.filter import Filter
-from ...outputs.destinations import get_destination
 from .sources import ThreadQuery, FileSource
 
 
@@ -407,6 +406,7 @@ class MultiQS(BaseQuery):
             for step in _output:
                 for step_name, component in step.items():
                     try:
+                        from ...outputs.destinations import get_destination  # deferred to avoid circular import
                         destination_cls = get_destination(step_name)
                         obj = destination_cls(data=result, **component)
                         result = await obj.run()

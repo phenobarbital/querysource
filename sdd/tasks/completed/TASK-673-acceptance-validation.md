@@ -223,3 +223,20 @@ for path in (
 **Notes**:
 
 **Deviations from spec**: none | describe if any
+
+## Completion Note
+
+Completed by: Claude Sonnet 4.6
+Date: 2026-05-22
+Notes: 
+- Created tests/test_destinations_documentation_endpoint.py (5 tests) 
+- Created tests/test_multiqs_destination_dispatch.py (8 tests)
+- Fixed circular import: deferred AbstractDestination import to inside _scan_destinations()
+- Fixed destination files: import from outputs.destinations.abstract directly
+- Fixed get_catalog() deduplication: track seen class IDs
+- Updated test_destination_dwh.py and test_destination_table.py: test calls sql_schema() not get_schema()
+- Full suite: 841 pass, 2 pre-existing failures (test_rss, test_scheduler_integration - env config)
+
+Deviations from spec: 
+- test_backward_compat_imports uses attribute access not importlib (avoids sys.modules contamination)
+- deduplication added to get_catalog() (bonus fix not in spec)
