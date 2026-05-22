@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-096
 **Date**: 2026-05-22
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 6.1.0
 
 ---
@@ -634,8 +634,8 @@ class ComponentHandler(AbstractHandler):
   - Formula fields: pandas-`object` is fine for v1; document caveat.
   - Date/datetime: trust pandas `infer_objects()` (object dtype) or proactively convert via `pd.to_datetime`?
   Recommended default (to be confirmed): keep linked records and attachments as-is (object dtype), do NOT proactively coerce dates. Document the behavior in `docs/sources/airtable.md` and revisit only if user reports surface concrete pain.
-- [ ] **Q-runtime — Token persistence across process restarts.** *Owner: deployment*. `navigator_session` may be backed by Redis / DB / cookie depending on deployment. Confirm the chosen backend persists across restarts (Redis: yes; client-side cookie: depends on size — the OAuth bundle is ~1KB which is fine). If a deployment uses an in-memory session backend, users must reconnect on every restart — document this caveat.
-- [ ] **Q-rate-limit — Retry/back-off layer.** *Owner: follow-up FEAT*. This spec raises `RuntimeError` on HTTP 429. A bounded-retry/jittered-back-off layer is a natural follow-up; not in scope here.
+- [x] **Q-runtime — Token persistence across process restarts.** *Owner: deployment*. `navigator_session` may be backed by Redis / DB / cookie depending on deployment. Confirm the chosen backend persists across restarts (Redis: yes; client-side cookie: depends on size — the OAuth bundle is ~1KB which is fine). If a deployment uses an in-memory session backend, users must reconnect on every restart — document this caveat: navigator-session is backed by database.
+- [x] **Q-rate-limit — Retry/back-off layer.** *Owner: follow-up FEAT*. This spec raises `RuntimeError` on HTTP 429. A bounded-retry/jittered-back-off layer is a natural follow-up; not in scope here.
 
 ---
 
