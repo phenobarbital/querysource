@@ -43,6 +43,7 @@ from .conf import (
     QS_PBAC_ENABLED,
     QS_POLICY_PATH,
     QS_PBAC_CACHE_TTL,
+    QS_AIRTABLE_OAUTH_ENABLED,    # added (FEAT-096)
 )
 from .auth import setup_pbac
 
@@ -225,6 +226,29 @@ class QuerySource(metaclass=Singleton):
             ch.validate_pipeline
         )
         routes.append(r)
+
+        # ── Airtable OAuth integration (FEAT-096) — gated by env flag ────────
+        if QS_AIRTABLE_OAUTH_ENABLED:
+            from .handlers.integrations.airtable import (  # noqa: PLC0415
+                AirtableConnectView,
+                AirtableCallbackView,
+            )
+            _airtable_connect = AirtableConnectView()
+            _airtable_callback = AirtableCallbackView()
+            r = self.app.router.add_get(
+                '/api/v1/qs/integrations/airtable/connect',
+                _airtable_connect.get,
+            )
+            routes.append(r)
+            r = self.app.router.add_get(
+                '/api/v1/qs/integrations/airtable/callback',
+                _airtable_callback.get,
+            )
+            routes.append(r)
+            _svc_logger = logging.getLogger("querysource.services")
+            _svc_logger.info(
+                "Airtable OAuth routes registered (QS_AIRTABLE_OAUTH_ENABLED=True)"
+            )
 
         # querying directly to drivers
         # self.app.router.add_get('/api/v2/queries/{driver}/{method}', qs.query)
