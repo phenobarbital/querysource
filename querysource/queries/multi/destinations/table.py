@@ -28,7 +28,7 @@ import asyncio
 from typing import List, Optional, Union
 import pandas as pd
 from querysource.exceptions import DataNotFound, DriverError, OutputError
-from . import AbstractDestination
+from querysource.outputs.destinations.abstract import AbstractDestination
 
 
 # ---------------------------------------------------------------------------

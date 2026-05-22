@@ -179,8 +179,19 @@ class ComponentRegistry:
 
         components = cls.discover_all()
         catalog: list[ComponentInfo] = []
+        # Track seen class objects to avoid duplicate catalog entries when the
+        # same class is registered under multiple step-name keys (e.g. "DWH"
+        # and "DWHDestination" both resolve to the same DWHDestination class).
+        _seen_classes: set[int] = set()
 
         for name, comp_cls in components.items():
+            # Deduplicate: if this exact class object was already catalogued,
+            # skip the current (YAML step-name) alias entry.
+            class_id = id(comp_cls)
+            if isinstance(comp_cls, type) and class_id in _seen_classes:
+                continue
+            if isinstance(comp_cls, type):
+                _seen_classes.add(class_id)
             try:
                 if isinstance(comp_cls, type) and issubclass(comp_cls, SchemaIntrospectable):
                     # Use introspection classmethods

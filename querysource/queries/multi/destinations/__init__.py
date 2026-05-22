@@ -20,14 +20,23 @@ import inspect
 import logging as _logging
 from pathlib import Path
 
-from querysource.outputs.destinations.abstract import AbstractDestination
-
 _pkg_logger = _logging.getLogger(__name__)
 
 
-def _scan_destinations() -> dict[str, type[AbstractDestination]]:
-    """Scan this folder for AbstractDestination subclasses and return a registry."""
-    registry: dict[str, type[AbstractDestination]] = {}
+def _scan_destinations() -> dict:
+    """Scan this folder for AbstractDestination subclasses and return a registry.
+
+    The import of AbstractDestination is deferred to inside this function to
+    avoid a circular import: outputs/destinations/__init__.py imports
+    queries/multi/destinations (this package), and this package's module-level
+    import of outputs.destinations.abstract would trigger outputs.destinations.__init__
+    which in turn would re-enter this package before initialization completes.
+    """
+    # Deferred import to break the circular: outputs.destinations -> abstract ->
+    # (loads outputs.destinations.__init__) -> queries.multi.destinations -> here
+    from querysource.outputs.destinations.abstract import AbstractDestination  # noqa: PLC0415
+
+    registry: dict = {}
     pkg_dir = Path(__file__).parent
     for py_file in sorted(pkg_dir.glob("*.py")):
         name = py_file.name
@@ -52,7 +61,22 @@ def _scan_destinations() -> dict[str, type[AbstractDestination]]:
     return registry
 
 
-DESTINATION_REGISTRY: dict[str, type[AbstractDestination]] = _scan_destinations()
+# Expose AbstractDestination as a convenience re-export.
+# The import is deferred here too; callers that need the class should import
+# it directly from querysource.outputs.destinations.abstract.
+def _get_abstract_destination():
+    from querysource.outputs.destinations.abstract import AbstractDestination
+    return AbstractDestination
+
+
+DESTINATION_REGISTRY: dict = _scan_destinations()
+
+
+def __getattr__(name: str):
+    """Lazy attribute access for AbstractDestination to avoid circular import."""
+    if name == "AbstractDestination":
+        return _get_abstract_destination()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = ("AbstractDestination", "DESTINATION_REGISTRY")

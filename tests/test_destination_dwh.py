@@ -169,8 +169,10 @@ class TestDWHDestinationParentProtocol:
     """Verify parent-protocol methods required by BigQueryOutput."""
 
     def test_get_schema_returns_schema(self, sample_df, bigquery_config):
+        # sql_schema() is the engine parent-protocol method (returns SQL schema name).
+        # get_schema() is the SchemaIntrospectable classmethod (returns JSON schema dict).
         dest = DWHDestination(data=sample_df, **bigquery_config)
-        assert dest.get_schema() == "analytics"
+        assert dest.sql_schema() == "analytics"
 
     def test_primary_keys_returns_pk_list(self, sample_df, bigquery_config):
         dest = DWHDestination(data=sample_df, **bigquery_config)

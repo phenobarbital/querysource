@@ -177,8 +177,10 @@ class TestTableDestinationParentProtocol:
     """Verify parent-protocol methods required by AbstractOutput engines."""
 
     def test_get_schema_returns_schema(self, sample_df, pg_table_config):
+        # sql_schema() is the engine parent-protocol method (returns SQL schema name).
+        # get_schema() is the SchemaIntrospectable classmethod (returns JSON schema dict).
         dest = TableDestination(data=sample_df, **pg_table_config)
-        assert dest.get_schema() == "troc"
+        assert dest.sql_schema() == "troc"
 
     def test_primary_keys_returns_pk_list(self, sample_df, pg_table_config):
         dest = TableDestination(data=sample_df, **pg_table_config)

@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 from typing import Union
 import pandas as pd
 from querysource.exceptions import OutputError
-from . import AbstractDestination
+from querysource.outputs.destinations.abstract import AbstractDestination
 
 
 # Upload size thresholds (bytes)
