@@ -14,7 +14,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "No upstream deps; can run in parallel with TASK-678 (different file). Everything else in this spec depends on this task.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-674-airtable-interface-foundation.md"
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-674-airtable-interface-foundation.md"
     },
     {
       "id": "TASK-675",
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Modifies the same file as TASK-674 (querysource/interfaces/airtable.py); must be sequential.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-675-airtable-interface-read-methods.md"
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-675-airtable-interface-read-methods.md"
     },
     {
       "id": "TASK-676",
