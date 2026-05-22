@@ -14,14 +14,14 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Modifies Info.py which is read by TASK-686; must complete first.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T23:47:19+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-685-info-eda-operator-rewrite.md"
     },
@@ -32,14 +32,16 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
-      "depends_on": ["TASK-685"],
+      "depends_on": [
+        "TASK-685"
+      ],
       "parallel": false,
       "parallelism_notes": "Depends on TASK-685 output format; modifies __init__.py dispatch that calls Info.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T23:47:19+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-686-multiqs-info-pipeline-flow.md"
     },
@@ -50,14 +52,17 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "S",
-      "depends_on": ["TASK-685", "TASK-686"],
+      "depends_on": [
+        "TASK-685",
+        "TASK-686"
+      ],
       "parallel": false,
       "parallelism_notes": "Requires both the rewritten operator (TASK-685) and the pipeline change (TASK-686) to be in place.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T23:47:19+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-687-info-eda-end-to-end-tests.md"
     }
