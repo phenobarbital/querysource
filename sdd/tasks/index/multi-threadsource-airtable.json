@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-05-22T15:50:00Z",
-  "completed_at": null,
+  "completed_at": "2026-05-22T18:45:41Z",
   "tasks": [
     {
       "id": "TASK-674",
@@ -14,7 +14,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "No upstream deps; can run in parallel with TASK-678 (different file). Everything else in this spec depends on this task.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-674-airtable-interface-foundation.md"
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-674-airtable-interface-foundation.md"
     },
     {
       "id": "TASK-675",
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Modifies the same file as TASK-674 (querysource/interfaces/airtable.py); must be sequential.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-675-airtable-interface-read-methods.md"
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-675-airtable-interface-read-methods.md"
     },
     {
       "id": "TASK-676",
@@ -52,7 +52,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Imports AirtableInterface.list_records from TASK-675; must come after.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-676-airtable-source-component.md"
+      "completed_at": "2026-05-22T17:08:09+00:00",
+      "file": "sdd/tasks/completed/TASK-676-airtable-source-component.md"
     },
     {
       "id": "TASK-677",
@@ -72,7 +72,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -82,8 +82,8 @@
       "parallelism_notes": "Imports AirtableSource from TASK-676.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-677-source-registry-registration.md"
+      "completed_at": "2026-05-22T17:09:09+00:00",
+      "file": "sdd/tasks/completed/TASK-677-source-registry-registration.md"
     },
     {
       "id": "TASK-678",
@@ -92,7 +92,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -100,8 +100,8 @@
       "parallelism_notes": "Touches only querysource/conf.py — no overlap with the Interface/Source files. Can run in parallel with TASK-674 / TASK-675 / TASK-676.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-678-airtable-conf-constants.md"
+      "completed_at": "2026-05-22T17:01:53+00:00",
+      "file": "sdd/tasks/completed/TASK-678-airtable-conf-constants.md"
     },
     {
       "id": "TASK-679",
@@ -110,7 +110,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -121,8 +121,8 @@
       "parallelism_notes": "Needs AirtableInterface constants (for OAUTH_TOKEN_URL etc.) and the new env vars from TASK-678.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-679-airtable-oauth-handlers.md"
+      "completed_at": "2026-05-22T17:11:34+00:00",
+      "file": "sdd/tasks/completed/TASK-679-airtable-oauth-handlers.md"
     },
     {
       "id": "TASK-680",
@@ -131,7 +131,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -142,8 +142,8 @@
       "parallelism_notes": "Imports view classes from TASK-679 and the feature flag from TASK-678.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-680-querysource-setup-route-registration.md"
+      "completed_at": "2026-05-22T17:14:51+00:00",
+      "file": "sdd/tasks/completed/TASK-680-querysource-setup-route-registration.md"
     },
     {
       "id": "TASK-681",
@@ -152,7 +152,7 @@
       "feature_id": "FEAT-096",
       "feature": "multi-threadsource-airtable",
       "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [
@@ -162,8 +162,8 @@
       "parallelism_notes": "Touches only docs/sources/airtable.md (a new file) — no overlap with code paths. Can run in parallel with TASK-677 through TASK-680 once TASK-676 lands.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:52:03+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-681-airtable-documentation.md"
+      "completed_at": "2026-05-22T17:16:37+00:00",
+      "file": "sdd/tasks/completed/TASK-681-airtable-documentation.md"
     }
   ]
 }
