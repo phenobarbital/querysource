@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-097
 **Date**: 2026-05-22
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 6.0.0
 
 ---
@@ -450,8 +450,8 @@ No new dependencies introduced.
 - [x] Should existing destinations move? — *Resolved 2026-05-22*: Migrate all MultiQS destinations (`ToSharepoint`, `ToS3`, `TableDestination`, `DWHDestination`) to `queries/multi/destinations/`. `TableOutputAdapter` and `TableOutput` stay in `outputs/` because Flowtask consumes them.
 - [x] How does `ComponentRegistry` discover destinations? — *Resolved 2026-05-22*: Both — filesystem scan of `queries/multi/destinations/` AND merge with the existing `DESTINATION_REGISTRY` from `outputs/destinations/`. New folder wins on key collision.
 - [x] Target version? — *Resolved 2026-05-22*: 6.0.0.
-- [ ] Should the local `DESTINATION_REGISTRY` in `queries/multi/destinations/__init__.py` also expose `get_destination()` (a second lookup helper), or rely exclusively on the legacy one in `outputs/destinations/`? — *Owner: Jesus*. Defaulting to "rely on the legacy one" unless a need surfaces during implementation.
-- [ ] Once the migration lands, should we deprecate the four `outputs/destinations/{sharepoint,s3,table,dwh}.py` shims in a follow-up release? — *Owner: Jesus*. Decision can be deferred to post-6.0.0.
+- [x] Should the local `DESTINATION_REGISTRY` in `queries/multi/destinations/__init__.py` also expose `get_destination()` (a second lookup helper), or rely exclusively on the legacy one in `outputs/destinations/`? — *Owner: Jesus*. Defaulting to "rely on the legacy one" unless a need surfaces during implementation.: rely on the legacy one.
+- [x] Once the migration lands, should we deprecate the four `outputs/destinations/{sharepoint,s3,table,dwh}.py` shims in a follow-up release? — *Owner: Jesus*: these outputs are not in production yet, there is not a requirement of a shim import.
 
 ---
 
