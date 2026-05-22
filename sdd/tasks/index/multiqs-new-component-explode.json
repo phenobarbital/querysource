@@ -14,14 +14,14 @@
       "feature_id": "FEAT-099",
       "feature": "multiqs-new-component-explode",
       "spec": "sdd/specs/multiqs-new-component-explode.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Must complete before TASK-688 (tests depend on the implementation)",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T23:48:53+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-687-texplode-component.md"
     },
@@ -32,14 +32,16 @@
       "feature_id": "FEAT-099",
       "feature": "multiqs-new-component-explode",
       "spec": "sdd/specs/multiqs-new-component-explode.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-687"],
+      "depends_on": [
+        "TASK-687"
+      ],
       "parallel": false,
       "parallelism_notes": "Depends on TASK-687 — tests import and exercise the tExplode class",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-22T23:48:53+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-688-texplode-tests.md"
     }
