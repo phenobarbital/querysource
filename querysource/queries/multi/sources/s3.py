@@ -1,4 +1,4 @@
-"""SourceS3 — download a single file from an AWS S3 bucket as a pandas DataFrame.
+"""S3Source — download a single file from an AWS S3 bucket as a pandas DataFrame.
 
 Downloads a single file from S3 using the async ``aioboto3`` library.
 Supports CSV, compressed CSV (.gz), and Excel (.xlsx / .xls) files.
@@ -21,7 +21,7 @@ from .file import excel_based
 _SIZE_WARNING_BYTES = 100 * 1024 * 1024
 
 
-class SourceS3(ThreadSource):
+class S3Source(ThreadSource):
     """Download a single file from an S3 bucket and return it as a DataFrame.
 
     Authenticates with AWS using explicit credentials (resolved via navconfig
@@ -79,7 +79,7 @@ class SourceS3(ThreadSource):
         """Decompress (if needed) and parse bytes as a DataFrame."""
         if len(content) > _SIZE_WARNING_BYTES:
             self.logger.warning(
-                "SourceS3: downloaded %d bytes (%.1f MB) — consider streaming "
+                "S3Source: downloaded %d bytes (%.1f MB) — consider streaming "
                 "for files larger than 100 MB.",
                 len(content),
                 len(content) / (1024 * 1024),
@@ -141,7 +141,7 @@ class SourceS3(ThreadSource):
             ) from exc
 
         if not self._file:
-            raise ValueError("SourceS3: 'source.file' is required.")
+            raise ValueError("S3Source: 'source.file' is required.")
 
         s3_key = self._build_s3_key()
 

@@ -22,7 +22,7 @@ class TestDiscoverAll:
 
     def test_finds_sources(self):
         components = ComponentRegistry.discover_all()
-        assert len([k for k in components if k.startswith("Source")]) > 0
+        assert len([k for k in components if k.endswith("Source")]) > 0
 
     def test_finds_destinations(self):
         components = ComponentRegistry.discover_all()

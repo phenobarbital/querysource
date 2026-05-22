@@ -1,4 +1,4 @@
-"""SourceSmartSheet — download a sheet from SmartSheet as a pandas DataFrame.
+"""SmartSheetSource — download a sheet from SmartSheet as a pandas DataFrame.
 
 Fetches a SmartSheet spreadsheet via the SmartSheet REST API (GET as Excel)
 and parses it into a pandas DataFrame.
@@ -15,7 +15,7 @@ from aiohttp import web
 from .base import ThreadSource
 
 
-class SourceSmartSheet(ThreadSource):
+class SmartSheetSource(ThreadSource):
     """Download a SmartSheet sheet as Excel and return it as a DataFrame.
 
     Authenticates via Bearer token (SmartSheet API key from navconfig or
@@ -66,7 +66,7 @@ class SourceSmartSheet(ThreadSource):
             ValueError: If ``file_id`` is not provided.
         """
         if not self._file_id:
-            raise ValueError("SourceSmartSheet: 'source.file_id' is required.")
+            raise ValueError("SmartSheetSource: 'source.file_id' is required.")
 
         url = f"{self.BASE_URL}{self._file_id}"
         headers = {

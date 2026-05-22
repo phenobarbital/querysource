@@ -1,4 +1,4 @@
-"""Unit tests for SourceSharepoint (TASK-647)."""
+"""Unit tests for SharepointSource (TASK-647)."""
 import asyncio
 import io
 
@@ -6,12 +6,12 @@ import pandas as pd
 import pytest
 
 from querysource.queries.multi.sources.base import ThreadSource
-from querysource.queries.multi.sources.sharepoint import SourceSharepoint
+from querysource.queries.multi.sources.sharepoint import SharepointSource
 
 
-class TestSourceSharepoint:
+class TestSharepointSource:
     def test_inherits_thread_source(self):
-        assert issubclass(SourceSharepoint, ThreadSource)
+        assert issubclass(SharepointSource, ThreadSource)
 
     def test_parses_credentials(self):
         options = {
@@ -27,7 +27,7 @@ class TestSourceSharepoint:
                 "directory": "Shared Documents/General",
             },
         }
-        source = SourceSharepoint("sp_test", options, None, asyncio.Queue())
+        source = SharepointSource("sp_test", options, None, asyncio.Queue())
         assert source._client_id == "test_id"
         assert source._client_secret == "test_secret"
         assert source._tenant_id == "test_tenant"
@@ -40,14 +40,14 @@ class TestSourceSharepoint:
             "credentials": {"client_id": "id", "client_secret": "s", "tenant_id": "t"},
             "source": {"filename": "data.csv", "directory": "Reports"},
         }
-        source = SourceSharepoint("sp", options, None, asyncio.Queue())
+        source = SharepointSource("sp", options, None, asyncio.Queue())
         assert source._filename == "data.csv"
         assert source._directory == "Reports"
 
     def test_default_credentials_resolve_navconfig_names(self):
         """When no credentials provided, defaults are navconfig var names."""
         options = {"source": {"filename": "f.xlsx", "directory": "D"}}
-        source = SourceSharepoint("sp", options, None, asyncio.Queue())
+        source = SharepointSource("sp", options, None, asyncio.Queue())
         # client_id should either be resolved from navconfig or remain as string
         assert isinstance(source._client_id, str)
         assert isinstance(source._client_secret, str)
@@ -58,7 +58,7 @@ class TestSourceSharepoint:
             "credentials": {"client_id": "i", "client_secret": "s", "tenant_id": "t"},
             "source": {"filename": "data.csv", "directory": "D"},
         }
-        source = SourceSharepoint("sp", options, None, asyncio.Queue())
+        source = SharepointSource("sp", options, None, asyncio.Queue())
         content = b"col1,col2\n1,a\n2,b"
         df = source._parse_file_content(content)
         assert isinstance(df, pd.DataFrame)
@@ -70,7 +70,7 @@ class TestSourceSharepoint:
             "credentials": {"client_id": "i", "client_secret": "s", "tenant_id": "t"},
             "source": {"filename": "data.xlsx", "directory": "D"},
         }
-        source = SourceSharepoint("sp", options, None, asyncio.Queue())
+        source = SharepointSource("sp", options, None, asyncio.Queue())
         df_original = pd.DataFrame({"col1": [1, 2], "col2": ["a", "b"]})
         buf = io.BytesIO()
         df_original.to_excel(buf, index=False)
@@ -89,7 +89,7 @@ class TestSourceSharepoint:
                             "tenant_name": "contoso", "site": "S"},
             "source": {"filename": "f.xlsx", "directory": "D"},
         }
-        source = SourceSharepoint("sp", options, None, asyncio.Queue())
+        source = SharepointSource("sp", options, None, asyncio.Queue())
 
         async def _run():
             with patch.dict(sys.modules, {'azure': None, 'azure.identity': None,

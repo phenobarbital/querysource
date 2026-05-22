@@ -13,7 +13,7 @@ class TestMultiQSSources:
     def test_sources_key_extracted(self):
         """Sources key should be parsed from query dict."""
         query = {
-            "sources": [{"SourceTable": {"driver": "pg", "table": "test"}}]
+            "sources": [{"TableSource": {"driver": "pg", "table": "test"}}]
         }
         mqs = MultiQS(query=query, request=MagicMock())
         assert mqs._sources is not None
@@ -22,7 +22,7 @@ class TestMultiQSSources:
     def test_empty_check_includes_sources(self):
         """Should not raise DriverError when only sources is provided."""
         query = {
-            "sources": [{"SourceTable": {"driver": "pg", "table": "test"}}]
+            "sources": [{"TableSource": {"driver": "pg", "table": "test"}}]
         }
         # Must NOT raise DriverError
         mqs = MultiQS(query=query, request=MagicMock())
@@ -55,8 +55,8 @@ class TestMultiQSSources:
         """Multiple source entries should all be extracted."""
         query = {
             "sources": [
-                {"SourceTable": {"driver": "pg", "table": "t1"}},
-                {"SourceS3": {"source": {"file": "f.csv"}}},
+                {"TableSource": {"driver": "pg", "table": "t1"}},
+                {"S3Source": {"source": {"file": "f.csv"}}},
             ]
         }
         mqs = MultiQS(query=query, request=MagicMock())
@@ -67,7 +67,7 @@ class TestMultiQSSources:
         query = {
             "queries": {"q": {"slug": "slug1"}},
             "files": {"f": {"path": "/tmp/x.csv", "mime": "text/csv"}},
-            "sources": [{"SourceTable": {"driver": "pg", "table": "t"}}],
+            "sources": [{"TableSource": {"driver": "pg", "table": "t"}}],
         }
         mqs = MultiQS(query=query, request=MagicMock())
         assert mqs._queries

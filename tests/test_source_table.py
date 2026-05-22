@@ -1,4 +1,4 @@
-"""Unit tests for SourceTable (TASK-650)."""
+"""Unit tests for TableSource (TASK-650)."""
 import asyncio
 
 import pytest
@@ -7,42 +7,42 @@ from querysource.queries.multi.sources.base import ThreadSource
 from querysource.queries.multi.sources.table import (
     DRIVER_ALIASES,
     SQL_IDENTIFIER_RE,
-    SourceTable,
+    TableSource,
 )
 
 
-class TestSourceTable:
+class TestTableSource:
     def test_inherits_thread_source(self):
-        assert issubclass(SourceTable, ThreadSource)
+        assert issubclass(TableSource, ThreadSource)
 
     def test_driver_normalization_postgresql(self):
         options = {"driver": "postgresql", "table": "users"}
-        source = SourceTable("tbl_test", options, None, asyncio.Queue())
+        source = TableSource("tbl_test", options, None, asyncio.Queue())
         assert source._driver == "pg"
 
     def test_driver_normalization_postgres(self):
         options = {"driver": "postgres", "table": "users"}
-        source = SourceTable("tbl_test", options, None, asyncio.Queue())
+        source = TableSource("tbl_test", options, None, asyncio.Queue())
         assert source._driver == "pg"
 
     def test_driver_normalization_bq(self):
         options = {"driver": "bq", "table": "users"}
-        source = SourceTable("tbl_test", options, None, asyncio.Queue())
+        source = TableSource("tbl_test", options, None, asyncio.Queue())
         assert source._driver == "bigquery"
 
     def test_driver_normalization_mariadb(self):
         options = {"driver": "mariadb", "table": "users"}
-        source = SourceTable("tbl_test", options, None, asyncio.Queue())
+        source = TableSource("tbl_test", options, None, asyncio.Queue())
         assert source._driver == "mysql"
 
     def test_driver_passthrough_for_unknown(self):
         options = {"driver": "mongo", "table": "items"}
-        source = SourceTable("tbl_test", options, None, asyncio.Queue())
+        source = TableSource("tbl_test", options, None, asyncio.Queue())
         assert source._driver == "mongo"
 
     def test_invalid_table_name_raises(self):
         with pytest.raises(ValueError, match="Invalid table name"):
-            SourceTable(
+            TableSource(
                 "test",
                 {"driver": "pg", "table": "'; DROP TABLE--"},
                 None,
@@ -51,7 +51,7 @@ class TestSourceTable:
 
     def test_invalid_schema_name_raises(self):
         with pytest.raises(ValueError, match="Invalid schema name"):
-            SourceTable(
+            TableSource(
                 "test",
                 {"driver": "pg", "table": "t", "schema": "1bad"},
                 None,
@@ -59,7 +59,7 @@ class TestSourceTable:
             )
 
     def test_valid_identifiers_pass(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "my_table", "schema": "public"},
             None,
@@ -69,11 +69,11 @@ class TestSourceTable:
         assert source._schema == "public"
 
     def test_build_where_empty(self):
-        source = SourceTable("test", {"driver": "pg", "table": "t"}, None, asyncio.Queue())
+        source = TableSource("test", {"driver": "pg", "table": "t"}, None, asyncio.Queue())
         assert source._build_where() == ""
 
     def test_build_where_bool_true(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"active": True}},
             None,
@@ -84,7 +84,7 @@ class TestSourceTable:
         assert where.startswith(" WHERE ")
 
     def test_build_where_bool_false(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"deleted": False}},
             None,
@@ -94,7 +94,7 @@ class TestSourceTable:
         assert "deleted = false" in where
 
     def test_build_where_integer(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"id": 42}},
             None,
@@ -104,7 +104,7 @@ class TestSourceTable:
         assert "id = 42" in where
 
     def test_build_where_float(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"score": 9.5}},
             None,
@@ -114,7 +114,7 @@ class TestSourceTable:
         assert "score = 9.5" in where
 
     def test_build_where_string_escaping(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"name": "O'Brien"}},
             None,
@@ -124,7 +124,7 @@ class TestSourceTable:
         assert "O''Brien" in where
 
     def test_build_where_null(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "t", "filter": {"deleted_at": None}},
             None,
@@ -133,7 +133,7 @@ class TestSourceTable:
         assert "IS NULL" in source._build_where()
 
     def test_build_where_multiple_filters(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {
                 "driver": "pg",
@@ -149,7 +149,7 @@ class TestSourceTable:
         assert "AND" in where
 
     def test_build_where_invalid_column_raises(self):
-        source = SourceTable("test", {"driver": "pg", "table": "t"}, None, asyncio.Queue())
+        source = TableSource("test", {"driver": "pg", "table": "t"}, None, asyncio.Queue())
         source._filter = {"bad;column": "value"}
         with pytest.raises(ValueError, match="Invalid column name"):
             source._build_where()
@@ -174,7 +174,7 @@ class TestSourceTable:
         assert "mariadb" in DRIVER_ALIASES
 
     def test_schema_table_ref_with_schema(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "stores", "schema": "troc"},
             None,
@@ -184,7 +184,7 @@ class TestSourceTable:
         assert table_ref == "troc.stores"
 
     def test_schema_table_ref_without_schema(self):
-        source = SourceTable(
+        source = TableSource(
             "test",
             {"driver": "pg", "table": "stores"},
             None,

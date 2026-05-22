@@ -1,4 +1,4 @@
-"""SourceSharepoint — download a single file from a SharePoint document library.
+"""SharepointSource — download a single file from a SharePoint document library.
 
 Downloads a single Excel or CSV file from a SharePoint site's document library
 via the Microsoft Graph API and returns it as a pandas DataFrame.
@@ -17,7 +17,7 @@ from .base import ThreadSource
 from .file import excel_based
 
 
-class SourceSharepoint(ThreadSource):
+class SharepointSource(ThreadSource):
     """Download a single file from a SharePoint document library.
 
     Authenticates via Microsoft Graph client credentials (client_id,

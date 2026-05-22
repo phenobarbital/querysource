@@ -68,8 +68,7 @@ async def scheduled_multiqs_job(
     loader at startup (which logs a DEBUG line) but is not passed to
     this callable.
 
-    Currently accepts only ``slug``; condition-based filtering is not yet
-    supported.
+    TODO: v2 may accept an optional conditions kwarg (parity with QS(slug, conditions=...))
 
     Args:
         slug: The multi-query slug to execute.

@@ -1,4 +1,4 @@
-"""Unit tests for SourceS3 (TASK-649)."""
+"""Unit tests for S3Source (TASK-649)."""
 import asyncio
 import gzip
 import io
@@ -8,12 +8,12 @@ import pandas as pd
 import pytest
 
 from querysource.queries.multi.sources.base import ThreadSource
-from querysource.queries.multi.sources.s3 import SourceS3
+from querysource.queries.multi.sources.s3 import S3Source
 
 
-class TestSourceS3:
+class TestS3Source:
     def test_inherits_thread_source(self):
-        assert issubclass(SourceS3, ThreadSource)
+        assert issubclass(S3Source, ThreadSource)
 
     def test_parses_credentials(self):
         options = {
@@ -28,7 +28,7 @@ class TestSourceS3:
                 "directory": "exports/",
             },
         }
-        source = SourceS3("s3_test", options, None, asyncio.Queue())
+        source = S3Source("s3_test", options, None, asyncio.Queue())
         assert source._bucket == "my-bucket"
         assert source._file == "data.csv"
         assert source._directory == "exports/"
@@ -40,7 +40,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.csv", "directory": "path/to/"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         key = source._build_s3_key()
         assert key == "path/to/data.csv"
 
@@ -50,7 +50,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.csv"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         assert source._build_s3_key() == "data.csv"
 
     def test_s3_key_strips_trailing_slash(self):
@@ -59,7 +59,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "f.csv", "directory": "dir/subdir/"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         assert source._build_s3_key() == "dir/subdir/f.csv"
 
     def test_parse_csv_content(self):
@@ -68,7 +68,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.csv"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         content = b"col1,col2\n1,a\n2,b"
         df = source._parse_content(content, "data.csv")
         assert isinstance(df, pd.DataFrame)
@@ -81,7 +81,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.csv.gz"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         raw = b"col1,col2\n10,x\n20,y"
         compressed = gzip.compress(raw)
         df = source._parse_content(compressed, "data.csv.gz")
@@ -95,7 +95,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.xlsx"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
         df_original = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
         buf = io.BytesIO()
         df_original.to_excel(buf, index=False)
@@ -113,7 +113,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {"file": "data.csv"},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
 
         async def _run():
             with patch.dict(sys.modules, {'aioboto3': None}):
@@ -131,7 +131,7 @@ class TestSourceS3:
                             "aws_key": "k", "aws_secret": "s"},
             "source": {},
         }
-        source = SourceS3("test", options, None, asyncio.Queue())
+        source = S3Source("test", options, None, asyncio.Queue())
 
         async def _run():
             with pytest.raises(ValueError, match="source.file"):

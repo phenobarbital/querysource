@@ -18,8 +18,8 @@ excel_based = (
 )
 
 
-class ThreadFile(ThreadSource):
-    """ThreadFile loads a static file from a local path.
+class FileSource(ThreadSource):
+    """FileSource loads a static file from a local path.
 
     Reads the file (CSV or Excel, optionally compressed with gzip or zip)
     and puts the resulting DataFrame into the shared queue.  Inherits the

@@ -1,4 +1,4 @@
-"""SourceTable — query a database table and return results as a pandas DataFrame.
+"""TableSource — query a database table and return results as a pandas DataFrame.
 
 Connects to a database via ``asyncdb.AsyncDB``, executes
 ``SELECT * FROM schema.table [WHERE ...]``, and returns the result as a
@@ -26,7 +26,7 @@ DRIVER_ALIASES: dict[str, str] = {
 SQL_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
-class SourceTable(ThreadSource):
+class TableSource(ThreadSource):
     """Query a database table and return the result as a pandas DataFrame.
 
     Executes ``SELECT * FROM [schema.]table [WHERE ...]`` using an asyncdb
@@ -130,7 +130,7 @@ class SourceTable(ThreadSource):
         from asyncdb import AsyncDB  # noqa: PLC0415
 
         if not self._table:
-            raise ValueError("SourceTable: 'table' is required.")
+            raise ValueError("TableSource: 'table' is required.")
 
         table_ref = (
             f"{self._schema}.{self._table}" if self._schema else self._table
@@ -152,7 +152,7 @@ class SourceTable(ThreadSource):
             conn.output_format('pandas')
             result, errors = await conn.query(sql)
             if errors:
-                raise RuntimeError(f"SourceTable query error: {errors}")
+                raise RuntimeError(f"TableSource query error: {errors}")
 
         if result is None:
             return pd.DataFrame()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import functools
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -234,7 +234,7 @@ class ComponentRegistry:
         except (ImportError, AttributeError):
             pass
         # Heuristic from name
-        if name.startswith("Source"):
+        if name.endswith("Source"):
             return "Sources"
         if name in ("tableOutput", "TableOutput", "ToSharepoint", "ToS3", "Table", "DWH"):
             return "Destinations"

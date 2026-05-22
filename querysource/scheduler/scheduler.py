@@ -255,9 +255,16 @@ class QSScheduler:
         Args:
             app: The aiohttp web application.
         """
+        self.logger.info(
+            "Starting QSScheduler (timezone=%s, coalesce=%s, max_instances=%s)",
+            self._timezone,
+            QS_SCHEDULER_COALESCE,
+            QS_SCHEDULER_MAX_INSTANCES,
+        )
         if not self._loop:
             self._loop = asyncio.get_event_loop()
         # Create own PostgreSQL pool
+        self.logger.info("QSScheduler: initializing PostgreSQL pool")
         self._db = AsyncPool(
             "pg",
             dsn=default_dsn,
@@ -266,13 +273,15 @@ class QSScheduler:
         # Starts the pool (establishes initial connections)
         try:
             await self._db.connect()
-            self.logger.info("QS Scheduler DB pool started")
+            self.logger.info("QSScheduler: DB pool started")
         except Exception as exc:
-            self.logger.error(f"Failed to start QS Scheduler DB pool: {exc}")
+            self.logger.error(f"QSScheduler: failed to start DB pool: {exc}")
             self._db = None
         # Create the scheduler
+        self.logger.info("QSScheduler: creating AsyncIOScheduler instance")
         self._scheduler = self._create_scheduler()
         # Query public.queries for schedulable rows
+        self.logger.info("QSScheduler: loading schedulable queries from public.queries")
         try:
             async with await self._db.acquire() as conn:
                 sql = (
@@ -284,11 +293,14 @@ class QSScheduler:
                 )
                 rows, error = await conn.query(sql)
                 if error:
-                    self.logger.error(f"Error loading schedulable queries: {error}")
+                    self.logger.error(f"QSScheduler: error loading schedulable queries: {error}")
                     rows = []
         except Exception as exc:
-            self.logger.error(f"Failed to query schedulable rows: {exc}")
+            self.logger.error(f"QSScheduler: failed to query schedulable rows: {exc}")
             rows = []
+        self.logger.info(
+            "QSScheduler: fetched %d candidate row(s) from public.queries", len(rows)
+        )
         # Register jobs
         query_count = self._load_scheduled_queries(rows)
         cache_count = self._load_cache_refresh_jobs(rows)
@@ -298,7 +310,10 @@ class QSScheduler:
         )
         # Start the scheduler
         self._scheduler.start()
-        self.logger.info("QSScheduler started")
+        self.logger.info(
+            "QSScheduler started with %d active job(s)",
+            len(self._scheduler.get_jobs()),
+        )
         app["qs_scheduler"] = self
 
     async def shutdown(self, app: web.Application) -> None:

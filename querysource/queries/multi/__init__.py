@@ -16,7 +16,7 @@ from .transformations import (
 )
 from .operators.filter import Filter
 from ...outputs.destinations import get_destination
-from .sources import ThreadQuery, ThreadFile
+from .sources import ThreadQuery, FileSource
 
 
 def get_operator_module(clsname: str):
@@ -162,7 +162,7 @@ class MultiQS(BaseQuery):
                 tasks[name] = t
         if self._files:
             for name, file in self._files.items():
-                t = ThreadFile(
+                t = FileSource(
                     name, file, self._request, self._queue
                 )
                 t.start()
