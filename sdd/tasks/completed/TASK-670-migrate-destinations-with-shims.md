@@ -297,3 +297,16 @@ def test_local_registry_populated_after_migration():
 **Notes**:
 
 **Deviations from spec**: none | describe if any
+
+## Completion Note
+
+All four destination classes (ToSharepoint, ToS3, TableDestination, DWHDestination)
+migrated to querysource/queries/multi/destinations/ as canonical location.
+
+Back-compat shims written for outputs/destinations/{sharepoint,s3,table,dwh}.py.
+
+Key change: renamed get_schema(self) -> sql_schema(self) in TableDestination and
+DWHDestination to avoid shadowing SchemaIntrospectable.get_schema(cls) classmethod.
+Engine files updated with hasattr-guarded sql_schema() calls.
+
+All 32 tests pass. Committed as: feat(new-destination-multiquery): TASK-670

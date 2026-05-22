@@ -72,7 +72,7 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -82,8 +82,8 @@
       "parallelism_notes": "Moves four files in lockstep; each move-and-shim pair must keep its test green before advancing.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:14:21+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-670-migrate-destinations-with-shims.md"
+      "completed_at": "2026-05-22T16:31:54+00:00",
+      "file": "sdd/tasks/completed/TASK-670-migrate-destinations-with-shims.md"
     },
     {
       "id": "TASK-671",
