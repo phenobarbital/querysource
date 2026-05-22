@@ -17,6 +17,15 @@ import re
 import typing
 from typing import Any, Union
 
+# Compiled at module level to avoid re-compiling inside the MRO loop.
+# NOTE: The default-value capture group [^)]+ stops at the first ')'.
+# This truncates nested calls like fn(a, b) or tuple literals (x, y).
+# The default field is informational-only; treat complex defaults as approximate.
+_KWARGS_PATTERN = re.compile(
+    r"kwargs\.(?:pop|get)\s*\(\s*['\"](\w+)['\"]"
+    r"(?:\s*,\s*([^)]+))?\s*\)"
+)
+
 
 def _type_to_json_schema(type_str: str) -> dict:
     """Convert a Python type string to a JSON Schema draft-2020-12 type dict."""
@@ -73,6 +82,12 @@ def _parse_default(default_str: str | None) -> Any:
     # Handle tuple defaults like ('_x', '_y') — return as raw string
     if s.startswith("(") and s.endswith(")"):
         return s
+    # Handle dict ({}) and list ([]) literals via JSON
+    import json as _json
+    try:
+        return _json.loads(s)
+    except (ValueError, _json.JSONDecodeError):
+        pass
     return s
 
 
@@ -106,7 +121,12 @@ class SchemaIntrospectable:
         # --- Pass 1: class-level type annotations ---
         try:
             hints = typing.get_type_hints(cls)
-        except Exception:
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "get_type_hints(%s) failed, falling back to empty hints: %s",
+                cls.__qualname__, exc,
+            )
             hints = {}
 
         # Filter out private / dunder / inherited-from-SchemaIntrospectable annotations
@@ -127,11 +147,25 @@ class SchemaIntrospectable:
             }
 
         # --- Pass 2: inspect __init__ source for kwargs.pop / kwargs.get ---
+        # Collect stop bases by identity (not name) to avoid false matches.
+        # ABC is stdlib — no circular-import risk; identity check is more precise.
+        from abc import ABC as _ABC
+        _stop_bases: tuple[type, ...] = (_ABC, object)
+        try:
+            from querysource.queries.multi.abstract import AbstractMulti as _AM
+            _stop_bases = _stop_bases + (_AM,)
+        except ImportError:
+            pass
+        try:
+            from querysource.outputs.destinations.abstract import AbstractDestination as _AD
+            _stop_bases = _stop_bases + (_AD,)
+        except ImportError:
+            pass
+
         for klass in cls.__mro__:
-            if klass is SchemaIntrospectable or klass is object:
+            if klass is SchemaIntrospectable:
                 break
-            # Stop at ABC too (imported lazily to avoid circular deps)
-            if klass.__name__ in ("ABC", "AbstractMulti", "AbstractDestination"):
+            if klass in _stop_bases:
                 break
             try:
                 source = inspect.getsource(klass.__init__)
@@ -139,11 +173,7 @@ class SchemaIntrospectable:
                 continue
             # Match: self._attr = kwargs.pop('attr_name', default)
             #     or self._attr = kwargs.get('attr_name', default)
-            pattern = re.compile(
-                r"kwargs\.(?:pop|get)\s*\(\s*['\"](\w+)['\"]"
-                r"(?:\s*,\s*([^)]+))?\s*\)"
-            )
-            for match in pattern.finditer(source):
+            for match in _KWARGS_PATTERN.finditer(source):
                 kwarg_name = match.group(1)
                 default_str = match.group(2)
                 if kwarg_name in ("backend",):

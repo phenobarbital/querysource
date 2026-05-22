@@ -12,4 +12,4 @@ from querysource.queries.multi.destinations.dwh import (  # noqa: F401
     _clean_dynamo_record,
 )
 
-__all__ = ("DWHDestination", "_clean_dynamo_record")
+__all__ = ("DWHDestination",)

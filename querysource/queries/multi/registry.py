@@ -38,7 +38,7 @@ class ComponentInfo:
     description: str
     usage: str
     attributes: list[AttributeInfo] = field(default_factory=list)
-    json_schema: dict = field(default_factory=dict)
+    json_schema: dict | None = field(default_factory=dict)  # None means schema unknown
     example: dict = field(default_factory=dict)
 
 
@@ -187,6 +187,8 @@ class ComponentRegistry:
         for name, comp_cls in components.items():
             # Deduplicate: if this exact class object was already catalogued,
             # skip the current (YAML step-name) alias entry.
+            # id() is safe here: all registered classes are module-level and
+            # never garbage-collected during a process lifetime, so id() is stable.
             class_id = id(comp_cls)
             if isinstance(comp_cls, type) and class_id in _seen_classes:
                 continue
@@ -216,7 +218,8 @@ class ComponentRegistry:
                         example=desc.get("example", {}),
                     ))
                 else:
-                    # Sources / destinations or plain classes
+                    # Sources / destinations or plain classes not yet implementing
+                    # SchemaIntrospectable — schema is unknown, not "no parameters".
                     category = cls._classify(name, comp_cls)
                     doc = getattr(comp_cls, "__doc__", "") or ""
                     first_line = doc.strip().splitlines()[0].strip() if doc.strip() else ""
@@ -226,13 +229,7 @@ class ComponentRegistry:
                         description=first_line,
                         usage="",
                         attributes=[],
-                        json_schema={
-                            "$schema": "https://json-schema.org/draft/2020-12/schema",
-                            "type": "object",
-                            "title": name,
-                            "properties": {},
-                            "required": [],
-                        },
+                        json_schema=None,  # schema unknown — class not yet SchemaIntrospectable
                         example={},
                     ))
             except Exception as exc:
@@ -303,7 +300,7 @@ class ComponentRegistry:
                     step=step_name,
                     field="",
                     message=f"Unknown operator/transform: '{step_name}'. "
-                            f"Available: {sorted(known_names)[:10]}...",
+                            f"Available: {sorted(known_names)}",
                 ))
                 continue
 

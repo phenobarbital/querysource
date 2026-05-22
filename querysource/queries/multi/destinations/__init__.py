@@ -48,8 +48,9 @@ def _scan_destinations() -> dict:
                 f".{stem}", package="querysource.queries.multi.destinations"
             )
         except ImportError as exc:
-            _pkg_logger.debug(
-                "Destination module '%s' skipped (optional dep missing): %s",
+            _pkg_logger.warning(
+                "Skipping '%s': optional dependency missing (%s). "
+                "Install the required package to enable this destination.",
                 stem, exc,
             )
             continue
@@ -77,6 +78,11 @@ def __getattr__(name: str):
     if name == "AbstractDestination":
         return _get_abstract_destination()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    """Include lazily-resolved names so dir() and hasattr() stay consistent."""
+    return __all__
 
 
 __all__ = ("AbstractDestination", "DESTINATION_REGISTRY")

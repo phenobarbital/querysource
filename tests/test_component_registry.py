@@ -146,6 +146,9 @@ class TestDestinationDiscovery:
         from querysource.queries.multi.registry import ComponentRegistry
         ComponentRegistry.discover_all.cache_clear()
 
+    def teardown_method(self):
+        ComponentRegistry.discover_all.cache_clear()
+
     def test_scan_picks_up_migrated_destinations(self):
         from querysource.queries.multi.registry import ComponentRegistry
         components = ComponentRegistry.discover_all()
