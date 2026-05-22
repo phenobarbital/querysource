@@ -181,29 +181,52 @@ class tExplode(AbstractTransform):
         )
         return result
 
+    def _column_contains_dicts(self, df: pd.DataFrame) -> bool:
+        """Return True if the first non-null value in ``self.column`` is a dict.
+
+        This distinguishes direct dict columns (use json_normalize) from list
+        columns whose exploded values may be dicts (use explode + json_normalize).
+        """
+        non_null = df[self.column].dropna()
+        if non_null.empty:
+            return False
+        return isinstance(non_null.iloc[0], dict)
+
     def _explode_standard(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standard-mode explosion.
 
-        Steps:
+        Behaviour depends on the column's value type:
+
+        **List column** (most common):
         1. ``DataFrame.explode(column)`` to expand list cells into rows.
         2. Optionally normalise dict values via ``json_normalize``
-           (when ``explode_dataset=True``).
+           (when ``explode_dataset=True`` and exploded values are dicts).
         3. Optionally drop the source column (when ``drop_original=True``).
 
-        Note: If the target column contains a mix of lists and scalars,
+        **Dict column** (column contains dicts directly, not inside lists):
+        - With ``explode_dataset=True``: apply ``json_normalize`` to expand
+          dict keys into columns. The original dict column is replaced/dropped.
+        - With ``explode_dataset=False``: return the DataFrame unchanged
+          (dicts stay as values).
+
+        Note: If a list column contains a mix of lists and scalars,
         ``DataFrame.explode()`` handles this gracefully — scalar values remain
         as-is and are not duplicated.
         """
-        # Step 1: Explode the column
+        # Detect whether the column contains dicts directly (not in lists).
+        if self._column_contains_dicts(df):
+            return self._normalize_dict_column(df)
+
+        # Step 1: Explode the list column
         exploded = df.explode(self.column).reset_index(drop=True)
 
         if self.explode_dataset:
-            # Step 2: Normalise dict values into separate columns
+            # Step 2: Normalise dict values into separate columns.
             # Drop NaN entries before normalising to avoid type errors.
             valid_mask = exploded[self.column].notna()
             valid_items = exploded.loc[valid_mask, self.column]
 
-            if not valid_items.empty:
+            if not valid_items.empty and isinstance(valid_items.iloc[0], dict):
                 normalized = json_normalize(valid_items.tolist())
                 normalized.index = valid_items.index
 
@@ -212,7 +235,7 @@ class tExplode(AbstractTransform):
 
                 result = pd.concat([exploded, normalized], axis=1)
             else:
-                # All values are NaN after explode — nothing to normalise
+                # Values after explode are not dicts — nothing to normalise.
                 if self.drop_original:
                     exploded = exploded.drop(columns=[self.column])
                 result = exploded
@@ -221,6 +244,34 @@ class tExplode(AbstractTransform):
                 exploded = exploded.drop(columns=[self.column])
             result = exploded
 
+        return result
+
+    def _normalize_dict_column(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Handle the case where the column directly contains dict values.
+
+        With ``explode_dataset=True``: expand dict keys into separate columns
+        via ``json_normalize``, keeping all other columns.
+        With ``explode_dataset=False``: return the DataFrame as-is (dicts
+        remain as column values — no explosion occurs).
+
+        Parameters
+        ----------
+        df:
+            The input DataFrame whose ``self.column`` contains dict values.
+        """
+        if not self.explode_dataset:
+            # Dicts stay as values — return unchanged.
+            return df.copy()
+
+        # Expand dict keys into columns
+        valid_mask = df[self.column].notna()
+        valid_items = df.loc[valid_mask, self.column]
+        normalized = json_normalize(valid_items.tolist())
+        normalized.index = valid_items.index
+
+        # Build the result: other columns + normalized dict columns
+        other_cols = df.drop(columns=[self.column])
+        result = pd.concat([other_cols, normalized], axis=1).reset_index(drop=True)
         return result
 
     def _explode_advanced(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -239,10 +290,18 @@ class tExplode(AbstractTransform):
         """
         if not self.explode_dataset:
             # Advanced mode without dict normalisation — simple explode
+            # For dict columns, just return as-is; for list columns, explode.
+            if self._column_contains_dicts(df):
+                return df.copy()
             result = df.explode(self.column).reset_index(drop=True)
             if self.drop_original:
                 result = result.drop(columns=[self.column])
             return result
+
+        # If the column contains dicts directly (not in lists), delegate to
+        # the dict normalization path with parent tracking.
+        if self._column_contains_dicts(df):
+            return self._advanced_normalize_dict_column(df)
 
         # Step 1: Add parent index tracker
         working_df = df.copy()
@@ -307,6 +366,67 @@ class tExplode(AbstractTransform):
         result = pd.concat([parent_df, exploded_df], ignore_index=True)
 
         # Step 8: Optionally drop source column
+        if self.drop_original and self.column in result.columns:
+            result = result.drop(columns=[self.column])
+
+        return result
+
+    def _advanced_normalize_dict_column(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Advanced mode for columns containing dicts directly (not in lists).
+
+        In this case there is no list to explode — instead we normalize the
+        dict values into columns and concatenate parent + child rows.
+        ``propagate_columns`` values are copied from the parent to the child row.
+
+        Each parent row produces one child row (its dict expanded into columns),
+        so the result has 2× as many rows as the input: parent rows (original)
+        + child rows (expanded dicts).
+
+        Parameters
+        ----------
+        df:
+            The input DataFrame whose ``self.column`` contains dict values.
+        """
+        working_df = df.copy()
+        working_df["_parent_idx"] = working_df.index
+
+        valid_mask = working_df[self.column].notna()
+        valid_items = working_df.loc[valid_mask, self.column]
+
+        if valid_items.empty:
+            working_df = working_df.drop(columns=["_parent_idx"])
+            if self.drop_original and self.column in working_df.columns:
+                working_df = working_df.drop(columns=[self.column])
+            return working_df
+
+        # Normalise dicts into columns
+        normalized_df = json_normalize(valid_items.tolist())
+        normalized_df.index = valid_items.index
+
+        # Build child DataFrame: start from the exploded (non-dict) rows,
+        # add the normalized dict columns.
+        child_df = working_df.loc[valid_mask].copy()
+
+        for col in normalized_df.columns:
+            child_df[col] = normalized_df[col].values
+
+        # Apply propagate_columns: copy parent values if not already in child
+        if self.propagate_columns:
+            for col in self.propagate_columns:
+                if col in df.columns and col not in normalized_df.columns:
+                    for idx in valid_items.index:
+                        parent_row_idx = working_df.at[idx, "_parent_idx"]
+                        child_df.at[idx, col] = df.at[parent_row_idx, col]
+
+        # Remove helper column
+        parent_df = working_df.drop(columns=["_parent_idx"])
+        if "_parent_idx" in child_df.columns:
+            child_df = child_df.drop(columns=["_parent_idx"])
+
+        # Concatenate parent + child
+        result = pd.concat([parent_df, child_df], ignore_index=True)
+
+        # Optionally drop source column
         if self.drop_original and self.column in result.columns:
             result = result.drop(columns=[self.column])
 
