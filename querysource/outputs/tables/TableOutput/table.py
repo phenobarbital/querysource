@@ -46,6 +46,12 @@ class TableOutput:
     def get_schema(self):
         return self._schema
 
+    # Alias used by engine parent-protocol for FEAT-097 compatibility.
+    # Both TableOutput (legacy) and TableDestination/DWHDestination (new)
+    # expose sql_schema() so the engine files can call a single method.
+    def sql_schema(self):
+        return self._schema
+
     @property
     def jsonb_columns(self) -> Set[str]:
         return self._jsonb_columns

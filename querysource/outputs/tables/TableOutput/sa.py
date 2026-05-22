@@ -49,7 +49,7 @@ class SaOutput(AbstractOutput):
         metadata = MetaData()
         metadata.bind = conn
         constraint = self._parent.constraints()
-        options = {"schema": self._parent.get_schema(), "autoload_with": conn}
+        options = {"schema": self._parent.sql_schema() if hasattr(self._parent, 'sql_schema') else self._parent.get_schema(), "autoload_with": conn}
         tbl = Table(table.name, metadata, *args, **options)
         # removing the columns from the table definition
         columns = self._columns

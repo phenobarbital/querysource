@@ -501,7 +501,7 @@ class PgOutput(AbstractOutput):
         except Exception:
             tablename = self._parent.tablename
 
-        schema = self._parent.get_schema()
+        schema = self._parent.sql_schema() if hasattr(self._parent, 'sql_schema') else self._parent.get_schema()
         primary_keys = self._parent.primary_keys()
         constraint = self._parent.constraints()
 
