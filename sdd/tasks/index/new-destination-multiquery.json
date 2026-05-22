@@ -52,7 +52,7 @@
       "feature_id": "FEAT-097",
       "feature": "new-destination-multiquery",
       "spec": "sdd/specs/new-destination-multiquery.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Sets up the package that hosts the migrated classes — must precede TASK-670.",
       "assigned_to": null,
       "started_at": "2026-05-22T16:14:21+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-669-destinations-subpackage-skeleton.md"
+      "completed_at": "2026-05-22T16:21:31+00:00",
+      "file": "sdd/tasks/completed/TASK-669-destinations-subpackage-skeleton.md"
     },
     {
       "id": "TASK-670",
