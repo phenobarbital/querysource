@@ -340,8 +340,10 @@ When you pick up this task:
 
 ## Completion Note
 
-**Completed by**: Claude Sonnet 4.6 (SDD Worker)
-**Date**: 2026-05-23
-**Notes**: All 10 unit tests pass. Added object-dtype casting for nullable numeric stat columns (min, max, mean, std, median, mode, skewness, kurtosis, q1, q3) to preserve Python None identity (pandas coerces None to np.nan in float64 columns). Compiled .so files copied to worktree for test environment.
+*(Agent fills this in when done)*
 
-**Deviations from spec**: Minor — added nullable-column dtype casting not mentioned in spec, but required to satisfy `is None` checks in test specification.
+**Completed by**:
+**Date**:
+**Notes**:
+
+**Deviations from spec**: none | describe if any

@@ -230,8 +230,10 @@ When you pick up this task:
 
 ## Completion Note
 
-**Completed by**: Claude Sonnet 4.6 (SDD Worker)
-**Date**: 2026-05-23
-**Notes**: Removed early-return from Info dispatch block. Added `_info = self._options.pop('Info', {})` and removed `return result, self._options`. Passes `**_info` to operator constructor so output_format and any future attributes flow through. All 3 integration tests pass.
+*(Agent fills this in when done)*
 
-**Deviations from spec**: none
+**Completed by**:
+**Date**:
+**Notes**:
+
+**Deviations from spec**: none | describe if any

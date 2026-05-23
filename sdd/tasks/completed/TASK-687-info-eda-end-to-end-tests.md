@@ -246,8 +246,10 @@ When you pick up this task:
 
 ## Completion Note
 
-**Completed by**: Claude Sonnet 4.6 (SDD Worker)
-**Date**: 2026-05-23
-**Notes**: All 5 end-to-end tests pass. Tests exercise Info standalone, default options, JSON mode, data quality verification, and backward compatibility. Tests run without HTTP server by invoking operators directly.
+*(Agent fills this in when done)*
+
+**Completed by**:
+**Date**:
+**Notes**:
 
 **Deviations from spec**: none | describe if any
