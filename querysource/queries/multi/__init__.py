@@ -231,12 +231,11 @@ class MultiQS(BaseQuery):
         ### Step 2: passing Results to virtual JOINs
         if 'Info' in self._options:
             obj = get_operator_module('Info')
+            _info = self._options.pop('Info', {})
             try:
-                ## making Join of Data
-                info = obj(data=result)
+                info = obj(data=result, **_info)
                 async with info as i:
                     result = await i.run()
-                return result, self._options
             except DataNotFound:
                 raise
             except (QueryException, Exception) as ex:
