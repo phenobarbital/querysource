@@ -142,6 +142,19 @@ class TestPluckCols:
         # Order should match original df, not the order of columns list
         assert list(result.columns) == ["name", "email"]
 
+    @pytest.mark.asyncio
+    async def test_pluck_cols_dict_inconsistent_schemas(self):
+        """Dict where one DF lacks a requested exact column → DriverError.
+
+        Called directly (not via context manager) so DriverError is not wrapped
+        in QueryException by AbstractMulti.__aexit__.
+        """
+        df1 = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        df2 = pd.DataFrame({"b": [5, 6], "c": [7, 8]})  # no column 'a'
+        obj = PluckCols(data={"df1": df1, "df2": df2}, columns=["a"])
+        with pytest.raises(DriverError, match="not found in DataFrame"):
+            await obj.run()
+
 
 # ---------------------------------------------------------------------------
 # DropCols
@@ -306,6 +319,32 @@ class TestFilterCols:
             assert "all_null_col" not in df.columns
             assert "name" in df.columns
 
+    @pytest.mark.asyncio
+    async def test_filter_cols_constant_single_row_drops_all(self):
+        """Single-row DF: every column has nunique==1 → all dropped → DataNotFound.
+
+        Called directly (not via context manager) so DataNotFound is not
+        wrapped in QueryException by AbstractMulti.__aexit__.
+        """
+        df = pd.DataFrame({"a": [1], "b": ["hello"], "c": [True]})
+        obj = FilterCols(data=df, expression="constant")
+        with pytest.raises(DataNotFound):
+            await obj.run()
+
+    @pytest.mark.asyncio
+    async def test_filter_cols_constant_skips_all_null(self, sample_df):
+        """'constant' does NOT drop all-null columns (nunique==0 != 1).
+
+        All-null columns are the domain of the 'all_null' expression.
+        """
+        obj = FilterCols(data=sample_df, expression="constant")
+        async with obj as o:
+            result = await o.run()
+        # all_null_col has nunique==0 → NOT dropped by "constant"
+        assert "all_null_col" in result.columns
+        # constant_col has nunique==1 → IS dropped by "constant"
+        assert "constant_col" not in result.columns
+
 
 # ---------------------------------------------------------------------------
 # Empty DataFrame — all three transforms raise DataNotFound
@@ -373,7 +412,10 @@ class TestIntegration:
 
     def test_component_registry_discovery(self):
         """ComponentRegistry.discover_all() includes all three new transforms."""
-        # Clear LRU cache to ensure fresh scan picks up new modules
+        # Clear LRU cache so this test always performs a real filesystem scan,
+        # even when the registry was already populated by a prior test or import.
+        # If ComponentRegistry.discover_all ever stops using an LRU cache,
+        # this call can be removed.
         ComponentRegistry.discover_all.cache_clear()
         components = ComponentRegistry.discover_all()
         for cls_name in ["PluckCols", "DropCols", "FilterCols"]:

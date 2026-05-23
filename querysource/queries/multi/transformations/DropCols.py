@@ -49,6 +49,9 @@ class DropCols(AbstractTransform):
         self.startswith = kwargs.pop('startswith', None)
         self.endswith = kwargs.pop('endswith', None)
         super(DropCols, self).__init__(data, **kwargs)
+        # Tracks whether start() has been called; prevents a redundant second
+        # call when using ``async with obj as o: await o.run()``.
+        self._started: bool = False
         # Validate that at least one selector is provided
         if not any([self.columns, self.pattern, self.regex, self.startswith, self.endswith]):
             raise DriverError(
@@ -56,7 +59,12 @@ class DropCols(AbstractTransform):
                 "(columns, pattern, regex, startswith, or endswith)."
             )
 
-    def _resolve_columns(self, df: pd.DataFrame) -> list:
+    async def start(self) -> None:
+        """Delegate to parent start() and mark this instance as started."""
+        await super().start()
+        self._started = True
+
+    def _resolve_columns(self, df: pd.DataFrame) -> list[str]:
         """Return the union of columns to drop, matched by all provided selectors.
 
         Exact column names not present in the DataFrame are silently ignored.
@@ -101,10 +109,6 @@ class DropCols(AbstractTransform):
         """Apply column dropping to a single DataFrame."""
         to_drop = self._resolve_columns(df)
         result = df.drop(columns=to_drop, errors='ignore')
-        if result.empty and len(result.columns) == 0:
-            raise DataNotFound(
-                "DropCols: All columns were dropped — result would be an empty DataFrame."
-            )
         if len(result.columns) == 0:
             raise DataNotFound(
                 "DropCols: All columns were dropped — result has no columns."
@@ -113,7 +117,9 @@ class DropCols(AbstractTransform):
 
     async def run(self) -> Union[dict, pd.DataFrame]:
         """Execute the DropCols transformation."""
-        await self.start()
+        # Only call start() if __aenter__ hasn't already done so.
+        if not self._started:
+            await self.start()
         # AbstractTransform.start() validates empty DFs for dict inputs only;
         # check single-DataFrame emptiness here.
         if isinstance(self.data, pd.DataFrame) and self.data.empty:
