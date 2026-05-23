@@ -1,0 +1,169 @@
+{
+  "feature": "multi-threadsource-airtable",
+  "feature_id": "FEAT-096",
+  "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-05-22T15:50:00Z",
+  "completed_at": "2026-05-22T18:45:41Z",
+  "tasks": [
+    {
+      "id": "TASK-674",
+      "slug": "airtable-interface-foundation",
+      "title": "AirtableInterface — foundation (tokens, exceptions, URL parser, write stubs)",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "No upstream deps; can run in parallel with TASK-678 (different file). Everything else in this spec depends on this task.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-674-airtable-interface-foundation.md"
+    },
+    {
+      "id": "TASK-675",
+      "slug": "airtable-interface-read-methods",
+      "title": "AirtableInterface — read methods (list_records, pagination, refresh-on-401)",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "L",
+      "depends_on": [
+        "TASK-674"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Modifies the same file as TASK-674 (querysource/interfaces/airtable.py); must be sequential.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:00:25+00:00",
+      "file": "sdd/tasks/completed/TASK-675-airtable-interface-read-methods.md"
+    },
+    {
+      "id": "TASK-676",
+      "slug": "airtable-source-component",
+      "title": "AirtableSource — MultiQuery Source component",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "L",
+      "depends_on": [
+        "TASK-675"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Imports AirtableInterface.list_records from TASK-675; must come after.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:08:09+00:00",
+      "file": "sdd/tasks/completed/TASK-676-airtable-source-component.md"
+    },
+    {
+      "id": "TASK-677",
+      "slug": "source-registry-registration",
+      "title": "Register AirtableSource in SOURCE_REGISTRY and __all__",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-676"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Imports AirtableSource from TASK-676.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:09:09+00:00",
+      "file": "sdd/tasks/completed/TASK-677-source-registry-registration.md"
+    },
+    {
+      "id": "TASK-678",
+      "slug": "airtable-conf-constants",
+      "title": "Airtable env constants + QS_AIRTABLE_OAUTH_ENABLED flag in conf.py",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Touches only querysource/conf.py — no overlap with the Interface/Source files. Can run in parallel with TASK-674 / TASK-675 / TASK-676.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:01:53+00:00",
+      "file": "sdd/tasks/completed/TASK-678-airtable-conf-constants.md"
+    },
+    {
+      "id": "TASK-679",
+      "slug": "airtable-oauth-handlers",
+      "title": "OAuth handler views (/connect consent HTML + /callback token exchange)",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "L",
+      "depends_on": [
+        "TASK-675",
+        "TASK-678"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Needs AirtableInterface constants (for OAUTH_TOKEN_URL etc.) and the new env vars from TASK-678.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:11:34+00:00",
+      "file": "sdd/tasks/completed/TASK-679-airtable-oauth-handlers.md"
+    },
+    {
+      "id": "TASK-680",
+      "slug": "querysource-setup-route-registration",
+      "title": "Register /connect and /callback routes inside QuerySource.setup()",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-678",
+        "TASK-679"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Imports view classes from TASK-679 and the feature flag from TASK-678.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:14:51+00:00",
+      "file": "sdd/tasks/completed/TASK-680-querysource-setup-route-registration.md"
+    },
+    {
+      "id": "TASK-681",
+      "slug": "airtable-documentation",
+      "title": "Airtable source documentation (docs/sources/airtable.md)",
+      "feature_id": "FEAT-096",
+      "feature": "multi-threadsource-airtable",
+      "spec": "sdd/specs/multi-threadsource-airtable.spec.md",
+      "status": "done",
+      "priority": "low",
+      "effort": "S",
+      "depends_on": [
+        "TASK-676"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Touches only docs/sources/airtable.md (a new file) — no overlap with code paths. Can run in parallel with TASK-677 through TASK-680 once TASK-676 lands.",
+      "assigned_to": null,
+      "started_at": "2026-05-22T16:52:03+00:00",
+      "completed_at": "2026-05-22T17:16:37+00:00",
+      "file": "sdd/tasks/completed/TASK-681-airtable-documentation.md"
+    }
+  ]
+}

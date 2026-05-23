@@ -134,16 +134,28 @@ vectors = [
     "gensim>=4.4.0",
 ]
 
+sharepoint = [
+    "msgraph-sdk>=1.0",
+    "azure-identity>=1.0",
+    "httpx>=0.24",
+]
+
+s3 = [
+    "aioboto3>=12.0",
+]
+
 dev = [
     "pytest>=5.4.0",
     "coverage",
     "pytest-asyncio==1.3.0",
     "pytest-xdist==3.3.1",
-    "pytest-assume==2.4.3"
+    "pytest-assume==2.4.3",
+    "ruff>=0.6.0"
 ]
 
 [project.scripts]
 query = "querysource.__cli__:main"
+generate-multiquery-docs = "querysource.cli.generate_docs:main"
 
 [project.urls]
 Homepage = "https://github.com/phenobarbital/querysource/"
@@ -180,13 +192,12 @@ filterwarnings = [
 ]
 
 # ---------------------------------------------------------------------------
-# Maturin (Rust extension) — used by `maturin develop` for local builds
+# Maturin (Rust extension) — configured in rust/pyproject.toml.
+# Invoke via: maturin develop --release --manifest-path rust/Cargo.toml
+# (see `make build-rust`). Config lives in rust/pyproject.toml so maturin
+# reads its own build-backend instead of warning about this file's setuptools
+# backend.
 # ---------------------------------------------------------------------------
-[tool.maturin]
-manifest-path = "rust/Cargo.toml"
-module-name = "querysource.qs_parsers._qs_parsers"
-bindings = "pyo3"
-features = ["pyo3/extension-module"]
 
 # ---------------------------------------------------------------------------
 # uv install settings

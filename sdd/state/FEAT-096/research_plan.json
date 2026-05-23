@@ -1,0 +1,147 @@
+{
+  "feat_id": "FEAT-096",
+  "mode": "investigation",
+  "budget_profile": "default",
+  "queries": [
+    {
+      "id": "Q001",
+      "intent": "Read ThreadSource base class — the class we're extending",
+      "type": "read",
+      "params": { "path": "querysource/queries/multi/sources/base.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q002",
+      "intent": "Inspect existing source implementations (file, s3, sharepoint, smartsheet, table, query) for patterns",
+      "type": "glob",
+      "params": { "pattern": "querysource/queries/multi/sources/*.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q003",
+      "intent": "Read smartsheet source — likely uses API token + aiohttp, closest analogue",
+      "type": "read",
+      "params": { "path": "querysource/queries/multi/sources/smartsheet.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q004",
+      "intent": "Read sharepoint source — OAuth-capable, closest auth analogue",
+      "type": "read",
+      "params": { "path": "querysource/queries/multi/sources/sharepoint.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q005",
+      "intent": "Locate Source registry / discovery mechanism for MultiQuery",
+      "type": "grep",
+      "params": { "pattern": "ThreadSource|class.*Source.*:.*ThreadSource", "path": "querysource/queries/multi/" },
+      "priority": 1
+    },
+    {
+      "id": "Q006",
+      "intent": "Find QuerySource.configure() entry point and aiohttp route registration",
+      "type": "grep",
+      "params": { "pattern": "def configure|add_routes|router.add", "path": "querysource/" },
+      "priority": 1
+    },
+    {
+      "id": "Q007",
+      "intent": "Locate any /api/v1/qs/integrations/* existing routes",
+      "type": "grep",
+      "params": { "pattern": "integrations|/qs/integrations", "path": "querysource/" },
+      "priority": 1
+    },
+    {
+      "id": "Q008",
+      "intent": "Find existing OAuth2 / callback handlers (Google, Salesforce, HubSpot, etc.)",
+      "type": "grep",
+      "params": { "pattern": "oauth|callback|access_token|refresh_token", "path": "querysource/auth/" },
+      "priority": 1
+    },
+    {
+      "id": "Q009",
+      "intent": "Find how user-session credentials / 'vault' are stored",
+      "type": "grep",
+      "params": { "pattern": "session.*vault|user.*vault|credentials.*store|user_credentials", "path": "querysource/" },
+      "priority": 1
+    },
+    {
+      "id": "Q010",
+      "intent": "Read credentials interface — how sources receive credentials",
+      "type": "read",
+      "params": { "path": "querysource/interfaces/credentials.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q011",
+      "intent": "Read HTTP interface — async HTTP plumbing used by other sources",
+      "type": "read",
+      "params": { "path": "querysource/interfaces/http.py" },
+      "priority": 2
+    },
+    {
+      "id": "Q012",
+      "intent": "Inspect querysource/auth directory tree",
+      "type": "tree",
+      "params": { "path": "querysource/auth", "maxdepth": 2 },
+      "priority": 2
+    },
+    {
+      "id": "Q013",
+      "intent": "Recent git activity in multi/sources to understand active patterns",
+      "type": "git_log",
+      "params": { "path": "querysource/queries/multi/sources/", "since": "6 months ago", "limit": 20 },
+      "priority": 2
+    },
+    {
+      "id": "Q014",
+      "intent": "Find where Source signature receives request / session / credentials",
+      "type": "grep",
+      "params": { "pattern": "web\\.Request|aiohttp.*Request|request:|session:", "path": "querysource/queries/multi/sources/base.py" },
+      "priority": 2
+    },
+    {
+      "id": "Q015",
+      "intent": "Read multi-query abstract.py (umbrella) — to see where sources fit in pipelines",
+      "type": "read",
+      "params": { "path": "querysource/queries/multi/abstract.py" },
+      "priority": 2
+    },
+    {
+      "id": "Q016",
+      "intent": "Find where pandas DataFrame is produced/returned by sources",
+      "type": "grep",
+      "params": { "pattern": "pd\\.DataFrame|return.*DataFrame|to_dataframe|as_dataframe", "path": "querysource/queries/multi/sources/" },
+      "priority": 2
+    },
+    {
+      "id": "Q017",
+      "intent": "Find any prior Airtable references in the codebase",
+      "type": "grep",
+      "params": { "pattern": "airtable|Airtable|AIRTABLE", "path": "." },
+      "priority": 1
+    },
+    {
+      "id": "Q018",
+      "intent": "Find Source factory / loader in multi-query (how new Sources are registered)",
+      "type": "read",
+      "params": { "path": "querysource/queries/multi/sources/__init__.py" },
+      "priority": 1
+    },
+    {
+      "id": "Q019",
+      "intent": "Inspect QuerySource app/setup to see how configure() wires routes",
+      "type": "grep",
+      "params": { "pattern": "QuerySource\\(|class QuerySource|def setup|configure", "path": "querysource/__init__.py" },
+      "priority": 2
+    },
+    {
+      "id": "Q020",
+      "intent": "Recent activity in querysource/auth to see OAuth implementations",
+      "type": "git_log",
+      "params": { "path": "querysource/auth/", "since": "12 months ago", "limit": 15 },
+      "priority": 2
+    }
+  ]
+}

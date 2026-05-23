@@ -406,6 +406,39 @@ QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
 
+# ── Airtable Integration (FEAT-096) ───────────────────────────────────────────
+# OAuth2 client credentials (server-side; never sent to the browser).
+AIRTABLE_CLIENT_ID = config.get('AIRTABLE_CLIENT_ID')
+AIRTABLE_CLIENT_SECRET = config.get('AIRTABLE_CLIENT_SECRET')
+
+# Optional: default base id used when YAML does not specify one.
+AIRTABLE_BASE_ID = config.get('AIRTABLE_BASE_ID')
+
+# Server-wide Personal Access Token used when no user session is present.
+# Per FEAT-096 §1 Non-Goals: a single global PAT only (no per-user PATs).
+AIRTABLE_ACCESS_TOKEN = config.get('AIRTABLE_ACCESS_TOKEN')
+
+# Must match the redirect URI registered with the Airtable OAuth2 app.
+# Defaults assume QuerySource is reachable at its canonical /api/v1/qs/ path.
+AIRTABLE_REDIRECT_URI = config.get(
+    'AIRTABLE_REDIRECT_URI',
+    fallback='http://localhost:5000/api/v1/qs/integrations/airtable/callback',
+)
+
+# Space-separated OAuth2 scopes requested during the consent flow.
+# Override via AIRTABLE_OAUTH_SCOPES env var to add or restrict access.
+AIRTABLE_OAUTH_SCOPES = config.get(
+    'AIRTABLE_OAUTH_SCOPES',
+    fallback='data.records:read data.recordComments:read schema.bases:read'
+)
+
+# Feature flag — when False (the default), the /connect and /callback
+# routes are NOT registered by QuerySource.setup(). PAT-only operation
+# of AirtableSource still works regardless.
+QS_AIRTABLE_OAUTH_ENABLED = config.getboolean(
+    'QS_AIRTABLE_OAUTH_ENABLED', fallback=False
+)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:

@@ -44,7 +44,7 @@ class MysqlOutput(AbstractOutput):
         metadata = MetaData()
         metadata.bind = self._engine
         constraint = self._parent.constraints()
-        options = {"schema": self._parent.get_schema(), "autoload_with": self._engine}
+        options = {"schema": self._parent.sql_schema() if hasattr(self._parent, 'sql_schema') else self._parent.get_schema(), "autoload_with": self._engine}
         tbl = Table(tablename, metadata, *args, **options)
         # removing the columns from the table definition
         columns = self._columns

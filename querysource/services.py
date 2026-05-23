@@ -43,6 +43,7 @@ from .conf import (
     QS_PBAC_ENABLED,
     QS_POLICY_PATH,
     QS_PBAC_CACHE_TTL,
+    QS_AIRTABLE_OAUTH_ENABLED,    # added (FEAT-096)
 )
 from .auth import setup_pbac
 
@@ -164,7 +165,13 @@ class QuerySource(metaclass=Singleton):
 
         ### Logging Service:
         lg = LoggingService()
-        r = self.app.router.add_get('/api/v1/audit_log', lg.audit_log)
+        r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)
+        routes.append(r)
+        # DEPRECATED: redirect old un-namespaced path → new /qs/ path (307 Temporary)
+        async def _redirect_audit_log(request: web.Request) -> web.Response:
+            qs = f'?{request.query_string}' if request.query_string else ''
+            raise web.HTTPTemporaryRedirect(f'/api/v1/qs/audit_log{qs}')
+        r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
         routes.append(r)
 
         ### Query Manager ###
@@ -206,6 +213,43 @@ class QuerySource(metaclass=Singleton):
         )
         routes.append(r)
 
+        ## Component Documentation:
+        from .handlers.components import ComponentHandler  # noqa: PLC0415
+        ch = ComponentHandler()
+        r = self.app.router.add_get(
+            r'/api/v3/qs/components',
+            ch.list_components
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            r'/api/v3/qs/validate',
+            ch.validate_pipeline
+        )
+        routes.append(r)
+
+        # ── Airtable OAuth integration (FEAT-096) — gated by env flag ────────
+        if QS_AIRTABLE_OAUTH_ENABLED:
+            from .handlers.integrations.airtable import (  # noqa: PLC0415
+                AirtableConnectView,
+                AirtableCallbackView,
+            )
+            _airtable_connect = AirtableConnectView()
+            _airtable_callback = AirtableCallbackView()
+            r = self.app.router.add_get(
+                '/api/v1/qs/integrations/airtable/connect',
+                _airtable_connect.get,
+            )
+            routes.append(r)
+            r = self.app.router.add_get(
+                '/api/v1/qs/integrations/airtable/callback',
+                _airtable_callback.get,
+            )
+            routes.append(r)
+            _svc_logger = logging.getLogger("querysource.services")
+            _svc_logger.info(
+                "Airtable OAuth routes registered (QS_AIRTABLE_OAUTH_ENABLED=True)"
+            )
+
         # querying directly to drivers
         # self.app.router.add_get('/api/v2/queries/{driver}/{method}', qs.query)
         # self.app.router.add_post('/api/v2/queries/{driver}/{method}', qs.query)
@@ -243,13 +287,23 @@ class QuerySource(metaclass=Singleton):
         ### Getting the QuerySource Extensions
         ### Getting the QuerySource variables
         # PROGRAM Variables
-        self.app.router.add_view("/api/v2/variables", VariablesService)
+        self.app.router.add_view("/api/v2/qs/variables", VariablesService)
         self.app.router.add_route(
             "*", "/api/v2/services/variables", VariablesService
         )
-        self.app.router.add_view("/api/v2/variables/{program}", VariablesService)
+        self.app.router.add_view("/api/v2/qs/variables/{program}", VariablesService)
         self.app.router.add_view(
-            "/api/v2/variables/{program}/{variable}", VariablesService
+            "/api/v2/qs/variables/{program}/{variable}", VariablesService
+        )
+        # DEPRECATED: redirect old un-namespaced paths → new /qs/ paths (307 Temporary)
+        async def _redirect_variables(request: web.Request) -> web.Response:
+            new_path = request.path.replace('/api/v2/variables', '/api/v2/qs/variables', 1)
+            qs = f'?{request.query_string}' if request.query_string else ''
+            raise web.HTTPTemporaryRedirect(f'{new_path}{qs}')
+        self.app.router.add_route("*", "/api/v2/variables", _redirect_variables)
+        self.app.router.add_route("*", "/api/v2/variables/{program}", _redirect_variables)
+        self.app.router.add_route(
+            "*", "/api/v2/variables/{program}/{variable}", _redirect_variables
         )
 
         ### Startup Event for QuerySource:
@@ -264,6 +318,15 @@ class QuerySource(metaclass=Singleton):
             from .scheduler import QSScheduler
             self._scheduler = QSScheduler()
             self._scheduler.setup(self.app)
+            from .handlers.scheduler import SchedulerJobsView  # noqa: PLC0415
+            r = self.app.router.add_view(
+                '/api/v1/qs/scheduler/jobs', SchedulerJobsView
+            )
+            routes.append(r)
+            r = self.app.router.add_view(
+                '/api/v1/qs/scheduler/jobs/{job_id}', SchedulerJobsView
+            )
+            routes.append(r)
 
         # Loading Vector Models at Startup:
         if USE_VECTORS and api:

@@ -8,15 +8,21 @@ as Join, Melt, Concat or Filter.
 """
 import pandas as pd
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from ....exceptions import QueryException
+from ..abstract import AbstractMulti
 
 
-class AbstractOperator(ABC):
+class AbstractOperator(AbstractMulti):
     """AbstractOperator.
 
     Abstract Class for Multi-Query Operators.
+
+    Usage: Base class for all operator steps (Join, Concat, Melt, etc.) in a MultiQuery pipeline.
     """
+
+    _category = "Operators"
+
     def __init__(self, data: dict, **kwargs) -> None:
         self._backend = kwargs.get('backend', 'pandas')
         # Use Modin as backend if available
@@ -25,20 +31,7 @@ class AbstractOperator(ABC):
             self._pd = mpd
         else:
             self._pd = pd
-        self.data = data
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            raise QueryException(
-                f"Operator Error: {exc_value!s}"
-            ) from exc_value
-        await self.close()
+        super().__init__(data, **kwargs)
 
     @abstractmethod
     async def start(self):
@@ -49,14 +42,3 @@ class AbstractOperator(ABC):
     async def run(self):
         """Run the Operator.
         """
-
-    async def close(self):
-        """Close the Operator.
-        """
-        pass
-
-    def _print_info(self, df: pd.DataFrame):
-        print('::: Printing Column Information === ')
-        for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
-        print()

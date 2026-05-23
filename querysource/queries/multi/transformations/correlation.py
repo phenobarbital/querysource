@@ -39,6 +39,36 @@ def categorize_correlation(coefficient):
         return "Undetermined"
 
 class correlation(AbstractTransform):
+    """Compute pairwise correlation between numeric columns in a DataFrame.
+
+    Calculates the correlation matrix for the specified columns, applying a
+    human-readable category label (e.g. "Strong positive correlation") to
+    each value.
+
+    Usage: Use in a MultiQuery ``Transform`` step to analyse the linear
+    relationship between numeric columns in a DataFrame.
+
+    Attributes:
+        columns: List of column names to include in the correlation analysis. Required.
+        method: Correlation method — ``'pearson'``, ``'kendall'``, or ``'spearman'``.
+            Default: ``'pearson'``.
+        numeric_only: If ``True``, include only numeric columns. Default: ``True``.
+        reset_index: If ``True``, reset the index on the result. Default: ``True``.
+
+    Example:
+        {
+            "Transform": [
+                {
+                    "correlation": {
+                        "columns": ["revenue", "cost", "profit"],
+                        "method": "pearson",
+                        "numeric_only": true
+                    }
+                }
+            ]
+        }
+    """
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.reset_index: bool = bool(kwargs.pop('reset_index', True))
         self.numeric_only: bool = bool(kwargs.pop('numeric_only', True))

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Optional
 from aiohttp import web
 from ...exceptions import (
@@ -14,8 +15,7 @@ from .transformations import (
     GoogleMaps,
 )
 from .operators.filter import Filter
-from ...outputs.tables import TableOutput
-from .sources import ThreadQuery, ThreadFile
+from .sources import ThreadQuery, FileSource
 
 
 def get_operator_module(clsname: str):
@@ -91,12 +91,15 @@ class MultiQS(BaseQuery):
             ## Getting data from Queries or Files
             self._queries = query.pop('queries', {})
             self._files = query.pop('files', {})
-        if not (self.slug or self._queries or self._files):
+            self._sources = query.pop('sources', [])
+        else:
+            self._sources = []
+        if not (self.slug or self._queries or self._files or self._sources):
             # Check if both are effectively empty
             raise DriverError(
                 (
                     'Invalid Options passed to MultiQuery. '
-                    'Slug, Queries and Files are all empty.'
+                    'Slug, Queries, Files and Sources are all empty.'
                 )
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
@@ -119,11 +122,12 @@ class MultiQS(BaseQuery):
                     # (e.g. plain SQL) — fall back to single-query mode.
                     slug_data = None
             if isinstance(slug_data, dict) and (
-                'queries' in slug_data or 'files' in slug_data
+                'queries' in slug_data or 'files' in slug_data or 'sources' in slug_data
             ):
                 self._options = slug_data
                 self._queries = slug_data.pop('queries', {})
                 self._files = slug_data.pop('files', {})
+                self._sources = slug_data.pop('sources', [])
                 # TODO: making replacements based on POST data.
             else:
                 # Single-query slug: wrap it for the multi-query executor
@@ -157,16 +161,38 @@ class MultiQS(BaseQuery):
                 tasks[name] = t
         if self._files:
             for name, file in self._files.items():
-                t = ThreadFile(
+                t = FileSource(
                     name, file, self._request, self._queue
                 )
                 t.start()
                 tasks[name] = t
+        if self._sources:
+            from .sources import SOURCE_REGISTRY  # noqa: PLC0415
+            for entry in self._sources:
+                for source_type, config in entry.items():
+                    cls = SOURCE_REGISTRY.get(source_type)
+                    if cls is None:
+                        raise DriverError(
+                            f"Unknown source type: {source_type!r}. "
+                            f"Available: {list(SOURCE_REGISTRY.keys())}"
+                        )
+                    idx = sum(
+                        1 for k in tasks
+                        if k == source_type or k.startswith(f"{source_type}_")
+                    )
+                    name = source_type if idx == 0 else f"{source_type}_{idx}"
+                    t = cls(name, config, self._request, self._queue)
+                    t.start()
+                    tasks[name] = t
 
         ## then, run all jobs:
         try:
             for t in tasks.values():
-                t.join()
+                t.join(timeout=30)
+                if t.is_alive():
+                    raise self.Error(
+                        message=f"Source {t.slug!r} timed out after 30 seconds.",
+                    )
                 if t.exc:
                     ## raise exception for this Query
                     if isinstance(t.exc, ParserError):
@@ -193,7 +219,7 @@ class MultiQS(BaseQuery):
                             exception=t.exc
                         )
             result = {}
-        except (QueryException, DriverError) as ex:
+        except (QueryException, DriverError):
             raise
         except Exception as ex:
             raise self.Error(
@@ -315,7 +341,7 @@ class MultiQS(BaseQuery):
                                 obj = clobj(data=result, **component)
                                 async with obj as o:
                                     result = await o.run()
-                            except ImportError as exc:
+                            except ImportError:
                                 raise
                             except DataNotFound as ex:
                                 raise self.Error(
@@ -375,14 +401,22 @@ class MultiQS(BaseQuery):
         if self._return_all is False and (isinstance(result, dict) and len(result) == 1):
             # reduce to one single Dataframe:
             result = list(result.values())[0]
-        ### Step 5: Optionally saving result into Database (using Pandas)
+        ### Step 5: Optionally saving result to destination (registry-based dispatch)
         if _output:
             for step in _output:
-                obj = None
                 for step_name, component in step.items():
-                    if step_name in ('tableOutput', 'TableOutput'):
-                        obj = TableOutput(data=result, **component)
+                    try:
+                        from ...outputs.destinations import get_destination  # deferred to avoid circular import
+                        destination_cls = get_destination(step_name)
+                        obj = destination_cls(data=result, **component)
                         result = await obj.run()
+                    except Exception as dest_err:
+                        logging.error(
+                            "MultiQS: output destination '%s' failed: %s",
+                            step_name,
+                            dest_err,
+                        )
+                        # Per spec: continue to next destination on failure
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"

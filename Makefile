@@ -40,9 +40,12 @@ develop: build-rust
 	uv sync --frozen --extra analytics --extra dev
 
 # Build the Rust-accelerated parser extension (querysource.qs_parsers._qs_parsers)
+# Use --manifest-path so maturin reads rust/pyproject.toml (build-backend = maturin),
+# avoiding the "build-backend not set to maturin" warning emitted when reading the
+# root pyproject.toml (which uses setuptools for the rest of the project).
 build-rust:
 	@command -v maturin >/dev/null 2>&1 || uv pip install maturin
-	maturin develop --release
+	maturin develop --release --manifest-path rust/Cargo.toml
 
 # Alternative: install without lock file (faster for development)
 develop-fast:

@@ -1,9 +1,7 @@
 """Unit tests for QSScheduler job definitions."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-@pytest.mark.asyncio
 class TestScheduledQueryJob:
     @patch("querysource.queries.qs.QS")
     async def test_executes_query(self, mock_qs_cls):
@@ -60,7 +58,6 @@ class TestScheduledQueryJob:
         mock_instance.query.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 class TestCacheRefreshJob:
     @patch("querysource.queries.qs.QS")
     async def test_executes_query(self, mock_qs_cls):
@@ -106,9 +103,66 @@ class TestCacheRefreshJob:
         await cache_refresh_job(slug="broken_slug")
 
 
+class TestScheduledMultiQSJob:
+
+    async def test_calls_multiqs_with_slug_only(self):
+        """scheduled_multiqs_job constructs MultiQS(slug=slug) and awaits query()."""
+        with patch("querysource.queries.MultiQS") as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.query = AsyncMock(return_value=({}, {}))
+            mock_cls.return_value = mock_instance
+
+            from querysource.scheduler.jobs import scheduled_multiqs_job
+            await scheduled_multiqs_job(slug="test_slug")
+
+            mock_cls.assert_called_once_with(slug="test_slug")
+            mock_instance.query.assert_awaited_once_with()
+
+    async def test_notifies_on_exception(self):
+        """scheduled_multiqs_job notifies the manager when MultiQS.query() raises."""
+        notification_manager = MagicMock()
+        boom = RuntimeError("boom")
+
+        with patch("querysource.queries.MultiQS") as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.query = AsyncMock(side_effect=boom)
+            mock_cls.return_value = mock_instance
+
+            from querysource.scheduler.jobs import scheduled_multiqs_job
+            await scheduled_multiqs_job(
+                slug="bad_slug",
+                notification_manager=notification_manager,
+            )
+
+            notification_manager.notify.assert_called_once_with(
+                job_id="multi_bad_slug",
+                slug="bad_slug",
+                error=boom,
+            )
+
+    async def test_swallows_exception(self):
+        """scheduled_multiqs_job does NOT re-raise after notifying."""
+        with patch("querysource.queries.MultiQS") as mock_cls:
+            mock_instance = MagicMock()
+            mock_instance.query = AsyncMock(side_effect=ValueError("nope"))
+            mock_cls.return_value = mock_instance
+
+            from querysource.scheduler.jobs import scheduled_multiqs_job
+            # Must not raise.
+            await scheduled_multiqs_job(
+                slug="x",
+                notification_manager=MagicMock(),
+            )
+
+
 class TestJobImports:
     def test_importable(self):
-        """Both jobs are importable from the scheduler package."""
-        from querysource.scheduler.jobs import scheduled_query_job, cache_refresh_job
+        """All three jobs are importable from the scheduler package."""
+        from querysource.scheduler.jobs import (
+            scheduled_query_job,
+            cache_refresh_job,
+            scheduled_multiqs_job,
+        )
         assert callable(scheduled_query_job)
         assert callable(cache_refresh_job)
+        assert callable(scheduled_multiqs_job)

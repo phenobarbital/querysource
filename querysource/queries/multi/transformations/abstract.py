@@ -1,29 +1,43 @@
 from typing import Union
 from abc import abstractmethod
+import logging
 import pandas as pd
-from navconfig.logging import logging
+from navconfig.logging import logging as navconfig_logging
 from ....exceptions import (
     DataNotFound,
     DriverError,
     QueryException
 )
+from ..abstract import AbstractMulti
+
+_logger = logging.getLogger(__name__)
 
 
-class AbstractTransform:
+class AbstractTransform(AbstractMulti):
+    """Unified base class for all MultiQuery Transformations.
+
+    Inherits shared boilerplate (init, async context manager, lifecycle) from
+    AbstractMulti and adds transform-specific data validation in ``start()``.
+
+    Usage: Base class for all data-transformation steps in a MultiQuery pipeline.
+    """
+
+    _category = "Transformations"
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self._backend = 'pandas'
-        self.data = data
-        self.logger = logging.getLogger(f'QS.Transform.{self.__class__.__name__}')
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        self.logger = navconfig_logging.getLogger(f'QS.Transform.{self.__class__.__name__}')
+        super().__init__(data, **kwargs)
 
-    def colum_info(self, df):
-        print(df.head())
-        print('::: Printing Column Information === ')
+    def _print_info(self, df: pd.DataFrame) -> None:
+        """Log column type/sample information for a DataFrame."""
+        _logger.debug('%s', df.head())
+        _logger.debug('::: Printing Column Information === ')
         for column, t in df.dtypes.items():
-            print(column, '->', t, '->', df[column].iloc[0])
+            _logger.debug('%s -> %s -> %s', column, t, df[column].iloc[0])
 
     async def start(self):
+        """Validate input data before running the transformation."""
         ### TODO: making transformations over list of dataframes
         if isinstance(self.data, dict):
             for _, data in self.data.items():
@@ -39,23 +53,9 @@ class AbstractTransform:
                     )
         elif not isinstance(self.data, pd.DataFrame):
             raise DriverError(
-                f'Wrong type of data, required a Pandas dataframe: {type(data)}'
+                f'Wrong type of data, required a Pandas dataframe: {type(self.data)}'
             )
-
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            raise QueryException(
-                f"Operator Error: {exc_value!s}"
-            ) from exc_value
-        await self.close()
-
-    async def close(self):
-        pass
 
     @abstractmethod
     async def run(self):
-        pass
+        """Execute the transformation. Must be implemented by every concrete subclass."""
