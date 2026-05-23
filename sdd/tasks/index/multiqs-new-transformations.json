@@ -14,16 +14,16 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No shared files with TASK-683 or TASK-684; each creates an independent module file",
       "assigned_to": null,
-      "started_at": "2026-05-22T23:47:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-682-pluckcols-transform.md"
+      "started_at": null,
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-682-pluckcols-transform.md"
     },
     {
       "id": "TASK-683",
@@ -32,16 +32,16 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No shared files with TASK-682 or TASK-684; each creates an independent module file",
       "assigned_to": null,
-      "started_at": "2026-05-22T23:47:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-683-dropcols-transform.md"
+      "started_at": null,
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-683-dropcols-transform.md"
     },
     {
       "id": "TASK-684",
@@ -50,16 +50,16 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No shared files with TASK-682 or TASK-683; independent module with no cross-references",
       "assigned_to": null,
-      "started_at": "2026-05-22T23:47:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-684-filtercols-transform.md"
+      "started_at": null,
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-684-filtercols-transform.md"
     },
     {
       "id": "TASK-685",
@@ -68,7 +68,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -79,9 +79,9 @@
       "parallel": false,
       "parallelism_notes": "Depends on all three implementation tasks; must run after they are complete",
       "assigned_to": null,
-      "started_at": "2026-05-22T23:47:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-685-column-transform-tests.md"
+      "started_at": null,
+      "completed_at": "2026-05-23T00:22:24+00:00",
+      "file": "sdd/tasks/completed/TASK-685-column-transform-tests.md"
     }
   ]
 }
