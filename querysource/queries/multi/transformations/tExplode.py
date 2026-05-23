@@ -46,36 +46,42 @@ from .abstract import AbstractTransform
 class tExplode(AbstractTransform):
     """Explode a column of lists or dicts into multiple rows.
 
-    Parameters
-    ----------
-    data:
-        Input data — either a single ``pd.DataFrame`` or a dict whose values
-        are ``pd.DataFrame`` objects.
-    column:
-        Name of the column to explode.  **Required.**
-    drop_original:
-        When ``True``, remove the source column from the result.
-        Default: ``False``.
-    explode_dataset:
-        When ``True`` and the column contains dictionaries, expand the dicts
-        into separate columns via ``pandas.json_normalize``.  Default: ``True``.
-    advanced_mode:
-        Enable enhanced processing: parent-index tracking, empty-list
-        preservation, and column propagation.  Default: ``False``.
-    propagate_columns:
-        List of column names whose values should be copied from the parent row
-        to each of its child rows (only in ``advanced_mode``).  Default: ``[]``.
+    Standard mode calls ``DataFrame.explode()`` and, when values are dicts,
+    normalises them into columns via ``pandas.json_normalize``. Advanced mode
+    tracks parent row indices, preserves rows with empty lists, propagates
+    selected parent columns onto child rows, and concatenates parent + child
+    DataFrames.
 
-    Raises
-    ------
-    DriverError
-        If ``column`` is not provided, or if the column does not exist in the
-        DataFrame, or if the input data is not a ``pd.DataFrame`` /
-        dict-of-DataFrames.
-    DataNotFound
-        If the transformed result is an empty DataFrame.
-    QueryException
-        On unexpected runtime errors during transformation.
+    Usage: Use in a MultiQuery ``Transform`` step to expand a list- or
+    dict-valued column into multiple rows.
+
+    Attributes:
+        column: Name of the column to explode. **Required.**
+        drop_original: When ``True``, remove the source column from the
+            result. Default: ``False``.
+        explode_dataset: When ``True`` and the column contains dictionaries,
+            expand the dicts into separate columns via
+            ``pandas.json_normalize``. Default: ``True``.
+        advanced_mode: Enable enhanced processing — parent-index tracking,
+            empty-list preservation, and column propagation. Default: ``False``.
+        propagate_columns: List of column names whose values should be copied
+            from the parent row to each of its child rows (only in
+            ``advanced_mode``). Default: ``[]``.
+
+    Example:
+        {
+            "Transform": [
+                {
+                    "tExplode": {
+                        "column": "tags",
+                        "drop_original": false,
+                        "explode_dataset": true,
+                        "advanced_mode": false,
+                        "propagate_columns": []
+                    }
+                }
+            ]
+        }
     """
 
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:

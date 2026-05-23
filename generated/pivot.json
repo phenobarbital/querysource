@@ -1,0 +1,60 @@
+{
+  "name": "pivot",
+  "category": "Transformations",
+  "description": "Reshape a DataFrame using a pivot or pivot_table operation.",
+  "usage": "Use in a MultiQuery ``Transform`` step to turn row-level records into a column-per-category layout (e.g. monthly columns from a date column).",
+  "attributes": [
+    {
+      "name": "reset_index",
+      "type": "bool",
+      "default": true,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "type",
+      "type": "Any",
+      "default": "pivot",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "multilevel",
+      "type": "Any",
+      "default": false,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "pd_args",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "fill_value",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "pivot",
+    "properties": {
+      "reset_index": {
+        "type": "boolean"
+      },
+      "type": {},
+      "multilevel": {},
+      "pd_args": {},
+      "fill_value": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"pivot\": {\n                \"index\": \"product\",\n                \"columns\": \"month\",\n                \"values\": \"revenue\",\n                \"aggfunc\": \"sum\",\n                \"type\": \"pivot_table\",\n                \"fill_value\": 0\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

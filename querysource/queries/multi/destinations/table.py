@@ -22,7 +22,11 @@ YAML configuration example::
 Supported drivers: ``pg``, ``postgresql``, ``postgres``, ``mysql``,
 ``mariadb``, ``bigquery``, ``bq``.
 
-Supported methods: ``append``, ``upsert``, ``truncate``.
+Supported methods: ``append``, ``upsert``, ``truncate``, ``drop``.
+
+Set ``create: true`` to auto-create the target table from the DataFrame
+schema when it does not exist. ``method: drop`` always drops and
+re-creates the table before writing.
 """
 import asyncio
 from typing import List, Optional, Union
@@ -45,7 +49,7 @@ DRIVER_MAP: dict[str, str] = {
     "bq": "bigquery",
 }
 
-VALID_METHODS = frozenset({"append", "upsert", "truncate"})
+VALID_METHODS = frozenset({"append", "upsert", "truncate", "drop"})
 
 # External (non-SQLAlchemy) engines — use db_upsert directly
 _EXTERNAL_DRIVERS = frozenset({"bigquery"})
@@ -62,7 +66,156 @@ class TableDestination(AbstractDestination):
     * ``append`` — insert rows (default).
     * ``upsert`` — INSERT … ON CONFLICT UPDATE (engine-dependent).
     * ``truncate`` — TRUNCATE the table first, then append.
+    * ``drop`` — DROP the table, re-create it from the DataFrame schema,
+      then append.
+
+    Set ``create=True`` to auto-create the target table from the
+    DataFrame schema when it does not already exist.
     """
+
+    # User-facing catalog override. The introspector can't recover per-attr
+    # types (annotations sit on local/private vars) or the ``method`` /
+    # ``driver`` enum constraints (defined as module-level frozensets), so
+    # we hand-craft the catalog entry the UI consumes.
+    _catalog = {
+        "display_name": "Table",
+        "description": (
+            "Write a DataFrame to a relational or external database table "
+            "with configurable write mode (append, upsert, truncate)."
+        ),
+        "usage": (
+            "Use as a Destination step to persist a pipeline result into "
+            "PostgreSQL, MySQL/MariaDB, or BigQuery. Pick the backend with "
+            "``driver``, address the target with ``schema`` + ``table``, and "
+            "choose the write semantics with ``method``: ``append`` inserts "
+            "rows, ``upsert`` performs INSERT … ON CONFLICT UPDATE (requires "
+            "``pk``), ``truncate`` empties the table before appending, and "
+            "``drop`` re-creates the table from the DataFrame schema. Set "
+            "``create: true`` to auto-create the table when it does not "
+            "exist; when ``pk`` is configured, the PRIMARY KEY is added (or "
+            "re-checked on re-runs)."
+        ),
+        "icon": "database",
+        "attributes": [
+            {
+                "name": "driver",
+                "type": "str",
+                "required": False,
+                "default": "pg",
+                "description": (
+                    "Backend driver. One of: ``pg`` / ``postgresql`` / "
+                    "``postgres``, ``mysql`` / ``mariadb``, ``bigquery`` / "
+                    "``bq``."
+                ),
+            },
+            {
+                "name": "method",
+                "type": "str",
+                "required": False,
+                "default": "append",
+                "description": (
+                    "Write mode: ``append`` (insert rows), ``upsert`` "
+                    "(INSERT … ON CONFLICT UPDATE — requires ``pk``), "
+                    "``truncate`` (TRUNCATE table first, then append), or "
+                    "``drop`` (DROP table, re-create from DataFrame schema, "
+                    "then append)."
+                ),
+            },
+            {
+                "name": "create",
+                "type": "bool",
+                "required": False,
+                "default": False,
+                "description": (
+                    "When True, auto-create the target table from the "
+                    "DataFrame schema if it does not already exist. Ignored "
+                    "when ``method=drop`` (drop always re-creates)."
+                ),
+            },
+            {
+                "name": "table",
+                "type": "str",
+                "required": True,
+                "default": "",
+                "description": "Target table name.",
+            },
+            {
+                "name": "schema",
+                "type": "str",
+                "required": False,
+                "default": "public",
+                "description": "Database schema (relational backends).",
+            },
+            {
+                "name": "pk",
+                "type": "list",
+                "required": False,
+                "default": [],
+                "description": (
+                    "Primary-key column names. Required when "
+                    "``method=upsert``."
+                ),
+            },
+            {
+                "name": "dsn",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Optional explicit DSN/connection string. When omitted, "
+                    "the engine's default connection is used."
+                ),
+            },
+        ],
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "title": "Table",
+            "description": "Write a DataFrame to a database table.",
+            "properties": {
+                "driver": {
+                    "type": "string",
+                    "enum": [
+                        "pg", "postgresql", "postgres",
+                        "mysql", "mariadb",
+                        "bigquery", "bq",
+                    ],
+                    "default": "pg",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["append", "upsert", "truncate", "drop"],
+                    "default": "append",
+                },
+                "table": {"type": "string"},
+                "schema": {"type": "string", "default": "public"},
+                "pk": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                },
+                "create": {"type": "boolean", "default": False},
+                "dsn": {"type": ["string", "null"], "default": None},
+            },
+            "required": ["table"],
+            "additionalProperties": False,
+        },
+        "example": (
+            '{\n'
+            '  "Output": [\n'
+            '    {\n'
+            '      "Table": {\n'
+            '        "driver": "pg",\n'
+            '        "schema": "troc",\n'
+            '        "table": "stores",\n'
+            '        "method": "upsert",\n'
+            '        "pk": ["store_id"]\n'
+            '      }\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        ),
+    }
 
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         super().__init__(data, **kwargs)
@@ -88,6 +241,7 @@ class TableDestination(AbstractDestination):
         self._schema: str = kwargs.get("schema", "public")
         self._pk: List[str] = kwargs.get("pk", []) or []
         self._dsn: Optional[str] = kwargs.get("dsn")
+        self._create: bool = bool(kwargs.get("create", False))
 
     # ------------------------------------------------------------------
     # Engine factory
@@ -142,7 +296,7 @@ class TableDestination(AbstractDestination):
     @property
     def if_exists(self) -> str:
         """Map `method` to pandas/engine on-conflict string."""
-        if self._method in ("append", "truncate"):
+        if self._method in ("append", "truncate", "drop"):
             return "append"
         # upsert → 'upsert' signals the engine to use conflict resolution
         return "upsert"
@@ -176,6 +330,204 @@ class TableDestination(AbstractDestination):
     # ------------------------------------------------------------------
     # Write helpers
     # ------------------------------------------------------------------
+
+    async def _table_exists(self, engine) -> bool:
+        """
+        Return True when ``schema.table`` exists on the backend.
+
+        For external engines (BigQuery, etc.) we cannot cheaply introspect
+        without a driver-specific call, so return ``False`` and let the
+        engine create the table on insert.
+        """
+        if engine.is_external:
+            return False
+        from sqlalchemy import text as sa_text
+
+        def _check() -> bool:
+            with engine.engine().connect() as conn:
+                if self._normalized_driver == "postgresql":
+                    sql = (
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = :s AND table_name = :t"
+                    )
+                else:  # mysql / mariadb
+                    sql = (
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = :s AND table_name = :t"
+                    )
+                result = conn.execute(
+                    sa_text(sql), {"s": self._schema, "t": self._table}
+                )
+                return result.first() is not None
+
+        try:
+            return await asyncio.to_thread(_check)
+        except Exception as err:
+            self.logger.warning(
+                "TableDestination: existence check for %s.%s failed: %s",
+                self._schema, self._table, err,
+            )
+            return False
+
+    async def _drop_table(self, engine) -> None:
+        """
+        Execute ``DROP TABLE IF EXISTS schema.table`` on the backend.
+
+        :param engine: An initialised engine instance.
+        :raises OutputError: If the drop fails.
+        """
+        qualified = f"{self._schema}.{self._table}"
+        try:
+            if engine.is_external:
+                if self._normalized_driver == "bigquery":
+                    conn = engine._connection if hasattr(engine, "_connection") else None
+                    if conn is None:
+                        engine.connect()
+                        conn = engine._connection
+                    await conn.execute(
+                        f"DROP TABLE IF EXISTS `{self._schema}.{self._table}`"
+                    )
+                    self.logger.info(
+                        "TableDestination (bigquery): dropped %s", qualified
+                    )
+                    return
+                raise OutputError(
+                    f"TableDestination: DROP not supported for driver "
+                    f"'{self._normalized_driver}'"
+                )
+
+            from sqlalchemy import text as sa_text
+
+            def _do_drop() -> None:
+                with engine.engine().begin() as conn:
+                    conn.execute(sa_text(f"DROP TABLE IF EXISTS {qualified}"))
+
+            await asyncio.to_thread(_do_drop)
+            self.logger.info("TableDestination: dropped %s", qualified)
+        except OutputError:
+            raise
+        except Exception as err:
+            raise OutputError(
+                f"TableDestination: DROP {qualified} failed: {err}"
+            ) from err
+
+    async def _create_table_from_df(
+        self, df: pd.DataFrame, engine
+    ) -> None:
+        """
+        Create ``schema.table`` from *df*'s schema (no rows).
+
+        Uses ``DataFrame.head(0).to_sql(if_exists="fail")`` so SQLAlchemy
+        emits ``CREATE TABLE`` derived from the DataFrame dtypes. The
+        PRIMARY KEY is added separately by :meth:`_ensure_primary_key` so
+        the same logic runs even when the table already exists (e.g. a
+        previous run created it without the PK).
+
+        For external engines (BigQuery, etc.) this is a no-op — those
+        engines create the table lazily on insert.
+
+        :param df: DataFrame whose schema drives the CREATE.
+        :param engine: An initialised engine instance.
+        :raises OutputError: If the CREATE fails.
+        """
+        qualified = f"{self._schema}.{self._table}"
+        if engine.is_external:
+            self.logger.info(
+                "TableDestination: create=True is a no-op for external "
+                "driver '%s'; engine will create the table on insert.",
+                self._normalized_driver,
+            )
+            return
+
+        try:
+            await asyncio.to_thread(
+                df.head(0).to_sql,
+                name=self._table,
+                con=engine.engine(),
+                schema=self._schema,
+                index=False,
+                if_exists="fail",
+            )
+            self.logger.info(
+                "TableDestination: created %s from DataFrame schema", qualified
+            )
+        except Exception as err:
+            raise OutputError(
+                f"TableDestination: CREATE {qualified} failed: {err}"
+            ) from err
+
+    async def _has_primary_key(self, engine) -> bool:
+        """Return True if the target table has any PRIMARY KEY constraint.
+
+        Used by :meth:`_ensure_primary_key` to keep the ALTER idempotent.
+        External engines manage PKs themselves — treat as "yes" so we don't
+        attempt an unsupported ALTER on them.
+        """
+        if engine.is_external:
+            return True
+        from sqlalchemy import text as sa_text
+
+        def _check() -> bool:
+            with engine.engine().connect() as conn:
+                result = conn.execute(
+                    sa_text(
+                        "SELECT 1 FROM information_schema.table_constraints "
+                        "WHERE table_schema = :s AND table_name = :t "
+                        "AND constraint_type = 'PRIMARY KEY' LIMIT 1"
+                    ),
+                    {"s": self._schema, "t": self._table},
+                )
+                return result.first() is not None
+
+        try:
+            return await asyncio.to_thread(_check)
+        except Exception as err:
+            self.logger.warning(
+                "TableDestination: PK existence check for %s.%s failed: %s — "
+                "assuming PK exists to skip duplicate ALTER.",
+                self._schema, self._table, err,
+            )
+            return True
+
+    async def _ensure_primary_key(self, engine) -> None:
+        """Idempotently ensure ``self._pk`` is the table's PRIMARY KEY.
+
+        Runs whenever ``create=True`` and a ``pk`` is configured. Safe to
+        call repeatedly: a pre-existing PRIMARY KEY (regardless of column
+        list) short-circuits the ALTER. Failures are raised — never
+        swallowed — so users see the real error instead of a silent skip
+        followed by ``ON CONFLICT`` blowing up at INSERT time.
+
+        For external engines (BigQuery, etc.) this is a no-op.
+        """
+        if not self._pk or engine.is_external:
+            return
+        if await self._has_primary_key(engine):
+            return
+
+        qualified = f"{self._schema}.{self._table}"
+        pk_cols = ", ".join(f'"{c}"' for c in self._pk)
+        from sqlalchemy import text as sa_text
+
+        def _add_pk() -> None:
+            with engine.engine().begin() as conn:
+                conn.execute(
+                    sa_text(
+                        f"ALTER TABLE {qualified} ADD PRIMARY KEY ({pk_cols})"
+                    )
+                )
+
+        try:
+            await asyncio.to_thread(_add_pk)
+            self.logger.info(
+                "TableDestination: added PRIMARY KEY (%s) on %s",
+                ", ".join(self._pk), qualified,
+            )
+        except Exception as err:
+            raise OutputError(
+                f"TableDestination: failed to add PRIMARY KEY ({pk_cols}) "
+                f"on {qualified}: {err}"
+            ) from err
 
     async def _truncate_table(self, engine) -> None:
         """
@@ -226,6 +578,34 @@ class TableDestination(AbstractDestination):
                 f"TableDestination: TRUNCATE {qualified} failed: {err}"
             ) from err
 
+    async def _ensure_table(self, df: pd.DataFrame, engine) -> None:
+        """
+        Ensure the target table exists with the declared PRIMARY KEY before
+        writing.
+
+        * When ``method=drop`` the table is always re-created from *df*.
+        * When ``create=True`` the table is created only if it does not
+          already exist.
+
+        In both branches, when a ``pk`` is configured we additionally call
+        :meth:`_ensure_primary_key`. This is essential when the table was
+        created on a previous run (or manually) without the declared PK —
+        otherwise the next ``INSERT ... ON CONFLICT`` (used by the engine's
+        upsert path) would fail with *"no unique or exclusion constraint
+        matching the ON CONFLICT specification"*.
+        """
+        if self._method == "drop":
+            # Drop unconditionally (handles missing table), then create.
+            await self._drop_table(engine)
+            await self._create_table_from_df(df, engine)
+            await self._ensure_primary_key(engine)
+            return
+
+        if self._create:
+            if not await self._table_exists(engine):
+                await self._create_table_from_df(df, engine)
+            await self._ensure_primary_key(engine)
+
     async def _write_to_table(self, df: pd.DataFrame, engine) -> None:
         """
         Write *df* to the configured table using *engine*.
@@ -250,9 +630,16 @@ class TableDestination(AbstractDestination):
                     options["index_label"] = self._pk
                 engine.columns = list(df.columns)
                 self._columns = engine.columns
-                # Clean NA strings
-                u = df.select_dtypes(include=["object", "string"])
-                df[u.columns] = u.replace(["<NA>", "None"], None)
+                # Clean NA-string sentinels. Use a local copy + .loc so we
+                # don't mutate a slice that the caller still holds (which
+                # triggered SettingWithCopyWarning under chained-assignment
+                # semantics).
+                obj_cols = df.select_dtypes(include=["object", "string"]).columns
+                if len(obj_cols):
+                    df = df.copy()
+                    df.loc[:, obj_cols] = df.loc[:, obj_cols].replace(
+                        ["<NA>", "None"], None
+                    )
                 await asyncio.to_thread(
                     df.to_sql,
                     name=self._table,
@@ -320,6 +707,11 @@ class TableDestination(AbstractDestination):
                 raise DriverError(
                     f"TableDestination: expected DataFrame or dict, got {type(self.data)}"
                 )
+
+            # Pre-write DDL: drop+create or create-if-missing.
+            # Uses the first frame's schema to derive the CREATE.
+            if self._method == "drop" or self._create:
+                await self._ensure_table(frames[0], engine)
 
             # Truncate once before writing all frames
             if self._method == "truncate":

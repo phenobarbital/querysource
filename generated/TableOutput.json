@@ -1,0 +1,135 @@
+{
+  "name": "TableOutput",
+  "category": "Destinations",
+  "description": "Write a DataFrame to a database table. Supports PostgreSQL, MySQL, BigQuery, MongoDB, DocumentDB, and RethinkDB.",
+  "usage": "Use as a Destination step to persist a pipeline result into a relational or document database. Set ``flavor`` to pick the backend, ``schema`` + ``tablename`` to address the target, and ``if_exists`` to control append / replace behaviour. Provide ``pk`` for primary-key-aware upserts and ``jsonb_columns`` to preserve dict/list columns as JSONB on PostgreSQL.",
+  "attributes": [
+    {
+      "name": "flavor",
+      "type": "str",
+      "default": "postgresql",
+      "required": false,
+      "description": "Backend engine: ``postgresql`` (default), ``postgres``, ``mysql``, ``bigquery``, ``mongodb``, ``documentdb``, or ``rethink``."
+    },
+    {
+      "name": "schema",
+      "type": "str",
+      "default": "public",
+      "required": false,
+      "description": "Database schema (relational backends)."
+    },
+    {
+      "name": "tablename",
+      "type": "str",
+      "default": null,
+      "required": true,
+      "description": "Target table or collection name."
+    },
+    {
+      "name": "if_exists",
+      "type": "str",
+      "default": "append",
+      "required": false,
+      "description": "Conflict behaviour: ``append``, ``replace``, ``fail``, or backend-specific upsert keys."
+    },
+    {
+      "name": "pk",
+      "type": "list",
+      "default": [],
+      "required": false,
+      "description": "Primary-key column names (for upsert)."
+    },
+    {
+      "name": "fk",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Foreign-key column reference."
+    },
+    {
+      "name": "constraint",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Additional unique-constraint columns."
+    },
+    {
+      "name": "jsonb_columns",
+      "type": "list",
+      "default": [],
+      "required": false,
+      "description": "Columns to persist as PostgreSQL JSONB (preserves dict and list values)."
+    },
+    {
+      "name": "truncate",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": "Truncate the table before writing."
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "TableOutput",
+    "description": "Write a DataFrame to a database table.",
+    "properties": {
+      "flavor": {
+        "type": "string",
+        "enum": [
+          "postgresql",
+          "postgres",
+          "mysql",
+          "bigquery",
+          "mongodb",
+          "documentdb",
+          "rethink"
+        ],
+        "default": "postgresql"
+      },
+      "schema": {
+        "type": "string",
+        "default": "public"
+      },
+      "tablename": {
+        "type": "string"
+      },
+      "if_exists": {
+        "type": "string",
+        "default": "append",
+        "description": "append | replace | fail | upsert key."
+      },
+      "pk": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "fk": {
+        "type": "string"
+      },
+      "constraint": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "jsonb_columns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "truncate": {
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": [
+      "tablename"
+    ],
+    "additionalProperties": true
+  },
+  "example": "{\n  \"TableOutput\": {\n    \"flavor\": \"postgres\",\n    \"schema\": \"public\",\n    \"tablename\": \"target_table\",\n    \"if_exists\": \"append\",\n    \"pk\": [\"id\"]\n  }\n}",
+  "icon": "database"
+}

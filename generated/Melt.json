@@ -1,0 +1,34 @@
+{
+  "name": "Melt",
+  "category": "Operators",
+  "description": "Unpivot a DataFrame from wide format to long format.",
+  "usage": "Use in a MultiQuery pipeline to reshape wide DataFrames into long (tidy) format for further analysis or visualization.",
+  "attributes": [
+    {
+      "name": "id",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "na_cols",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Melt",
+    "properties": {
+      "id": {},
+      "na_cols": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Melt\": {\n        \"using\": \"wide_data\",\n        \"id\": \"date\",\n        \"na_cols\": \"value\"\n    }\n}",
+  "icon": "git-merge"
+}

@@ -1,0 +1,28 @@
+{
+  "name": "Map",
+  "category": "Transformations",
+  "description": "Rename, select, or compute columns in a DataFrame (shape mapping).",
+  "usage": "Use in a MultiQuery ``Transform`` step to reshape a DataFrame \u2014 rename columns, select fields, or compute derived columns \u2014 before returning the result.",
+  "attributes": [
+    {
+      "name": "replace_columns",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Map",
+    "properties": {
+      "replace_columns": {
+        "type": "boolean"
+      }
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"Map\": {\n                \"fields\": {\n                    \"customer_name\": \"name\",\n                    \"total_amount\": \"revenue\"\n                },\n                \"reset_index\": true\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

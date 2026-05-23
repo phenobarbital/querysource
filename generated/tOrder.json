@@ -1,0 +1,62 @@
+{
+  "name": "tOrder",
+  "category": "Transformations",
+  "description": "Sort a DataFrame by one or more columns in a MultiQuery pipeline.",
+  "usage": "Use in a MultiQuery ``Transform`` step to sort the result of a prior query or operator before returning or further processing.",
+  "attributes": [
+    {
+      "name": "columns",
+      "type": "Union[str, list]",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "ascending",
+      "type": "Union[bool, list]",
+      "default": "ascending",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "na_position",
+      "type": "str",
+      "default": "last",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "pd_args",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "tOrder",
+    "properties": {
+      "columns": {
+        "type": [
+          "string",
+          "array"
+        ]
+      },
+      "ascending": {
+        "type": [
+          "boolean",
+          "array"
+        ]
+      },
+      "na_position": {
+        "type": "string"
+      },
+      "pd_args": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"tOrder\": {\n                \"columns\": [\"revenue\", \"date\"],\n                \"ascending\": [false, true],\n                \"na_position\": \"last\"\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

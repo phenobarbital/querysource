@@ -1,0 +1,48 @@
+{
+  "name": "GroupBy",
+  "category": "Operators",
+  "description": "Aggregate DataFrame columns grouped by one or more key columns.",
+  "usage": "Use in a MultiQuery pipeline to compute aggregate statistics on a DataFrame, equivalent to SQL GROUP BY with aggregate functions.",
+  "attributes": [
+    {
+      "name": "columns",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "by",
+      "type": "list",
+      "default": [],
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "by_replace_nan",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "GroupBy",
+    "properties": {
+      "columns": {
+        "type": "object"
+      },
+      "by": {
+        "type": "array"
+      },
+      "by_replace_nan": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "example": "{\n    \"GroupBy\": {\n        \"by\": [\"region\", \"product\"],\n        \"columns\": {\n            \"total_revenue\": \"sum\",\n            \"avg_price\": \"mean\",\n            \"order_count\": \"count\"\n        }\n    }\n}",
+  "icon": "git-merge"
+}

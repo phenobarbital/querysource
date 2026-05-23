@@ -1,0 +1,47 @@
+{
+  "name": "SmartSheetSource",
+  "category": "Sources",
+  "description": "Download a SmartSheet sheet as Excel and return it as a DataFrame.",
+  "usage": "Authenticates via Bearer token (SmartSheet API key from navconfig or explicit configuration) and downloads the sheet with the given ``file_id`` (sheet ID) in Excel format.",
+  "attributes": [
+    {
+      "name": "credentials.api_key",
+      "type": "Any",
+      "default": "SMARTSHEET_API_KEY",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.file_id",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "SmartSheetSource",
+    "properties": {
+      "credentials": {
+        "type": "object",
+        "properties": {
+          "api_key": {}
+        }
+      },
+      "source": {
+        "type": "object",
+        "properties": {
+          "file_id": {}
+        },
+        "required": [
+          "file_id"
+        ]
+      }
+    },
+    "required": []
+  },
+  "example": "{\n    \"credentials\": {\n        \"api_key\": \"SMARTSHEET_API_KEY\"   # navconfig var or literal\n    },\n    \"source\": {\n        \"file_id\": 8504624500658052\n    }\n}",
+  "icon": "database"
+}

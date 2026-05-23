@@ -1,0 +1,58 @@
+{
+  "name": "DropCols",
+  "category": "Transformations",
+  "description": "Drop the columns matching any of the specified selectors.",
+  "usage": "Use in a MultiQuery ``Transform`` step to remove unwanted columns from a DataFrame via exact names, glob patterns, regex, or prefix/suffix matching.",
+  "attributes": [
+    {
+      "name": "columns",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "pattern",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "regex",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "startswith",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "endswith",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "DropCols",
+    "properties": {
+      "columns": {},
+      "pattern": {},
+      "regex": {},
+      "startswith": {},
+      "endswith": {}
+    },
+    "required": []
+  },
+  "example": "{\"Transform\": [{\"DropCols\": {\"columns\": [\"internal_id\", \"debug_flag\"]}}]}",
+  "icon": "shuffle"
+}

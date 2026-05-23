@@ -1,0 +1,119 @@
+{
+  "name": "Table",
+  "category": "Destinations",
+  "description": "Write a DataFrame to a relational or external database table with configurable write mode (append, upsert, truncate).",
+  "usage": "Use as a Destination step to persist a pipeline result into PostgreSQL, MySQL/MariaDB, or BigQuery. Pick the backend with ``driver``, address the target with ``schema`` + ``table``, and choose the write semantics with ``method``: ``append`` inserts rows, ``upsert`` performs INSERT \u2026 ON CONFLICT UPDATE (requires ``pk``), ``truncate`` empties the table before appending, and ``drop`` re-creates the table from the DataFrame schema. Set ``create: true`` to auto-create the table when it does not exist; when ``pk`` is configured, the PRIMARY KEY is added (or re-checked on re-runs).",
+  "attributes": [
+    {
+      "name": "driver",
+      "type": "str",
+      "default": "pg",
+      "required": false,
+      "description": "Backend driver. One of: ``pg`` / ``postgresql`` / ``postgres``, ``mysql`` / ``mariadb``, ``bigquery`` / ``bq``."
+    },
+    {
+      "name": "method",
+      "type": "str",
+      "default": "append",
+      "required": false,
+      "description": "Write mode: ``append`` (insert rows), ``upsert`` (INSERT \u2026 ON CONFLICT UPDATE \u2014 requires ``pk``), ``truncate`` (TRUNCATE table first, then append), or ``drop`` (DROP table, re-create from DataFrame schema, then append)."
+    },
+    {
+      "name": "create",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": "When True, auto-create the target table from the DataFrame schema if it does not already exist. Ignored when ``method=drop`` (drop always re-creates)."
+    },
+    {
+      "name": "table",
+      "type": "str",
+      "default": "",
+      "required": true,
+      "description": "Target table name."
+    },
+    {
+      "name": "schema",
+      "type": "str",
+      "default": "public",
+      "required": false,
+      "description": "Database schema (relational backends)."
+    },
+    {
+      "name": "pk",
+      "type": "list",
+      "default": [],
+      "required": false,
+      "description": "Primary-key column names. Required when ``method=upsert``."
+    },
+    {
+      "name": "dsn",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Optional explicit DSN/connection string. When omitted, the engine's default connection is used."
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Table",
+    "description": "Write a DataFrame to a database table.",
+    "properties": {
+      "driver": {
+        "type": "string",
+        "enum": [
+          "pg",
+          "postgresql",
+          "postgres",
+          "mysql",
+          "mariadb",
+          "bigquery",
+          "bq"
+        ],
+        "default": "pg"
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "append",
+          "upsert",
+          "truncate",
+          "drop"
+        ],
+        "default": "append"
+      },
+      "table": {
+        "type": "string"
+      },
+      "schema": {
+        "type": "string",
+        "default": "public"
+      },
+      "pk": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "create": {
+        "type": "boolean",
+        "default": false
+      },
+      "dsn": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "table"
+    ],
+    "additionalProperties": false
+  },
+  "example": "{\n  \"Output\": [\n    {\n      \"Table\": {\n        \"driver\": \"pg\",\n        \"schema\": \"troc\",\n        \"table\": \"stores\",\n        \"method\": \"upsert\",\n        \"pk\": [\"store_id\"]\n      }\n    }\n  ]\n}",
+  "icon": "database"
+}

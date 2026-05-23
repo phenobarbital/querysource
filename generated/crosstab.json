@@ -1,0 +1,36 @@
+{
+  "name": "crosstab",
+  "category": "Transformations",
+  "description": "Compute a cross-tabulation (frequency or aggregation) from a DataFrame.",
+  "usage": "Use in a MultiQuery ``Transform`` step to pivot categorical data into a frequency or summary table.",
+  "attributes": [
+    {
+      "name": "reset_index",
+      "type": "bool",
+      "default": true,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "type",
+      "type": "Any",
+      "default": "crosstab",
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "crosstab",
+    "properties": {
+      "reset_index": {
+        "type": "boolean"
+      },
+      "type": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"crosstab\": {\n                \"index\": \"region\",\n                \"columns\": \"product_category\",\n                \"values\": \"revenue\",\n                \"aggfunc\": \"sum\",\n                \"reset_index\": true\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

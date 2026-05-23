@@ -1,0 +1,58 @@
+{
+  "name": "Merge",
+  "category": "Operators",
+  "description": "Merge two DataFrames with support for various join types including anti-join.",
+  "usage": "Use in a MultiQuery pipeline to combine two DataFrames on explicit column keys, with fine-grained control over join columns and overlap handling.",
+  "attributes": [
+    {
+      "name": "on",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "how",
+      "type": "Any",
+      "default": "inner",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "left_on",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "right_on",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "suffixes",
+      "type": "Any",
+      "default": "('_x', '_y'",
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Merge",
+    "properties": {
+      "on": {},
+      "how": {},
+      "left_on": {},
+      "right_on": {},
+      "suffixes": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Merge\": {\n        \"using\": \"employees\",\n        \"on\": \"department_id\",\n        \"how\": \"left\",\n        \"suffixes\": [\"_emp\", \"_dept\"]\n    }\n}",
+  "icon": "git-merge"
+}

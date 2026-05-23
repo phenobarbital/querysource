@@ -1,0 +1,26 @@
+{
+  "name": "Info",
+  "category": "Operators",
+  "description": "Exploratory Data Analysis operator for MultiQuery pipelines.",
+  "usage": "Use in a MultiQuery pipeline to profile the shape, types, and statistical distribution of intermediate DataFrames. Results are returned as a dict of DataFrames compatible with downstream pipeline steps (Transform, Filter, Output).",
+  "attributes": [
+    {
+      "name": "output_format",
+      "type": "Any",
+      "default": "dataframe",
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Info",
+    "properties": {
+      "output_format": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Info\": {}\n}",
+  "icon": "git-merge"
+}
