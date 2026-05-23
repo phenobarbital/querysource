@@ -52,7 +52,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -63,8 +63,8 @@
       "parallelism_notes": "Requires both the rewritten operator (TASK-685) and the pipeline change (TASK-686) to be in place.",
       "assigned_to": null,
       "started_at": "2026-05-22T23:47:19+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-687-info-eda-end-to-end-tests.md"
+      "completed_at": "2026-05-23T00:01:59+00:00",
+      "file": "sdd/tasks/completed/TASK-687-info-eda-end-to-end-tests.md"
     }
   ]
 }
