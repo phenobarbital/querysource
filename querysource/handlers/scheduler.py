@@ -85,7 +85,10 @@ class SchedulerJobsView(BaseView):
             ``next_run_time``, ``trigger``, ``coalesce``, ``max_instances``,
             ``misfire_grace_time``, ``pending``.
         """
-        nrt = job.next_run_time
+        # APScheduler Job uses __slots__; some slots are only set after the
+        # scheduler starts (e.g. next_run_time). Use getattr with a default
+        # to avoid AttributeError when the scheduler is pending/unstarted.
+        nrt = getattr(job, "next_run_time", None)
         trigger_cls_name = type(job.trigger).__name__  # e.g. "IntervalTrigger"
         # Strip the "Trigger" suffix and lowercase to get "interval" / "cron"
         trigger_type = trigger_cls_name.lower()
@@ -104,10 +107,10 @@ class SchedulerJobsView(BaseView):
                 "type": trigger_type,
                 "repr": str(job.trigger),
             },
-            "coalesce": bool(job.coalesce),
-            "max_instances": int(job.max_instances),
-            "misfire_grace_time": job.misfire_grace_time,
-            "pending": bool(job.pending),
+            "coalesce": bool(getattr(job, "coalesce", False)),
+            "max_instances": int(getattr(job, "max_instances", 1)),
+            "misfire_grace_time": getattr(job, "misfire_grace_time", None),
+            "pending": bool(getattr(job, "pending", True)),
         }
 
     async def get(self) -> web.Response:

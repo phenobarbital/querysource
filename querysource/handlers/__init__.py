@@ -9,6 +9,7 @@ from .manager import QueryManager
 from .executor import QueryExecutor
 from .variables import VariablesService
 from .log import LoggingService
+from .scheduler import SchedulerJobsView
 
 
 __all__ = (
@@ -18,4 +19,5 @@ __all__ = (
     'QueryExecutor',
     'VariablesService',
     'LoggingService',
+    'SchedulerJobsView',
 )
