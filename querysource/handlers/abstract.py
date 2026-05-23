@@ -85,7 +85,13 @@ class AbstractHandler(BaseHandler):
             }
         else:
             headers['x-message'] = message
-        return web.Response(headers=headers, status=204)
+        # aiohttp's header serializer rejects non-str values (and reports the
+        # error as "non-str key None"). Drop None entries and stringify the
+        # rest so callers can pass raw values without manual sanitisation.
+        clean_headers = {
+            str(k): str(v) for k, v in headers.items() if v is not None
+        }
+        return web.Response(headers=clean_headers, status=204)
 
     def NotFound(self, message: str, exception: BaseException = None):
         """Raised when Data not Found.

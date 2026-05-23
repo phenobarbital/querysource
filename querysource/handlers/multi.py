@@ -230,6 +230,7 @@ class QueryHandler(AbstractHandler):
         try:
             result, options = await qs.query()
         except DataNotFound as dnf:
+            total_time = time.monotonic() - started_at
             return self.NoData(
                 message=str(dnf),
                 headers={

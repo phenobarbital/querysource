@@ -83,6 +83,39 @@ class TestGetCatalog:
                     f"{t} should be 'Transformations', got {catalog_dict[t].category}"
                 )
 
+    def test_all_have_non_empty_usage(self):
+        """Usage falls back to the docstring body; no component should be blank."""
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = ComponentRegistry.get_catalog()
+        blanks = [c.name for c in catalog if not c.usage]
+        assert not blanks, f"Components with empty usage: {blanks}"
+
+    def test_all_have_icon(self):
+        """Every component must have an icon (from _icon attr or category default)."""
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = ComponentRegistry.get_catalog()
+        blanks = [c.name for c in catalog if not c.icon]
+        assert not blanks, f"Components with empty icon: {blanks}"
+
+    def test_example_is_string(self):
+        """The example field is rendered as a JSON/YAML text snippet."""
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = ComponentRegistry.get_catalog()
+        for c in catalog:
+            assert isinstance(c.example, str), (
+                f"{c.name}.example must be a string, got {type(c.example).__name__}"
+            )
+
+    def test_join_example_is_balanced_json(self):
+        """Regression: brace-balanced parsing keeps the outer closing brace."""
+        ComponentRegistry.discover_all.cache_clear()
+        catalog = {c.name: c for c in ComponentRegistry.get_catalog()}
+        ex = catalog["Join"].example
+        assert ex, "Join must have an example"
+        assert ex.count("{") == ex.count("}"), (
+            f"Unbalanced braces in Join example:\n{ex}"
+        )
+
 
 class TestValidatePipeline:
     def test_no_sources_is_invalid(self):
@@ -216,7 +249,8 @@ class TestDataModels:
         )
         assert info.attributes == []
         assert info.json_schema == {}
-        assert info.example == {}
+        assert info.example == ""
+        assert info.icon == ""
 
     def test_validation_error_creation(self):
         err = ValidationError(step="Join", field="left", message="Missing left key")
