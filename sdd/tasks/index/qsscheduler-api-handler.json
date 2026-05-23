@@ -14,7 +14,7 @@
       "feature_id": "FEAT-100",
       "feature": "qsscheduler-api-handler",
       "spec": "sdd/specs/qsscheduler-api-handler.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Per-spec sequential per the spec's Worktree Strategy. Creates a new module (querysource/handlers/scheduler.py) with no overlap with TASK-692's files, but TASK-692 imports the symbol this task defines, so wiring without the symbol existing would fail at route-registration time. Run sequentially in the same worktree.",
       "assigned_to": null,
       "started_at": "2026-05-23T00:29:56+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-691-scheduler-jobs-view-handler.md"
+      "completed_at": "2026-05-23T00:34:15+00:00",
+      "file": "sdd/tasks/completed/TASK-691-scheduler-jobs-view-handler.md"
     },
     {
       "id": "TASK-692",
