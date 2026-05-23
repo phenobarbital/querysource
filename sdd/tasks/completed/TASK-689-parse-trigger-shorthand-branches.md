@@ -519,10 +519,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-05-23
+**Notes**: All 19 unit tests pass. Added `from datetime import datetime, timedelta` import,
+`_DOW_TO_INT` dict and `_biweekly_anchor` module-level helper, and five new elif branches
+(hourly, daily, weekly, monthly, biweekly) in `_parse_trigger`. ruff returns no errors.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

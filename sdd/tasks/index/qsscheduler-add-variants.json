@@ -14,7 +14,7 @@
       "feature_id": "FEAT-098",
       "feature": "qsscheduler-add-variants",
       "spec": "sdd/specs/qsscheduler-add-variants.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Per-spec sequential per the spec's Worktree Strategy. This task modifies querysource/scheduler/scheduler.py and creates tests/scheduler/test_parse_trigger_shorthands.py. TASK-690 logically follows because it asserts behavior implemented here; running them in parallel worktrees would create coordination overhead with no benefit (single small file diff).",
       "assigned_to": null,
       "started_at": "2026-05-23T00:14:14+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-689-parse-trigger-shorthand-branches.md"
+      "completed_at": "2026-05-23T00:17:09+00:00",
+      "file": "sdd/tasks/completed/TASK-689-parse-trigger-shorthand-branches.md"
     },
     {
       "id": "TASK-690",
