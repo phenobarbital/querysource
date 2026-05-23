@@ -14,14 +14,14 @@
       "feature_id": "FEAT-100",
       "feature": "qsscheduler-api-handler",
       "spec": "sdd/specs/qsscheduler-api-handler.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Per-spec sequential per the spec's Worktree Strategy. Creates a new module (querysource/handlers/scheduler.py) with no overlap with TASK-692's files, but TASK-692 imports the symbol this task defines, so wiring without the symbol existing would fail at route-registration time. Run sequentially in the same worktree.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-23T00:29:56+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-691-scheduler-jobs-view-handler.md"
     },
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-100",
       "feature": "qsscheduler-api-handler",
       "spec": "sdd/specs/qsscheduler-api-handler.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -41,7 +41,7 @@
       "parallel": false,
       "parallelism_notes": "Sequential because integration tests import SchedulerJobsView from TASK-691 and services.py route registration references the same symbol. Cannot run in parallel — runs in the same worktree after TASK-691 lands.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-05-23T00:29:56+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-692-scheduler-route-registration-and-tests.md"
     }
