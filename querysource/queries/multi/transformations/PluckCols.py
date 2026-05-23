@@ -117,6 +117,10 @@ class PluckCols(AbstractTransform):
     async def run(self) -> Union[dict, pd.DataFrame]:
         """Execute the PluckCols transformation."""
         await self.start()
+        # AbstractTransform.start() validates empty DFs for dict inputs only;
+        # check single-DataFrame emptiness here.
+        if isinstance(self.data, pd.DataFrame) and self.data.empty:
+            raise DataNotFound("PluckCols: Empty DataFrame input.")
         try:
             if isinstance(self.data, dict):
                 return {
