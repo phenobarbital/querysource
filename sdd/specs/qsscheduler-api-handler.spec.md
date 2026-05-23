@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-100
 **Date**: 2026-05-23
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.x
 
 ---
@@ -452,21 +452,32 @@ No new dependencies.
 
 ## 8. Open Questions
 
-> Questions that must be resolved before or during implementation.
+> Resolved questions are checked off with the agreed answer; unresolved
+> questions remain `[ ]` for the implementing agent or follow-up specs.
 
-- [ ] **PBAC enforcement** — Should `/api/v1/qs/scheduler/jobs` enforce
-      PBAC (similar to query slugs), or is it open like
-      `/api/v1/qs/audit_log`? — *Owner: Jesus Lara*
-- [ ] **Filtering query params** — Do we want `?kind=query|multi|cache`
-      and/or `?slug=<substr>` filters in v1, or defer to a follow-up? —
-      *Owner: Jesus Lara*
-- [ ] **404 vs 503 when scheduler missing** — If the scheduler is enabled
-      but `app["qs_scheduler"]` is briefly absent (mid-startup race), is
-      503 the right code, or should we return an empty list with
-      `scheduler.running=false`? — *Owner: Jesus Lara*
-- [ ] **Promote `get_jobs()` to public QSScheduler API** — Or keep reading
-      the private `_scheduler` attribute from the handler? Decision likely
-      tied to the follow-up POST/PUT/DELETE spec. — *Owner: Jesus Lara*
+- [x] **PBAC enforcement** — *Resolved (conservative default for v1)*:
+      No PBAC enforcement in v1. The endpoint is gated only by
+      `ENABLE_QS_SCHEDULER` (same posture as `/api/v1/qs/audit_log`).
+      Adding PBAC is deferred to the follow-up spec that introduces
+      mutating verbs (POST/PUT/DELETE) — those are the verbs that warrant
+      a policy.
+- [x] **Filtering query params** — *Resolved (conservative default for v1)*:
+      No `?kind` or `?slug` filters in v1. Clients can filter client-side
+      because the expected job count is small. Filters can be added later
+      without breaking the response shape.
+- [x] **404 vs 503 when scheduler missing** — *Resolved*: Return **503**
+      with a JSON body `{"error": "...", "scheduler": {"enabled": true,
+      "running": false}}` when `ENABLE_QS_SCHEDULER=True` but
+      `app["qs_scheduler"]` is missing (mid-startup race or partial
+      failure). The route itself is not registered when the flag is off,
+      so an inactive scheduler never produces a 200 with an empty list.
+- [x] **Promote `get_jobs()` to public QSScheduler API** — *Resolved
+      (defer)*: The handler reads `scheduler._scheduler.get_jobs()` and
+      `scheduler._scheduler.get_job(job_id)` directly in v1. Promotion to
+      a public API on `QSScheduler` is reconsidered when the follow-up
+      mutating-verbs spec lands — that one will need `add_job` /
+      `remove_job` / `pause_job` wrappers anyway, and the read methods
+      should be promoted alongside them for symmetry.
 
 ---
 
