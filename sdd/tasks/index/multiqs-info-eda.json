@@ -14,7 +14,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Modifies Info.py which is read by TASK-686; must complete first.",
       "assigned_to": null,
       "started_at": "2026-05-22T23:47:19+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-685-info-eda-operator-rewrite.md"
+      "completed_at": "2026-05-23T00:00:07+00:00",
+      "file": "sdd/tasks/completed/TASK-685-info-eda-operator-rewrite.md"
     },
     {
       "id": "TASK-686",
