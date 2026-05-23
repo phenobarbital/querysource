@@ -330,10 +330,12 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Sonnet 4.6 (SDD Worker)
+**Date**: 2026-05-23
+**Notes**: All 4 integration tests pass. Tests drive _load_scheduled_queries and
+_load_cache_refresh_jobs with hand-crafted row fixtures using a non-started
+AsyncIOScheduler (attached via _create_scheduler()). No DB pool, no aiohttp app.
+The invalid-row test asserts "Failed to parse trigger" ERROR is logged via caplog.
+ruff returns no errors.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
