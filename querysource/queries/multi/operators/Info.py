@@ -1,7 +1,7 @@
-import json
 import pandas as pd
 from pandas import DataFrame
 from typing import Union
+# json_encoder (from datamodel) handles all pandas/numpy type coercion for JSON output
 from datamodel.parsers.json import json_encoder
 from ....exceptions import DriverError, QueryException
 from .abstract import AbstractOperator
@@ -51,26 +51,31 @@ class Info(AbstractOperator):
         non_null_count = total - null_count
         null_percent = (null_count / total * 100.0) if total > 0 else 0.0
         unique_count = int(series.nunique(dropna=True))
-        duplicate_count = total - unique_count
-        duplicate_percent = (duplicate_count / total * 100.0) if total > 0 else 0.0
+        non_null_total = non_null_count  # already computed above
+        duplicate_count = non_null_total - unique_count
+        duplicate_percent = (duplicate_count / non_null_total * 100.0) if non_null_total > 0 else 0.0
 
         is_numeric = pd.api.types.is_numeric_dtype(series)
+        is_datetime = pd.api.types.is_datetime64_any_dtype(series)
 
-        # min / max — work for numeric and datetime; None for other types
-        try:
-            col_min = series.min(skipna=True) if non_null_count > 0 else None
-            col_max = series.max(skipna=True) if non_null_count > 0 else None
-            # Convert to Python native types for safety
-            if col_min is not None and pd.isna(col_min):
+        # min / max — only meaningful for numeric and datetime dtypes
+        if (is_numeric or is_datetime) and non_null_count > 0:
+            try:
+                col_min = series.min(skipna=True)
+                col_max = series.max(skipna=True)
+                if col_min is not None and pd.isna(col_min):
+                    col_min = None
+                if col_max is not None and pd.isna(col_max):
+                    col_max = None
+            except Exception:
                 col_min = None
-            if col_max is not None and pd.isna(col_max):
                 col_max = None
-        except Exception:
+        else:
             col_min = None
             col_max = None
 
         # Numeric-only stats
-        mean = std = median = skewness = kurtosis = q1 = q3 = None
+        mean = std = median = skewness = kurt_val = q1 = q3 = None
         if is_numeric and non_null_count > 0:
             try:
                 mean = float(series.mean(skipna=True))
@@ -89,9 +94,9 @@ class Info(AbstractOperator):
             except Exception:
                 skewness = None
             try:
-                kurtosis = float(series.kurtosis(skipna=True))
+                kurt_val = float(series.kurtosis(skipna=True))
             except Exception:
-                kurtosis = None
+                kurt_val = None
             try:
                 q1 = float(series.quantile(0.25))
             except Exception:
@@ -111,11 +116,12 @@ class Info(AbstractOperator):
         # memory_usage (deep)
         mem = int(series.memory_usage(deep=True))
 
-        # sample_values — up to 5 non-null values, truncated to 200 chars each
+        # sample_values — up to 5 non-null values, JSON-encoded
         try:
             samples = series.dropna().head(5).tolist()
-            sample_strs = [str(s)[:200] for s in samples]
-            sample_values = json.dumps(sample_strs)
+            # Truncate string representations to 200 chars each before encoding
+            truncated = [s[:200] if isinstance(s, str) else s for s in samples]
+            sample_values = json_encoder(truncated)
         except Exception:
             sample_values = "[]"
 
@@ -134,7 +140,7 @@ class Info(AbstractOperator):
             "median": median,
             "mode": mode_val,
             "skewness": skewness,
-            "kurtosis": kurtosis,
+            "kurtosis": kurt_val,
             "q1": q1,
             "q3": q3,
             "memory_usage": mem,
@@ -142,14 +148,18 @@ class Info(AbstractOperator):
         }
 
     async def start(self) -> None:
-        """Validate that all data dict values are DataFrames."""
+        """Validate output_format and that all data dict values are DataFrames."""
+        if self.output_format not in ('dataframe', 'json'):
+            raise QueryException(
+                f"Invalid output_format '{self.output_format}'. Must be 'dataframe' or 'json'."
+            )
         for name, data in self.data.items():
             if not isinstance(data, DataFrame):
                 raise DriverError(
                     f'Wrong type of data for Info, required a Pandas dataframe: {type(data)}'
                 )
 
-    async def run(self) -> Union[dict, object]:
+    async def run(self) -> Union[dict, str]:
         """Compute EDA statistics for each DataFrame in self.data."""
         try:
             eda_results = {}

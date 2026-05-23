@@ -119,14 +119,20 @@ class TestInfoEDA:
         assert len(eda) == 1
         assert eda.iloc[0]["non_null_count"] == 0
         assert eda.iloc[0]["null_percent"] == 0.0
+        assert eda.iloc[0]["duplicate_percent"] == 0.0
 
     @pytest.mark.asyncio
     async def test_output_format_json(self, mixed_dtypes_df):
-        """output_format='json' returns JSON-serializable dict."""
+        """output_format='json' returns JSON-serializable string."""
+        import json as _json
         info = Info(data={"src": mixed_dtypes_df}, output_format="json")
         async with info as i:
             result = await i.run()
-        assert isinstance(result, (dict, str))
+        assert isinstance(result, str)
+        decoded = _json.loads(result)
+        assert "src" in decoded
+        assert isinstance(decoded["src"], list)
+        assert len(decoded["src"]) == len(mixed_dtypes_df.columns)
 
     @pytest.mark.asyncio
     async def test_memory_usage(self, mixed_dtypes_df):

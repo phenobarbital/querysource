@@ -49,13 +49,18 @@ class TestInfoEDAEndToEnd:
 
     @pytest.mark.asyncio
     async def test_info_json_mode(self, multi_source_data):
-        """Info with output_format='json' returns serializable dict."""
+        """Info with output_format='json' returns a JSON string."""
+        import json as _json
         from querysource.queries.multi.operators.Info import Info
 
         info = Info(data=multi_source_data, output_format="json")
         async with info as i:
             result = await i.run()
-        assert isinstance(result, (dict, str))
+        assert isinstance(result, str)
+        decoded = _json.loads(result)
+        assert set(decoded.keys()) == {"sales", "inventory"}
+        assert isinstance(decoded["sales"], list)
+        assert len(decoded["sales"]) == 3  # 3 columns in sales
 
     @pytest.mark.asyncio
     async def test_info_eda_data_quality(self, multi_source_data):
