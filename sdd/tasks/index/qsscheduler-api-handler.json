@@ -23,6 +23,7 @@
       "assigned_to": null,
       "started_at": "2026-05-23T00:29:56+00:00",
       "completed_at": "2026-05-23T00:34:15+00:00",
+      "verification": "verified",
       "file": "sdd/tasks/completed/TASK-691-scheduler-jobs-view-handler.md"
     },
     {
@@ -43,6 +44,7 @@
       "assigned_to": null,
       "started_at": "2026-05-23T00:29:56+00:00",
       "completed_at": "2026-05-23T00:40:31+00:00",
+      "verification": "verified",
       "file": "sdd/tasks/completed/TASK-692-scheduler-route-registration-and-tests.md"
     }
   ]
