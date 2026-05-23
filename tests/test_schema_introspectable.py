@@ -66,3 +66,89 @@ class TestSchemaIntrospectable:
         assert "json_schema" in schema
         assert "attributes" in schema
         assert isinstance(schema["attributes"], list)
+
+
+class TestDescribeClass:
+    """Tests for the module-level describe_class helper."""
+
+    def test_returns_icon_default_for_category(self):
+        from querysource.queries.multi._introspect import describe_class
+
+        class _Op:
+            """Some operator."""
+            _category = "Operators"
+
+        desc = describe_class(_Op)
+        assert desc["icon"] == "git-merge"
+
+    def test_class_icon_attribute_overrides_default(self):
+        from querysource.queries.multi._introspect import describe_class
+
+        class _Custom:
+            """Custom component."""
+            _category = "Sources"
+            _icon = "airtable"
+
+        desc = describe_class(_Custom)
+        assert desc["icon"] == "airtable"
+
+    def test_example_is_string(self):
+        from querysource.queries.multi._introspect import describe_class
+
+        class _WithExample:
+            """A class with a JSON example.
+
+            Example:
+                {
+                    "Step": {
+                        "key": "value"
+                    }
+                }
+            """
+            _category = "Operators"
+
+        desc = describe_class(_WithExample)
+        assert isinstance(desc["example"], str)
+        assert '"Step"' in desc["example"]
+        # Closing braces are preserved (regression: brace-balanced parsing).
+        assert desc["example"].count("{") == desc["example"].count("}")
+
+    def test_usage_falls_back_to_body_when_no_usage_section(self):
+        from querysource.queries.multi._introspect import describe_class
+
+        class _NoUsageSection:
+            """One-line summary.
+
+            This is the body paragraph that should become the usage
+            fallback when no explicit Usage: section is present.
+
+            Args:
+                x: something.
+            """
+            _category = "Sources"
+
+        desc = describe_class(_NoUsageSection)
+        assert "body paragraph" in desc["usage"]
+        assert "Args" not in desc["usage"]
+
+    def test_literal_block_becomes_example_when_no_explicit_example(self):
+        from querysource.queries.multi._introspect import describe_class
+
+        class _LiteralOnly:
+            """One-line summary.
+
+            YAML configuration example::
+
+                Output:
+                  - Foo:
+                      bar: baz
+
+            Trailing prose paragraph.
+            """
+            _category = "Destinations"
+
+        desc = describe_class(_LiteralOnly)
+        assert "Output:" in desc["example"]
+        assert "bar: baz" in desc["example"]
+        # The trailing prose should become usage.
+        assert "Trailing prose paragraph" in desc["usage"]

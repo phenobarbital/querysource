@@ -32,14 +32,22 @@ class AttributeInfo:
 
 @dataclass
 class ComponentInfo:
-    """Documentation for a single MultiQuery component."""
+    """Documentation for a single MultiQuery component.
+
+    Attributes:
+        example: Pre-formatted JSON snippet (string) showing how to write
+            this component in a MultiQuery pipeline. Rendered by the UI.
+        icon: Icon name for the frontend. Defaults to a per-category icon
+            and can be overridden by setting ``_icon`` on the class.
+    """
     name: str
     category: str  # "Operators" | "Transformations" | "Sources" | "Destinations" | "Components"
     description: str
     usage: str
     attributes: list[AttributeInfo] = field(default_factory=list)
     json_schema: dict | None = field(default_factory=dict)  # None means schema unknown
-    example: dict = field(default_factory=dict)
+    example: str = ""
+    icon: str = ""
 
 
 @dataclass
@@ -179,14 +187,21 @@ class ComponentRegistry:
     def get_catalog(cls) -> list[ComponentInfo]:
         """Return a list of ComponentInfo for all discovered components.
 
-        For components that inherit from SchemaIntrospectable, uses the
-        introspection classmethods. For sources and destinations, builds
-        ComponentInfo from __doc__ and __init__ inspection.
+        Docstring parsing (description, usage, example, icon) is delegated to
+        :func:`querysource.queries.multi._introspect.describe_class` so the
+        same logic applies to both SchemaIntrospectable subclasses and legacy
+        (e.g. ``ThreadSource``) sources.
+
+        For SchemaIntrospectable subclasses we additionally populate
+        ``attributes`` and ``json_schema`` from the introspection helpers.
 
         Returns:
             List of ComponentInfo dataclass instances.
         """
-        from querysource.queries.multi._introspect import SchemaIntrospectable
+        from querysource.queries.multi._introspect import (
+            SchemaIntrospectable,
+            describe_class,
+        )
 
         components = cls.discover_all()
         catalog: list[ComponentInfo] = []
@@ -206,10 +221,20 @@ class ComponentRegistry:
             if isinstance(comp_cls, type):
                 _seen_classes.add(class_id)
             try:
-                if isinstance(comp_cls, type) and issubclass(comp_cls, SchemaIntrospectable):
-                    # Use introspection classmethods
+                is_introspectable = isinstance(comp_cls, type) and issubclass(
+                    comp_cls, SchemaIntrospectable
+                )
+
+                # For non-introspectable classes (legacy ThreadSource-based
+                # sources) we still need a sensible category — fall back to
+                # heuristic classification.
+                category_override = (
+                    None if is_introspectable else cls._classify(name, comp_cls)
+                )
+                desc = describe_class(comp_cls, category=category_override)
+
+                if is_introspectable:
                     schema = comp_cls.get_schema()
-                    desc = comp_cls.get_description()
                     attrs = [
                         AttributeInfo(
                             name=a["name"],
@@ -219,30 +244,22 @@ class ComponentRegistry:
                         )
                         for a in schema.get("attributes", [])
                     ]
-                    catalog.append(ComponentInfo(
-                        name=desc.get("name", name),
-                        category=desc.get("category", "Components"),
-                        description=desc.get("description", ""),
-                        usage=desc.get("usage", ""),
-                        attributes=attrs,
-                        json_schema=schema.get("json_schema", {}),
-                        example=desc.get("example", {}),
-                    ))
+                    json_schema = schema.get("json_schema", {})
                 else:
-                    # Sources / destinations or plain classes not yet implementing
-                    # SchemaIntrospectable — schema is unknown, not "no parameters".
-                    category = cls._classify(name, comp_cls)
-                    doc = getattr(comp_cls, "__doc__", "") or ""
-                    first_line = doc.strip().splitlines()[0].strip() if doc.strip() else ""
-                    catalog.append(ComponentInfo(
-                        name=name,
-                        category=category,
-                        description=first_line,
-                        usage="",
-                        attributes=[],
-                        json_schema=None,  # schema unknown — class not yet SchemaIntrospectable
-                        example={},
-                    ))
+                    # Legacy sources: schema is unknown (None signals "not introspected")
+                    attrs = []
+                    json_schema = None
+
+                catalog.append(ComponentInfo(
+                    name=desc.get("name", name),
+                    category=desc.get("category", "Components"),
+                    description=desc.get("description", ""),
+                    usage=desc.get("usage", ""),
+                    attributes=attrs,
+                    json_schema=json_schema,
+                    example=desc.get("example", ""),
+                    icon=desc.get("icon", ""),
+                ))
             except Exception as exc:
                 logger.warning("Could not build ComponentInfo for %s: %s", name, exc)
 
