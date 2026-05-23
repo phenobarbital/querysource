@@ -318,6 +318,15 @@ class QuerySource(metaclass=Singleton):
             from .scheduler import QSScheduler
             self._scheduler = QSScheduler()
             self._scheduler.setup(self.app)
+            from .handlers.scheduler import SchedulerJobsView  # noqa: PLC0415
+            r = self.app.router.add_view(
+                '/api/v1/qs/scheduler/jobs', SchedulerJobsView
+            )
+            routes.append(r)
+            r = self.app.router.add_view(
+                '/api/v1/qs/scheduler/jobs/{job_id}', SchedulerJobsView
+            )
+            routes.append(r)
 
         # Loading Vector Models at Startup:
         if USE_VECTORS and api:
