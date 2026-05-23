@@ -32,7 +32,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-info-eda",
       "spec": "sdd/specs/multiqs-info-eda.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Depends on TASK-685 output format; modifies __init__.py dispatch that calls Info.",
       "assigned_to": null,
       "started_at": "2026-05-22T23:47:19+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-686-multiqs-info-pipeline-flow.md"
+      "completed_at": "2026-05-23T00:00:59+00:00",
+      "file": "sdd/tasks/completed/TASK-686-multiqs-info-pipeline-flow.md"
     },
     {
       "id": "TASK-687",
