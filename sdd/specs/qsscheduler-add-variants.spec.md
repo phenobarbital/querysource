@@ -7,7 +7,7 @@ base_branch: dev
 **Feature ID**: FEAT-098
 **Date**: 2026-05-23
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.x
 
 ---

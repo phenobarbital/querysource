@@ -1,0 +1,47 @@
+{
+  "feature": "qsscheduler-add-variants",
+  "feature_id": "FEAT-098",
+  "spec": "sdd/specs/qsscheduler-add-variants.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-05-23T00:00:00Z",
+  "completed_at": null,
+  "tasks": [
+    {
+      "id": "TASK-689",
+      "slug": "parse-trigger-shorthand-branches",
+      "title": "Implement five shorthand schedule_type branches in _parse_trigger",
+      "feature_id": "FEAT-098",
+      "feature": "qsscheduler-add-variants",
+      "spec": "sdd/specs/qsscheduler-add-variants.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential per the spec's Worktree Strategy. This task modifies querysource/scheduler/scheduler.py and creates tests/scheduler/test_parse_trigger_shorthands.py. TASK-690 logically follows because it asserts behavior implemented here; running them in parallel worktrees would create coordination overhead with no benefit (single small file diff).",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-689-parse-trigger-shorthand-branches.md"
+    },
+    {
+      "id": "TASK-690",
+      "slug": "shorthand-loader-integration-tests",
+      "title": "Integration tests for shorthand schedules via QSScheduler loaders",
+      "feature_id": "FEAT-098",
+      "feature": "qsscheduler-add-variants",
+      "spec": "sdd/specs/qsscheduler-add-variants.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": ["TASK-689"],
+      "parallel": false,
+      "parallelism_notes": "Sequential because the tests exercise the shorthand branches added in TASK-689 — they will fail until TASK-689 lands. Per spec Worktree Strategy, runs in the same worktree.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-690-shorthand-loader-integration-tests.md"
+    }
+  ]
+}
