@@ -14,7 +14,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "No shared files with TASK-683 or TASK-684; each creates an independent module file",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-682-pluckcols-transform.md"
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-682-pluckcols-transform.md"
     },
     {
       "id": "TASK-683",
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -40,8 +40,8 @@
       "parallelism_notes": "No shared files with TASK-682 or TASK-684; each creates an independent module file",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-683-dropcols-transform.md"
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-683-dropcols-transform.md"
     },
     {
       "id": "TASK-684",
@@ -50,7 +50,7 @@
       "feature_id": "FEAT-098",
       "feature": "multiqs-new-transformations",
       "spec": "sdd/specs/multiqs-new-transformations.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -58,8 +58,8 @@
       "parallelism_notes": "No shared files with TASK-682 or TASK-683; independent module with no cross-references",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-684-filtercols-transform.md"
+      "completed_at": "2026-05-23T00:03:40+00:00",
+      "file": "sdd/tasks/completed/TASK-684-filtercols-transform.md"
     },
     {
       "id": "TASK-685",
@@ -71,7 +71,11 @@
       "status": "pending",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-682", "TASK-683", "TASK-684"],
+      "depends_on": [
+        "TASK-682",
+        "TASK-683",
+        "TASK-684"
+      ],
       "parallel": false,
       "parallelism_notes": "Depends on all three implementation tasks; must run after they are complete",
       "assigned_to": null,
