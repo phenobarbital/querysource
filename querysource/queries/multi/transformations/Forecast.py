@@ -1,6 +1,5 @@
 from typing import Union
 import pandas as pd
-from pmdarima import auto_arima
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
@@ -23,8 +22,7 @@ class Forecast(AbstractTransform):
     Attributes:
         index_column: Name of the datetime column to use as the time-series index. Required.
         value_column: Name of the numeric column to forecast. Required.
-        model: Forecast model — ``'auto_arima'``, ``'arima'``, ``'sarima'``, or
-            ``'exponential_smoothing'``. Default: ``'auto_arima'``.
+        model: Forecast model — ``'ARIMA'``, ``'SARIMA'``, or ``'Exponential'``.
         order: ARIMA (p, d, q) order tuple. Default: ``(1, 1, 1)``.
         steps: Number of future periods to forecast. Default: ``6``.
         frequency: Pandas time-series frequency string (e.g. ``'ME'`` for month-end,
@@ -39,7 +37,7 @@ class Forecast(AbstractTransform):
                     "Forecast": {
                         "index_column": "date",
                         "value_column": "revenue",
-                        "model": "auto_arima",
+                        "model": "ARIMA",
                         "steps": 12,
                         "frequency": "ME"
                     }
@@ -98,11 +96,6 @@ class Forecast(AbstractTransform):
     def forecast_sarima(self, data):
         try:
             data.index = pd.DatetimeIndex(data.index).to_period('M')
-            model = auto_arima(
-                data, seasonal=True, m=12, trace=False,
-                error_action='ignore', suppress_warnings=True,
-                stepwise=True, n_fits=50
-            )
             sarima_model = SARIMAX(
                 data,
                 order=self._order,

@@ -134,8 +134,8 @@ class ComponentRegistry:
                 comp_cls = get_transform_module(clsname)
                 components[clsname] = comp_cls
             except Exception as exc:
-                # Broad catch: some modules may have optional deps (e.g. pmdarima)
-                # that fail with ValueError on numpy ABI mismatch or ImportError.
+                # Broad catch: some modules may have optional deps that fail
+                # with ImportError or ValueError (e.g. native ABI mismatches).
                 logger.warning("Could not import transform %s: %s", clsname, exc)
 
         # Add GoogleMaps (in subdirectory)
@@ -201,7 +201,12 @@ class ComponentRegistry:
         from querysource.queries.multi._introspect import (
             SchemaIntrospectable,
             describe_class,
+            extract_source_schema,
         )
+        try:
+            from querysource.queries.multi.sources.base import ThreadSource
+        except (ImportError, AttributeError):
+            ThreadSource = None  # type: ignore[assignment]
 
         components = cls.discover_all()
         catalog: list[ComponentInfo] = []
@@ -233,6 +238,11 @@ class ComponentRegistry:
                 )
                 desc = describe_class(comp_cls, category=category_override)
 
+                is_source = (
+                    ThreadSource is not None
+                    and isinstance(comp_cls, type)
+                    and issubclass(comp_cls, ThreadSource)
+                )
                 if is_introspectable:
                     schema = comp_cls.get_schema()
                     attrs = [
@@ -245,10 +255,43 @@ class ComponentRegistry:
                         for a in schema.get("attributes", [])
                     ]
                     json_schema = schema.get("json_schema", {})
+                elif is_source:
+                    # ThreadSource subclasses: parse __init__ for nested
+                    # options.get/<alias>.get patterns.
+                    schema = extract_source_schema(comp_cls)
+                    attrs = [
+                        AttributeInfo(
+                            name=a["name"],
+                            type=a.get("type", "Any"),
+                            default=a.get("default"),
+                            required=a.get("required", False),
+                        )
+                        for a in schema.get("attributes", [])
+                    ]
+                    json_schema = schema.get("json_schema")
                 else:
-                    # Legacy sources: schema is unknown (None signals "not introspected")
+                    # Truly opaque legacy components: schema unknown.
                     attrs = []
                     json_schema = None
+
+                # Optional class-level ``_catalog`` overrides for components
+                # whose introspected schema doesn't reflect their user-facing
+                # config shape (e.g. ``ThreadQuery``).
+                overrides = getattr(comp_cls, "_catalog", None)
+                if isinstance(overrides, dict):
+                    if isinstance(overrides.get("attributes"), list):
+                        attrs = [
+                            AttributeInfo(
+                                name=a["name"],
+                                type=a.get("type", "Any"),
+                                default=a.get("default"),
+                                required=a.get("required", False),
+                                description=a.get("description", ""),
+                            )
+                            for a in overrides["attributes"]
+                        ]
+                    if "json_schema" in overrides:
+                        json_schema = overrides["json_schema"]
 
                 catalog.append(ComponentInfo(
                     name=desc.get("name", name),

@@ -1,0 +1,38 @@
+{
+  "name": "ToSharepoint",
+  "category": "Destinations",
+  "description": "Upload a DataFrame as an Excel or CSV file to a SharePoint document library.",
+  "usage": "The ``site`` key inside ``credentials`` is the SharePoint *site name* (not the full URL).  All credential values may be literal strings or navconfig variable names (ALL_CAPS_SNAKE_CASE) that are resolved at runtime.",
+  "attributes": [
+    {
+      "name": "credentials",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "destination",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "ToSharepoint",
+    "properties": {
+      "credentials": {
+        "type": "object"
+      },
+      "destination": {
+        "type": "object"
+      }
+    },
+    "required": []
+  },
+  "example": "Output:\n  - ToSharepoint:\n      credentials:\n        client_id: SHAREPOINT_APP_ID\n        client_secret: SHAREPOINT_APP_SECRET\n        tenant_id: SHAREPOINT_TENANT_ID\n        site: Roadshows\n      destination:\n        filename: \"2025 Events Master Schedule.xlsx\"\n        directory: \"Shared Documents/General/Schedule\"",
+  "icon": "upload-cloud"
+}

@@ -1,0 +1,68 @@
+{
+  "name": "Forecast",
+  "category": "Transformations",
+  "description": "Generate time-series forecasts using ARIMA, SARIMA, or Exponential Smoothing.",
+  "usage": "Use in a MultiQuery ``Transform`` step to extend a time-series DataFrame with future value predictions.",
+  "attributes": [
+    {
+      "name": "steps",
+      "type": "int",
+      "default": 6,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "frequency",
+      "type": "str",
+      "default": "ME",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "model_args",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "reset_index",
+      "type": "Any",
+      "default": true,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "order",
+      "type": "Any",
+      "default": [
+        1,
+        1,
+        1
+      ],
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Forecast",
+    "properties": {
+      "steps": {
+        "type": "integer"
+      },
+      "frequency": {
+        "type": "string"
+      },
+      "model_args": {
+        "type": "object"
+      },
+      "reset_index": {},
+      "order": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"Forecast\": {\n                \"index_column\": \"date\",\n                \"value_column\": \"revenue\",\n                \"model\": \"ARIMA\",\n                \"steps\": 12,\n                \"frequency\": \"ME\"\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

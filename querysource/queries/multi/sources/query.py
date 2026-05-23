@@ -17,6 +17,113 @@ class ThreadQuery(ThreadSource):
     queue-put step.
     """
 
+    # User-facing catalog override. ThreadQuery is dispatched from the YAML
+    # ``queries:`` block — each value (not the class itself) is the unit users
+    # write — so the introspected ``__init__`` shape is meaningless here.
+    _catalog = {
+        "display_name": "Query",
+        "description": (
+            "Run a stored slug-based query or a raw SQL query and expose the "
+            "result as a named DataFrame inside the MultiQS pipeline."
+        ),
+        "usage": (
+            "Add entries to the top-level ``queries:`` block. Each key is the "
+            "DataFrame name; each value must specify either ``slug`` (named "
+            "stored query) or ``query`` (raw SQL). For raw SQL, set either "
+            "``driver`` (e.g. ``pg``, ``mysql``) or ``datasource`` (named "
+            "connection). Any additional keys on a ``slug`` entry are passed "
+            "through as conditions."
+        ),
+        "icon": "database",
+        "attributes": [
+            {
+                "name": "slug",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Stored query slug to execute. Mutually exclusive with "
+                    "``query``."
+                ),
+            },
+            {
+                "name": "query",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Raw SQL string to execute. Mutually exclusive with "
+                    "``slug``."
+                ),
+            },
+            {
+                "name": "driver",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Default driver to use when running a raw ``query`` "
+                    "(e.g. ``pg``, ``mysql``, ``bigquery``)."
+                ),
+            },
+            {
+                "name": "datasource",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Named datasource (connection) to use when running a "
+                    "raw ``query``. Takes precedence over ``driver``."
+                ),
+            },
+        ],
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "title": "Query",
+            "description": (
+                "A single entry under the MultiQS ``queries:`` block. Must "
+                "provide either ``slug`` or ``query`` (but not both)."
+            ),
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "description": "Stored query slug.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Raw SQL statement.",
+                },
+                "driver": {
+                    "type": "string",
+                    "description": "Driver alias for raw queries.",
+                },
+                "datasource": {
+                    "type": "string",
+                    "description": "Named datasource for raw queries.",
+                },
+            },
+            "oneOf": [
+                {"required": ["slug"]},
+                {"required": ["query"]},
+            ],
+            "additionalProperties": True,
+        },
+        "example": (
+            '{\n'
+            '  "queries": {\n'
+            '    "stores": {\n'
+            '      "query": "select * from hisense.stores",\n'
+            '      "driver": "pg"\n'
+            '    },\n'
+            '    "products": {\n'
+            '      "slug": "all_products"\n'
+            '    }\n'
+            '  }\n'
+            '}'
+        ),
+    }
+
     def __init__(
         self,
         name: str,

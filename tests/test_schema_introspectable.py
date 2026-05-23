@@ -152,3 +152,106 @@ class TestDescribeClass:
         assert "bar: baz" in desc["example"]
         # The trailing prose should become usage.
         assert "Trailing prose paragraph" in desc["usage"]
+
+
+class TestTypedKwargsIntrospection:
+    """``var: TYPE = kwargs.get|pop(...)`` introspection (follow-up improvement).
+
+    The regex recovers the type annotation from local-variable and
+    self-prefixed typed assignments inside ``__init__``, so attributes don't
+    collapse to ``"Any"`` when the only type information lives there.
+    """
+
+    def test_typed_kwargs_capture_simple_types(self):
+        from typing import List, Optional, Union
+
+        class _Typed(SchemaIntrospectable):
+            """Typed kwargs example."""
+
+            def __init__(self, **kwargs) -> None:
+                self._driver: str = kwargs.get("driver", "pg")
+                self._count: int = kwargs.get("count", 0)
+                self._enabled: bool = kwargs.pop("enabled", True)
+                self._tags: List[str] = kwargs.get("tags", [])
+                self._dsn: Optional[str] = kwargs.get("dsn")
+                self._ids: Union[str, list] = kwargs.get("ids", None)
+
+        attrs = {a["name"]: a for a in _Typed.get_attributes()}
+        assert attrs["driver"]["type"] == "str"
+        assert attrs["count"]["type"] == "int"
+        assert attrs["enabled"]["type"] == "bool"
+        assert attrs["tags"]["type"] == "List[str]"
+        assert attrs["dsn"]["type"] == "Optional[str]"
+        assert attrs["ids"]["type"] == "Union[str, list]"
+
+        # ``dsn`` had no default — should be flagged required.
+        assert attrs["dsn"]["required"] is True
+        # The others have defaults — not required.
+        assert attrs["driver"]["required"] is False
+        assert attrs["enabled"]["required"] is False
+
+    def test_typed_kwargs_drive_json_schema_types(self):
+        from typing import List, Optional
+
+        class _Schema(SchemaIntrospectable):
+            """Schema-typed kwargs."""
+
+            def __init__(self, **kwargs) -> None:
+                driver: str = kwargs.get("driver", "pg") or "pg"
+                self._pk: List[str] = kwargs.get("pk", []) or []
+                self._dsn: Optional[str] = kwargs.get("dsn")
+                method: str = (kwargs.get("method", "append") or "append").lower()
+                _ = driver, method  # silence unused warnings
+
+        props = _Schema.get_schema()["json_schema"]["properties"]
+        assert props["driver"] == {"type": "string"}
+        assert props["pk"] == {"type": "array", "items": {"type": "string"}}
+        # Optional[str] becomes nullable.
+        assert props["dsn"]["type"] == ["string", "null"]
+        # The wrapped-in-parens form is recognised too.
+        assert props["method"] == {"type": "string"}
+
+    def test_typed_pattern_does_not_fold_across_lines(self):
+        """Regression: the pattern was greedy across newlines and pulled the
+        function signature's ``-> None:`` into the next assignment, capturing
+        ``self.conditions`` as the "type" of an untyped kwarg.
+        """
+
+        class _Untyped(SchemaIntrospectable):
+            """No annotations on these kwargs."""
+
+            def __init__(self, **kwargs) -> None:
+                self.conditions = kwargs.pop("conditions", None)
+                self.fields: dict = kwargs.pop("fields", {})
+
+        attrs = {a["name"]: a for a in _Untyped.get_attributes()}
+        # ``conditions`` has no annotation — must stay ``Any``.
+        assert attrs["conditions"]["type"] == "Any"
+        # ``fields`` has a proper annotation — must be captured.
+        assert attrs["fields"]["type"] == "dict"
+
+    def test_pipe_union_types_become_nullable_when_none_present(self):
+        from querysource.queries.multi._introspect import _type_to_json_schema
+
+        # Optional[str] equivalent
+        assert _type_to_json_schema("str | None")["type"] == ["string", "null"]
+        # Multi-type union
+        assert _type_to_json_schema("str | int")["type"] == ["string", "integer"]
+        # Multi-type union with None
+        assert _type_to_json_schema("str | int | None")["type"] == [
+            "string", "integer", "null",
+        ]
+
+    def test_list_dict_generics_produce_proper_schema(self):
+        from querysource.queries.multi._introspect import _type_to_json_schema
+
+        assert _type_to_json_schema("List[int]") == {
+            "type": "array", "items": {"type": "integer"},
+        }
+        assert _type_to_json_schema("list[str]") == {
+            "type": "array", "items": {"type": "string"},
+        }
+        assert _type_to_json_schema("Dict[str, int]") == {"type": "object"}
+        assert _type_to_json_schema("Optional[List[str]]") == {
+            "type": ["array", "null"], "items": {"type": "string"},
+        }

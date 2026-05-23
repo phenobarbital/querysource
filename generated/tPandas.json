@@ -1,0 +1,26 @@
+{
+  "name": "tPandas",
+  "category": "Transformations",
+  "description": "Abstract base for Pandas-backed data transformations in a MultiQuery pipeline.",
+  "usage": "Subclass ``tPandas`` to implement custom DataFrame transformations. End-users use concrete subclasses such as ``tOrder``, ``correlation``, ``crosstab``, ``pivot``, ``Forecast``, and ``Map``.",
+  "attributes": [
+    {
+      "name": "pd_args",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "tPandas",
+    "properties": {
+      "pd_args": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\"tOrder\": {\"column\": \"revenue\", \"ascending\": false}}\n    ]\n}",
+  "icon": "shuffle"
+}

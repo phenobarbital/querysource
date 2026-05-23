@@ -1,0 +1,66 @@
+{
+  "name": "GoogleMaps",
+  "category": "Transformations",
+  "description": "Enrich a DataFrame with Google Maps route and travel-time data.",
+  "usage": "Use in a MultiQuery ``Transform`` step to augment location-based data with real-world route information.",
+  "attributes": [
+    {
+      "name": "zoom",
+      "type": "int",
+      "default": 10,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "map_scale",
+      "type": "int",
+      "default": 2,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "timestamp_key",
+      "type": "str",
+      "default": "timestamp",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "departure_time",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "map_size",
+      "type": "Any",
+      "default": "(800, 800",
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "GoogleMaps",
+    "properties": {
+      "zoom": {
+        "type": "integer"
+      },
+      "map_scale": {
+        "type": "integer"
+      },
+      "timestamp_key": {
+        "type": "string"
+      },
+      "departure_time": {
+        "type": "string"
+      },
+      "map_size": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"GoogleMaps\": {\n        \"zoom\": 12,\n        \"timestamp_key\": \"departure_time\",\n        \"type\": \"get_route\"\n    }\n}",
+  "icon": "shuffle"
+}

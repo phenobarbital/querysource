@@ -1,0 +1,37 @@
+{
+  "name": "FileSource",
+  "category": "Sources",
+  "description": "FileSource loads a static file from a local path.",
+  "usage": "Reads the file (CSV or Excel, optionally compressed with gzip or zip) and puts the resulting DataFrame into the shared queue.  Inherits the thread/event-loop/queue boilerplate from :class:`ThreadSource`.",
+  "attributes": [
+    {
+      "name": "path",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "mime",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "FileSource",
+    "properties": {
+      "path": {},
+      "mime": {}
+    },
+    "required": [
+      "path",
+      "mime"
+    ]
+  },
+  "example": "",
+  "icon": "database"
+}

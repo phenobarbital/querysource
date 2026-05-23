@@ -1,0 +1,16 @@
+{
+  "name": "Concat",
+  "category": "Operators",
+  "description": "Concatenate two or more DataFrames into a single DataFrame.",
+  "usage": "Use in a MultiQuery pipeline to append rows from multiple DataFrames that share the same schema, equivalent to SQL UNION ALL.",
+  "attributes": [],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Concat",
+    "properties": {},
+    "required": []
+  },
+  "example": "{\n    \"Concat\": {}\n}",
+  "icon": "git-merge"
+}

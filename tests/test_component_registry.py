@@ -208,28 +208,37 @@ class TestDestinationDiscovery:
         from querysource.queries.multi.registry import ComponentRegistry
         ComponentRegistry.discover_all.cache_clear()
         catalog = {ci.name: ci for ci in ComponentRegistry.get_catalog()}
-        for name in ("ToSharepoint", "ToS3", "TableDestination", "DWHDestination"):
+        # TableDestination publishes a ``_catalog`` override renaming it to
+        # "Table" (the YAML step-name); all the others are introspected.
+        for name in ("ToSharepoint", "ToS3", "Table", "DWHDestination"):
             ci = catalog[name]
             assert ci.category == "Destinations"
             assert ci.json_schema.get("properties"), (
                 f"Expected populated JSON schema for {name}; got {ci.json_schema}"
             )
 
-    def test_catalog_allows_empty_schema_for_table_output_adapter(self):
-        """TableOutputAdapter wraps a non-introspectable TableOutput; empty is OK.
+    def test_catalog_renames_table_output_adapter_to_table_output(self):
+        """TableOutputAdapter publishes a ``_catalog`` override naming it ``TableOutput``.
 
-        The catalog uses the class name "TableOutputAdapter" (from get_description()),
-        not the YAML step-name keys ("tableOutput" / "TableOutput").
+        The Python class is ``TableOutputAdapter`` for historical reasons, but
+        the YAML step-name and the UI display name are both ``TableOutput``.
+        The override also populates attributes, json_schema, and example.
         """
         from querysource.queries.multi.registry import ComponentRegistry
         ComponentRegistry.discover_all.cache_clear()
         catalog = {ci.name: ci for ci in ComponentRegistry.get_catalog()}
-        # get_catalog uses the class name from get_description(), not the step-name key
-        adapter_entry = catalog.get("TableOutputAdapter")
-        assert adapter_entry is not None, (
-            f"Expected 'TableOutputAdapter' in catalog; found keys: {list(catalog.keys())}"
+        entry = catalog.get("TableOutput")
+        assert entry is not None, (
+            f"Expected 'TableOutput' in catalog; found keys: {list(catalog.keys())}"
         )
-        assert adapter_entry.category == "Destinations"
+        assert entry.category == "Destinations"
+        # The override should populate the catalog fully.
+        attr_names = {a.name for a in entry.attributes}
+        assert {"flavor", "tablename", "if_exists", "pk"}.issubset(attr_names)
+        assert entry.json_schema and entry.json_schema.get("properties")
+        assert entry.example, "Expected a non-empty example for TableOutput"
+        # The old display name must no longer be present.
+        assert "TableOutputAdapter" not in catalog
 
 
 class TestDataModels:

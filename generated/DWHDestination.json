@@ -1,0 +1,81 @@
+{
+  "name": "DWHDestination",
+  "category": "Destinations",
+  "description": "Write a DataFrame to a data warehouse backend.",
+  "usage": "Unlike :class:`~querysource.queries.multi.destinations.table.TableDestination` (which targets relational databases), ``DWHDestination`` targets managed, non-relational, or cloud-native data stores.",
+  "attributes": [
+    {
+      "name": "driver",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "method",
+      "type": "str",
+      "default": "append",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "table",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "schema",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "pk",
+      "type": "List[str]",
+      "default": [],
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "DWHDestination",
+    "properties": {
+      "driver": {
+        "type": "string"
+      },
+      "method": {
+        "type": "string"
+      },
+      "table": {
+        "type": "string"
+      },
+      "schema": {
+        "type": "string"
+      },
+      "pk": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "credentials": {
+        "type": "object"
+      }
+    },
+    "required": []
+  },
+  "example": "",
+  "icon": "upload-cloud"
+}

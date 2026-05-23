@@ -1,0 +1,38 @@
+{
+  "name": "ToS3",
+  "category": "Destinations",
+  "description": "Upload a DataFrame to an AWS S3 bucket.",
+  "usage": "The destination ``directory`` and ``file`` config keys are joined to form",
+  "attributes": [
+    {
+      "name": "credentials",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "destination",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "ToS3",
+    "properties": {
+      "credentials": {
+        "type": "object"
+      },
+      "destination": {
+        "type": "object"
+      }
+    },
+    "required": []
+  },
+  "example": "s3_key = directory.strip(\"/\") + \"/\" + file",
+  "icon": "upload-cloud"
+}

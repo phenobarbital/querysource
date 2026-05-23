@@ -1,0 +1,34 @@
+{
+  "name": "correlation",
+  "category": "Transformations",
+  "description": "Compute pairwise correlation between numeric columns in a DataFrame.",
+  "usage": "Use in a MultiQuery ``Transform`` step to analyse the linear relationship between numeric columns in a DataFrame.",
+  "attributes": [
+    {
+      "name": "reset_index",
+      "type": "Any",
+      "default": true,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "numeric_only",
+      "type": "Any",
+      "default": true,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "correlation",
+    "properties": {
+      "reset_index": {},
+      "numeric_only": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"correlation\": {\n                \"columns\": [\"revenue\", \"cost\", \"profit\"],\n                \"method\": \"pearson\",\n                \"numeric_only\": true\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

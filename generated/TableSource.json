@@ -1,0 +1,45 @@
+{
+  "name": "TableSource",
+  "category": "Sources",
+  "description": "Query a database table and return the result as a pandas DataFrame.",
+  "usage": "Executes ``SELECT * FROM [schema.]table [WHERE ...]`` using an asyncdb connection.  The driver can be specified using short aliases (e.g. ``pg`` for PostgreSQL, ``bigquery`` for Google BigQuery).",
+  "attributes": [
+    {
+      "name": "schema",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "table",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "filter",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "TableSource",
+    "properties": {
+      "schema": {},
+      "table": {},
+      "filter": {}
+    },
+    "required": [
+      "schema",
+      "table"
+    ]
+  },
+  "example": "{\n    \"driver\": \"pg\",\n    \"schema\": \"troc\",\n    \"table\": \"stores\",\n    \"filter\": {\"active\": true},\n    \"credentials\": {         # optional\n        \"host\": \"localhost\",\n        \"port\": 5432,\n        \"user\": \"myuser\",\n        \"password\": \"mypassword\",\n        \"database\": \"mydb\"\n    }\n}",
+  "icon": "database"
+}

@@ -1,0 +1,62 @@
+{
+  "name": "Join",
+  "category": "Operators",
+  "description": "Join two or more DataFrames on shared columns or index.",
+  "usage": "Use in a MultiQuery pipeline to combine DataFrames by matching rows on one or more columns, equivalent to SQL JOIN operations.",
+  "attributes": [
+    {
+      "name": "type",
+      "type": "str",
+      "default": "inner",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "left",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "right",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "join_conditions",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "on",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Join",
+    "properties": {
+      "type": {
+        "type": "string"
+      },
+      "left": {},
+      "right": {},
+      "join_conditions": {},
+      "on": {}
+    },
+    "required": [
+      "on"
+    ]
+  },
+  "example": "{\n    \"Join\": {\n        \"type\": \"inner\",\n        \"left\": \"revenue\",\n        \"right\": \"costs\",\n        \"on\": \"date\"\n    }\n}",
+  "icon": "git-merge"
+}

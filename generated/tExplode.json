@@ -1,0 +1,68 @@
+{
+  "name": "tExplode",
+  "category": "Transformations",
+  "description": "Explode a column of lists or dicts into multiple rows.",
+  "usage": "Use in a MultiQuery ``Transform`` step to expand a list- or dict-valued column into multiple rows.",
+  "attributes": [
+    {
+      "name": "column",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "drop_original",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "explode_dataset",
+      "type": "bool",
+      "default": true,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "advanced_mode",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "propagate_columns",
+      "type": "list",
+      "default": [],
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "tExplode",
+    "properties": {
+      "column": {
+        "type": "string"
+      },
+      "drop_original": {
+        "type": "boolean"
+      },
+      "explode_dataset": {
+        "type": "boolean"
+      },
+      "advanced_mode": {
+        "type": "boolean"
+      },
+      "propagate_columns": {
+        "type": "array"
+      }
+    },
+    "required": []
+  },
+  "example": "{\n    \"Transform\": [\n        {\n            \"tExplode\": {\n                \"column\": \"tags\",\n                \"drop_original\": false,\n                \"explode_dataset\": true,\n                \"advanced_mode\": false,\n                \"propagate_columns\": []\n            }\n        }\n    ]\n}",
+  "icon": "shuffle"
+}

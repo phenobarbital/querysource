@@ -1,0 +1,87 @@
+{
+  "name": "AirtableSource",
+  "category": "Sources",
+  "description": "Fetch all records from an Airtable table and return as a DataFrame.",
+  "usage": "Thin :class:`~querysource.queries.multi.sources.base.ThreadSource` subclass.  All Airtable HTTP/pagination complexity lives in :class:`~querysource.interfaces.airtable.AirtableInterface`.",
+  "attributes": [
+    {
+      "name": "source.url",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.base_id",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.table",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.view",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.filter_by_formula",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.max_records",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "source.page_size",
+      "type": "Any",
+      "default": 100,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "AirtableSource",
+    "properties": {
+      "source": {
+        "type": "object",
+        "properties": {
+          "url": {},
+          "base_id": {},
+          "table": {},
+          "view": {},
+          "filter_by_formula": {},
+          "max_records": {},
+          "page_size": {}
+        },
+        "required": [
+          "url",
+          "base_id",
+          "table",
+          "view",
+          "filter_by_formula",
+          "max_records"
+        ]
+      }
+    },
+    "required": []
+  },
+  "example": "",
+  "icon": "database"
+}

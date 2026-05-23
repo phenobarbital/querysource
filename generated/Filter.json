@@ -1,0 +1,54 @@
+{
+  "name": "Filter",
+  "category": "Operators",
+  "description": "Filter rows in a DataFrame based on declarative conditions or field mappings.",
+  "usage": "Use in a MultiQuery pipeline to reduce a DataFrame to only the rows that satisfy specified conditions, equivalent to SQL WHERE clauses.",
+  "attributes": [
+    {
+      "name": "fields",
+      "type": "dict",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "operator",
+      "type": "str",
+      "default": "&",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "conditions",
+      "type": "Any",
+      "default": null,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "filter",
+      "type": "Any",
+      "default": [],
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Filter",
+    "properties": {
+      "fields": {
+        "type": "object"
+      },
+      "operator": {
+        "type": "string"
+      },
+      "conditions": {},
+      "filter": {}
+    },
+    "required": []
+  },
+  "example": "{\n    \"Filter\": {\n        \"conditions\": [\n            {\"column\": \"status\", \"expression\": \"==\", \"value\": \"active\"},\n            {\"column\": \"revenue\", \"expression\": \">\", \"value\": 1000}\n        ],\n        \"operator\": \"&\"\n    }\n}",
+  "icon": "git-merge"
+}

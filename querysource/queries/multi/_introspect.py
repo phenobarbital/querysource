@@ -44,9 +44,118 @@ _KWARGS_PATTERN = re.compile(
     r"(?:\s*,\s*([^)]+))?\s*\)"
 )
 
+# Typed assignment pattern: captures the type annotation on assignments like
+#     driver: str = kwargs.get("driver", "pg") or "pg"
+#     self._pk: List[str] = kwargs.get("pk", []) or []
+#     method: str = (kwargs.get("method", "append") or "append").lower()
+# Groups: (type_str, kwarg_name, default_str).
+# Anchored to start-of-line (re.MULTILINE) so we don't fold the function
+# signature's trailing ``-> None:`` into the next line's assignment. The type
+# group forbids ``\n`` and ``=`` so it cannot span lines or capture the
+# assignment operator. The optional ``(?:[ \t]*\(\s*)?`` swallows a leading
+# ``(`` that wraps the kwargs.get expression (e.g. ``(kwargs.get(...) or x).lower()``).
+_KWARGS_TYPED_PATTERN = re.compile(
+    r"^[ \t]*(?:self\.)?_?\w+[ \t]*:[ \t]*([^\n=]+?)[ \t]*=[ \t]*"
+    r"(?:\([ \t]*)?"
+    r"kwargs\.(?:pop|get)\s*\(\s*['\"](\w+)['\"]"
+    r"(?:\s*,\s*([^)]+))?\s*\)",
+    re.MULTILINE,
+)
+
+
+def _split_top_level(s: str, sep: str = ",") -> list[str]:
+    """Split *s* on *sep* but skip over content inside []/{}/() brackets."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in s:
+        if ch in "([{":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            current.append(ch)
+        elif ch == sep and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append("".join(current))
+    return parts
+
 
 def _type_to_json_schema(type_str: str) -> dict:
-    """Convert a Python type string to a JSON Schema draft-2020-12 type dict."""
+    """Convert a Python type string to a JSON Schema draft-2020-12 type dict.
+
+    Handles primitive types plus common generics: ``List[X]``, ``Dict[X, Y]``,
+    ``Tuple[...]``, ``Set[X]``, ``Optional[X]``, ``Union[X, Y, ...]``, and the
+    Python 3.10+ pipe-union syntax (``X | Y``). ``typing.`` prefixes are
+    accepted. Optional/Union containing ``None`` becomes a nullable type.
+    """
+    type_str = (type_str or "").strip()
+    if not type_str:
+        return {}
+
+    # Pipe-union syntax: X | Y | None
+    if "|" in type_str and not type_str.startswith("Literal"):
+        parts = [p.strip() for p in _split_top_level(type_str, "|")]
+        non_none = [p for p in parts if p not in ("None", "type(None)")]
+        nullable = len(parts) > len(non_none)
+        if not non_none:
+            return {"type": "null"}
+        if len(non_none) == 1:
+            inner = _type_to_json_schema(non_none[0])
+            if nullable:
+                _make_nullable(inner)
+            return inner
+        # Multiple non-None alternatives — collapse to a type-list when each
+        # alternative resolves to a single primitive type.
+        types: list[str] = []
+        for p in non_none:
+            sub = _type_to_json_schema(p)
+            t = sub.get("type")
+            if isinstance(t, str):
+                types.append(t)
+            else:
+                # Mixed/complex alternatives — fall back to no type constraint.
+                return {}
+        if nullable:
+            types.append("null")
+        return {"type": types}
+
+    # Optional[X] → unwrap, mark nullable
+    m = re.match(r"^(?:typing\.)?Optional\[(.+)\]$", type_str)
+    if m:
+        inner = _type_to_json_schema(m.group(1))
+        _make_nullable(inner)
+        return inner
+
+    # Union[X, Y, ...] → reuse pipe-union logic
+    m = re.match(r"^(?:typing\.)?Union\[(.+)\]$", type_str)
+    if m:
+        return _type_to_json_schema(
+            " | ".join(p.strip() for p in _split_top_level(m.group(1), ","))
+        )
+
+    # List[X] / list[X]
+    m = re.match(r"^(?:typing\.)?[Ll]ist\[(.+)\]$", type_str)
+    if m:
+        items = _type_to_json_schema(m.group(1))
+        return {"type": "array", "items": items} if items else {"type": "array"}
+
+    # Tuple[...] / tuple[...]  (item types are heterogeneous — keep generic)
+    if re.match(r"^(?:typing\.)?[Tt]uple\[", type_str):
+        return {"type": "array"}
+
+    # Dict[X, Y] / dict[X, Y]
+    if re.match(r"^(?:typing\.)?[Dd]ict\[", type_str):
+        return {"type": "object"}
+
+    # Set[X] / set[X] / FrozenSet[X]
+    if re.match(r"^(?:typing\.)?(?:Frozen)?[Ss]et\[", type_str):
+        return {"type": "array"}
+
     mapping = {
         "str": {"type": "string"},
         "int": {"type": "integer"},
@@ -54,11 +163,24 @@ def _type_to_json_schema(type_str: str) -> dict:
         "bool": {"type": "boolean"},
         "list": {"type": "array"},
         "dict": {"type": "object"},
+        "tuple": {"type": "array"},
+        "set": {"type": "array"},
         "None": {"type": "null"},
         "Any": {},
     }
-    # Unknown/complex types default to string representation in schema output
     return mapping.get(type_str, {"type": "string"})
+
+
+def _make_nullable(schema: dict) -> None:
+    """In-place: extend ``schema['type']`` so the value can also be null."""
+    if "type" not in schema:
+        return
+    t = schema["type"]
+    if isinstance(t, list):
+        if "null" not in t:
+            t.append("null")
+    elif t != "null":
+        schema["type"] = [t, "null"]
 
 
 def _hint_to_str(hint) -> str:
@@ -189,8 +311,33 @@ class SchemaIntrospectable:
                 source = inspect.getsource(klass.__init__)
             except (TypeError, OSError):
                 continue
-            # Match: self._attr = kwargs.pop('attr_name', default)
-            #     or self._attr = kwargs.get('attr_name', default)
+            # Pass 2a: typed assignments — `var: TYPE = kwargs.get(...)`.
+            # Captures the type annotation so attrs aren't all stuck at "Any".
+            for match in _KWARGS_TYPED_PATTERN.finditer(source):
+                type_str = match.group(1).strip()
+                kwarg_name = match.group(2)
+                default_str = match.group(3)
+                if kwarg_name in ("backend",):
+                    continue
+                default = _parse_default(default_str)
+                required = default_str is None
+                if kwarg_name not in attrs:
+                    attrs[kwarg_name] = {
+                        "name": kwarg_name,
+                        "type": type_str,
+                        "default": default,
+                        "required": required,
+                    }
+                else:
+                    # Upgrade type when prior pass left it as "Any" or unset.
+                    existing_type = attrs[kwarg_name].get("type")
+                    if not existing_type or existing_type == "Any":
+                        attrs[kwarg_name]["type"] = type_str
+                    if attrs[kwarg_name].get("default") is None:
+                        attrs[kwarg_name]["default"] = default
+                    attrs[kwarg_name]["required"] = required
+            # Pass 2b: untyped fallback — `self._attr = kwargs.pop('attr_name', default)`
+            # or `kwargs.get('attr_name', default)` without a type annotation.
             for match in _KWARGS_PATTERN.finditer(source):
                 kwarg_name = match.group(1)
                 default_str = match.group(2)
@@ -418,30 +565,34 @@ def _extract_body_usage_and_literal(lines: list[str]) -> tuple[str, str]:
     usage_parts: list[str] = []
     literal_text = ""
     i = 1  # skip the summary line
-    started_usage = False
+    usage_done = False
     while i < len(lines):
         raw = lines[i]
         stripped = raw.strip()
         if not stripped:
-            if started_usage:
-                break
+            # Blank line ends the current usage paragraph but keeps scanning
+            # for an upcoming literal block (e.g. ``Configuration shape::``).
+            if usage_parts:
+                usage_done = True
             i += 1
             continue
         # Stop at non-`::` section headers (e.g. "Args:", "Attributes:").
         if _is_section_header(stripped) and not stripped.endswith("::"):
             break
         if stripped.endswith("::"):
-            # rST literal-block introducer. Treat the intro (sans `::`) as
-            # part of usage only if we have no other prose yet, then capture
-            # the indented block as the literal_text.
+            # rST literal-block introducer. Keep the first literal block we
+            # encounter; drop later ones to avoid clobbering.
             if not literal_text:
                 literal_text, i = _parse_literal_block(lines, i)
             else:
-                # Already captured a literal earlier — skip this one's block too.
                 _, i = _parse_literal_block(lines, i)
             continue
-        usage_parts.append(stripped)
-        started_usage = True
+        # Regular prose: counts toward usage only until the first paragraph
+        # break. Subsequent prose paragraphs (e.g. extra notes between the
+        # summary and the literal block) are ignored for usage but don't
+        # stop us from finding a later literal block.
+        if not usage_done:
+            usage_parts.append(stripped)
         i += 1
     return " ".join(usage_parts), literal_text
 
@@ -494,7 +645,7 @@ def describe_class(cls: type, category: str | None = None) -> dict:
         category, DEFAULT_CATEGORY_ICONS["Components"]
     )
 
-    return {
+    result = {
         "name": name,
         "description": description,
         "usage": usage,
@@ -502,3 +653,174 @@ def describe_class(cls: type, category: str | None = None) -> dict:
         "example": example_text,
         "icon": icon,
     }
+
+    # Optional class-level ``_catalog`` dict overrides any of the parsed
+    # fields. Used by components whose docstring/__init__ don't accurately
+    # describe their user-facing config shape (e.g. ``ThreadQuery``, which is
+    # dispatched via the YAML ``queries:`` block, not as a named source).
+    overrides = getattr(cls, "_catalog", None)
+    if isinstance(overrides, dict):
+        if overrides.get("display_name"):
+            result["name"] = overrides["display_name"]
+        for key in ("description", "usage", "example", "icon", "category"):
+            if overrides.get(key):
+                result[key] = overrides[key]
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Source-class introspection (ThreadSource subclasses)
+# ---------------------------------------------------------------------------
+#
+# Source classes (subclasses of ``ThreadSource``) don't follow the flat
+# ``kwargs.pop(...)`` pattern used by operators/transforms. Instead they
+# receive an ``options`` dict and pull nested sub-dicts:
+#
+#     creds = options.get('credentials', {})
+#     self._client_id = creds.get('client_id', 'SHAREPOINT_APP_ID')
+#     source = options.get('source', {})
+#     self._filename = source.get('filename', '')
+#
+# ``extract_source_schema`` parses this pattern to produce both a flat
+# attribute list (with dotted names like ``credentials.client_id``) and a
+# nested JSON Schema mirroring the YAML config shape.
+
+# `<localvar> = <opts>.get('<container>', {})` — captures the sub-dict alias.
+_SOURCE_CONTAINER_PATTERN = re.compile(
+    r"(\w+)\s*=\s*(\w+)\.get\s*\(\s*['\"](\w+)['\"]"
+)
+
+# `<varname>.get|pop('<field>', <default>)` — same default-capture limitation
+# as _KWARGS_PATTERN (stops at first ')'; nested defaults are approximate).
+_SOURCE_FIELD_PATTERN = re.compile(
+    r"(\w+)\.(?:get|pop)\s*\(\s*['\"](\w+)['\"]"
+    r"(?:\s*,\s*([^)]+))?\s*\)"
+)
+
+
+def _source_options_param(cls) -> str | None:
+    """Return the name of the source's options-dict parameter (3rd positional).
+
+    Most sources use ``options``; ``FileSource`` uses ``file_options``;
+    ``ThreadQuery`` uses ``query``. The 3rd positional parameter after
+    (self, name, ...) is the convention enforced by ``ThreadSource.__init__``.
+    """
+    try:
+        sig = inspect.signature(cls.__init__)
+    except (TypeError, ValueError):
+        return None
+    params = [p for p in sig.parameters.values() if p.name != "self"]
+    if len(params) < 2:
+        return None
+    return params[1].name  # skip 'name', return the options-dict param
+
+
+def extract_source_schema(cls) -> dict:
+    """Build ``{json_schema, attributes}`` for a ThreadSource subclass.
+
+    Parses the ``__init__`` of every class in the MRO up to (but not
+    including) ``ThreadSource`` for ``<container>.get|pop(...)`` calls and
+    groups them into a nested JSON Schema. Top-level fields pulled directly
+    from the options dict become root properties; fields pulled from
+    aliased sub-dicts (e.g. ``creds = options.get('credentials', {})``)
+    become nested ``properties`` under the container name.
+
+    Returns:
+        Dict with keys ``json_schema`` (nested object schema) and
+        ``attributes`` (flat list with dotted names — empty when the source
+        has no introspectable fields, e.g. ``ThreadQuery``).
+    """
+    from .sources.base import ThreadSource
+
+    opts_param = _source_options_param(cls)
+    if not opts_param:
+        return {"json_schema": None, "attributes": []}
+
+    # 1. Collect __init__ source from this class up the MRO until ThreadSource.
+    bodies: list[str] = []
+    for klass in cls.__mro__:
+        if klass is ThreadSource or klass is object:
+            break
+        try:
+            bodies.append(inspect.getsource(klass.__init__))
+        except (TypeError, OSError):
+            continue
+    code = "\n".join(bodies)
+    if not code:
+        return {"json_schema": None, "attributes": []}
+
+    # 2. Map sub-dict aliases: var_name -> container_name
+    container_aliases: dict[str, str] = {}
+    for m in _SOURCE_CONTAINER_PATTERN.finditer(code):
+        local_var, parent, container = m.group(1), m.group(2), m.group(3)
+        if parent == opts_param and local_var not in (opts_param, "self"):
+            container_aliases[local_var] = container
+    container_names = set(container_aliases.values())
+
+    # 3. Extract fields. Keep insertion order so the rendered schema reflects
+    #    the source-code order developers wrote.
+    top_level: dict[str, dict] = {}
+    containers: dict[str, dict[str, dict]] = {}
+    for m in _SOURCE_FIELD_PATTERN.finditer(code):
+        var, field, default_str = m.group(1), m.group(2), m.group(3)
+        default = _parse_default(default_str)
+        required = default_str is None
+        if var == opts_param:
+            # Direct pull from options dict — top-level field, unless the
+            # field itself is a container we already aliased.
+            if field in container_names:
+                continue
+            top_level.setdefault(field, {"default": default, "required": required})
+        elif var in container_aliases:
+            container = container_aliases[var]
+            # Skip the alias-assignment line itself (creds = options.get('credentials', {}))
+            if field == container:
+                continue
+            containers.setdefault(container, {})
+            containers[container].setdefault(
+                field, {"default": default, "required": required}
+            )
+
+    # 4. Build flat attributes list + nested json_schema.
+    attributes: list[dict] = []
+    properties: dict = {}
+    root_required: list[str] = []
+
+    for field, meta in top_level.items():
+        attributes.append({
+            "name": field,
+            "type": "Any",
+            "default": meta["default"],
+            "required": meta["required"],
+        })
+        properties[field] = {}
+        if meta["required"]:
+            root_required.append(field)
+
+    for container, fields in containers.items():
+        sub_props: dict = {}
+        sub_required: list[str] = []
+        for field, meta in fields.items():
+            sub_props[field] = {}
+            if meta["required"]:
+                sub_required.append(field)
+            attributes.append({
+                "name": f"{container}.{field}",
+                "type": "Any",
+                "default": meta["default"],
+                "required": meta["required"],
+            })
+        prop_schema: dict = {"type": "object", "properties": sub_props}
+        if sub_required:
+            prop_schema["required"] = sub_required
+        properties[container] = prop_schema
+
+    json_schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "title": cls.__name__,
+        "properties": properties,
+        "required": root_required,
+    }
+    return {"json_schema": json_schema, "attributes": attributes}

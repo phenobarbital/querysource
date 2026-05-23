@@ -1,0 +1,76 @@
+{
+  "name": "S3Source",
+  "category": "Sources",
+  "description": "Download a single file from an S3 bucket and return it as a DataFrame.",
+  "usage": "Authenticates with AWS using explicit credentials (resolved via navconfig if the values look like environment variable names) or falls back to the default AWS credential chain.",
+  "attributes": [
+    {
+      "name": "credentials.region_name",
+      "type": "Any",
+      "default": "AWS_REGION_NAME",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.bucket",
+      "type": "Any",
+      "default": "AWS_S3_BUCKET",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.aws_key",
+      "type": "Any",
+      "default": "AWS_ACCESS_KEY_ID",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.aws_secret",
+      "type": "Any",
+      "default": "AWS_SECRET_ACCESS_KEY",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.file",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.directory",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "S3Source",
+    "properties": {
+      "credentials": {
+        "type": "object",
+        "properties": {
+          "region_name": {},
+          "bucket": {},
+          "aws_key": {},
+          "aws_secret": {}
+        }
+      },
+      "source": {
+        "type": "object",
+        "properties": {
+          "file": {},
+          "directory": {}
+        }
+      }
+    },
+    "required": []
+  },
+  "example": "{\n    \"credentials\": {\n        \"region_name\": \"AWS_REGION_NAME\",        # navconfig var or literal\n        \"bucket\": \"AWS_PLACER_BUCKET\",\n        \"aws_key\": \"AWS_ACCESS_KEY_ID\",\n        \"aws_secret\": \"AWS_SECRET_ACCESS_KEY\"\n    },\n    \"source\": {\n        \"file\": \"metrics_2024-12-09_0003.csv.gz\",\n        \"directory\": \"placer-analytics/bulk-export/\"\n    }\n}",
+  "icon": "database"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "TableOutputAdapter",
+  "category": "Destinations",
+  "description": "Thin adapter that wraps the existing :class:`~querysource.outputs.tables.TableOutput`",
+  "usage": "so it can be registered in :data:`DESTINATION_REGISTRY` alongside the new destination classes.",
+  "attributes": [],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "TableOutputAdapter",
+    "properties": {},
+    "required": []
+  },
+  "example": "",
+  "icon": "upload-cloud"
+}

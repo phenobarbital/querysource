@@ -30,6 +30,147 @@ class TableOutputAdapter(AbstractDestination):
     All constructor arguments are forwarded verbatim to :class:`TableOutput`.
     """
 
+    # User-facing catalog override. The Python class is ``TableOutputAdapter``
+    # for historical reasons, but the YAML step-name and UI display name are
+    # ``TableOutput`` — which is what the pipeline expects. The wrapped
+    # ``TableOutput`` accepts **kwargs without declared attributes, so the
+    # schema is hand-crafted from the keys observed in real YAML configs.
+    _catalog = {
+        "display_name": "TableOutput",
+        "description": (
+            "Write a DataFrame to a database table. Supports PostgreSQL, "
+            "MySQL, BigQuery, MongoDB, DocumentDB, and RethinkDB."
+        ),
+        "usage": (
+            "Use as a Destination step to persist a pipeline result into a "
+            "relational or document database. Set ``flavor`` to pick the "
+            "backend, ``schema`` + ``tablename`` to address the target, and "
+            "``if_exists`` to control append / replace behaviour. Provide "
+            "``pk`` for primary-key-aware upserts and ``jsonb_columns`` to "
+            "preserve dict/list columns as JSONB on PostgreSQL."
+        ),
+        "icon": "database",
+        "attributes": [
+            {
+                "name": "flavor",
+                "type": "str",
+                "required": False,
+                "default": "postgresql",
+                "description": (
+                    "Backend engine: ``postgresql`` (default), ``postgres``, "
+                    "``mysql``, ``bigquery``, ``mongodb``, ``documentdb``, "
+                    "or ``rethink``."
+                ),
+            },
+            {
+                "name": "schema",
+                "type": "str",
+                "required": False,
+                "default": "public",
+                "description": "Database schema (relational backends).",
+            },
+            {
+                "name": "tablename",
+                "type": "str",
+                "required": True,
+                "default": None,
+                "description": "Target table or collection name.",
+            },
+            {
+                "name": "if_exists",
+                "type": "str",
+                "required": False,
+                "default": "append",
+                "description": (
+                    "Conflict behaviour: ``append``, ``replace``, ``fail``, "
+                    "or backend-specific upsert keys."
+                ),
+            },
+            {
+                "name": "pk",
+                "type": "list",
+                "required": False,
+                "default": [],
+                "description": "Primary-key column names (for upsert).",
+            },
+            {
+                "name": "fk",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": "Foreign-key column reference.",
+            },
+            {
+                "name": "constraint",
+                "type": "list",
+                "required": False,
+                "default": None,
+                "description": "Additional unique-constraint columns.",
+            },
+            {
+                "name": "jsonb_columns",
+                "type": "list",
+                "required": False,
+                "default": [],
+                "description": (
+                    "Columns to persist as PostgreSQL JSONB (preserves dict "
+                    "and list values)."
+                ),
+            },
+            {
+                "name": "truncate",
+                "type": "bool",
+                "required": False,
+                "default": False,
+                "description": "Truncate the table before writing.",
+            },
+        ],
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "title": "TableOutput",
+            "description": "Write a DataFrame to a database table.",
+            "properties": {
+                "flavor": {
+                    "type": "string",
+                    "enum": [
+                        "postgresql", "postgres", "mysql", "bigquery",
+                        "mongodb", "documentdb", "rethink",
+                    ],
+                    "default": "postgresql",
+                },
+                "schema": {"type": "string", "default": "public"},
+                "tablename": {"type": "string"},
+                "if_exists": {
+                    "type": "string",
+                    "default": "append",
+                    "description": "append | replace | fail | upsert key.",
+                },
+                "pk": {"type": "array", "items": {"type": "string"}},
+                "fk": {"type": "string"},
+                "constraint": {"type": "array", "items": {"type": "string"}},
+                "jsonb_columns": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "truncate": {"type": "boolean", "default": False},
+            },
+            "required": ["tablename"],
+            "additionalProperties": True,
+        },
+        "example": (
+            '{\n'
+            '  "TableOutput": {\n'
+            '    "flavor": "postgres",\n'
+            '    "schema": "public",\n'
+            '    "tablename": "target_table",\n'
+            '    "if_exists": "append",\n'
+            '    "pk": ["id"]\n'
+            '  }\n'
+            '}'
+        ),
+    }
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         # Call AbstractDestination.__init__ to set self.data and self.logger.
         super().__init__(data, **kwargs)

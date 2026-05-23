@@ -1,0 +1,68 @@
+{
+  "name": "TableDestination",
+  "category": "Destinations",
+  "description": "Write a DataFrame to a database table.",
+  "usage": "Uses the existing engine classes from ``TableOutput`` to avoid duplicating database write logic.  The ``method`` parameter controls",
+  "attributes": [
+    {
+      "name": "driver",
+      "type": "Any",
+      "default": "pg",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "method",
+      "type": "Any",
+      "default": "append",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "table",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "schema",
+      "type": "Any",
+      "default": "public",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "pk",
+      "type": "Any",
+      "default": [],
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "dsn",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "TableDestination",
+    "properties": {
+      "driver": {},
+      "method": {},
+      "table": {},
+      "schema": {},
+      "pk": {},
+      "dsn": {}
+    },
+    "required": [
+      "dsn"
+    ]
+  },
+  "example": "",
+  "icon": "upload-cloud"
+}

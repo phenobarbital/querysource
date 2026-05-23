@@ -1,0 +1,28 @@
+{
+  "name": "FilterCols",
+  "category": "Transformations",
+  "description": "Drop columns matching a predefined data-quality expression.",
+  "usage": "Use in a MultiQuery ``Transform`` step to remove columns based on their data content \u2014 e.g. columns that are entirely null, entirely empty, or contain a single constant value.",
+  "attributes": [
+    {
+      "name": "expression",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "FilterCols",
+    "properties": {
+      "expression": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "example": "{\"Transform\": [{\"FilterCols\": {\"expression\": \"all_null\"}}]}",
+  "icon": "shuffle"
+}
