@@ -18,10 +18,12 @@ import asyncio
 import json
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import Optional, Union
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.memory import MemoryJobStore
+from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from aiohttp import web
@@ -57,8 +59,8 @@ _DOW_TO_INT = {
 
 
 def _biweekly_anchor(
-    start_date,
-    day_of_week,
+    start_date: Union[str, datetime],
+    day_of_week: Union[str, int],
     hour: int,
     minute: int,
 ) -> datetime:
@@ -66,6 +68,12 @@ def _biweekly_anchor(
 
     Rolls forward from start_date until the target weekday is reached, then
     applies the requested hour and minute.
+
+    Note:
+        ``start_date`` is the recommended way to pin the biweekly cadence
+        phase.  Without it the ``week='*/2'`` CronTrigger path is used, which
+        is subject to ISO-week phase ambiguity when the scheduler is deployed
+        at different times of the year.
 
     Args:
         start_date: A ``"YYYY-MM-DD"`` / ISO-8601 string or a datetime object.
@@ -80,6 +88,7 @@ def _biweekly_anchor(
 
     Raises:
         TypeError: If start_date is neither a str nor a datetime.
+        ValueError: If day_of_week is an integer outside [0, 6].
         KeyError: If day_of_week is an unrecognised string (caught by the
             caller's outer except block in _parse_trigger).
     """
@@ -93,9 +102,13 @@ def _biweekly_anchor(
         )
     anchor = anchor.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if isinstance(day_of_week, str):
-        target_dow = _DOW_TO_INT[day_of_week.lower()]
+        target_dow = _DOW_TO_INT[day_of_week.lower()]  # KeyError propagates
     else:
         target_dow = int(day_of_week)
+        if not (0 <= target_dow <= 6):
+            raise ValueError(
+                f"biweekly day_of_week int must be 0-6 (mon=0..sun=6), got {target_dow}"
+            )
     while anchor.weekday() != target_dow:
         anchor = anchor + timedelta(days=1)
     return anchor
@@ -130,7 +143,7 @@ class QSScheduler:
 
     def _parse_trigger(
         self, schedule_type: str, schedule: dict
-    ):
+    ) -> Optional[BaseTrigger]:
         """Parse a schedule definition into an APScheduler trigger.
 
         Args:
@@ -142,29 +155,26 @@ class QSScheduler:
             An APScheduler trigger instance, or None if parsing fails.
         """
         try:
+            tz = schedule.get("timezone", self._timezone)
             if schedule_type == "interval":
                 return IntervalTrigger(**schedule)
             elif schedule_type == "crontab":
                 crontab_expr = schedule["crontab"]
-                tz = schedule.get("timezone", self._timezone)
                 return CronTrigger.from_crontab(crontab_expr, timezone=tz)
             elif schedule_type == "cron":
                 return CronTrigger(**schedule)
             elif schedule_type == "hourly":
-                tz = schedule.get("timezone", self._timezone)
                 return CronTrigger(
                     minute=schedule["minute"],
                     timezone=tz,
                 )
             elif schedule_type == "daily":
-                tz = schedule.get("timezone", self._timezone)
                 return CronTrigger(
                     hour=schedule["hour"],
                     minute=schedule["minute"],
                     timezone=tz,
                 )
             elif schedule_type == "weekly":
-                tz = schedule.get("timezone", self._timezone)
                 return CronTrigger(
                     day_of_week=schedule["day_of_week"],
                     hour=schedule["hour"],
@@ -172,7 +182,6 @@ class QSScheduler:
                     timezone=tz,
                 )
             elif schedule_type == "monthly":
-                tz = schedule.get("timezone", self._timezone)
                 return CronTrigger(
                     day=schedule["day"],
                     hour=schedule["hour"],
@@ -180,7 +189,6 @@ class QSScheduler:
                     timezone=tz,
                 )
             elif schedule_type == "biweekly":
-                tz = schedule.get("timezone", self._timezone)
                 day_of_week = schedule["day_of_week"]
                 hour = schedule["hour"]
                 minute = schedule["minute"]
@@ -201,12 +209,12 @@ class QSScheduler:
                 )
             else:
                 self.logger.error(
-                    f"Unknown schedule_type '{schedule_type}' — skipping"
+                    "Unknown schedule_type '%s' — skipping", schedule_type
                 )
                 return None
         except Exception as exc:
             self.logger.error(
-                f"Failed to parse trigger (type={schedule_type}): {exc}"
+                "Failed to parse trigger (type=%s): %s", schedule_type, exc
             )
             return None
 

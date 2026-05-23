@@ -36,8 +36,9 @@ def test_hourly_missing_minute_returns_none(scheduler, caplog):
     assert any("Failed to parse trigger" in r.message for r in caplog.records)
 
 
-def test_hourly_out_of_range_minute_returns_none(scheduler):
+def test_hourly_out_of_range_minute_returns_none(scheduler, caplog):
     assert scheduler._parse_trigger("hourly", {"minute": 60}) is None
+    assert any("Failed to parse trigger" in r.message for r in caplog.records)
 
 
 # ----- daily ----------------------------------------------------------------
@@ -47,8 +48,9 @@ def test_daily_hour_minute(scheduler):
     assert isinstance(trig, CronTrigger)
 
 
-def test_daily_missing_hour_returns_none(scheduler):
+def test_daily_missing_hour_returns_none(scheduler, caplog):
     assert scheduler._parse_trigger("daily", {"minute": 0}) is None
+    assert any("Failed to parse trigger" in r.message for r in caplog.records)
 
 
 # ----- weekly ---------------------------------------------------------------
@@ -85,13 +87,14 @@ def test_monthly_day_1_midnight(scheduler):
     assert isinstance(trig, CronTrigger)
 
 
-def test_monthly_day_out_of_range_returns_none(scheduler):
+def test_monthly_day_out_of_range_returns_none(scheduler, caplog):
     assert (
         scheduler._parse_trigger(
             "monthly", {"day": 32, "hour": 0, "minute": 0}
         )
         is None
     )
+    assert any("Failed to parse trigger" in r.message for r in caplog.records)
 
 
 # ----- biweekly -------------------------------------------------------------
@@ -124,6 +127,21 @@ def test_biweekly_anchor_date_aligns_to_day_of_week():
     # 2026-06-03 is a Wednesday; the next Monday is 2026-06-08.
     anchor = _biweekly_anchor("2026-06-03", "mon", 9, 0)
     assert anchor == datetime(2026, 6, 8, 9, 0)
+
+
+def test_biweekly_anchor_int_day_of_week_valid(scheduler):
+    trig = scheduler._parse_trigger(
+        "biweekly",
+        {"day_of_week": 0, "hour": 9, "minute": 0, "start_date": "2026-06-01"},
+    )
+    assert isinstance(trig, IntervalTrigger)
+
+
+def test_biweekly_anchor_int_day_of_week_out_of_range_returns_none(scheduler):
+    assert scheduler._parse_trigger(
+        "biweekly",
+        {"day_of_week": 7, "hour": 9, "minute": 0, "start_date": "2026-06-01"},
+    ) is None
 
 
 # ----- timezone -------------------------------------------------------------
