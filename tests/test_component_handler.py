@@ -43,7 +43,8 @@ def _make_component_info(name="TestOp", category="Operators"):
         usage="Test usage",
         attributes=[],
         json_schema={},
-        example={},
+        example="",
+        icon="box",
     )
 
 
