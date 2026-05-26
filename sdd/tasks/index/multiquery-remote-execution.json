@@ -32,7 +32,7 @@
       "feature_id": "FEAT-101",
       "feature": "multiquery-remote-execution",
       "spec": "sdd/specs/multiquery-remote-execution.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Extends QueryExecutor from TASK-693; must share the same executors.py file.",
       "assigned_to": null,
       "started_at": "2026-05-26T10:43:59+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-694-remote-executor.md"
+      "completed_at": "2026-05-26T10:51:23+00:00",
+      "file": "sdd/tasks/completed/TASK-694-remote-executor.md"
     },
     {
       "id": "TASK-695",
