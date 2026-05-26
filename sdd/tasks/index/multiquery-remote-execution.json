@@ -112,7 +112,7 @@
       "feature_id": "FEAT-101",
       "feature": "multiquery-remote-execution",
       "spec": "sdd/specs/multiquery-remote-execution.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -122,8 +122,8 @@
       "parallelism_notes": "Modifies query.py which is also modified by TASK-695; must run after.",
       "assigned_to": null,
       "started_at": "2026-05-26T10:43:59+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-698-catalog-schema-update.md"
+      "completed_at": "2026-05-26T10:54:47+00:00",
+      "file": "sdd/tasks/completed/TASK-698-catalog-schema-update.md"
     },
     {
       "id": "TASK-699",
