@@ -14,7 +14,7 @@
       "feature_id": "FEAT-101",
       "feature": "multiquery-remote-execution",
       "spec": "sdd/specs/multiquery-remote-execution.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Foundation task — all executor-related tasks depend on this interface.",
       "assigned_to": null,
       "started_at": "2026-05-26T10:43:59+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-693-query-executor-interface.md"
+      "completed_at": "2026-05-26T10:48:13+00:00",
+      "file": "sdd/tasks/completed/TASK-693-query-executor-interface.md"
     },
     {
       "id": "TASK-694",
