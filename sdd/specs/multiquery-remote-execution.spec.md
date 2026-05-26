@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-101
 **Date**: 2026-05-26
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: TBD
 
 ---
@@ -580,11 +580,11 @@ This does NOT need to be implemented for v1.
 
 ## 8. Open Questions
 
-- [ ] Should `QWORKER_HOST`/`QWORKER_PORT` support a comma-separated list for multiple workers (round-robin)? QClient already supports `worker_list` with round-robin scheduling. — *Owner: Jesus*
-- [ ] What timeout should remote queries use? The current QClient default is 5s (connection), but query execution can take much longer. Should there be a `QWORKER_QUERY_TIMEOUT` separate from connection timeout? — *Owner: Jesus*
-- [ ] Should the qworker QueryHandler support raw SQL queries (`query` key) in addition to slugs, or only slugs for security reasons? — *Owner: Jesus*
-- [ ] For v2 streaming: should the Redis stream key include a namespace/prefix to avoid collisions with other qworker streams? — *Owner: Jesus*
-- [ ] Should remote query results be cached (e.g., in Redis) to avoid re-dispatching identical slugs+conditions? — *Owner: Jesus*
+- [ ] Should `QWORKER_HOST`/`QWORKER_PORT` support a comma-separated list for multiple workers (round-robin)? QClient already supports `worker_list` with round-robin scheduling. — *Owner: Jesus*: Yes
+- [ ] What timeout should remote queries use? The current QClient default is 5s (connection), but query execution can take much longer. Should there be a `QWORKER_QUERY_TIMEOUT` separate from connection timeout? — *Owner: Jesus*: a QWORKER_QUERY_TIMEOUT with a default of 60seconds.
+- [ ] Should the qworker QueryHandler support raw SQL queries (`query` key) in addition to slugs, or only slugs for security reasons? — *Owner: Jesus*: both, queries + slugs
+- [ ] For v2 streaming: should the Redis stream key include a namespace/prefix to avoid collisions with other qworker streams? — *Owner: Jesus*: yes, but move streaming for v1.
+- [ ] Should remote query results be cached (e.g., in Redis) to avoid re-dispatching identical slugs+conditions? — *Owner: Jesus*: no
 
 ---
 
