@@ -15,10 +15,26 @@ class jsonWriter(AbstractWriter):
             from pandas import DataFrame
             is_dataframe = isinstance(self.data, DataFrame)
         except ImportError:
+            DataFrame = None  # type: ignore
             is_dataframe = False
+        # Multi-source pipelines without an operator (no Join/Concat/Melt/Merge)
+        # return a dict of DataFrames (one per source). Serialize each frame to
+        # records so the frontend can render per-source tabs.
+        is_multi_df = (
+            DataFrame is not None
+            and isinstance(self.data, dict)
+            and len(self.data) > 0
+            and all(isinstance(v, DataFrame) for v in self.data.values())
+        )
         if is_dataframe:
             # Convert to a list of dictionaries
             data_dict = self.data.to_dict(orient='records')
+            data = self._json.dumps(data_dict)
+        elif is_multi_df:
+            data_dict = {
+                key: frame.to_dict(orient='records')
+                for key, frame in self.data.items()
+            }
             data = self._json.dumps(data_dict)
         else:
             try:
