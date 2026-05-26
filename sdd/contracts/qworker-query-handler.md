@@ -112,7 +112,7 @@ async def query_handler(slug: str = None, conditions: dict = None, **options) ->
         query=query,
         queue=queue,
         request=None,    # no HTTP request context on the worker side
-        loop=asyncio.get_event_loop(),
+        loop=asyncio.get_running_loop(),
     )
 
     await query_obj.build_provider()

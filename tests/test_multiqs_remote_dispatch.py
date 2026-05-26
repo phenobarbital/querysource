@@ -78,7 +78,8 @@ class TestMultiQSRemoteDispatch:
         mqs = self._make_multiqs({"q": {"slug": "s"}})
         assert mqs._remote_queries == []
 
-    def test_remote_true_no_worker_no_config_raises(self):
+    @pytest.mark.asyncio
+    async def test_remote_true_no_worker_no_config_raises(self):
         """remote=true with no worker and QWORKER_HOST=None raises DriverError."""
         from querysource.queries.multi import MultiQS
         import querysource.queries.multi as multiqs_module
@@ -86,6 +87,6 @@ class TestMultiQSRemoteDispatch:
         mqs = MultiQS(queries={"q": {"slug": "s", "remote": True}})
 
         with patch.object(multiqs_module, "QWORKER_HOST", None):
-            with pytest.raises(DriverError, match="no worker address configured"):
-                import asyncio
-                asyncio.get_event_loop().run_until_complete(mqs.query())
+            with patch.object(multiqs_module, "QWORKER_WORKERS", []):
+                with pytest.raises(DriverError, match="no worker address configured"):
+                    await mqs.query()

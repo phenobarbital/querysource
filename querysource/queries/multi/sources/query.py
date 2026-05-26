@@ -98,7 +98,9 @@ class ThreadQuery(ThreadSource):
                     "Address of the remote qworker to use for this query, "
                     "in ``host:port`` format (e.g. ``qworker1.internal:8888``). "
                     "Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` "
-                    "settings. Only relevant when ``remote: true``."
+                    "settings. Only relevant when ``remote: true``. "
+                    "If no port is specified, QWORKER_PORT is used as the "
+                    "fallback (default: 8888)."
                 ),
             },
         ],
@@ -148,6 +150,10 @@ class ThreadQuery(ThreadSource):
                 {"required": ["slug"]},
                 {"required": ["query"]},
             ],
+            "$comment": (
+                "oneOf enforces mutual exclusion: a query must have exactly one of "
+                "'slug' (named query) or 'query' (raw SQL), not both."
+            ),
             "additionalProperties": True,
         },
         "example": (
@@ -179,30 +185,33 @@ class ThreadQuery(ThreadSource):
         queue: asyncio.Queue,
         remote_config: Optional[RemoteConfig] = None,
     ):
+        assert isinstance(query, dict), (
+            f"ThreadQuery expects a dict for 'query', got {type(query).__name__!r}"
+        )
         super().__init__(name, query, request, queue)
+        # self._query aliases self._options (set by super().__init__); kept for
+        # backward-compat with the slug property and internal fetch() references.
         self._query = query
-        self._request = request
+        # Note: self._request is already set by ThreadSource.__init__ (via super());
+        # the redundant assignment is intentionally omitted here.
         if remote_config is not None:
             self._executor = RemoteExecutor(
                 remote_config.host,
                 remote_config.port,
                 remote_config.timeout,
+                workers=remote_config.workers,
             )
         else:
             self._executor = LocalExecutor()
 
     @property
-    def slug(self):
+    def slug(self) -> str:
         """Return the query slug.
 
-        With the executor pattern, ``self._query`` is always a dict
-        (it is no longer replaced with a QueryObject inside fetch()).
+        ``self._query`` is always a dict (invariant enforced by __init__).
         Falls back to the thread name when no ``slug`` key is present.
         """
-        if isinstance(self._query, dict):
-            return self._query.get('slug', self._name)
-        # Defensive fallback — should not reach here in normal flow.
-        return getattr(self._query, 'slug', self._name)
+        return self._query.get('slug', self._name)
 
     async def fetch(self) -> pd.DataFrame | None:
         """Delegate query execution to the configured executor.

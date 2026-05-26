@@ -17,7 +17,7 @@ from .transformations import (
 from .operators.filter import Filter
 from .sources import ThreadQuery, FileSource
 from .sources.executors import RemoteConfig
-from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT
+from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
 
 
 def get_operator_module(clsname: str):
@@ -164,21 +164,36 @@ class MultiQS(BaseQuery):
                         # rsplit handles IPv6 addresses or hostnames with colons.
                         parts = worker_addr.rsplit(":", 1)
                         host = parts[0]
-                        port = int(parts[1]) if len(parts) > 1 else QWORKER_PORT
+                        if len(parts) > 1:
+                            try:
+                                port = int(parts[1])
+                            except ValueError:
+                                raise DriverError(
+                                    f"Query {name!r}: invalid 'worker' address "
+                                    f"{worker_addr!r} — port must be an integer."
+                                )
+                        else:
+                            port = QWORKER_PORT
+                        remote_config = RemoteConfig(
+                            host=host,
+                            port=port,
+                            timeout=QWORKER_TIMEOUT,
+                        )
                     elif QWORKER_HOST:
                         host = QWORKER_HOST
                         port = QWORKER_PORT
+                        remote_config = RemoteConfig(
+                            host=host,
+                            port=port,
+                            timeout=QWORKER_TIMEOUT,
+                            workers=QWORKER_WORKERS,
+                        )
                     else:
                         raise DriverError(
                             f"Query {name!r} has remote=true but no worker address "
                             f"configured. Set 'worker' on the query or configure "
                             f"QWORKER_HOST/QWORKER_PORT."
                         )
-                    remote_config = RemoteConfig(
-                        host=host,
-                        port=port,
-                        timeout=QWORKER_TIMEOUT,
-                    )
                     self._remote_queries.append(name)
                 try:
                     t = ThreadQuery(
