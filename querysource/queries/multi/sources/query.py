@@ -1,10 +1,11 @@
 import asyncio
+from typing import Optional
 
 import pandas as pd
 from aiohttp import web
 
-from ...obj import QueryObject
 from .base import ThreadSource
+from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
 
 
 class ThreadQuery(ThreadSource):
@@ -130,48 +131,53 @@ class ThreadQuery(ThreadSource):
         query: dict,
         request: web.Request,
         queue: asyncio.Queue,
+        remote_config: Optional[RemoteConfig] = None,
     ):
         super().__init__(name, query, request, queue)
         self._query = query
         self._request = request
+        if remote_config is not None:
+            self._executor = RemoteExecutor(
+                remote_config.host,
+                remote_config.port,
+                remote_config.timeout,
+            )
+        else:
+            self._executor = LocalExecutor()
 
     @property
     def slug(self):
         """Return the query slug.
 
-        Before ``fetch()`` runs this accesses the dict; after ``fetch()`` the
-        dict has been replaced with a :class:`~querysource.queries.obj.QueryObject`
-        that exposes ``.slug`` directly.
+        With the executor pattern, ``self._query`` is always a dict
+        (it is no longer replaced with a QueryObject inside fetch()).
+        Falls back to the thread name when no ``slug`` key is present.
         """
         if isinstance(self._query, dict):
             return self._query.get('slug', self._name)
-        return self._query.slug
+        # Defensive fallback — should not reach here in normal flow.
+        return getattr(self._query, 'slug', self._name)
 
     async def fetch(self) -> pd.DataFrame | None:
-        """Build and execute the QueryObject.
+        """Delegate query execution to the configured executor.
 
-        :class:`~querysource.queries.obj.QueryObject` already puts the result
-        into ``self._queue`` at the end of its ``query()`` call, so this
-        method returns ``None`` to prevent the base :meth:`ThreadSource.run`
-        from performing a duplicate queue-put.
+        The executor (either :class:`~.executors.LocalExecutor` or
+        :class:`~.executors.RemoteExecutor`) is responsible for placing
+        ``{name: DataFrame}`` into ``self._queue``.  This method returns
+        ``None`` to signal :meth:`ThreadSource.run` that the queue-put
+        has already been performed.
 
         Returns:
-            ``None`` — the queue is written by :class:`QueryObject` internally.
+            ``None`` — the queue is written by the executor.
 
         Raises:
-            :class:`~querysource.exceptions.QueryException`: On provider build
-                or query execution failure.
+            :class:`~querysource.exceptions.QueryException`: On provider
+                build or query execution failure (local or remote).
         """
-        loop = asyncio.get_event_loop()
-        self._query = QueryObject(
+        await self._executor.execute(
             self._name,
             self._query,
-            queue=self._queue,
-            request=self._request,
-            loop=loop,
+            self._queue,
+            self._request,
         )
-        await self._query.build_provider()
-        await self._query.query()
-        # QueryObject.query() already queued the result — return None so that
-        # ThreadSource.run() skips its own queue-put step.
         return None
