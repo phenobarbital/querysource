@@ -381,7 +381,12 @@ class QueryHandler(AbstractHandler):
             self.logger.debug(
                 f'Query Duration: {total_time:.2f} seconds'
             )
-            return await output.response()
+            response = await output.response()
+            # Add X-Remote-Queries header if any queries ran remotely (FEAT-101).
+            remote_queries = getattr(qs, '_remote_queries', [])
+            if remote_queries:
+                response.headers['X-Remote-Queries'] = ','.join(remote_queries)
+            return response
         except (DataNotFound) as ex:
             return self.NoData(
                 message="No Data was Found",

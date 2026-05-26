@@ -77,6 +77,30 @@ class ThreadQuery(ThreadSource):
                     "raw ``query``. Takes precedence over ``driver``."
                 ),
             },
+            {
+                "name": "remote",
+                "type": "bool",
+                "required": False,
+                "default": False,
+                "description": (
+                    "When ``True``, dispatch this query to a remote qworker "
+                    "server instead of executing locally. Requires either a "
+                    "``worker`` key on the same entry or the central "
+                    "``QWORKER_HOST`` / ``QWORKER_PORT`` configuration."
+                ),
+            },
+            {
+                "name": "worker",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Address of the remote qworker to use for this query, "
+                    "in ``host:port`` format (e.g. ``qworker1.internal:8888``). "
+                    "Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` "
+                    "settings. Only relevant when ``remote: true``."
+                ),
+            },
         ],
         "json_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -103,6 +127,22 @@ class ThreadQuery(ThreadSource):
                     "type": "string",
                     "description": "Named datasource for raw queries.",
                 },
+                "remote": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, dispatch this query to a remote qworker "
+                        "server. Requires 'worker' or central QWORKER_HOST config."
+                    ),
+                    "default": False,
+                },
+                "worker": {
+                    "type": "string",
+                    "description": (
+                        "Remote qworker address in 'host:port' format. "
+                        "Overrides central QWORKER_HOST/QWORKER_PORT settings. "
+                        "Only used when remote=true."
+                    ),
+                },
             },
             "oneOf": [
                 {"required": ["slug"]},
@@ -119,6 +159,12 @@ class ThreadQuery(ThreadSource):
             '    },\n'
             '    "products": {\n'
             '      "slug": "all_products"\n'
+            '    },\n'
+            '    "remote_orders": {\n'
+            '      "slug": "daily_orders",\n'
+            '      "remote": true,\n'
+            '      "worker": "qworker1.internal:8888",\n'
+            '      "store_id": 42\n'
             '    }\n'
             '  }\n'
             '}'
