@@ -345,3 +345,111 @@ class TestScalarFiltersStillWork:
 
         assert len(result) == 2
         assert list(result['id'].values) == [2, 3]
+
+
+class TestNumericBranchHardening:
+    """Validation and extended type support in the numeric branch."""
+
+    def test_decimal_value_is_accepted(self):
+        """Decimal values should be treated like numeric scalars."""
+        from decimal import Decimal
+
+        df = pd.DataFrame({
+            'id': [1, 2, 3],
+            'amount': [10.0, 20.5, 30.0],
+        })
+
+        _filter = [
+            {
+                'column': 'amount',
+                'expression': '>=',
+                'value': Decimal('20.0'),
+            }
+        ]
+
+        conditions = create_filter(_filter, df)
+        result = df.loc[eval(" & ".join(conditions))]
+
+        assert len(result) == 2
+        assert list(result['id'].values) == [2, 3]
+
+    def test_invalid_operator_on_numeric_raises(self):
+        """Non-comparison operators on numeric values must raise upfront."""
+        df = pd.DataFrame({'id': [1, 2], 'amount': [10, 20]})
+        _filter = [{'column': 'amount', 'expression': 'contains', 'value': 10}]
+
+        with pytest.raises(QueryException) as exc_info:
+            create_filter(_filter, df)
+
+        assert "numeric value" in str(exc_info.value)
+        assert "contains" in str(exc_info.value)
+
+
+class TestDatetimeBranchHardening:
+    """Validation and extended type support in the datetime branch."""
+
+    def test_datetime_date_value_is_accepted(self):
+        """A plain datetime.date should be normalized to pd.Timestamp."""
+        import datetime as _dt
+
+        df = pd.DataFrame({
+            'id': [1, 2, 3],
+            'fecha': pd.to_datetime(['2024-01-10', '2024-02-15', '2024-03-20']),
+        })
+
+        _filter = [
+            {
+                'column': 'fecha',
+                'expression': '>=',
+                'value': _dt.date(2024, 2, 1),
+            }
+        ]
+
+        conditions = create_filter(_filter, df)
+        result = df.loc[eval(" & ".join(conditions))]
+
+        assert len(result) == 2
+        assert list(result['id'].values) == [2, 3]
+
+    def test_datetime_datetime_value_is_accepted(self):
+        """A plain datetime.datetime should be normalized to pd.Timestamp."""
+        import datetime as _dt
+
+        df = pd.DataFrame({
+            'id': [1, 2, 3],
+            'fecha': pd.to_datetime(['2024-01-10', '2024-02-15', '2024-03-20']),
+        })
+
+        _filter = [
+            {
+                'column': 'fecha',
+                'expression': '<',
+                'value': _dt.datetime(2024, 2, 16),
+            }
+        ]
+
+        conditions = create_filter(_filter, df)
+        result = df.loc[eval(" & ".join(conditions))]
+
+        assert len(result) == 2
+        assert list(result['id'].values) == [1, 2]
+
+    def test_invalid_operator_on_datetime_raises(self):
+        """Non-comparison operators on datetime values must raise upfront."""
+        df = pd.DataFrame({
+            'id': [1, 2],
+            'fecha': pd.to_datetime(['2024-01-10', '2024-02-15']),
+        })
+        _filter = [
+            {
+                'column': 'fecha',
+                'expression': 'contains',
+                'value': pd.Timestamp('2024-02-01'),
+            }
+        ]
+
+        with pytest.raises(QueryException) as exc_info:
+            create_filter(_filter, df)
+
+        assert "datetime value" in str(exc_info.value)
+        assert "contains" in str(exc_info.value)
