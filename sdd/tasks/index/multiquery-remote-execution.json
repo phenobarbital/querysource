@@ -73,7 +73,7 @@
       "feature_id": "FEAT-101",
       "feature": "multiquery-remote-execution",
       "spec": "sdd/specs/multiquery-remote-execution.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,8 +84,8 @@
       "parallelism_notes": "Imports RemoteConfig from TASK-693 and QWORKER_* from TASK-697; modifies dispatch loop.",
       "assigned_to": null,
       "started_at": "2026-05-26T10:43:59+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-696-multiqs-remote-config-resolution.md"
+      "completed_at": "2026-05-26T10:56:16+00:00",
+      "file": "sdd/tasks/completed/TASK-696-multiqs-remote-config-resolution.md"
     },
     {
       "id": "TASK-697",
