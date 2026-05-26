@@ -16,6 +16,8 @@ from .transformations import (
 )
 from .operators.filter import Filter
 from .sources import ThreadQuery, FileSource
+from .sources.executors import RemoteConfig
+from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT
 
 
 def get_operator_module(clsname: str):
@@ -104,6 +106,8 @@ class MultiQS(BaseQuery):
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
         self._user_session = user_session
+        # FEAT-101: track names of queries dispatched to remote qworker.
+        self._remote_queries: list = []
 
     async def query(self):
         """
@@ -148,9 +152,38 @@ class MultiQS(BaseQuery):
                 conditions = self._conditions.pop(name, {})
                 # those conditions be applied to the query
                 query = {**conditions, **query}
+                # FEAT-101: detect remote execution directive and resolve worker.
+                # Pop remote/worker keys BEFORE passing to ThreadQuery so they
+                # never reach QueryObject or any database driver.
+                is_remote = query.pop("remote", False)
+                worker_addr = query.pop("worker", None)
+                remote_config = None
+                if is_remote:
+                    if worker_addr:
+                        # Parse "host:port" string.
+                        # rsplit handles IPv6 addresses or hostnames with colons.
+                        parts = worker_addr.rsplit(":", 1)
+                        host = parts[0]
+                        port = int(parts[1]) if len(parts) > 1 else QWORKER_PORT
+                    elif QWORKER_HOST:
+                        host = QWORKER_HOST
+                        port = QWORKER_PORT
+                    else:
+                        raise DriverError(
+                            f"Query {name!r} has remote=true but no worker address "
+                            f"configured. Set 'worker' on the query or configure "
+                            f"QWORKER_HOST/QWORKER_PORT."
+                        )
+                    remote_config = RemoteConfig(
+                        host=host,
+                        port=port,
+                        timeout=QWORKER_TIMEOUT,
+                    )
+                    self._remote_queries.append(name)
                 try:
                     t = ThreadQuery(
-                        name, query, self._request, self._queue
+                        name, query, self._request, self._queue,
+                        remote_config=remote_config,
                     )
                 except Exception as ex:
                     raise self.Error(
