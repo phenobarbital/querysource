@@ -132,7 +132,7 @@
       "feature_id": "FEAT-101",
       "feature": "multiquery-remote-execution",
       "spec": "sdd/specs/multiquery-remote-execution.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -140,8 +140,8 @@
       "parallelism_notes": "Documentation-only task in sdd/contracts/; no shared files with any code task.",
       "assigned_to": null,
       "started_at": "2026-05-26T10:43:59+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-699-qworker-interface-contract.md"
+      "completed_at": "2026-05-26T10:50:27+00:00",
+      "file": "sdd/tasks/completed/TASK-699-qworker-interface-contract.md"
     }
   ]
 }
