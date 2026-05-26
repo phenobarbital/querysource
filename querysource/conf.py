@@ -439,6 +439,17 @@ QS_AIRTABLE_OAUTH_ENABLED = config.getboolean(
     'QS_AIRTABLE_OAUTH_ENABLED', fallback=False
 )
 
+# ── QWorker Remote Execution (FEAT-101) ───────────────────────────────────────
+# Host/port of the remote qworker server used when MultiQS queries have
+# ``remote: true``.  QWORKER_HOST=None means remote execution is not configured
+# and any ``remote: true`` query without an explicit ``worker:`` key will raise
+# DriverError at dispatch time.
+QWORKER_HOST = config.get('QWORKER_HOST', fallback=None)
+QWORKER_PORT = config.getint('QWORKER_PORT', fallback=8888)
+# Query execution timeout in seconds (not the TCP connection timeout, which is
+# governed by QClient's own ``timeout`` attribute, default 5 s).
+QWORKER_TIMEOUT = config.getint('QWORKER_TIMEOUT', fallback=60)
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:
