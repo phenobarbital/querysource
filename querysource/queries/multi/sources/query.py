@@ -1,10 +1,11 @@
 import asyncio
+from typing import Optional
 
 import pandas as pd
 from aiohttp import web
 
-from ...obj import QueryObject
 from .base import ThreadSource
+from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
 
 
 class ThreadQuery(ThreadSource):
@@ -76,6 +77,32 @@ class ThreadQuery(ThreadSource):
                     "raw ``query``. Takes precedence over ``driver``."
                 ),
             },
+            {
+                "name": "remote",
+                "type": "bool",
+                "required": False,
+                "default": False,
+                "description": (
+                    "When ``True``, dispatch this query to a remote qworker "
+                    "server instead of executing locally. Requires either a "
+                    "``worker`` key on the same entry or the central "
+                    "``QWORKER_HOST`` / ``QWORKER_PORT`` configuration."
+                ),
+            },
+            {
+                "name": "worker",
+                "type": "str",
+                "required": False,
+                "default": None,
+                "description": (
+                    "Address of the remote qworker to use for this query, "
+                    "in ``host:port`` format (e.g. ``qworker1.internal:8888``). "
+                    "Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` "
+                    "settings. Only relevant when ``remote: true``. "
+                    "If no port is specified, QWORKER_PORT is used as the "
+                    "fallback (default: 8888)."
+                ),
+            },
         ],
         "json_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -102,11 +129,31 @@ class ThreadQuery(ThreadSource):
                     "type": "string",
                     "description": "Named datasource for raw queries.",
                 },
+                "remote": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, dispatch this query to a remote qworker "
+                        "server. Requires 'worker' or central QWORKER_HOST config."
+                    ),
+                    "default": False,
+                },
+                "worker": {
+                    "type": "string",
+                    "description": (
+                        "Remote qworker address in 'host:port' format. "
+                        "Overrides central QWORKER_HOST/QWORKER_PORT settings. "
+                        "Only used when remote=true."
+                    ),
+                },
             },
             "oneOf": [
                 {"required": ["slug"]},
                 {"required": ["query"]},
             ],
+            "$comment": (
+                "oneOf enforces mutual exclusion: a query must have exactly one of "
+                "'slug' (named query) or 'query' (raw SQL), not both."
+            ),
             "additionalProperties": True,
         },
         "example": (
@@ -118,6 +165,12 @@ class ThreadQuery(ThreadSource):
             '    },\n'
             '    "products": {\n'
             '      "slug": "all_products"\n'
+            '    },\n'
+            '    "remote_orders": {\n'
+            '      "slug": "daily_orders",\n'
+            '      "remote": true,\n'
+            '      "worker": "qworker1.internal:8888",\n'
+            '      "store_id": 42\n'
             '    }\n'
             '  }\n'
             '}'
@@ -130,48 +183,56 @@ class ThreadQuery(ThreadSource):
         query: dict,
         request: web.Request,
         queue: asyncio.Queue,
+        remote_config: Optional[RemoteConfig] = None,
     ):
+        assert isinstance(query, dict), (
+            f"ThreadQuery expects a dict for 'query', got {type(query).__name__!r}"
+        )
         super().__init__(name, query, request, queue)
+        # self._query aliases self._options (set by super().__init__); kept for
+        # backward-compat with the slug property and internal fetch() references.
         self._query = query
-        self._request = request
+        # Note: self._request is already set by ThreadSource.__init__ (via super());
+        # the redundant assignment is intentionally omitted here.
+        if remote_config is not None:
+            self._executor = RemoteExecutor(
+                remote_config.host,
+                remote_config.port,
+                remote_config.timeout,
+                workers=remote_config.workers,
+            )
+        else:
+            self._executor = LocalExecutor()
 
     @property
-    def slug(self):
+    def slug(self) -> str:
         """Return the query slug.
 
-        Before ``fetch()`` runs this accesses the dict; after ``fetch()`` the
-        dict has been replaced with a :class:`~querysource.queries.obj.QueryObject`
-        that exposes ``.slug`` directly.
+        ``self._query`` is always a dict (invariant enforced by __init__).
+        Falls back to the thread name when no ``slug`` key is present.
         """
-        if isinstance(self._query, dict):
-            return self._query.get('slug', self._name)
-        return self._query.slug
+        return self._query.get('slug', self._name)
 
     async def fetch(self) -> pd.DataFrame | None:
-        """Build and execute the QueryObject.
+        """Delegate query execution to the configured executor.
 
-        :class:`~querysource.queries.obj.QueryObject` already puts the result
-        into ``self._queue`` at the end of its ``query()`` call, so this
-        method returns ``None`` to prevent the base :meth:`ThreadSource.run`
-        from performing a duplicate queue-put.
+        The executor (either :class:`~.executors.LocalExecutor` or
+        :class:`~.executors.RemoteExecutor`) is responsible for placing
+        ``{name: DataFrame}`` into ``self._queue``.  This method returns
+        ``None`` to signal :meth:`ThreadSource.run` that the queue-put
+        has already been performed.
 
         Returns:
-            ``None`` — the queue is written by :class:`QueryObject` internally.
+            ``None`` — the queue is written by the executor.
 
         Raises:
-            :class:`~querysource.exceptions.QueryException`: On provider build
-                or query execution failure.
+            :class:`~querysource.exceptions.QueryException`: On provider
+                build or query execution failure (local or remote).
         """
-        loop = asyncio.get_event_loop()
-        self._query = QueryObject(
+        await self._executor.execute(
             self._name,
             self._query,
-            queue=self._queue,
-            request=self._request,
-            loop=loop,
+            self._queue,
+            self._request,
         )
-        await self._query.build_provider()
-        await self._query.query()
-        # QueryObject.query() already queued the result — return None so that
-        # ThreadSource.run() skips its own queue-put step.
         return None

@@ -1,5 +1,6 @@
 from .airtable import AirtableSource
 from .base import ThreadSource
+from .executors import LocalExecutor, QueryExecutor, RemoteConfig, RemoteExecutor
 from .file import FileSource
 from .query import ThreadQuery
 from .s3 import S3Source
@@ -17,6 +18,10 @@ __all__ = [
     "S3Source",
     "TableSource",
     "SOURCE_REGISTRY",
+    "QueryExecutor",
+    "LocalExecutor",
+    "RemoteExecutor",
+    "RemoteConfig",
 ]
 
 #: Registry mapping source type names (as used in YAML config) to their classes.

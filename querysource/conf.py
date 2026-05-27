@@ -453,6 +453,33 @@ QS_AIRTABLE_OAUTH_ENABLED = config.getboolean(
     'QS_AIRTABLE_OAUTH_ENABLED', fallback=False
 )
 
+# ── QWorker Remote Execution (FEAT-101) ───────────────────────────────────────
+# Host/port of the remote qworker server used when MultiQS queries have
+# ``remote: true``.  QWORKER_HOST=None means remote execution is not configured
+# and any ``remote: true`` query without an explicit ``worker:`` key will raise
+# DriverError at dispatch time.
+QWORKER_HOST = config.get('QWORKER_HOST', fallback=None)
+QWORKER_PORT = config.getint('QWORKER_PORT', fallback=8888)
+# TCP connection timeout in seconds (how long QClient waits to establish a
+# connection to the qworker server).
+QWORKER_TIMEOUT = config.getint('QWORKER_TIMEOUT', fallback=5)
+# Query execution timeout in seconds (wraps the entire client.run() call via
+# asyncio.wait_for; independent from the TCP connection timeout above).
+QWORKER_QUERY_TIMEOUT = config.getint('QWORKER_QUERY_TIMEOUT', fallback=60)
+
+# Pre-parsed worker list for QClient.
+# Supports "host1:port1,host2:port2" or plain "host1,host2" (uses QWORKER_PORT).
+_qworker_hosts_raw = config.get('QWORKER_HOST', fallback=None)
+QWORKER_WORKERS: list = []
+if _qworker_hosts_raw:
+    for _h in _qworker_hosts_raw.split(','):
+        _h = _h.strip()
+        if ':' in _h:
+            _hh, _hp = _h.rsplit(':', 1)
+            QWORKER_WORKERS.append((_hh.strip(), int(_hp)))
+        else:
+            QWORKER_WORKERS.append((_h, QWORKER_PORT))
+
 try:
     from settings.settings import *  # pylint: disable=W0614,W0401 # noqa
 except ImportError:

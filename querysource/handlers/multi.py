@@ -231,15 +231,25 @@ class QueryHandler(AbstractHandler):
             result, options = await qs.query()
         except DataNotFound as dnf:
             total_time = time.monotonic() - started_at
+            _remote_queries_on_err = getattr(qs, '_remote_queries', [])
+            if _remote_queries_on_err:
+                self.logger.warning(
+                    "MultiQuery DataNotFound after remote queries %s: %s",
+                    _remote_queries_on_err,
+                    dnf,
+                )
+            _err_headers = {
+                'Content-Type': 'application/json',
+                'X-Slug': slug,
+                'X-Format': queryformat,
+                'X-Total-Time': f'{total_time:.2f} seconds',
+                'X-Error': str(dnf),
+            }
+            if _remote_queries_on_err:
+                _err_headers['X-Remote-Queries'] = ','.join(_remote_queries_on_err)
             return self.NoData(
                 message=str(dnf),
-                headers={
-                    'Content-Type': 'application/json',
-                    'X-Slug': slug,
-                    'X-Format': queryformat,
-                    'X-Total-Time': f'{total_time:.2f} seconds',
-                    'X-Error': str(dnf),
-                },
+                headers=_err_headers,
             )
         except SlugNotFound as snf:
             raise self.Error(
@@ -255,6 +265,13 @@ class QueryHandler(AbstractHandler):
             )
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()
+            _remote_queries_on_err = getattr(qs, '_remote_queries', [])
+            if _remote_queries_on_err:
+                self.logger.warning(
+                    "MultiQuery error after remote queries %s: %s",
+                    _remote_queries_on_err,
+                    qe,
+                )
             self.logger.exception(qe, stack_info=True)
             raise self.Error(
                 message="Query Error",
@@ -264,6 +281,13 @@ class QueryHandler(AbstractHandler):
             )
         except Exception as ex:
             trace = traceback.format_exc()
+            _remote_queries_on_err = getattr(qs, '_remote_queries', [])
+            if _remote_queries_on_err:
+                self.logger.warning(
+                    "MultiQuery unexpected error after remote queries %s: %s",
+                    _remote_queries_on_err,
+                    ex,
+                )
             self.logger.exception(ex, stack_info=True)
             raise self.Except(
                 message=f"Unknown Error on Query: {ex!s}",
@@ -381,7 +405,12 @@ class QueryHandler(AbstractHandler):
             self.logger.debug(
                 f'Query Duration: {total_time:.2f} seconds'
             )
-            return await output.response()
+            response = await output.response()
+            # Add X-Remote-Queries header if any queries ran remotely (FEAT-101).
+            remote_queries = getattr(qs, '_remote_queries', [])
+            if remote_queries:
+                response.headers['X-Remote-Queries'] = ','.join(remote_queries)
+            return response
         except (DataNotFound) as ex:
             return self.NoData(
                 message="No Data was Found",
