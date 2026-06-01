@@ -205,11 +205,22 @@ pub fn quote_string(value: &str, no_dblquoting: bool) -> String {
 /// BigQuery strings enclosed in double quotes do not require single-quote
 /// escaping, so "Sam's Club" is valid as-is.  Internal double quotes are
 /// backslash-escaped.  Null sentinel values are passed through unquoted.
+///
+/// The value may arrive either raw (`Sam's Club`, from `_parser_conditions`)
+/// or already single-quoted by `is_valid`/`quoteString` (`'BBY102'`, from the
+/// `filter_conditions` URL-param path).  To stay idempotent we unwrap a
+/// surrounding pair of single quotes and undo PG-style `''` escaping before
+/// re-wrapping in BigQuery double quotes; raw values pass through untouched.
 pub fn bq_quote_string(value: &str) -> String {
     if value == "null" || value == "NULL" {
         return value.to_string();
     }
-    let v = value.replace('"', "\\\"");
+    let inner = if value.len() >= 2 && value.starts_with('\'') && value.ends_with('\'') {
+        value[1..value.len() - 1].replace("''", "'")
+    } else {
+        value.to_string()
+    };
+    let v = inner.replace('"', "\\\"");
     format!("\"{}\"", v)
 }
 
@@ -441,5 +452,27 @@ mod tests {
             is_valid("x", "some_value", None, false),
             "'some_value'"
         );
+    }
+
+    #[test]
+    fn test_bq_quote_string_raw() {
+        // Path A: raw value from _parser_conditions
+        assert_eq!(bq_quote_string("Sam's Club"), "\"Sam's Club\"");
+        assert_eq!(bq_quote_string("BBY102"), "\"BBY102\"");
+    }
+
+    #[test]
+    fn test_bq_quote_string_pre_quoted() {
+        // Path B: value already single-quoted by is_valid/quoteString.
+        // Must NOT double-wrap (regression: store_id="'BBY102'").
+        assert_eq!(bq_quote_string("'BBY102'"), "\"BBY102\"");
+        // PG-style '' escaping is undone when unwrapping.
+        assert_eq!(bq_quote_string("'Sam''s Club'"), "\"Sam's Club\"");
+    }
+
+    #[test]
+    fn test_bq_quote_string_null_passthrough() {
+        assert_eq!(bq_quote_string("null"), "null");
+        assert_eq!(bq_quote_string("NULL"), "NULL");
     }
 }

@@ -43,8 +43,9 @@ cdef str bq_quote_string(object value):
         return <str>value
     v = str(value)
     # Strip surrounding single quotes if already wrapped by a caller
+    # (is_valid/quoteString) and undo PG-style '' escaping before re-wrapping.
     if v.startswith("'") and v.endswith("'") and len(v) >= 2:
-        v = v[1:-1]
+        v = v[1:-1].replace("''", "'")
     # Escape any literal double quotes inside the string
     v = v.replace('"', '\\"')
     return f'"{v}"'
