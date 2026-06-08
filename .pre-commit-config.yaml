@@ -1,0 +1,21 @@
+# Pre-commit hooks for QuerySource.
+#
+# Install once per clone (inside the activated venv):
+#     uv pip install pre-commit
+#     pre-commit install
+#
+# The generate-multiquery-docs hook regenerates the per-component JSON under
+# generated/ from the component classes + their <module>.catalog.yaml companion
+# files. If anything changed, pre-commit re-stages the files and fails the
+# commit so the refreshed docs are included — this is the freshness guard that
+# stops generated/ from drifting out of sync with the source of truth.
+repos:
+  - repo: local
+    hooks:
+      - id: generate-multiquery-docs
+        name: Regenerate MultiQuery component docs (generated/)
+        entry: bash -c 'generate-multiquery-docs -o generated >/dev/null && git add generated'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

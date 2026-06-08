@@ -39,10 +39,33 @@ class Filter(AbstractOperator):
         }
     """
 
+    @classmethod
+    def filter_functions(cls) -> list[str]:
+        """Return the named filter functions accepted as ``filter_conditions`` keys.
+
+        Single source of truth shared by the runtime — which resolves each key
+        via ``getattr(dffunctions, name)`` — and the ``Filter.catalog.yaml``
+        ``filterFunc`` enum (resolved through the ``enum_from_class`` companion
+        directive). The condition/expression builders are excluded; only the
+        DataFrame-transforming functions are valid here.
+        """
+        import inspect
+        _builders = {
+            'getFunction', 'build_condition', 'create_filter_chain', 'create_filter'
+        }
+        return [
+            name for name, obj in vars(dffunctions).items()
+            if inspect.isfunction(obj)
+            and not name.startswith('_')
+            and name not in _builders
+        ]
+
     def __init__(self, data: dict, **kwargs) -> None:
         self.conditions = kwargs.pop('conditions', None)
         self.fields: dict = kwargs.pop('fields', {})
         self._filter = kwargs.pop('filter', [])
+        # ``filter_conditions`` is intentionally NOT popped: AbstractMulti.__init__
+        # sets it from kwargs via setattr (default {} when not provided).
         self.filter_conditions: dict = {}
         self._applied: list = []
         self._operator: str = kwargs.get('operator', '&')
@@ -119,11 +142,13 @@ class Filter(AbstractOperator):
                             df = df[df[column] == v]
                     else:
                         df = df[df[column] == value]
-        if self._filter:
-            conditions = create_filter(self._filter, df)
+        # ``filter`` and ``conditions`` share the create_filter spec format and
+        # are both optional/combinable — apply them together.
+        filter_specs = list(self._filter or []) + list(self.conditions or [])
+        if filter_specs:
+            conditions = create_filter(filter_specs, df)
             # Joining all conditions
             self.condition = f" {self._operator} ".join(conditions)
-            print("CONDITION >> ", self.condition)
             df = df.loc[
                 eval(self.condition)
             ]  # pylint: disable=W0123

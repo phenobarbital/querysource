@@ -1,0 +1,105 @@
+# Companion documentation for the ``Melt`` operator (class: Melt).
+#
+# Source of truth for what introspection cannot infer: the required ``using``
+# DataFrame, the nested ``args`` (pandas.melt kwargs), and the fact that ``id``
+# and ``na_cols`` accept either a single column or a list of columns.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Melt
+category: Operators
+icon: git-merge
+
+description: >-
+  Unpivot a DataFrame from wide to long (tidy) format, then join the melted
+  result with a secondary metadata DataFrame.
+
+usage: >-
+  ``using`` names the primary DataFrame to melt; ``id`` lists the identifier
+  columns kept fixed while the remaining columns become rows. Pass pandas
+  ``melt`` options through ``args`` — typically ``var_name`` and ``value_name``.
+  Note: Melt joins the melted frame against the secondary DataFrame on a
+  ``column_name`` column, so set ``args.var_name`` to ``column_name`` for the
+  join to line up. ``na_cols`` drops rows with nulls in the given column(s)
+  after the join.
+
+attributes:
+  - name: using
+    type: str
+    required: true
+    description: >-
+      Name of the primary DataFrame (in the pipeline data dictionary) to melt.
+  - name: id
+    type: list
+    required: false
+    default: null
+    description: >-
+      Identifier column(s) kept fixed during the melt (pandas ``id_vars``).
+      A single column name or a list of names.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Identifier column(s) kept fixed during the melt (id_vars).
+  - name: na_cols
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column name(s) from which to drop null rows after the join (pandas
+      ``dropna(subset=...)``). A single column name or a list of names.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Column(s) whose null rows are dropped after the join.
+  - name: args
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Extra keyword arguments forwarded to ``pandas.melt`` (e.g. ``var_name``,
+      ``value_name``, ``value_vars``).
+    schema:
+      type: object
+      description: Extra pandas.melt keyword arguments.
+      properties:
+        var_name:
+          type: string
+          description: >-
+            Name for the melted "variable" column. Set to ``column_name`` to
+            match the internal join Melt performs against the secondary
+            DataFrame.
+        value_name:
+          type: string
+          description: Name for the melted "value" column.
+      additionalProperties: true
+
+# Single object (not a list). ``using`` is the only required field.
+schema:
+  title: Melt
+  description: >-
+    Unpivot ``using`` keeping ``id`` columns fixed, then join with the secondary
+    DataFrame and optionally drop nulls in ``na_cols``.
+  additionalProperties: true
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Melt": {
+      "using": "graduates",
+      "id": [
+        "student_uid", "graduate", "account_id", "lead_id", "full_name",
+        "first_name", "last_name", "lms_active", "lms_user_id",
+        "gm_account_id", "lead_score", "email_address", "city", "state",
+        "zipcode", "country", "licensee"
+      ],
+      "args": {
+        "var_name": "column_name",
+        "value_name": "course_date"
+      }
+    }
+  }

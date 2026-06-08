@@ -208,4 +208,4 @@ filterwarnings = [
 link-mode = "copy"
 
 [tool.uv.sources]
-navigator-auth = { path = "../../navigator/navigator-auth", editable = true }
+# navigator-auth = { path = "../../navigator/navigator-auth", editable = true }

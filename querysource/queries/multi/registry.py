@@ -200,6 +200,7 @@ class ComponentRegistry:
         """
         from querysource.queries.multi._introspect import (
             SchemaIntrospectable,
+            build_companion_catalog,
             describe_class,
             extract_source_schema,
         )
@@ -245,39 +246,38 @@ class ComponentRegistry:
                 )
                 if is_introspectable:
                     schema = comp_cls.get_schema()
-                    attrs = [
-                        AttributeInfo(
-                            name=a["name"],
-                            type=a.get("type", "Any"),
-                            default=a.get("default"),
-                            required=a.get("required", False),
-                        )
-                        for a in schema.get("attributes", [])
-                    ]
+                    introspected_attr_dicts = schema.get("attributes", [])
                     json_schema = schema.get("json_schema", {})
                 elif is_source:
                     # ThreadSource subclasses: parse __init__ for nested
                     # options.get/<alias>.get patterns.
                     schema = extract_source_schema(comp_cls)
-                    attrs = [
-                        AttributeInfo(
-                            name=a["name"],
-                            type=a.get("type", "Any"),
-                            default=a.get("default"),
-                            required=a.get("required", False),
-                        )
-                        for a in schema.get("attributes", [])
-                    ]
+                    introspected_attr_dicts = schema.get("attributes", [])
                     json_schema = schema.get("json_schema")
                 else:
                     # Truly opaque legacy components: schema unknown.
-                    attrs = []
+                    introspected_attr_dicts = []
                     json_schema = None
 
-                # Optional class-level ``_catalog`` overrides for components
-                # whose introspected schema doesn't reflect their user-facing
-                # config shape (e.g. ``ThreadQuery``).
-                overrides = getattr(comp_cls, "_catalog", None)
+                attrs = [
+                    AttributeInfo(
+                        name=a["name"],
+                        type=a.get("type", "Any"),
+                        default=a.get("default"),
+                        required=a.get("required", False),
+                        description=a.get("description", ""),
+                    )
+                    for a in introspected_attr_dicts
+                ]
+
+                # Documentation override: a sibling ``<module>.catalog.yaml``
+                # companion (preferred, hybrid-merged onto the introspected
+                # attributes) or a class-level ``_catalog`` dict (legacy) for
+                # components whose introspected schema doesn't reflect their
+                # user-facing config shape (e.g. ``ThreadQuery``).
+                overrides = build_companion_catalog(
+                    comp_cls, introspected_attr_dicts
+                ) or getattr(comp_cls, "_catalog", None)
                 if isinstance(overrides, dict):
                     if isinstance(overrides.get("attributes"), list):
                         attrs = [
