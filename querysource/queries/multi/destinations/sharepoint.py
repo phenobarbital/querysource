@@ -66,6 +66,9 @@ class ToSharepoint(AbstractDestination):
         self._client_secret: str = resolved.get("client_secret", "")
         self._tenant_id: str = resolved.get("tenant_id", "")
         self._site: str = resolved.get("site", "")
+        self._tenant_name: str = resolved.get("tenant_name", "")
+        # site_id can be provided directly to skip Graph site resolution
+        self._site_id: str = resolved.get("site_id", "")
 
         # Destination config
         self._filename: str = dest_cfg.get("filename", "output.xlsx")
@@ -118,6 +121,13 @@ class ToSharepoint(AbstractDestination):
                 "Install them with: pip install azure-identity msgraph-sdk"
             ) from exc
 
+        # The msgraph/kiota SDK uses platform.version() to build the User-Agent
+        # header. On Linux the string has a trailing space which aiohttp rejects
+        # as an illegal header value. Patch it before the client is constructed.
+        import platform as _platform
+        _orig_version = _platform.version
+        _platform.version = lambda: _orig_version().strip()
+
         if not all([self._tenant_id, self._client_id, self._client_secret]):
             raise OutputError(
                 "ToSharepoint: 'tenant_id', 'client_id', and 'client_secret' "
@@ -137,8 +147,29 @@ class ToSharepoint(AbstractDestination):
     # ------------------------------------------------------------------
 
     async def _resolve_site_id(self, graph_client) -> str:
-        """Return the Graph site-id for :attr:`_site`."""
-        # Primary lookup: tenant:path format
+        """Return the Graph site-id for :attr:`_site`.
+
+        Resolution order:
+        1. ``site_id`` credential provided directly → return as-is (no API call).
+        2. Hostname-based path: ``{tenant_name}.sharepoint.com:/sites/{site}:``
+        3. Fallback path: ``root:/sites/{site}:``
+        4. Search by display name via ``$search``.
+        """
+        # Fast path: site_id already known
+        if self._site_id:
+            return self._site_id
+
+        # Primary lookup: hostname-qualified path (most reliable)
+        if self._tenant_name:
+            try:
+                site_path = f"{self._tenant_name}.sharepoint.com:/sites/{self._site}:"
+                site = await graph_client.sites.by_site_id(site_path).get()
+                if site and site.id:
+                    return site.id
+            except Exception:
+                pass
+
+        # Secondary lookup: root-relative path
         try:
             site_path = f"root:/sites/{self._site}:"
             site = await graph_client.sites.by_site_id(site_path).get()
