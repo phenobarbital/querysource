@@ -1,62 +1,99 @@
 {
   "name": "tOrder",
   "category": "Transformations",
-  "description": "Sort a DataFrame by one or more columns in a MultiQuery pipeline.",
-  "usage": "Use in a MultiQuery ``Transform`` step to sort the result of a prior query or operator before returning or further processing.",
+  "description": "Sort a DataFrame by one or more columns, with configurable direction and NaN placement (pandas sort_values).",
+  "usage": "``columns`` lists the sort keys (a single name or a list). ``ascending`` is a single bool applied to all, or a list with one bool per column. ``na_position`` controls whether NaNs go first or last.",
   "attributes": [
     {
       "name": "columns",
-      "type": "Union[str, list]",
+      "type": "list",
       "default": null,
-      "required": false,
-      "description": ""
+      "required": true,
+      "description": "Column name or list of column names to sort by."
     },
     {
       "name": "ascending",
-      "type": "Union[bool, list]",
-      "default": "ascending",
+      "type": "list",
+      "default": true,
       "required": false,
-      "description": ""
+      "description": "Sort direction: a single bool for all columns, or a list with one bool per column (``True`` = ascending). Default ``True``."
     },
     {
       "name": "na_position",
       "type": "str",
       "default": "last",
       "required": false,
-      "description": ""
+      "description": "Where to place NaN values \u2014 ``first`` or ``last`` (default)."
     },
     {
       "name": "pd_args",
-      "type": "Any",
+      "type": "dict",
       "default": {},
       "required": false,
-      "description": ""
+      "description": "Extra keyword arguments forwarded to pandas ``sort_values``."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "tOrder",
+    "type": "object",
     "properties": {
       "columns": {
-        "type": [
-          "string",
-          "array"
-        ]
+        "$ref": "#/$defs/columnRef",
+        "description": "Sort key column(s)."
       },
       "ascending": {
-        "type": [
-          "boolean",
-          "array"
-        ]
+        "oneOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "description": "Single direction or one per column.",
+        "default": true
       },
       "na_position": {
-        "type": "string"
+        "type": "string",
+        "enum": [
+          "first",
+          "last"
+        ],
+        "description": "Where to place NaN values \u2014 ``first`` or ``last`` (default).",
+        "default": "last"
       },
-      "pd_args": {}
+      "pd_args": {
+        "type": "object",
+        "description": "Extra keyword arguments forwarded to pandas ``sort_values``.",
+        "default": {}
+      }
     },
-    "required": []
+    "required": [
+      "columns"
+    ],
+    "additionalProperties": true,
+    "description": "Sort a DataFrame by ``columns``. ``columns`` is required.",
+    "$defs": {
+      "columnRef": {
+        "description": "A single column name or a list of column names.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"tOrder\": {\n                \"columns\": [\"revenue\", \"date\"],\n                \"ascending\": [false, true],\n                \"na_position\": \"last\"\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"tOrder\": {\n        \"columns\": [\"revenue\", \"date\"],\n        \"ascending\": [false, true],\n        \"na_position\": \"last\"\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

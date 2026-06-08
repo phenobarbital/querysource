@@ -1,48 +1,106 @@
 {
   "name": "GroupBy",
   "category": "Operators",
-  "description": "Aggregate DataFrame columns grouped by one or more key columns.",
-  "usage": "Use in a MultiQuery pipeline to compute aggregate statistics on a DataFrame, equivalent to SQL GROUP BY with aggregate functions.",
+  "description": "Aggregate DataFrame columns grouped by one or more key columns (SQL GROUP BY with aggregate functions).",
+  "usage": "Provide ``by`` (the grouping key columns) and ``columns`` (a mapping of column name to the aggregation function to apply). Each value may be a single function name or a list of function names. Functions must be one of the supported aggregations (see the ``aggFunc`` enum).",
   "attributes": [
     {
       "name": "columns",
       "type": "dict",
       "default": {},
       "required": false,
-      "description": ""
+      "description": "Mapping of column name to the aggregation function (or list of functions) to apply, e.g. ``{\"total_revenue\": \"sum\", \"avg_price\": \"mean\"}``."
     },
     {
       "name": "by",
       "type": "list",
       "default": [],
       "required": false,
-      "description": ""
+      "description": "Column name(s) to group by, e.g. ``[\"region\", \"product\"]``. Must exist in the input DataFrame."
     },
     {
       "name": "by_replace_nan",
       "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Value used to replace NaN in the ``by`` columns before grouping. When omitted, missing values in grouping columns raise an error."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "GroupBy",
+    "type": "object",
     "properties": {
       "columns": {
-        "type": "object"
+        "type": "object",
+        "description": "Column-to-aggregation mapping. Keys are columns present in the input DataFrame; each value is one aggregation function or a list of them.",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/aggFunc"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/aggFunc"
+              }
+            }
+          ]
+        },
+        "examples": [
+          {
+            "total_revenue": "sum",
+            "avg_price": "mean",
+            "order_count": "count"
+          }
+        ],
+        "default": {}
       },
       "by": {
-        "type": "array"
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Grouping key columns.",
+        "default": []
       },
       "by_replace_nan": {
-        "type": "string"
+        "type": "string",
+        "description": "Value used to replace NaN in the ``by`` columns before grouping. When omitted, missing values in grouping columns raise an error."
       }
     },
-    "required": []
+    "additionalProperties": true,
+    "description": "Group the input DataFrame by ``by`` and aggregate the named ``columns``.",
+    "$defs": {
+      "aggFunc": {
+        "type": "string",
+        "description": "Supported aggregation function. Numeric-only functions coerce the column to numeric first; ``avg_first_last`` is a special function averaging the first and last value per group.",
+        "enum": [
+          "count",
+          "sum",
+          "mean",
+          "mad",
+          "median",
+          "min",
+          "max",
+          "mode",
+          "size",
+          "abs",
+          "prod",
+          "std",
+          "var",
+          "sem",
+          "nunique",
+          "unique",
+          "first",
+          "last",
+          "idxmax",
+          "idxmin",
+          "avg_first_last"
+        ]
+      }
+    }
   },
-  "example": "{\n    \"GroupBy\": {\n        \"by\": [\"region\", \"product\"],\n        \"columns\": {\n            \"total_revenue\": \"sum\",\n            \"avg_price\": \"mean\",\n            \"order_count\": \"count\"\n        }\n    }\n}",
+  "example": "{\n  \"GroupBy\": {\n    \"by\": [\"region\", \"product\"],\n    \"columns\": {\n      \"total_revenue\": \"sum\",\n      \"avg_price\": \"mean\",\n      \"order_count\": \"count\"\n    }\n  }\n}",
   "icon": "git-merge"
 }

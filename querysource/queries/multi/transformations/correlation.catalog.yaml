@@ -1,0 +1,105 @@
+# Companion documentation for the ``correlation`` transform (class: correlation).
+#
+# Computes a pairwise correlation matrix over ``columns``. ``columns`` is the
+# only required field; ``method`` defaults to pearson. Advanced optional keys
+# (``by_group``, ``add_categorization``, ``grouped``) change the output shape.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: correlation
+category: Transformations
+icon: shuffle
+
+description: >-
+  Compute the pairwise correlation matrix between numeric columns, optionally
+  labelling each coefficient with a human-readable strength category.
+
+usage: >-
+  Provide ``columns`` (the numeric columns to correlate) and optionally
+  ``method`` (pearson/kendall/spearman). Use ``by_group`` to compute the
+  correlation of the first two columns per group, and ``add_categorization`` to
+  append readable strength labels (e.g. "Strong positive correlation").
+
+attributes:
+  - name: columns
+    type: list
+    required: true
+    description: >-
+      Column names to include in the correlation analysis (at least two for a
+      meaningful pairwise result).
+    schema:
+      type: array
+      items:
+        type: string
+      description: Numeric columns to correlate.
+  - name: method
+    type: str
+    required: false
+    default: pearson
+    enum: [pearson, kendall, spearman]
+    description: >-
+      Correlation method passed to pandas ``corr``: ``pearson`` (default,
+      linear), ``kendall`` (rank, tau), or ``spearman`` (rank).
+  - name: numeric_only
+    type: bool
+    required: false
+    default: true
+    description: >-
+      If ``True`` (default), include only numeric columns in the correlation.
+  - name: reset_index
+    type: bool
+    required: false
+    default: true
+    description: If ``True`` (default), reset the index on the result.
+  - name: by_group
+    type: str
+    required: false
+    default: null
+    description: >-
+      Column to group rows by; computes the correlation between the first two
+      ``columns`` per group and returns a ``[by_group, Correlation]`` table.
+  - name: add_categorization
+    type: bool
+    required: false
+    default: false
+    description: >-
+      If present, append a human-readable strength category for each coefficient
+      (e.g. "Strong positive correlation", "No correlation").
+  - name: grouped
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Advanced: add a single correlation column computed per group between the
+      first two ``columns``.
+    schema:
+      type: object
+      description: Per-group correlation column configuration.
+      properties:
+        column:
+          type: string
+          description: Column to group by.
+        col_name:
+          type: string
+          description: Name of the output correlation column.
+      required: [column, col_name]
+
+schema:
+  title: correlation
+  description: >-
+    Pairwise correlation matrix over ``columns`` (required).
+  required: [columns]
+  additionalProperties: true
+
+example: |-
+  {
+    "Transform": [
+      {
+        "correlation": {
+          "columns": ["revenue", "cost", "profit"],
+          "method": "pearson",
+          "numeric_only": true
+        }
+      }
+    ]
+  }

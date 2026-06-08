@@ -1,0 +1,113 @@
+# Companion documentation for the ``Merge`` operator (class: Merge).
+#
+# Source of truth for what introspection cannot infer: the required ``using``
+# DataFrame, the ``how`` enum (including ``anti``), the 2-string ``suffixes``,
+# and the ``on`` vs ``left_on``/``right_on`` mutual exclusion enforced in run().
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Merge
+category: Operators
+icon: git-merge
+
+description: >-
+  Merge two DataFrames with pandas merge semantics, including anti-join (rows in
+  the left frame with no match on the right).
+
+usage: >-
+  ``using`` names the left DataFrame; the remaining DataFrame in the pipeline is
+  the right side. Provide either ``on`` (a key present in both frames) OR both
+  ``left_on`` and ``right_on`` (differently-named keys). ``how`` selects the join
+  type — ``inner`` (default), ``left``, ``right``, ``outer`` or ``anti``.
+  ``suffixes`` disambiguates overlapping column names.
+
+attributes:
+  - name: using
+    type: str
+    required: true
+    description: >-
+      Name of the left DataFrame key in the pipeline data dictionary. The right
+      DataFrame is the other frame remaining in the pipeline.
+  - name: 'on'
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) to join on, present in both DataFrames. Mutually exclusive with
+      ``left_on``/``right_on``.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Join key column(s) present in both frames.
+  - name: how
+    type: str
+    required: false
+    default: inner
+    enum: [inner, left, right, outer, anti]
+    description: >-
+      Join type, mapped to pandas merge ``how``: ``inner`` (default), ``left``,
+      ``right``, ``outer``, or ``anti`` (keep only left rows with no right match).
+  - name: left_on
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) from the left DataFrame. Use together with ``right_on`` instead
+      of ``on`` when the keys are named differently.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Left-side join key column(s).
+  - name: right_on
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) from the right DataFrame. Use together with ``left_on`` instead
+      of ``on`` when the keys are named differently.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Right-side join key column(s).
+  - name: suffixes
+    type: list
+    required: false
+    default: ['_x', '_y']
+    description: >-
+      Two suffixes appended to overlapping column names from the left and right
+      frames respectively. Default ``["_x", "_y"]``.
+    schema:
+      type: array
+      items:
+        type: string
+      minItems: 2
+      maxItems: 2
+      description: 2-element [left_suffix, right_suffix].
+
+# Single object. ``using`` is always required; the join keys must be provided as
+# either ``on`` OR both ``left_on`` and ``right_on``.
+schema:
+  title: Merge
+  description: >-
+    Merge the left DataFrame (``using``) with the remaining DataFrame on ``on``
+    or ``left_on``/``right_on``.
+  required: [using]
+  oneOf:
+    - required: ['on']
+    - required: [left_on, right_on]
+  additionalProperties: true
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Merge": {
+      "using": "employees",
+      "on": "department_id",
+      "how": "left",
+      "suffixes": ["_emp", "_dept"]
+    }
+  }

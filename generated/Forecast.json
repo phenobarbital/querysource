@@ -1,68 +1,184 @@
 {
   "name": "Forecast",
   "category": "Transformations",
-  "description": "Generate time-series forecasts using ARIMA, SARIMA, or Exponential Smoothing.",
-  "usage": "Use in a MultiQuery ``Transform`` step to extend a time-series DataFrame with future value predictions.",
+  "description": "Generate time-series forecasts (ARIMA, SARIMA, or Exponential Smoothing), fitting a model to the values in the target column(s) and appending ``steps`` future predictions to the result.",
+  "usage": "Set ``index_column`` (the datetime index), the target series via ``columns`` (list) or ``value_column`` (single column), and ``model``. ``steps`` controls how many future periods to predict and ``frequency`` their spacing. ARIMA/SARIMA use the ``order`` (p,d,q); SARIMA and Exponential require ``by_group`` to forecast each group separately.",
   "attributes": [
     {
       "name": "steps",
       "type": "int",
       "default": 6,
       "required": false,
-      "description": ""
+      "description": "Number of future periods to forecast. Default ``6``."
     },
     {
       "name": "frequency",
       "type": "str",
       "default": "ME",
       "required": false,
-      "description": ""
+      "description": "Pandas offset alias for the spacing of forecasted periods \u2014 e.g. ``D`` (daily), ``W`` (weekly), ``MS`` (month-start), ``ME`` (month-end, default), ``QE`` (quarter-end), ``YE`` (year-end), ``h`` (hourly). Drives the ARIMA forecast date range; Exponential always resamples monthly (``MS``) and SARIMA works in monthly periods."
     },
     {
       "name": "model_args",
       "type": "dict",
       "default": {},
       "required": false,
-      "description": ""
+      "description": "Extra keyword arguments forwarded to the model (currently used by ``Exponential``, e.g. ``alpha``)."
     },
     {
       "name": "reset_index",
-      "type": "Any",
+      "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default), reset the result index after forecasting."
     },
     {
       "name": "order",
-      "type": "Any",
+      "type": "list",
       "default": [
         1,
         1,
         1
       ],
       "required": false,
-      "description": ""
+      "description": "ARIMA/SARIMA ``(p, d, q)`` order \u2014 autoregressive, differencing, and moving-average terms. Default ``[1, 1, 1]``."
+    },
+    {
+      "name": "index_column",
+      "type": "str",
+      "default": null,
+      "required": true,
+      "description": "Name of the datetime column used as the time-series index."
+    },
+    {
+      "name": "columns",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Column(s) to forecast. Each produces its own predictions. Either this or ``value_column`` is required."
+    },
+    {
+      "name": "value_column",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Single-column alias for ``columns`` (promoted to a one-element list when ``columns`` is not provided)."
+    },
+    {
+      "name": "model",
+      "type": "str",
+      "default": null,
+      "required": true,
+      "description": "Forecast model. ARIMA = non-seasonal AutoRegressive Integrated Moving Average (per-column, no grouping). SARIMA = Seasonal ARIMA (SARIMAX with a monthly seasonal order (1,1,1,12)); requires ``by_group``. Exponential = Holt-Winters Exponential Smoothing (additive trend + additive seasonal, damped; resamples monthly, needs >= 2x ``steps`` points per series); requires ``by_group``."
+    },
+    {
+      "name": "by_group",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Column to group rows by, forecasting each group independently. Required for ``SARIMA`` and ``Exponential``; ignored by ``ARIMA``."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "Forecast",
+    "type": "object",
     "properties": {
       "steps": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Number of future periods to forecast. Default ``6``.",
+        "default": 6
       },
       "frequency": {
-        "type": "string"
+        "type": "string",
+        "description": "Pandas offset alias for the spacing of forecasted periods \u2014 e.g. ``D`` (daily), ``W`` (weekly), ``MS`` (month-start), ``ME`` (month-end, default), ``QE`` (quarter-end), ``YE`` (year-end), ``h`` (hourly). Drives the ARIMA forecast date range; Exponential always resamples monthly (``MS``) and SARIMA works in monthly periods.",
+        "default": "ME"
       },
       "model_args": {
-        "type": "object"
+        "type": "object",
+        "description": "Extra keyword arguments forwarded to the model (currently used by ``Exponential``, e.g. ``alpha``).",
+        "default": {}
       },
-      "reset_index": {},
-      "order": {}
+      "reset_index": {
+        "type": "boolean",
+        "description": "If ``True`` (default), reset the result index after forecasting.",
+        "default": true
+      },
+      "order": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        },
+        "minItems": 3,
+        "maxItems": 3,
+        "description": "ARIMA (p, d, q) order.",
+        "default": [
+          1,
+          1,
+          1
+        ]
+      },
+      "index_column": {
+        "type": "string",
+        "description": "Name of the datetime column used as the time-series index."
+      },
+      "columns": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Numeric column(s) to forecast."
+      },
+      "value_column": {
+        "type": "string",
+        "description": "Single-column alias for ``columns`` (promoted to a one-element list when ``columns`` is not provided)."
+      },
+      "model": {
+        "type": "string",
+        "description": "Forecast model name.",
+        "enum": [
+          "ARIMA",
+          "SARIMA",
+          "Exponential"
+        ]
+      },
+      "by_group": {
+        "type": "string",
+        "description": "Column to group rows by, forecasting each group independently. Required for ``SARIMA`` and ``Exponential``; ignored by ``ARIMA``."
+      }
     },
-    "required": []
+    "required": [
+      "index_column",
+      "model"
+    ],
+    "anyOf": [
+      {
+        "required": [
+          "columns"
+        ]
+      },
+      {
+        "required": [
+          "value_column"
+        ]
+      }
+    ],
+    "additionalProperties": true,
+    "description": "Append time-series forecasts to a DataFrame. ``index_column`` and ``model`` are required, plus one of ``columns`` / ``value_column``.",
+    "$defs": {
+      "columnRef": {
+        "description": "A single column name or a list of column names.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"Forecast\": {\n                \"index_column\": \"date\",\n                \"value_column\": \"revenue\",\n                \"model\": \"ARIMA\",\n                \"steps\": 12,\n                \"frequency\": \"ME\"\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"Forecast\": {\n        \"index_column\": \"date\",\n        \"value_column\": \"revenue\",\n        \"model\": \"ARIMA\",\n        \"steps\": 12,\n        \"frequency\": \"ME\"\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

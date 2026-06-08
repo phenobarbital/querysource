@@ -91,7 +91,7 @@ class crosstab(AbstractTransform):
                 )
             if self.reset_index is True:
                 df.reset_index(inplace=True)
-            self.colum_info(df)
+            self._print_info(df)
             return df
         except (ValueError, KeyError) as err:
             raise QueryException(

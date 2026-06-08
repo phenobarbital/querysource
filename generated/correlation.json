@@ -1,34 +1,125 @@
 {
   "name": "correlation",
   "category": "Transformations",
-  "description": "Compute pairwise correlation between numeric columns in a DataFrame.",
-  "usage": "Use in a MultiQuery ``Transform`` step to analyse the linear relationship between numeric columns in a DataFrame.",
+  "description": "Compute the pairwise correlation matrix between numeric columns, optionally labelling each coefficient with a human-readable strength category.",
+  "usage": "Provide ``columns`` (the numeric columns to correlate) and optionally ``method`` (pearson/kendall/spearman). Use ``by_group`` to compute the correlation of the first two columns per group, and ``add_categorization`` to append readable strength labels (e.g. \"Strong positive correlation\").",
   "attributes": [
     {
       "name": "reset_index",
-      "type": "Any",
+      "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default), reset the index on the result."
     },
     {
       "name": "numeric_only",
-      "type": "Any",
+      "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default), include only numeric columns in the correlation."
+    },
+    {
+      "name": "columns",
+      "type": "list",
+      "default": null,
+      "required": true,
+      "description": "Column names to include in the correlation analysis (at least two for a meaningful pairwise result)."
+    },
+    {
+      "name": "method",
+      "type": "str",
+      "default": "pearson",
+      "required": false,
+      "description": "Correlation method passed to pandas ``corr``: ``pearson`` (default, linear), ``kendall`` (rank, tau), or ``spearman`` (rank)."
+    },
+    {
+      "name": "by_group",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Column to group rows by; computes the correlation between the first two ``columns`` per group and returns a ``[by_group, Correlation]`` table."
+    },
+    {
+      "name": "add_categorization",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": "If present, append a human-readable strength category for each coefficient (e.g. \"Strong positive correlation\", \"No correlation\")."
+    },
+    {
+      "name": "grouped",
+      "type": "dict",
+      "default": null,
+      "required": false,
+      "description": "Advanced: add a single correlation column computed per group between the first two ``columns``."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "correlation",
+    "type": "object",
     "properties": {
-      "reset_index": {},
-      "numeric_only": {}
+      "reset_index": {
+        "type": "boolean",
+        "description": "If ``True`` (default), reset the index on the result.",
+        "default": true
+      },
+      "numeric_only": {
+        "type": "boolean",
+        "description": "If ``True`` (default), include only numeric columns in the correlation.",
+        "default": true
+      },
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Numeric columns to correlate."
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "pearson",
+          "kendall",
+          "spearman"
+        ],
+        "description": "Correlation method passed to pandas ``corr``: ``pearson`` (default, linear), ``kendall`` (rank, tau), or ``spearman`` (rank).",
+        "default": "pearson"
+      },
+      "by_group": {
+        "type": "string",
+        "description": "Column to group rows by; computes the correlation between the first two ``columns`` per group and returns a ``[by_group, Correlation]`` table."
+      },
+      "add_categorization": {
+        "type": "boolean",
+        "description": "If present, append a human-readable strength category for each coefficient (e.g. \"Strong positive correlation\", \"No correlation\").",
+        "default": false
+      },
+      "grouped": {
+        "type": "object",
+        "description": "Per-group correlation column configuration.",
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column to group by."
+          },
+          "col_name": {
+            "type": "string",
+            "description": "Name of the output correlation column."
+          }
+        },
+        "required": [
+          "column",
+          "col_name"
+        ]
+      }
     },
-    "required": []
+    "required": [
+      "columns"
+    ],
+    "additionalProperties": true,
+    "description": "Pairwise correlation matrix over ``columns`` (required)."
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"correlation\": {\n                \"columns\": [\"revenue\", \"cost\", \"profit\"],\n                \"method\": \"pearson\",\n                \"numeric_only\": true\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"correlation\": {\n        \"columns\": [\"revenue\", \"cost\", \"profit\"],\n        \"method\": \"pearson\",\n        \"numeric_only\": true\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

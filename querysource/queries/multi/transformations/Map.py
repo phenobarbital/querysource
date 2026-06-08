@@ -45,13 +45,29 @@ class Map(AbstractTransform):
             ]
         }
     """
+
+    @classmethod
+    def transform_functions(cls) -> list[str]:
+        """Return the named transform functions usable inside ``fields`` values.
+
+        Single source of truth shared by the runtime — which resolves each
+        function via ``getattr(dffunctions, name)`` — and the ``Map.catalog.yaml``
+        ``transformFunc`` enum (resolved through the ``enum_from_class`` companion
+        directive). The ``getFunction`` resolver helper is excluded.
+        """
+        import inspect
+        return [
+            name for name, obj in vars(dffunctions).items()
+            if inspect.isfunction(obj)
+            and not name.startswith('_')
+            and name != 'getFunction'
+        ]
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.replace_columns: bool = kwargs.pop('replace_columns', False)
-        try:
-            self.reset_index: bool = kwargs['reset_index']
-            del kwargs['reset_index']
-        except KeyError:
-            self.reset_index: bool = True
+        # Default False so existing Maps (which never reset the index) are
+        # unaffected; only opt-in resets now take effect.
+        self.reset_index: bool = kwargs.pop('reset_index', False)
         super(Map, self).__init__(data, **kwargs)
         if not hasattr(self, 'fields'):
             raise DriverError(
@@ -72,8 +88,9 @@ class Map(AbstractTransform):
                 # simple column replacement:
                 try:
                     it[field] = it[val]
-                    # if self.replace_columns is True:
-                    it.drop(val, axis="columns", inplace=True)
+                    # Only drop the source column when replacing in-place.
+                    if self.replace_columns:
+                        it.drop(val, axis="columns", inplace=True)
                     continue
                 except KeyError:
                     self.logger.error(
@@ -103,7 +120,9 @@ class Map(AbstractTransform):
         self.data = it
         if hasattr(self, 'drop_columns'):
             self.data.drop(columns=self.drop_columns, inplace=True)
-        self.colum_info(self.data)
+        if self.reset_index:
+            self.data.reset_index(drop=True, inplace=True)
+        self._print_info(self.data)
         return self.data
 
     def _call_fn(self, field: str, fname: Callable, args: dict, it: pd.DataFrame) -> pd.DataFrame:

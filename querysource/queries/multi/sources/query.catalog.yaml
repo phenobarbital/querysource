@@ -1,0 +1,111 @@
+# Companion documentation for the ``Query`` component (class: ThreadQuery).
+#
+# This file is the SINGLE SOURCE OF TRUTH for everything the component
+# introspection cannot infer: human prose, schema-level constraints
+# (oneOf / additionalProperties), and the usage example.
+#
+# Hybrid model:
+#   * Structural schema (property names + types + required) is derived from
+#     code introspection when available.
+#   * This companion supplies the non-introspectable bits and MERGES onto the
+#     introspected attributes by ``name`` (overriding prose, appending new
+#     fields). Query has nothing introspectable, so the full attribute list
+#     lives here.
+#
+# After editing this file run ``generate-multiquery-docs`` to refresh
+# ``generated/Query.json`` (a pre-commit hook does this automatically).
+
+display_name: Query
+category: Sources
+icon: database
+
+description: >-
+  Run a stored slug-based query or a raw SQL query and expose the result as a
+  named DataFrame inside the MultiQS pipeline.
+
+usage: >-
+  Add entries to the top-level ``queries:`` block. Each key is the DataFrame
+  name; each value must specify either ``slug`` (named stored query) or
+  ``query`` (raw SQL). For raw SQL, set either ``driver`` (e.g. ``pg``,
+  ``mysql``) or ``datasource`` (named connection). Any additional keys on a
+  ``slug`` entry are passed through as conditions.
+
+# Attributes — merged onto introspected attributes by ``name``.
+attributes:
+  - name: slug
+    type: str
+    required: false
+    default: null
+    description: >-
+      Stored query slug to execute. Mutually exclusive with ``query``.
+  - name: query
+    type: str
+    required: false
+    default: null
+    description: >-
+      Raw SQL string to execute. Mutually exclusive with ``slug``.
+  - name: driver
+    type: str
+    required: false
+    default: null
+    description: >-
+      Default driver to use when running a raw ``query`` (e.g. ``pg``,
+      ``mysql``, ``bigquery``).
+  - name: datasource
+    type: str
+    required: false
+    default: null
+    description: >-
+      Named datasource (connection) to use when running a raw ``query``.
+      Takes precedence over ``driver``.
+  - name: remote
+    type: bool
+    required: false
+    default: false
+    description: >-
+      When ``True``, dispatch this query to a remote qworker server instead of
+      executing locally. Requires either a ``worker`` key on the same entry or
+      the central ``QWORKER_HOST`` / ``QWORKER_PORT`` configuration.
+  - name: worker
+    type: str
+    required: false
+    default: null
+    description: >-
+      Address of the remote qworker to use for this query, in ``host:port``
+      format (e.g. ``qworker1.internal:8888``). Overrides the central
+      ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when
+      ``remote: true``. If no port is specified, QWORKER_PORT is used as the
+      fallback (default: 8888).
+
+# Schema-level constraints overlaid onto the synthesized json_schema.
+schema:
+  title: Query
+  description: >-
+    A single entry under the MultiQS ``queries:`` block. Must provide either
+    ``slug`` or ``query`` (but not both).
+  oneOf:
+    - required: [slug]
+    - required: [query]
+  additionalProperties: true
+  comment: >-
+    oneOf enforces mutual exclusion: a query must have exactly one of 'slug'
+    (named query) or 'query' (raw SQL), not both.
+
+example: |-
+  {
+    "queries": {
+      "stores": {
+        "query": "select * from hisense.stores",
+        "driver": "pg"
+      },
+      "products": {
+        "slug": "all_products"
+      },
+      "remote_orders": {
+        "slug": "daily_orders",
+        "remote": true,
+        "worker": "qworker1.internal:8888",
+        "store_id": 42
+      }
+    }
+  }

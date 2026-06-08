@@ -1,68 +1,84 @@
 {
   "name": "tExplode",
   "category": "Transformations",
-  "description": "Explode a column of lists or dicts into multiple rows.",
-  "usage": "Use in a MultiQuery ``Transform`` step to expand a list- or dict-valued column into multiple rows.",
+  "description": "Explode a column of lists or dicts into multiple rows, optionally normalising dict values into columns (pandas explode + json_normalize).",
+  "usage": "``column`` is the list/dict column to explode. ``explode_dataset`` expands dict values into separate columns; ``drop_original`` removes the source column. ``advanced_mode`` enables parent-index tracking, empty-list preservation and column propagation \u2014 only then does ``propagate_columns`` apply.",
   "attributes": [
     {
       "name": "column",
       "type": "str",
       "default": null,
-      "required": false,
-      "description": ""
+      "required": true,
+      "description": "Name of the list- or dict-valued column to explode."
     },
     {
       "name": "drop_original",
       "type": "bool",
       "default": false,
       "required": false,
-      "description": ""
+      "description": "If ``True``, remove the source column from the result. Default ``False``."
     },
     {
       "name": "explode_dataset",
       "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default) and the values are dicts, expand them into separate columns via ``json_normalize``."
     },
     {
       "name": "advanced_mode",
       "type": "bool",
       "default": false,
       "required": false,
-      "description": ""
+      "description": "Enable enhanced processing: parent-index tracking, empty-list preservation, and column propagation (concatenates parent + exploded child rows)."
     },
     {
       "name": "propagate_columns",
       "type": "list",
       "default": [],
       "required": false,
-      "description": ""
+      "description": "Parent column names whose values are copied onto each child row. Only applies when ``advanced_mode`` is ``True``."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "tExplode",
+    "type": "object",
     "properties": {
       "column": {
-        "type": "string"
+        "type": "string",
+        "description": "Name of the list- or dict-valued column to explode."
       },
       "drop_original": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "If ``True``, remove the source column from the result. Default ``False``.",
+        "default": false
       },
       "explode_dataset": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "If ``True`` (default) and the values are dicts, expand them into separate columns via ``json_normalize``.",
+        "default": true
       },
       "advanced_mode": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "Enable enhanced processing: parent-index tracking, empty-list preservation, and column propagation (concatenates parent + exploded child rows).",
+        "default": false
       },
       "propagate_columns": {
-        "type": "array"
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Parent columns to propagate to child rows (advanced_mode only).",
+        "default": []
       }
     },
-    "required": []
+    "required": [
+      "column"
+    ],
+    "additionalProperties": true,
+    "description": "Explode a list/dict column into rows. ``column`` is required."
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"tExplode\": {\n                \"column\": \"tags\",\n                \"drop_original\": false,\n                \"explode_dataset\": true,\n                \"advanced_mode\": false,\n                \"propagate_columns\": []\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"tExplode\": {\n        \"column\": \"tags\",\n        \"drop_original\": false,\n        \"explode_dataset\": true,\n        \"advanced_mode\": false,\n        \"propagate_columns\": []\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

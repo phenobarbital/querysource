@@ -1,66 +1,82 @@
 {
   "name": "GoogleMaps",
   "category": "Transformations",
-  "description": "Enrich a DataFrame with Google Maps route and travel-time data.",
-  "usage": "Use in a MultiQuery ``Transform`` step to augment location-based data with real-world route information.",
+  "description": "Enrich a DataFrame with Google Maps route geometry, distance, and travel-time data (calls the navigator Google Maps Route API per row).",
+  "usage": "Operates on rows that contain an ``origin`` and a ``locations`` list (each location with latitude/longitude/location_name/store_id). Locations are sorted by ``timestamp_key`` and a waypoint route (plus an optimal route) is computed, adding route/distance/duration columns (and ``opt_*`` variants).",
   "attributes": [
     {
       "name": "zoom",
       "type": "int",
       "default": 10,
       "required": false,
-      "description": ""
+      "description": "Map zoom level for any embedded map output. Default ``10``."
     },
     {
       "name": "map_scale",
       "type": "int",
       "default": 2,
       "required": false,
-      "description": ""
+      "description": "Scale factor for map output (1 or 2). Default ``2``."
     },
     {
       "name": "timestamp_key",
       "type": "str",
       "default": "timestamp",
       "required": false,
-      "description": ""
+      "description": "Column inside each ``locations`` entry used to sort stops by departure time. Default ``timestamp``."
     },
     {
       "name": "departure_time",
       "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Fixed departure time (ISO string) used when a row has no per-row ``departure_time``. Default ``None``."
     },
     {
-      "name": "map_size",
-      "type": "Any",
-      "default": "(800, 800",
+      "name": "type",
+      "type": "str",
+      "default": "get_route",
       "required": false,
-      "description": ""
+      "description": "Route method (navigator ``Route``) to dispatch: ``get_route`` (origin\u2192destination route) or ``waypoint_route`` (multi-stop route). An optimal-route pass is also computed and added as ``opt_*`` columns."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "GoogleMaps",
+    "type": "object",
     "properties": {
       "zoom": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Map zoom level for any embedded map output. Default ``10``.",
+        "default": 10
       },
       "map_scale": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Scale factor for map output (1 or 2). Default ``2``.",
+        "default": 2
       },
       "timestamp_key": {
-        "type": "string"
+        "type": "string",
+        "description": "Column inside each ``locations`` entry used to sort stops by departure time. Default ``timestamp``.",
+        "default": "timestamp"
       },
       "departure_time": {
-        "type": "string"
+        "type": "string",
+        "description": "Fixed departure time (ISO string) used when a row has no per-row ``departure_time``. Default ``None``."
       },
-      "map_size": {}
+      "type": {
+        "type": "string",
+        "description": "Route method to dispatch.",
+        "default": "get_route",
+        "enum": [
+          "get_route",
+          "waypoint_route"
+        ]
+      }
     },
-    "required": []
+    "additionalProperties": true,
+    "description": "Add Google Maps route/travel-time columns to a DataFrame."
   },
-  "example": "{\n    \"GoogleMaps\": {\n        \"zoom\": 12,\n        \"timestamp_key\": \"departure_time\",\n        \"type\": \"get_route\"\n    }\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"GoogleMaps\": {\n        \"zoom\": 12,\n        \"timestamp_key\": \"departure_time\",\n        \"type\": \"get_route\"\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

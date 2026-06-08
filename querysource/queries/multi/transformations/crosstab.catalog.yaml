@@ -1,0 +1,113 @@
+# Companion documentation for the ``crosstab`` transform (class: crosstab).
+#
+# Cross-tabulation (frequency or aggregation) via pandas crosstab (type=crosstab)
+# or pivot_table (type=pivot). Same engine family as ``pivot``. NOTE: the runtime
+# aggregation key is ``aggregate`` (NOT ``aggfunc`` as the docstring says).
+# ``index`` and ``columns`` are required; ``values``/``aggregate``/``totals`` are
+# pulled via kwargs (not introspected).
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: crosstab
+category: Transformations
+icon: shuffle
+
+description: >-
+  Compute a cross-tabulation (contingency table) from a DataFrame — frequency
+  counts, or an aggregation of ``values``.
+
+usage: >-
+  ``index`` and ``columns`` (both required) are the column name(s) forming the
+  rows and columns of the table. Omit ``values`` for frequency counts, or set it
+  with ``aggregate`` to summarise. ``totals`` adds a margins row/column.
+
+attributes:
+  - name: index
+    type: list
+    required: true
+    description: >-
+      Column name(s) used as the cross-tab row index. A single name or a list.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Row index column(s).
+  - name: columns
+    type: list
+    required: true
+    description: >-
+      Column name(s) used as the cross-tab columns. A single name or a list.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Cross-tab column(s).
+  - name: values
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) to aggregate. Omit for plain frequency counts.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Value column(s) to aggregate.
+  - name: aggregate
+    type: str
+    required: false
+    default: count
+    description: >-
+      Aggregation function applied to ``values`` (pandas ``aggfunc``), e.g.
+      ``count``, ``sum``, ``mean``. Defaults to frequency counts when omitted.
+  - name: type
+    type: str
+    required: false
+    default: crosstab
+    enum: [crosstab, pivot]
+    description: >-
+      Engine to use: ``crosstab`` (pandas crosstab, default) or ``pivot``
+      (pandas pivot_table).
+  - name: totals
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Add a totals/margins row and column (pandas ``margins``).
+    schema:
+      type: object
+      description: Totals/margins configuration.
+      properties:
+        name:
+          type: string
+          description: Label for the totals row/column (pandas margins_name).
+      required: [name]
+  - name: reset_index
+    type: bool
+    required: false
+    default: true
+    description: If ``True`` (default), reset the result index after the cross-tab.
+
+schema:
+  title: crosstab
+  description: >-
+    Cross-tabulate a DataFrame. ``index`` and ``columns`` are required.
+  required: [index, columns]
+  additionalProperties: true
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Transform": [
+      {
+        "crosstab": {
+          "index": "region",
+          "columns": "product_category",
+          "values": "revenue",
+          "aggregate": "sum",
+          "reset_index": true
+        }
+      }
+    ]
+  }

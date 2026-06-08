@@ -38,6 +38,16 @@ class FilterCols(AbstractTransform):
         {"Transform": [{"FilterCols": {"expression": "constant"}}]}
     """
 
+    @classmethod
+    def supported_expressions(cls) -> list[str]:
+        """Return the data-quality predicates accepted by ``expression``.
+
+        Single source of truth shared by the runtime validation (against
+        ``SUPPORTED_EXPRESSIONS``) and the ``FilterCols.catalog.yaml``
+        ``expression`` enum (resolved via the ``enum_from_class`` directive).
+        """
+        return sorted(SUPPORTED_EXPRESSIONS)
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         # Pop expression BEFORE super().__init__ so introspection works
         self.expression: str = kwargs.pop('expression', None)

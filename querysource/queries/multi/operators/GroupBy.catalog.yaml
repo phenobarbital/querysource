@@ -1,0 +1,99 @@
+# Companion documentation for the ``GroupBy`` operator (class: GroupBy).
+#
+# Source of truth for what introspection cannot infer: the nested shape of
+# ``columns`` (output column -> aggregation function) and the closed set of
+# aggregation functions, which the code gates via the ``numeric_required`` table
+# plus ``supported_functions`` (an unlisted function raises KeyError at runtime).
+#
+# The aggregation-function enum lives once in ``schema.defs.aggFunc`` and is
+# referenced with ``$ref`` so the list has a single source of truth.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: GroupBy
+category: Operators
+icon: git-merge
+
+description: >-
+  Aggregate DataFrame columns grouped by one or more key columns (SQL GROUP BY
+  with aggregate functions).
+
+usage: >-
+  Provide ``by`` (the grouping key columns) and ``columns`` (a mapping of column
+  name to the aggregation function to apply). Each value may be a single function
+  name or a list of function names. Functions must be one of the supported
+  aggregations (see the ``aggFunc`` enum).
+
+attributes:
+  - name: by
+    type: list
+    required: false
+    default: []
+    description: >-
+      Column name(s) to group by, e.g. ``["region", "product"]``. Must exist in
+      the input DataFrame.
+    schema:
+      type: array
+      items:
+        type: string
+      description: Grouping key columns.
+  - name: columns
+    type: dict
+    required: false
+    default: {}
+    description: >-
+      Mapping of column name to the aggregation function (or list of functions)
+      to apply, e.g. ``{"total_revenue": "sum", "avg_price": "mean"}``.
+    schema:
+      type: object
+      description: >-
+        Column-to-aggregation mapping. Keys are columns present in the input
+        DataFrame; each value is one aggregation function or a list of them.
+      additionalProperties:
+        oneOf:
+          - $ref: '#/$defs/aggFunc'
+          - type: array
+            items:
+              $ref: '#/$defs/aggFunc'
+      examples:
+        - total_revenue: sum
+          avg_price: mean
+          order_count: count
+  - name: by_replace_nan
+    type: str
+    required: false
+    default: null
+    description: >-
+      Value used to replace NaN in the ``by`` columns before grouping. When
+      omitted, missing values in grouping columns raise an error.
+
+# Single object (not a list). Reusable aggregation-function enum lives in defs.
+schema:
+  title: GroupBy
+  description: >-
+    Group the input DataFrame by ``by`` and aggregate the named ``columns``.
+  additionalProperties: true
+  defs:
+    aggFunc:
+      type: string
+      description: >-
+        Supported aggregation function. Numeric-only functions coerce the column
+        to numeric first; ``avg_first_last`` is a special function averaging the
+        first and last value per group.
+      # Enum is pulled live from GroupBy.aggregation_functions() (which derives
+      # from the runtime ``numeric_required`` table + ``supported_functions``),
+      # so it can never drift from the code. Run generate-multiquery-docs after
+      # changing the accepted functions.
+      enum_from_class: aggregation_functions
+
+example: |-
+  {
+    "GroupBy": {
+      "by": ["region", "product"],
+      "columns": {
+        "total_revenue": "sum",
+        "avg_price": "mean",
+        "order_count": "count"
+      }
+    }
+  }

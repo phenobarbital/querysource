@@ -1,0 +1,149 @@
+# Companion documentation for the ``Forecast`` transform (class: Forecast).
+#
+# Time-series forecasting via statsmodels (ARIMA / SARIMA / Exponential
+# Smoothing). NOTES from the code: the series to forecast are given by
+# ``columns`` (a list) — ``value_column`` is a single-column ALIAS promoted to
+# ``columns`` when the latter is absent. ``model`` is required. ``SARIMA`` and
+# ``Exponential`` additionally require ``by_group`` (forecast per group); ARIMA
+# does not. The ``model`` enum is bound live to Forecast.supported_models().
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Forecast
+category: Transformations
+icon: shuffle
+
+description: >-
+  Generate time-series forecasts (ARIMA, SARIMA, or Exponential Smoothing),
+  fitting a model to the values in the target column(s) and appending ``steps``
+  future predictions to the result.
+
+usage: >-
+  Set ``index_column`` (the datetime index), the target series via ``columns``
+  (list) or ``value_column`` (single column), and ``model``. ``steps`` controls
+  how many future periods to predict and ``frequency`` their spacing. ARIMA/SARIMA
+  use the ``order`` (p,d,q); SARIMA and Exponential require ``by_group`` to
+  forecast each group separately.
+
+attributes:
+  - name: index_column
+    type: str
+    required: true
+    description: >-
+      Name of the datetime column used as the time-series index.
+  - name: columns
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) to forecast. Each produces its own predictions. Either this or
+      ``value_column`` is required.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Numeric column(s) to forecast.
+  - name: value_column
+    type: str
+    required: false
+    default: null
+    description: >-
+      Single-column alias for ``columns`` (promoted to a one-element list when
+      ``columns`` is not provided).
+  - name: model
+    type: str
+    required: true
+    description: >-
+      Forecast model. ARIMA = non-seasonal AutoRegressive Integrated Moving
+      Average (per-column, no grouping). SARIMA = Seasonal ARIMA (SARIMAX with a
+      monthly seasonal order (1,1,1,12)); requires ``by_group``. Exponential =
+      Holt-Winters Exponential Smoothing (additive trend + additive seasonal,
+      damped; resamples monthly, needs >= 2x ``steps`` points per series);
+      requires ``by_group``.
+    schema:
+      type: string
+      description: Forecast model name.
+      # Bound live to Forecast.supported_models().
+      enum_from_class: supported_models
+  - name: steps
+    type: int
+    required: false
+    default: 6
+    description: Number of future periods to forecast. Default ``6``.
+  - name: frequency
+    type: str
+    required: false
+    default: ME
+    description: >-
+      Pandas offset alias for the spacing of forecasted periods — e.g. ``D``
+      (daily), ``W`` (weekly), ``MS`` (month-start), ``ME`` (month-end, default),
+      ``QE`` (quarter-end), ``YE`` (year-end), ``h`` (hourly). Drives the ARIMA
+      forecast date range; Exponential always resamples monthly (``MS``) and
+      SARIMA works in monthly periods.
+  - name: order
+    type: list
+    required: false
+    default: [1, 1, 1]
+    description: >-
+      ARIMA/SARIMA ``(p, d, q)`` order — autoregressive, differencing, and
+      moving-average terms. Default ``[1, 1, 1]``.
+    schema:
+      type: array
+      items:
+        type: integer
+      minItems: 3
+      maxItems: 3
+      description: ARIMA (p, d, q) order.
+  - name: by_group
+    type: str
+    required: false
+    default: null
+    description: >-
+      Column to group rows by, forecasting each group independently. Required
+      for ``SARIMA`` and ``Exponential``; ignored by ``ARIMA``.
+  - name: model_args
+    type: dict
+    required: false
+    default: {}
+    description: >-
+      Extra keyword arguments forwarded to the model (currently used by
+      ``Exponential``, e.g. ``alpha``).
+    schema:
+      type: object
+  - name: reset_index
+    type: bool
+    required: false
+    default: true
+    description: If ``True`` (default), reset the result index after forecasting.
+
+schema:
+  title: Forecast
+  description: >-
+    Append time-series forecasts to a DataFrame. ``index_column`` and ``model``
+    are required, plus one of ``columns`` / ``value_column``.
+  required: [index_column, model]
+  additionalProperties: true
+  anyOf:
+    - required: [columns]
+    - required: [value_column]
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Transform": [
+      {
+        "Forecast": {
+          "index_column": "date",
+          "value_column": "revenue",
+          "model": "ARIMA",
+          "steps": 12,
+          "frequency": "ME"
+        }
+      }
+    ]
+  }

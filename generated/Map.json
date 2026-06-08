@@ -1,28 +1,228 @@
 {
   "name": "Map",
   "category": "Transformations",
-  "description": "Rename, select, or compute columns in a DataFrame (shape mapping).",
-  "usage": "Use in a MultiQuery ``Transform`` step to reshape a DataFrame \u2014 rename columns, select fields, or compute derived columns \u2014 before returning the result.",
+  "description": "Rename, select, or compute columns in a DataFrame (shape mapping) inside a MultiQuery ``Transform`` step.",
+  "usage": "``fields`` maps each target column to a source. A string value renames/copies a source column; an object value ``{func: {args}}`` applies one or more named transform functions; a list value applies a positional function call (``[func, {args}]``) or several. ``drop_columns`` removes columns after mapping.",
   "attributes": [
     {
       "name": "replace_columns",
       "type": "bool",
       "default": false,
       "required": false,
-      "description": ""
+      "description": "If ``True``, drop each mapped source column after copying it to the target (replace in-place). When ``False`` (default) the source column is kept."
+    },
+    {
+      "name": "reset_index",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": "If ``True``, reset the DataFrame index (``drop=True``) after mapping. Default ``False``."
+    },
+    {
+      "name": "fields",
+      "type": "dict",
+      "default": null,
+      "required": true,
+      "description": "Mapping of target column name to its source: a source column name (rename/copy), an object of transform-function calls, or a list of positional function calls."
+    },
+    {
+      "name": "drop_columns",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Column name(s) to drop from the result after mapping."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "Map",
+    "type": "object",
     "properties": {
       "replace_columns": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "If ``True``, drop each mapped source column after copying it to the target (replace in-place). When ``False`` (default) the source column is kept.",
+        "default": false
+      },
+      "reset_index": {
+        "type": "boolean",
+        "description": "If ``True``, reset the DataFrame index (``drop=True``) after mapping. Default ``False``.",
+        "default": false
+      },
+      "fields": {
+        "type": "object",
+        "description": "Target column -> source column or transform-function spec.",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Source column name to copy/rename from."
+            },
+            {
+              "type": "object",
+              "description": "Transform functions to apply: {function: {args}}.",
+              "propertyNames": {
+                "$ref": "#/$defs/transformFunc"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "description": "Keyword arguments for the transform function."
+              }
+            },
+            {
+              "type": "array",
+              "description": "Positional function call(s): [function, {args}] or a list thereof."
+            }
+          ]
+        }
+      },
+      "drop_columns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Columns to drop after mapping."
       }
     },
-    "required": []
+    "required": [
+      "fields"
+    ],
+    "additionalProperties": true,
+    "description": "Reshape a DataFrame by mapping target columns to source columns or transform functions. ``fields`` is required.",
+    "$defs": {
+      "transformFunc": {
+        "type": "string",
+        "description": "Named transform function from querysource.types.dt.transforms.",
+        "enum": [
+          "to_timestamp",
+          "from_currency",
+          "phone_format",
+          "num_formatter",
+          "convert_to_integer",
+          "apply_function",
+          "math_operation",
+          "extract_from_array",
+          "explode",
+          "sum",
+          "div",
+          "to_time",
+          "middle_time",
+          "drop_column",
+          "add_days",
+          "add_timestamp_to_time",
+          "substract_days",
+          "rename_column",
+          "rename_prefix",
+          "regex_match",
+          "zerofill",
+          "pad",
+          "concat",
+          "concat_column_values",
+          "prefix",
+          "suffix",
+          "normalize_strings",
+          "coalesce",
+          "split_array",
+          "split",
+          "split_to_columns",
+          "slice",
+          "case",
+          "divide",
+          "multiply",
+          "nullif",
+          "to_null",
+          "capitalize",
+          "to_round",
+          "uppercase",
+          "lowercase",
+          "both_strip",
+          "trim",
+          "ltrim",
+          "ltrip",
+          "rtrip",
+          "left_strip",
+          "right_strip",
+          "string_replace",
+          "replace_regex",
+          "ereplace",
+          "replace_to_nan",
+          "convert_to_object",
+          "convert_to_string",
+          "to_string",
+          "to_list",
+          "convert_to_array",
+          "json_sanitize",
+          "to_json",
+          "convert_json",
+          "convert_to_json",
+          "convert_to_datetime",
+          "to_datetime",
+          "convert_to_time",
+          "column_to_date",
+          "to_date",
+          "datetime_format",
+          "column_to_integer",
+          "convert_to_date",
+          "string_to_date",
+          "epoch_to_date",
+          "convert_to_numeric",
+          "to_integer",
+          "convert_to_boolean",
+          "to_boolean",
+          "string_to_bool",
+          "replace_args",
+          "replace",
+          "to_percentile",
+          "split_cols",
+          "startofweek",
+          "endofweek",
+          "to_excel_date",
+          "to_rethink_date",
+          "xlsdate",
+          "excel_to_date",
+          "is_datetime_column",
+          "is_time_column",
+          "extract",
+          "date_trunc",
+          "date_diff",
+          "replace_nulls",
+          "fill_nulls",
+          "fill_column",
+          "fn_get_timezone",
+          "get_timezone",
+          "split_into_series",
+          "change_timezone",
+          "to_numeric",
+          "remove_scientific_notation",
+          "first_not_null",
+          "remove_html_tags",
+          "clean_html_tags",
+          "autoincrement",
+          "row_to_column",
+          "datetime_to_string",
+          "flatten_array_row",
+          "flatten_array",
+          "extract_json_data",
+          "extract_column",
+          "sum_columns",
+          "sub_columns",
+          "autoincrement_by_group",
+          "autoincrement_by_column",
+          "fill_map",
+          "fill_current_week_midnight",
+          "reduce_fields",
+          "fill_current_date_midnight",
+          "create_daterange_from_columns",
+          "into_columns",
+          "flatten_column",
+          "flatten",
+          "rename_nested_json_key",
+          "set_when",
+          "dict_to_attr_list",
+          "filter_list_elements"
+        ]
+      }
+    }
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"Map\": {\n                \"fields\": {\n                    \"customer_name\": \"name\",\n                    \"total_amount\": \"revenue\"\n                },\n                \"reset_index\": true\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"Map\": {\n        \"fields\": {\n          \"customer_name\": \"name\",\n          \"total_amount\": \"revenue\"\n        },\n        \"reset_index\": true\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }
