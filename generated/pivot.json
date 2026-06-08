@@ -1,60 +1,166 @@
 {
   "name": "pivot",
   "category": "Transformations",
-  "description": "Reshape a DataFrame using a pivot or pivot_table operation.",
-  "usage": "Use in a MultiQuery ``Transform`` step to turn row-level records into a column-per-category layout (e.g. monthly columns from a date column).",
+  "description": "Reshape a long-format DataFrame into a wide table using pandas pivot_table (or crosstab), turning a column's unique values into new column headers.",
+  "usage": "``index`` (required) sets the row keys; ``columns`` (required) is the column whose unique values become headers; ``values`` populates the cells. ``aggregate`` is the aggregation applied to duplicate entries (default ``first``). ``type`` selects ``pivot`` (pandas pivot_table) or ``crosstab``. ``fill_value`` fills missing cells; ``multilevel`` keeps multi-level headers.",
   "attributes": [
     {
       "name": "reset_index",
       "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default), reset the result index after pivoting."
     },
     {
       "name": "type",
-      "type": "Any",
+      "type": "str",
       "default": "pivot",
       "required": false,
-      "description": ""
+      "description": "Engine to use: ``pivot`` (pandas pivot_table, default) or ``crosstab`` (pandas crosstab)."
     },
     {
       "name": "multilevel",
-      "type": "Any",
+      "type": "bool",
       "default": false,
       "required": false,
-      "description": ""
+      "description": "If ``True``, keep multi-level column headers; otherwise flatten them to ``\"<value>_<column>\"``."
     },
     {
       "name": "pd_args",
-      "type": "Any",
+      "type": "dict",
       "default": {},
       "required": false,
-      "description": ""
+      "description": "Extra keyword arguments forwarded to the underlying pandas call."
     },
     {
       "name": "fill_value",
       "type": "Any",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Value used for missing cells in the result (e.g. ``0``)."
+    },
+    {
+      "name": "index",
+      "type": "list",
+      "default": null,
+      "required": true,
+      "description": "Column(s) used as the pivot row index. A single column name or a list."
+    },
+    {
+      "name": "columns",
+      "type": "list",
+      "default": null,
+      "required": true,
+      "description": "Column whose unique values become the new column headers."
+    },
+    {
+      "name": "values",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Column(s) whose values populate the pivot cells. Optional for ``pivot``."
+    },
+    {
+      "name": "aggregate",
+      "type": "str",
+      "default": "first",
+      "required": false,
+      "description": "Aggregation function applied to duplicate entries (pandas ``aggfunc``), e.g. ``first``, ``sum``, ``mean``, ``count``. Default ``first``."
+    },
+    {
+      "name": "totals",
+      "type": "dict",
+      "default": null,
+      "required": false,
+      "description": "Add a totals/margins row and column (pandas ``margins``)."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "pivot",
+    "type": "object",
     "properties": {
       "reset_index": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "If ``True`` (default), reset the result index after pivoting.",
+        "default": true
       },
-      "type": {},
-      "multilevel": {},
-      "pd_args": {},
-      "fill_value": {}
+      "type": {
+        "type": "string",
+        "enum": [
+          "pivot",
+          "crosstab"
+        ],
+        "description": "Engine to use: ``pivot`` (pandas pivot_table, default) or ``crosstab`` (pandas crosstab).",
+        "default": "pivot"
+      },
+      "multilevel": {
+        "type": "boolean",
+        "description": "If ``True``, keep multi-level column headers; otherwise flatten them to ``\"<value>_<column>\"``.",
+        "default": false
+      },
+      "pd_args": {
+        "type": "object",
+        "description": "Extra keyword arguments forwarded to the underlying pandas call.",
+        "default": {}
+      },
+      "fill_value": {
+        "description": "Value used for missing cells in the result."
+      },
+      "index": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Row index column(s)."
+      },
+      "columns": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Column(s) becoming the new headers."
+      },
+      "values": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Value column(s) to aggregate into cells."
+      },
+      "aggregate": {
+        "type": "string",
+        "description": "Aggregation function applied to duplicate entries (pandas ``aggfunc``), e.g. ``first``, ``sum``, ``mean``, ``count``. Default ``first``.",
+        "default": "first"
+      },
+      "totals": {
+        "type": "object",
+        "description": "Totals/margins configuration.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Label for the totals row/column (pandas margins_name)."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
     },
-    "required": []
+    "required": [
+      "index",
+      "columns"
+    ],
+    "additionalProperties": true,
+    "description": "Pivot a DataFrame into a wide table. ``index`` and ``columns`` are required.",
+    "$defs": {
+      "columnRef": {
+        "description": "A single column name or a list of column names.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"pivot\": {\n                \"index\": \"product\",\n                \"columns\": \"month\",\n                \"values\": \"revenue\",\n                \"aggfunc\": \"sum\",\n                \"type\": \"pivot_table\",\n                \"fill_value\": 0\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"pivot\": {\n        \"type\": \"pivot\",\n        \"fill_value\": 0,\n        \"index\": [\"warehouse_alias\", \"warehouse_number\"],\n        \"columns\": \"dates\",\n        \"values\": [\"#_of_adjustments\", \"quantity_in\", \"quantity_out\"],\n        \"aggregate\": \"first\",\n        \"reset_index\": true\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

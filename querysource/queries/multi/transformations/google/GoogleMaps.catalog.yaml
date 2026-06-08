@@ -1,0 +1,83 @@
+# Companion documentation for the ``GoogleMaps`` transform (class: GoogleMaps).
+#
+# Enriches a DataFrame with Google Maps route/travel-time data via
+# navigator.actions.google (TravelerSearch, Location, Route). NOTES from the
+# code: ``map_size`` is NOT configurable (hardcoded (800,800)). ``type`` selects
+# the Route method to dispatch (get_route / waypoint_route — same signature),
+# bound live to GoogleMaps.supported_route_types(). Input rows are expected to
+# carry ``origin`` and ``locations`` columns (locations holding
+# latitude/longitude/location_name/store_id).
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: GoogleMaps
+category: Transformations
+icon: shuffle
+
+description: >-
+  Enrich a DataFrame with Google Maps route geometry, distance, and travel-time
+  data (calls the navigator Google Maps Route API per row).
+
+usage: >-
+  Operates on rows that contain an ``origin`` and a ``locations`` list (each
+  location with latitude/longitude/location_name/store_id). Locations are sorted
+  by ``timestamp_key`` and a waypoint route (plus an optimal route) is computed,
+  adding route/distance/duration columns (and ``opt_*`` variants).
+
+attributes:
+  - name: type
+    type: str
+    required: false
+    default: get_route
+    description: >-
+      Route method (navigator ``Route``) to dispatch: ``get_route``
+      (origin→destination route) or ``waypoint_route`` (multi-stop route). An
+      optimal-route pass is also computed and added as ``opt_*`` columns.
+    schema:
+      type: string
+      description: Route method to dispatch.
+      # Bound live to GoogleMaps.supported_route_types().
+      enum_from_class: supported_route_types
+  - name: timestamp_key
+    type: str
+    required: false
+    default: timestamp
+    description: >-
+      Column inside each ``locations`` entry used to sort stops by departure
+      time. Default ``timestamp``.
+  - name: departure_time
+    type: str
+    required: false
+    default: null
+    description: >-
+      Fixed departure time (ISO string) used when a row has no per-row
+      ``departure_time``. Default ``None``.
+  - name: zoom
+    type: int
+    required: false
+    default: 10
+    description: Map zoom level for any embedded map output. Default ``10``.
+  - name: map_scale
+    type: int
+    required: false
+    default: 2
+    description: Scale factor for map output (1 or 2). Default ``2``.
+
+schema:
+  title: GoogleMaps
+  description: >-
+    Add Google Maps route/travel-time columns to a DataFrame.
+  additionalProperties: true
+
+example: |-
+  {
+    "Transform": [
+      {
+        "GoogleMaps": {
+          "zoom": 12,
+          "timestamp_key": "departure_time",
+          "type": "get_route"
+        }
+      }
+    ]
+  }

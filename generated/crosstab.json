@@ -1,36 +1,132 @@
 {
   "name": "crosstab",
   "category": "Transformations",
-  "description": "Compute a cross-tabulation (frequency or aggregation) from a DataFrame.",
-  "usage": "Use in a MultiQuery ``Transform`` step to pivot categorical data into a frequency or summary table.",
+  "description": "Compute a cross-tabulation (contingency table) from a DataFrame \u2014 frequency counts, or an aggregation of ``values``.",
+  "usage": "``index`` and ``columns`` (both required) are the column name(s) forming the rows and columns of the table. Omit ``values`` for frequency counts, or set it with ``aggregate`` to summarise. ``totals`` adds a margins row/column.",
   "attributes": [
     {
       "name": "reset_index",
       "type": "bool",
       "default": true,
       "required": false,
-      "description": ""
+      "description": "If ``True`` (default), reset the result index after the cross-tab."
     },
     {
       "name": "type",
-      "type": "Any",
+      "type": "str",
       "default": "crosstab",
       "required": false,
-      "description": ""
+      "description": "Engine to use: ``crosstab`` (pandas crosstab, default) or ``pivot`` (pandas pivot_table)."
+    },
+    {
+      "name": "index",
+      "type": "list",
+      "default": null,
+      "required": true,
+      "description": "Column name(s) used as the cross-tab row index. A single name or a list."
+    },
+    {
+      "name": "columns",
+      "type": "list",
+      "default": null,
+      "required": true,
+      "description": "Column name(s) used as the cross-tab columns. A single name or a list."
+    },
+    {
+      "name": "values",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Column(s) to aggregate. Omit for plain frequency counts."
+    },
+    {
+      "name": "aggregate",
+      "type": "str",
+      "default": "count",
+      "required": false,
+      "description": "Aggregation function applied to ``values`` (pandas ``aggfunc``), e.g. ``count``, ``sum``, ``mean``. Defaults to frequency counts when omitted."
+    },
+    {
+      "name": "totals",
+      "type": "dict",
+      "default": null,
+      "required": false,
+      "description": "Add a totals/margins row and column (pandas ``margins``)."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "crosstab",
+    "type": "object",
     "properties": {
       "reset_index": {
-        "type": "boolean"
+        "type": "boolean",
+        "description": "If ``True`` (default), reset the result index after the cross-tab.",
+        "default": true
       },
-      "type": {}
+      "type": {
+        "type": "string",
+        "enum": [
+          "crosstab",
+          "pivot"
+        ],
+        "description": "Engine to use: ``crosstab`` (pandas crosstab, default) or ``pivot`` (pandas pivot_table).",
+        "default": "crosstab"
+      },
+      "index": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Row index column(s)."
+      },
+      "columns": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Cross-tab column(s)."
+      },
+      "values": {
+        "$ref": "#/$defs/columnRef",
+        "description": "Value column(s) to aggregate."
+      },
+      "aggregate": {
+        "type": "string",
+        "description": "Aggregation function applied to ``values`` (pandas ``aggfunc``), e.g. ``count``, ``sum``, ``mean``. Defaults to frequency counts when omitted.",
+        "default": "count"
+      },
+      "totals": {
+        "type": "object",
+        "description": "Totals/margins configuration.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Label for the totals row/column (pandas margins_name)."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
     },
-    "required": []
+    "required": [
+      "index",
+      "columns"
+    ],
+    "additionalProperties": true,
+    "description": "Cross-tabulate a DataFrame. ``index`` and ``columns`` are required.",
+    "$defs": {
+      "columnRef": {
+        "description": "A single column name or a list of column names.",
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
   },
-  "example": "{\n    \"Transform\": [\n        {\n            \"crosstab\": {\n                \"index\": \"region\",\n                \"columns\": \"product_category\",\n                \"values\": \"revenue\",\n                \"aggfunc\": \"sum\",\n                \"reset_index\": true\n            }\n        }\n    ]\n}",
+  "example": "{\n  \"Transform\": [\n    {\n      \"crosstab\": {\n        \"index\": \"region\",\n        \"columns\": \"product_category\",\n        \"values\": \"revenue\",\n        \"aggregate\": \"sum\",\n        \"reset_index\": true\n      }\n    }\n  ]\n}",
   "icon": "shuffle"
 }

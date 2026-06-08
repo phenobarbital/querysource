@@ -1,0 +1,81 @@
+# Companion documentation for the ``tExplode`` transform (class: tExplode).
+#
+# Explodes a list/dict column into multiple rows. All five fields are popped in
+# __init__ (so introspection sees them); ``column`` is required. This companion
+# supplies the required flag, value types and prose. No code changes — clean.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: tExplode
+category: Transformations
+icon: shuffle
+
+description: >-
+  Explode a column of lists or dicts into multiple rows, optionally normalising
+  dict values into columns (pandas explode + json_normalize).
+
+usage: >-
+  ``column`` is the list/dict column to explode. ``explode_dataset`` expands
+  dict values into separate columns; ``drop_original`` removes the source column.
+  ``advanced_mode`` enables parent-index tracking, empty-list preservation and
+  column propagation — only then does ``propagate_columns`` apply.
+
+attributes:
+  - name: column
+    type: str
+    required: true
+    description: Name of the list- or dict-valued column to explode.
+  - name: drop_original
+    type: bool
+    required: false
+    default: false
+    description: >-
+      If ``True``, remove the source column from the result. Default ``False``.
+  - name: explode_dataset
+    type: bool
+    required: false
+    default: true
+    description: >-
+      If ``True`` (default) and the values are dicts, expand them into separate
+      columns via ``json_normalize``.
+  - name: advanced_mode
+    type: bool
+    required: false
+    default: false
+    description: >-
+      Enable enhanced processing: parent-index tracking, empty-list preservation,
+      and column propagation (concatenates parent + exploded child rows).
+  - name: propagate_columns
+    type: list
+    required: false
+    default: []
+    description: >-
+      Parent column names whose values are copied onto each child row. Only
+      applies when ``advanced_mode`` is ``True``.
+    schema:
+      type: array
+      items:
+        type: string
+      description: Parent columns to propagate to child rows (advanced_mode only).
+
+schema:
+  title: tExplode
+  description: >-
+    Explode a list/dict column into rows. ``column`` is required.
+  required: [column]
+  additionalProperties: true
+
+example: |-
+  {
+    "Transform": [
+      {
+        "tExplode": {
+          "column": "tags",
+          "drop_original": false,
+          "explode_dataset": true,
+          "advanced_mode": false,
+          "propagate_columns": []
+        }
+      }
+    ]
+  }
