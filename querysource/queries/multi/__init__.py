@@ -94,7 +94,8 @@ class MultiQS(BaseQuery):
             ## Getting data from Queries or Files
             self._queries = query.pop('queries', {})
             self._files = query.pop('files', {})
-            self._sources = query.pop('sources', [])
+            raw_sources = query.pop('sources', [])
+            self._sources = self._normalize_sources(raw_sources)
         else:
             self._sources = []
         if not (self.slug or self._queries or self._files or self._sources):
@@ -109,6 +110,58 @@ class MultiQS(BaseQuery):
         self._user_session = user_session
         # FEAT-101: track names of queries dispatched to remote qworker.
         self._remote_queries: list = []
+
+    @staticmethod
+    def _expand_dotted_keys(cfg: dict) -> dict:
+        """Expand dot-notation keys into nested dicts.
+
+        Frontend sends ``{"source.file_id": {"file_id": 123}}`` instead of
+        ``{"source": {"file_id": 123}}``.  For each dotted key, the parent
+        segment becomes the top-level key and the value (a dict) is merged in.
+        Multiple dotted keys sharing the same parent are merged together.
+        """
+        expanded = {}
+        for key, value in cfg.items():
+            if '.' in key:
+                parent = key.split('.')[0]
+                if isinstance(value, dict):
+                    existing = expanded.get(parent, {})
+                    expanded[parent] = {**existing, **value}
+                else:
+                    expanded[key] = value
+            else:
+                expanded[key] = value
+        return expanded
+
+    @staticmethod
+    def _normalize_sources(raw) -> list:
+        """Normalize the ``sources`` payload to the internal list format.
+
+        Accepts two shapes:
+
+        * **List** (canonical internal format)::
+
+            [{"SmartSheetSource": {"credentials": {...}, "source": {...}}}]
+
+        * **Dict** (frontend convenience format)::
+
+            {"alias": {"type": "SmartSheetSource", "source.file_id": {"file_id": 123}}}
+
+          Each entry's ``type`` field is extracted as the source-type key.
+          Dot-notation keys (e.g. ``source.file_id``) are expanded into nested
+          dicts via ``_expand_dotted_keys``.
+        """
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, dict):
+            normalized = []
+            for _alias, cfg in raw.items():
+                cfg = dict(cfg)
+                source_type = cfg.pop('type', _alias)
+                cfg = MultiQS._expand_dotted_keys(cfg)
+                normalized.append({source_type: cfg})
+            return normalized
+        return []
 
     async def query(self):
         """
