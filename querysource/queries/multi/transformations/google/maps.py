@@ -6,6 +6,7 @@ import pandas as pd
 from datamodel.exceptions import ValidationError
 from navigator.actions.google.models import TravelerSearch, Location
 from navigator.actions.google.maps import Route
+from .....exceptions import DriverError
 from ..abstract import AbstractTransform
 
 class GoogleMaps(AbstractTransform):
@@ -36,15 +37,32 @@ class GoogleMaps(AbstractTransform):
         }
     """
 
+    #: Route methods (on navigator ``Route``) selectable via ``type``.
+    SUPPORTED_ROUTE_TYPES = ('get_route', 'waypoint_route')
+
+    @classmethod
+    def supported_route_types(cls) -> list[str]:
+        """Return the route types accepted by ``type``.
+
+        Single source of truth shared by the runtime dispatch (which calls
+        ``getattr(Route(), type)``) and the ``GoogleMaps.catalog.yaml`` ``type``
+        enum (resolved via the ``enum_from_class`` directive).
+        """
+        return list(cls.SUPPORTED_ROUTE_TYPES)
+
     def __init__(self, data: Union[dict, DataFrame], **kwargs) -> None:
         self.zoom: int = kwargs.get('zoom', 10)
         self.map_scale: int = kwargs.get('map_scale', 2)
         self.timestamp_key: str = kwargs.get('timestamp_key', 'timestamp')
-        # self.map_size: tuple = kwargs.get('map_size', (800, 800))
         self.departure_time: str = kwargs.get('departure_time', None)
         super(GoogleMaps, self).__init__(data, **kwargs)
-        if not hasattr(self, 'type'):
-            self._type = 'get_route'
+        # Resolve and validate the Route method to dispatch via ``type``.
+        self._route_type: str = getattr(self, 'type', None) or 'get_route'
+        if self._route_type not in self.SUPPORTED_ROUTE_TYPES:
+            raise DriverError(
+                f"GoogleMaps: unsupported type '{self._route_type}'. "
+                f"Supported: {', '.join(self.SUPPORTED_ROUTE_TYPES)}."
+            )
 
     async def process_row(self, row, idx, df):
         """Processes a single row of the DataFrame,
@@ -105,7 +123,9 @@ class GoogleMaps(AbstractTransform):
             return
         try:
             route = Route()
-            result = await route.waypoint_route(
+            # Dispatch the Route method selected by ``type`` (validated in __init__).
+            route_method = getattr(route, self._route_type)
+            result = await route_method(
                 traveler,
                 add_overview=False,
                 complete=False
@@ -126,7 +146,7 @@ class GoogleMaps(AbstractTransform):
             # Then, Calculate the "Optimal" Route:
             try:
                 traveler.optimal = True
-                result = await route.waypoint_route(
+                result = await route_method(
                     traveler,
                     add_overview=False,
                     complete=False
