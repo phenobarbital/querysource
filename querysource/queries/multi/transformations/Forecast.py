@@ -224,7 +224,7 @@ class Forecast(AbstractTransform):
             # df.sort_values(by=[self.by_group, self.index_column], inplace=True)
             df[self.index_column] = pd.to_datetime(df[self.index_column])
             print(df[self.index_column].dtype)  # Check after operation
-            self.colum_info(df)
+            self._print_info(df)
             return df
         except (ValueError, KeyError) as err:
             raise QueryException(

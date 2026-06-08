@@ -1,0 +1,78 @@
+# Companion documentation for the ``PluckCols`` transform (class: PluckCols).
+#
+# Whitelist column selector: keep only columns matching any selector. Five
+# optional selectors, at least one required (matches are unioned). DropCols is
+# the blacklist twin; FilterCols filters by data content instead of name.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: PluckCols
+category: Transformations
+icon: shuffle
+
+description: >-
+  Keep only the columns matching any of the provided selectors (whitelist by
+  column name).
+
+usage: >-
+  Provide at least one of ``columns`` (exact names), ``pattern`` (glob),
+  ``regex``, ``startswith`` or ``endswith``. Matches from every selector are
+  unioned and returned in the original column order. An exact name in
+  ``columns`` that is not present raises an error.
+
+attributes:
+  - name: columns
+    type: list
+    required: false
+    default: null
+    description: >-
+      Exact column names to keep. Raises if a named column is not present.
+    schema:
+      $ref: '#/$defs/stringList'
+      description: Exact column names to keep.
+  - name: pattern
+    type: str
+    required: false
+    default: null
+    description: 'Glob/fnmatch pattern to match column names (e.g. "revenue_*").'
+  - name: regex
+    type: str
+    required: false
+    default: null
+    description: 'Regular expression to match column names (e.g. "^(name|email)$").'
+  - name: startswith
+    type: list
+    required: false
+    default: null
+    description: Keep columns whose name starts with any of these prefixes.
+    schema:
+      $ref: '#/$defs/stringList'
+      description: Prefixes; columns starting with any are kept.
+  - name: endswith
+    type: list
+    required: false
+    default: null
+    description: Keep columns whose name ends with any of these suffixes.
+    schema:
+      $ref: '#/$defs/stringList'
+      description: Suffixes; columns ending with any are kept.
+
+schema:
+  title: PluckCols
+  description: >-
+    Keep columns matching any selector. At least one selector is required.
+  additionalProperties: true
+  anyOf:
+    - required: [columns]
+    - required: [pattern]
+    - required: [regex]
+    - required: [startswith]
+    - required: [endswith]
+  defs:
+    stringList:
+      type: array
+      items:
+        type: string
+
+example: |-
+  {"Transform": [{"PluckCols": {"columns": ["name", "email"]}}]}

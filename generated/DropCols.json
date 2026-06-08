@@ -1,57 +1,108 @@
 {
   "name": "DropCols",
   "category": "Transformations",
-  "description": "Drop the columns matching any of the specified selectors.",
-  "usage": "Use in a MultiQuery ``Transform`` step to remove unwanted columns from a DataFrame via exact names, glob patterns, regex, or prefix/suffix matching.",
+  "description": "Drop the columns matching any of the provided selectors (blacklist by column name).",
+  "usage": "Provide at least one of ``columns`` (exact names), ``pattern`` (glob), ``regex``, ``startswith`` or ``endswith``. Matches from every selector are unioned and removed. Exact names in ``columns`` that are not present are silently ignored.",
   "attributes": [
     {
       "name": "columns",
-      "type": "Any",
+      "type": "list",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Exact column names to drop. Missing columns are silently ignored."
     },
     {
       "name": "pattern",
-      "type": "Any",
+      "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Glob/fnmatch pattern to match column names (e.g. \"debug_*\")."
     },
     {
       "name": "regex",
-      "type": "Any",
+      "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Regular expression to match column names (e.g. \"^tmp_.*$\")."
     },
     {
       "name": "startswith",
-      "type": "Any",
+      "type": "list",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Drop columns whose name starts with any of these prefixes."
     },
     {
       "name": "endswith",
-      "type": "Any",
+      "type": "list",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Drop columns whose name ends with any of these suffixes."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "DropCols",
+    "type": "object",
     "properties": {
-      "columns": {},
-      "pattern": {},
-      "regex": {},
-      "startswith": {},
-      "endswith": {}
+      "columns": {
+        "$ref": "#/$defs/stringList",
+        "description": "Exact column names to drop."
+      },
+      "pattern": {
+        "type": "string",
+        "description": "Glob/fnmatch pattern to match column names (e.g. \"debug_*\")."
+      },
+      "regex": {
+        "type": "string",
+        "description": "Regular expression to match column names (e.g. \"^tmp_.*$\")."
+      },
+      "startswith": {
+        "$ref": "#/$defs/stringList",
+        "description": "Prefixes; columns starting with any are dropped."
+      },
+      "endswith": {
+        "$ref": "#/$defs/stringList",
+        "description": "Suffixes; columns ending with any are dropped."
+      }
     },
-    "required": []
+    "anyOf": [
+      {
+        "required": [
+          "columns"
+        ]
+      },
+      {
+        "required": [
+          "pattern"
+        ]
+      },
+      {
+        "required": [
+          "regex"
+        ]
+      },
+      {
+        "required": [
+          "startswith"
+        ]
+      },
+      {
+        "required": [
+          "endswith"
+        ]
+      }
+    ],
+    "additionalProperties": true,
+    "description": "Drop columns matching any selector. At least one selector is required.",
+    "$defs": {
+      "stringList": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
   },
   "example": "{\"Transform\": [{\"DropCols\": {\"columns\": [\"internal_id\", \"debug_flag\"]}}]}",
   "icon": "shuffle"

@@ -1,0 +1,43 @@
+# Companion documentation for the ``FilterCols`` transform (class: FilterCols).
+#
+# Drops columns by their DATA CONTENT (not by name, unlike PluckCols/DropCols),
+# using one predefined predicate. ``expression`` is required and constrained to
+# the SUPPORTED_EXPRESSIONS set, bound live via FilterCols.supported_expressions().
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: FilterCols
+category: Transformations
+icon: shuffle
+
+description: >-
+  Drop columns matching a predefined data-quality predicate (filters by content,
+  not by column name).
+
+usage: >-
+  Set ``expression`` to one predefined predicate: ``all_null`` (drop columns
+  entirely NaN/None), ``all_empty`` (entirely NaN/None/empty-string), or
+  ``constant`` (all non-null values identical; all-null columns are left to
+  ``all_null``).
+
+attributes:
+  - name: expression
+    type: str
+    required: true
+    description: >-
+      Predefined data-quality predicate selecting which columns to drop.
+    schema:
+      type: string
+      description: Data-quality predicate.
+      # Bound live to FilterCols.supported_expressions() (SUPPORTED_EXPRESSIONS).
+      enum_from_class: supported_expressions
+
+schema:
+  title: FilterCols
+  description: >-
+    Drop columns by data content. ``expression`` is required.
+  required: [expression]
+  additionalProperties: true
+
+example: |-
+  {"Transform": [{"FilterCols": {"expression": "all_null"}}]}
