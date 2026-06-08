@@ -198,19 +198,78 @@ class ToSharepoint(AbstractDestination):
             f"Verify the site name and credentials."
         )
 
-    async def _get_drive_id(self, graph_client, site_id: str) -> str:
-        """Return the document library drive-id for *site_id*."""
+    def _parse_directory_path(self, directory: str) -> tuple:
+        """Split *directory* into ``(library_name, path_within_library)``.
+
+        When *directory* contains at least two segments, the first segment is
+        the document-library name and the rest is the folder path inside that
+        library.  When only one segment is given it is treated as a subfolder
+        inside the default ``"Documents"`` library (single-segment paths are
+        rarely library names, and this matches the common convention).
+        ``"Shared Documents"`` is normalised to ``"Documents"``.
+
+        Examples::
+
+            "Shared Documents/Reports/2026" → ("Documents", "Reports/2026")
+            "Documents/Tests"               → ("Documents", "Tests")
+            "Tests"                         → ("Documents", "Tests")
+            "troc/Project Management"       → ("troc", "Project Management")
+        """
+        if not directory:
+            return "Documents", ""
+
+        directory = directory.replace("\\", "/").strip().strip("/")
+        if not directory:
+            return "Documents", ""
+
+        parts = directory.split("/")
+
+        if len(parts) == 1:
+            # Single segment → always treat as subfolder of default library
+            return "Documents", parts[0]
+
+        library_name = parts[0]
+        path_within = "/".join(parts[1:])
+
+        if library_name.lower() == "shared documents":
+            library_name = "Documents"
+
+        return library_name, path_within
+
+    async def _resolve_drive(
+        self, graph_client, site_id: str, library_name: str = "Documents"
+    ) -> str:
+        """Return the drive-id for *library_name* inside *site_id*.
+
+        Performs a case-insensitive search across all document libraries.
+        If the requested library is not found, logs the available names and
+        falls back to the first library named "Documents" / "Shared Documents",
+        or the first library overall.
+        """
         try:
             drives = await graph_client.sites.by_site_id(site_id).drives.get()
-            if drives and drives.value:
-                # Prefer a drive named "Documents" or "Shared Documents"
-                for drive in drives.value:
-                    if drive.name.lower() in ("documents", "shared documents"):
-                        return drive.id
-                return drives.value[0].id
-            raise OutputError(
-                f"ToSharepoint: no document libraries found for site '{site_id}'."
+            if not drives or not drives.value:
+                raise OutputError(
+                    f"ToSharepoint: no document libraries found for site '{site_id}'."
+                )
+
+            # Case-insensitive exact match
+            for drive in drives.value:
+                if drive.name.lower() == library_name.lower():
+                    return drive.id
+
+            # Log available libraries and fall back to default
+            available = [d.name for d in drives.value]
+            self.logger.warning(
+                "ToSharepoint: library '%s' not found. Available: %s. Using default.",
+                library_name,
+                available,
             )
+            for drive in drives.value:
+                if drive.name.lower() in ("documents", "shared documents"):
+                    return drive.id
+            return drives.value[0].id
+
         except OutputError:
             raise
         except Exception as err:
@@ -385,30 +444,9 @@ class ToSharepoint(AbstractDestination):
         graph_client = self._build_graph_client()
 
         site_id = await self._resolve_site_id(graph_client)
-        drive_id = await self._get_drive_id(graph_client, site_id)
-
-        # Parse directory: first segment is the library name, rest is the path
-        parts = self._directory.split("/", 1)
-        library_part = parts[0]
-        path_part = parts[1] if len(parts) > 1 else ""
-
-        # Find the specific library drive if name was given
-        if library_part:
-            try:
-                drives = await graph_client.sites.by_site_id(site_id).drives.get()
-                for drive in (drives.value or []):
-                    if drive.name.lower() == library_part.lower() or (
-                        library_part.lower() == "shared documents"
-                        and drive.name.lower() == "documents"
-                    ):
-                        drive_id = drive.id
-                        break
-                else:
-                    path_part = self._directory  # fallback: treat whole dir as path
-            except Exception:
-                path_part = self._directory
-
-        parent_id = await self._ensure_folder(graph_client, drive_id, path_part)
+        library_name, path_within = self._parse_directory_path(self._directory)
+        drive_id = await self._resolve_drive(graph_client, site_id, library_name)
+        parent_id = await self._ensure_folder(graph_client, drive_id, path_within)
 
         if len(content) <= _SMALL_FILE_THRESHOLD:
             self.logger.info(
