@@ -78,6 +78,10 @@ class SharepointSource(ThreadSource):
         source = options.get('source', {})
         self._filename: str = source.get('filename', '')
         self._directory: str = source.get('directory', '')
+        # sheet_name: int (0-based index) or str (sheet name). None reads all sheets.
+        self._sheet_name = source.get('sheet_name', 0)
+        # pd_args: extra kwargs forwarded to pd.read_excel / pd.read_csv (e.g. skiprows, header, usecols).
+        self._pd_args: dict = source.get('pd_args', {})
 
     def _parse_file_content(self, content: bytes) -> pd.DataFrame:
         """Parse raw bytes as Excel or CSV depending on the filename extension."""
@@ -95,10 +99,12 @@ class SharepointSource(ThreadSource):
             engine = 'xlrd' if suffix == '.xls' else 'openpyxl'
             df = pd.read_excel(
                 buf,
+                sheet_name=self._sheet_name,
                 na_values=["NULL", "TBD"],
                 na_filter=True,
                 engine=engine,
                 keep_default_na=False,
+                **self._pd_args,
             )
         else:
             df = pd.read_csv(
@@ -106,6 +112,7 @@ class SharepointSource(ThreadSource):
                 na_values=["NULL", "TBD"],
                 na_filter=True,
                 keep_default_na=False,
+                **self._pd_args,
             )
         df = df.infer_objects()
         return df
