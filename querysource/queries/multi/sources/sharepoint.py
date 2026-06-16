@@ -63,10 +63,17 @@ class SharepointSource(ThreadSource):
         self._tenant_id = self.resolve_credential(
             'tenant_id', creds.get('tenant_id', 'SHAREPOINT_TENANT_ID')
         )
-        # tenant_name is used to build the SharePoint host URL
-        self._tenant_name = creds.get('tenant_name', '') or self.resolve_credential(
-            'tenant_name', 'SHAREPOINT_TENANT_NAME'
+        # tenant_name / tenant_host: used to build the SharePoint host URL.
+        # Accepts either a bare tenant name ("trocglobal") or a full hostname
+        # ("trocglobal.sharepoint.com") via SHAREPOINT_TENANT_HOST.
+        _tenant_raw = (
+            creds.get('tenant_name', '')
+            or creds.get('tenant_host', '')
+            or self.resolve_credential('tenant_name', 'SHAREPOINT_TENANT_NAME')
+            or self.resolve_credential('tenant_host', 'SHAREPOINT_TENANT_HOST')
         )
+        # Strip .sharepoint.com suffix if the full hostname was provided
+        self._tenant_name = _tenant_raw.replace('.sharepoint.com', '').strip()
         self._site = creds.get('site', '')
         source = options.get('source', {})
         self._filename: str = source.get('filename', '')
@@ -153,7 +160,7 @@ class SharepointSource(ThreadSource):
             site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
             if site_host and self._site:
                 site = await client.sites.by_site_id(
-                    f"{site_host}:/sites/{self._site}"
+                    f"{site_host}:/sites/{self._site}:"
                 ).get()
             else:
                 raise RuntimeError(
