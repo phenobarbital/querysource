@@ -173,10 +173,22 @@ class SharepointSource(ThreadSource):
             drives_response = await client.sites.by_site_id(site_id).drives.get()
             drives = drives_response.value if drives_response else []
 
-            # Parse the directory: split on "/" to get library name and subfolder
-            parts = self._directory.split('/', 1) if self._directory else []
-            library_name = parts[0] if parts else 'Documents'
-            subfolder = parts[1] if len(parts) > 1 else ''
+            # Parse directory into (library_name, subfolder).
+            # Single segment (e.g. "Tests") → Documents library + subfolder "Tests".
+            # Multi-segment (e.g. "Documents/Tests") → first segment is library,
+            # rest is subfolder.  "Shared Documents" normalised to "Documents".
+            _dir = (self._directory or '').replace('\\', '/').strip().strip('/')
+            if not _dir:
+                library_name, subfolder = 'Documents', ''
+            else:
+                _parts = _dir.split('/')
+                if len(_parts) == 1:
+                    library_name, subfolder = 'Documents', _parts[0]
+                else:
+                    library_name = _parts[0]
+                    subfolder = '/'.join(_parts[1:])
+                    if library_name.lower() == 'shared documents':
+                        library_name = 'Documents'
 
             # Find the matching drive (case-insensitive)
             drive = None
@@ -196,19 +208,12 @@ class SharepointSource(ThreadSource):
             drive_id = drive.id
 
             # Navigate to the subfolder and find the file
-            if subfolder:
-                path_encoded = subfolder.rstrip('/')
-                item = await (
-                    client.drives.by_drive_id(drive_id)
-                    .items.by_drive_item_id(f"root:/{path_encoded}/{self._filename}:")
-                    .get()
-                )
-            else:
-                item = await (
-                    client.drives.by_drive_id(drive_id)
-                    .items.by_drive_item_id(f"root:/{self._filename}:")
-                    .get()
-                )
+            file_path = f"{subfolder.rstrip('/')}/{self._filename}" if subfolder else self._filename
+            item = await (
+                client.drives.by_drive_id(drive_id)
+                .items.by_drive_item_id(f"root:/{file_path}:")
+                .get()
+            )
 
             if item is None or not hasattr(item, 'id'):
                 raise RuntimeError(
@@ -227,8 +232,9 @@ class SharepointSource(ThreadSource):
                     f"Could not obtain download URL for file '{self._filename}'."
                 )
 
-            # Download the file content using httpx
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
+            # Download the file content using httpx.
+            # Large files (e.g. 100MB+) can take several minutes — use a long timeout.
+            async with httpx.AsyncClient(timeout=600.0) as http_client:
                 response = await http_client.get(download_url)
                 response.raise_for_status()
                 content = response.content
