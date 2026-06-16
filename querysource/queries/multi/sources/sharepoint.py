@@ -133,6 +133,13 @@ class SharepointSource(ThreadSource):
                 "navconfig SHAREPOINT_TENANT_NAME)."
             )
 
+        # The msgraph/kiota SDK uses platform.version() to build the User-Agent
+        # header. On Linux the string has a trailing space which httpx rejects
+        # as an illegal header value. Patch it before the client is constructed.
+        import platform as _platform  # noqa: PLC0415
+        _orig_version = _platform.version
+        _platform.version = lambda: _orig_version().strip()
+
         credential = ClientSecretCredential(
             self._tenant_id,
             self._client_id,
