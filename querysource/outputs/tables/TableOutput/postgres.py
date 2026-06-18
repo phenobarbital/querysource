@@ -388,6 +388,51 @@ class PgOutput(AbstractOutput):
                 f"Error opening database connection: {err}"
             ) from err
 
+    def ensure_primary_key(self, schema: str, table: str, pk: List[str]) -> None:
+        """Create the table's PRIMARY KEY when it is missing.
+
+        ``pandas.DataFrame.to_sql`` never emits a PRIMARY KEY / UNIQUE
+        constraint, yet :meth:`db_upsert` relies on one for its
+        ``INSERT ... ON CONFLICT`` statement. After the table structure is
+        created we add the PK declared in the JSON config (``pk``) so the
+        upsert has a conflict target. Idempotent: skips the ``ALTER`` when a
+        primary key already exists (e.g. ``if_exists='append'`` re-runs).
+        """
+        if not pk:
+            return
+        relname = f'"{schema}"."{table}"'
+        cols = ", ".join(f'"{c}"' for c in pk)
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                text(
+                    "SELECT 1 FROM pg_index i "
+                    "WHERE i.indrelid = CAST(:rel AS regclass) "
+                    "AND i.indisprimary"
+                ),
+                {"rel": relname},
+            ).first()
+            if not already:
+                conn.execute(
+                    text(f"ALTER TABLE {relname} ADD PRIMARY KEY ({cols})")
+                )
+                self.logger.debug(
+                    f":: Added PRIMARY KEY ({cols}) on {relname}"
+                )
+
+    def truncate_table(self, schema: str, table: str) -> None:
+        """Remove every row while keeping the table definition.
+
+        Unlike ``if_exists='replace'`` (which DROPs and re-creates the table,
+        losing grants, indexes and comments), ``TRUNCATE`` empties the table
+        in place. Used by the ``truncate=True`` path before re-loading data.
+        No CASCADE: if other tables reference this one via FK, the truncate
+        fails loudly instead of silently wiping dependent rows.
+        """
+        relname = f'"{schema}"."{table}"'
+        with self._engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {relname}"))
+        self.logger.debug(f":: Truncated {relname}")
+
     def _build_upsert_statement(
         self,
         table: Table,

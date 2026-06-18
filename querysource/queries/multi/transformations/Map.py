@@ -114,7 +114,6 @@ class Map(AbstractTransform):
                         it = self._run_one(v, it, field)
                 else:
                     it = self._run_one(val, it, field)
-                print(it)
                 continue
         # at the end
         self.data = it
