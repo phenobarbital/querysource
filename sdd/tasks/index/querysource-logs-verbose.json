@@ -14,14 +14,14 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Foundation module. TASK-701 and TASK-702 both import build_error_payload from this; must complete first.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-06-19T12:33:51+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-700-shared-error-formatter.md"
     },
@@ -32,14 +32,16 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-700"],
+      "depends_on": [
+        "TASK-700"
+      ],
       "parallel": true,
       "parallelism_notes": "Touches only querysource/handlers/abstract.py. Shares no files with TASK-702 (outputs/). Can run in a separate worktree concurrently with TASK-702 once TASK-700 is merged.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-06-19T12:33:51+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-701-handler-error-refactor.md"
     },
@@ -50,14 +52,16 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-700"],
+      "depends_on": [
+        "TASK-700"
+      ],
       "parallel": true,
       "parallelism_notes": "Touches only querysource/outputs/output.py and querysource/outputs/writers/abstract.py. Shares no files with TASK-701 (handlers/). Can run in a separate worktree concurrently with TASK-701 once TASK-700 is merged.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-06-19T12:33:51+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-702-output-writer-error-refactor.md"
     },
@@ -68,14 +72,18 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-700", "TASK-701", "TASK-702"],
+      "depends_on": [
+        "TASK-700",
+        "TASK-701",
+        "TASK-702"
+      ],
       "parallel": false,
       "parallelism_notes": "Integration tests exercise both refactored paths; depends on all prior tasks being merged.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-06-19T12:33:51+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-703-error-redaction-tests.md"
     }
