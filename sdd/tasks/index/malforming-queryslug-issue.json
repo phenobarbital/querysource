@@ -52,7 +52,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -63,8 +63,8 @@
       "parallelism_notes": "Rebuilds the wheel containing TASK-704/705 symbols; must follow them.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-706-qs-parsers-reexport.md"
+      "completed_at": "2026-06-19T13:18:24+00:00",
+      "file": "sdd/tasks/completed/TASK-706-qs-parsers-reexport.md"
     },
     {
       "id": "TASK-707",
