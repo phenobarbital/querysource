@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-103 — Malforming Query-Slug Issue (SQLi & Datasource Credential Exposure)
 **Spec**: `sdd/specs/malforming-queryslug-issue.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: none

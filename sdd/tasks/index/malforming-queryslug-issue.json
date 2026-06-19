@@ -113,7 +113,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -121,8 +121,8 @@
       "parallelism_notes": "Pure-Python, only touches datasources/handlers/datasource.py — shares no files or build step with the V1 Rust/Cython tasks. Can run in its own worktree and land first to stop the credential bleed.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-709-datasource-redaction-pbac.md"
+      "completed_at": "2026-06-19T13:35:59+00:00",
+      "file": "sdd/tasks/completed/TASK-709-datasource-redaction-pbac.md"
     },
     {
       "id": "TASK-710",
