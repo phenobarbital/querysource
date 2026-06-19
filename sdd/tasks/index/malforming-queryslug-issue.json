@@ -32,7 +32,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -42,8 +42,8 @@
       "parallelism_notes": "Same Rust crate as TASK-704 (different files: *_parser.rs). Build sequencing → not parallel within the V1 worktree.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-705-rust-filter-conditions-hardening.md"
+      "completed_at": "2026-06-19T13:17:28+00:00",
+      "file": "sdd/tasks/completed/TASK-705-rust-filter-conditions-hardening.md"
     },
     {
       "id": "TASK-706",
