@@ -1,8 +1,8 @@
-import traceback
 from typing import Union
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 
+from navconfig import DEBUG
 from navconfig.logging import logging
 from datamodel.parsers.encoders import DefaultEncoder
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
@@ -11,6 +11,7 @@ from ..exceptions import (
     DataNotFound,
     QueryException,
 )
+from ..utils.errors import build_error_payload
 from .writers import (
     jsonWriter,
     CSVWriter,
@@ -122,20 +123,38 @@ class DataOutput:
         headers: dict = None,
         content_type: str = 'application/json'
     ) -> BaseException:
-        trace = None
-        message = f"{message}: {exception!s}"
-        if exception:
-            trace = traceback.format_exc(limit=10)
-        reason = {
-            "error": message,
-            "trace": self._json.dumps(trace)
-        }
+        """Build a client-safe error payload and raise the appropriate aiohttp exception.
+
+        Delegates body construction to ``build_error_payload``, which logs full
+        detail (message + traceback) server-side and returns a minimal payload in
+        production (``DEBUG=False``) or a verbose one in development.
+
+        Note: This method always RAISES (never returns) — callers use the
+        ``return self.error(...)`` idiom to satisfy linters, but execution never
+        reaches the ``return`` statement.
+        """
+        # Map HTTP status to a formatter category
+        if status == 404:
+            category = "not_found"
+        elif status >= 500:
+            category = "server_error"
+        else:
+            category = "query_error"
+
+        payload = build_error_payload(
+            category=category,
+            status=status,
+            exception=exception,
+            debug=DEBUG,
+            logger=self.logger,
+            public_message=message if DEBUG else None,
+        )
         args = {
-            "reason": reason,
+            "reason": self._json.dumps(payload),
             "headers": {
                 "content_type": content_type,
-                "X-MESSAGE": str(message).replace('\n', ', '),
-                "X-STATUS": str(status).replace('\n', ', ')
+                "X-MESSAGE": payload["error"],
+                "X-STATUS": str(status),
             }
         }
         if status == 400:
@@ -158,7 +177,7 @@ class DataOutput:
             obj = web.HTTPBadRequest(**args)
         if headers:
             for header, value in headers.items():
-                obj.headers[header] = value
+                obj.headers[header] = str(value)
         raise obj
 
     def no_content(self, headers: dict = None, content_type: str = 'application/json') -> web.Response:
