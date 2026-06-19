@@ -52,7 +52,7 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,8 +62,8 @@
       "parallelism_notes": "Touches only querysource/outputs/output.py and querysource/outputs/writers/abstract.py. Shares no files with TASK-701 (handlers/). Can run in a separate worktree concurrently with TASK-701 once TASK-700 is merged.",
       "assigned_to": null,
       "started_at": "2026-06-19T12:33:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-702-output-writer-error-refactor.md"
+      "completed_at": "2026-06-19T12:39:09+00:00",
+      "file": "sdd/tasks/completed/TASK-702-output-writer-error-refactor.md"
     },
     {
       "id": "TASK-703",

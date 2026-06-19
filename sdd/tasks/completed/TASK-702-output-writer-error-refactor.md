@@ -190,10 +190,14 @@ def test_writer_error_redacts(monkeypatch):
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: claude-sonnet-4-6 (SDD Worker)
+**Date**: 2026-06-19
+**Notes**: Refactored `DataOutput.error()` (output.py) and `AbstractWriter.error()`
+(writers/abstract.py) to delegate to `build_error_payload()`. Both read `DEBUG` from
+`navconfig` directly (not from `self.debug`). The raise/return semantics are preserved:
+`DataOutput.error` still raises, `AbstractWriter.error` still returns. The `traceback`
+import was removed from both files. Pre-existing F821 ruff warning about `DataFrame`
+type annotation in output.py was NOT introduced by this change (verified via git diff).
+Writers/abstract.py lints cleanly.
 
 **Deviations from spec**: none | describe if any
