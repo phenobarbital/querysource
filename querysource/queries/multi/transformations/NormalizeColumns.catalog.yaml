@@ -1,0 +1,64 @@
+# Companion documentation for the ``NormalizeColumns`` transform
+# (class: NormalizeColumns).
+#
+# Rewrites every column name into a database-safe identifier (lowercase,
+# accent-stripped, non-alphanumeric collapsed to '_', truncated to 63 bytes,
+# collisions de-duplicated). Use it before a table/database destination so
+# PostgreSQL's 63-byte identifier limit no longer breaks the load.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: NormalizeColumns
+category: Transformations
+icon: shuffle
+
+description: >-
+  Normalize every column name into a database-safe identifier (lowercase,
+  accent-stripped, symbols collapsed to an underscore, truncated to a maximum
+  length, collisions de-duplicated).
+
+usage: >-
+  Drop it as a ``Transform`` step before a table/database destination. With no
+  parameters it applies safe defaults (lowercase, strip accents, 63-byte max).
+  Use ``overrides`` to pin specific source columns to an exact target name.
+
+attributes:
+  - name: max_length
+    type: int
+    required: false
+    default: 63
+    description: >-
+      Maximum identifier length. Defaults to 63 (the PostgreSQL identifier
+      byte limit).
+  - name: case
+    type: str
+    required: false
+    default: lower
+    description: 'Case handling: "lower", "upper" or "preserve".'
+  - name: strip_accents
+    type: bool
+    required: false
+    default: true
+    description: 'Remove diacritics ("Región" -> "region").'
+  - name: replacement
+    type: str
+    required: false
+    default: '_'
+    description: String that replaces runs of non-alphanumeric characters.
+  - name: overrides
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Mapping {original_name: target_name} pinning specific source columns to
+      an exact name, bypassing normalization for those columns.
+
+schema:
+  title: NormalizeColumns
+  description: >-
+    Normalize all column names into database-safe identifiers. All attributes
+    are optional; with no parameters safe defaults are applied.
+  additionalProperties: true
+
+example: |-
+  {"Transform": [{"NormalizeColumns": {}}]}

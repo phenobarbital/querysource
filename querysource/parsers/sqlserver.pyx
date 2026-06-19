@@ -94,6 +94,18 @@ cdef class msSQLParser(SQLParser):
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():
+                # SECURITY (FEAT-103): Validate key as a safe SQL identifier.
+                try:
+                    if isinstance(int(key), (int, float)):
+                        key = f'"{key}"'
+                    else:
+                        stripped = key.rstrip('|!~#@:')
+                        if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                            continue
+                except (ValueError, TypeError):
+                    stripped = key.rstrip('|!~#@:')
+                    if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                        continue
                 _format = None
                 _, name, end = field_components(key)[0]
                 if key in self.cond_definition:
@@ -109,21 +121,25 @@ cdef class msSQLParser(SQLParser):
                         )
                     else:
                         if _format == 'date':
+                            # SECURITY: Escape BETWEEN boundary values
+                            safe_v0 = str(value[0]).replace("'", "''")
+                            safe_v1 = str(value[1]).replace("'", "''")
                             where_cond.append(
-                                f"{key} BETWEEN '{value[0]}' AND '{value[1]}'"
+                                f"{key} BETWEEN '{safe_v0}' AND '{safe_v1}'"
                             )
                         else:
                             where_cond.append(
                                 f"{key} IN ({val})"
                             )
                 elif isinstance(value, (str, int)):
-                    if "BETWEEN" in str(value):
-                        if isinstance(value, str) and "'" not in value:
-                            where_cond.append(
-                                f"({key} {Entity.quoteString(value)})"
-                            )
-                        else:
-                            where_cond.append(f"({key} {value})")
+                    str_value = str(value)
+                    if "BETWEEN" in str_value:
+                        # SECURITY: Reject BETWEEN clauses with injection markers
+                        upper_val = str_value.upper()
+                        if ('--' in str_value or '/*' in str_value or ';' in str_value
+                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                            continue
+                        where_cond.append(f"({key} {str_value})")
                     elif value in ('null', 'NULL'):
                         where_cond.append(
                             f"{key} IS NULL"
@@ -133,11 +149,12 @@ cdef class msSQLParser(SQLParser):
                             f"{key} IS NOT NULL"
                         )
                     elif end == '!':
+                        # SECURITY: Escape the negated value
                         where_cond.append(
-                            f"{name} != {value}"
+                            f"{name} != {Entity.quoteString(str_value)}"
                         )
-                    elif str(value).startswith('!'):
-                        _val = Entity.escapeString(value[1:])
+                    elif str_value.startswith('!'):
+                        _val = Entity.escapeString(str_value[1:])
                         where_cond.append(
                             f"{key} != {_val}"
                         )

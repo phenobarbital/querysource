@@ -65,11 +65,18 @@ cdef class CQLParser(SQLParser):
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():
+                # SECURITY (FEAT-103): Validate key as a safe SQL identifier.
                 try:
                     if isinstance(int(key), (int, float)):
                         key = f'"{key}"'
-                except ValueError:
-                    pass
+                    else:
+                        stripped = key.rstrip('|!~#@:')
+                        if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                            continue
+                except (ValueError, TypeError):
+                    stripped = key.rstrip('|!~#@:')
+                    if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                        continue
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
@@ -79,13 +86,17 @@ cdef class CQLParser(SQLParser):
                 if isinstance(value, dict):
                     op, v = value.popitem()
                     if op in ('>=', '<=', '<>', '!=', '<', '>'):
-                        where_cond.append(f"{key} {op} {v}")
+                        # SECURITY: Escape comparison value
+                        safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
+                        where_cond.append(f"{key} {op} {safe_v}")
                     else:
                         continue
                 elif isinstance(value, list):
                     fval = value[0]
                     if fval in self.valid_operators:
-                        where_cond.append(f"{key} {fval} {value[1]}")
+                        # SECURITY: Escape second operand
+                        safe_v = Entity.quoteString(str(value[1])) if value[1] not in ('null', 'NULL') else str(value[1])
+                        where_cond.append(f"{key} {fval} {safe_v}")
                     else:
                         val = ','.join(
                             [
@@ -98,20 +109,24 @@ cdef class CQLParser(SQLParser):
                         else:
                             where_cond.append(f"{key} IN ({val})")
                 elif isinstance(value, (str, int)):
-                    if "BETWEEN" in str(value):
-                        if isinstance(value, str) and "'" not in value:
-                            where_cond.append(f"({key} {value})")
-                        else:
-                            where_cond.append(f"({key} {value})")
+                    str_value = str(value)
+                    if "BETWEEN" in str_value:
+                        # SECURITY: Reject BETWEEN clauses with injection markers
+                        upper_val = str_value.upper()
+                        if ('--' in str_value or '/*' in str_value or ';' in str_value
+                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                            continue
+                        where_cond.append(f"({key} {str_value})")
                     elif value in ('null', 'NULL'):
                         where_cond.append(f"{key} IS NULL")
                     elif value in ('!null', '!NULL'):
                         where_cond.append(f"{key} IS NOT NULL")
                     elif end == '!':
-                        where_cond.append(f"{name} != {value}")
-                    elif str(value).startswith('!'):
+                        # SECURITY: Escape the negated value
+                        where_cond.append(f"{name} != {Entity.quoteString(str_value)}")
+                    elif str_value.startswith('!'):
                         where_cond.append(
-                            f"{key} != {Entity.quoteString(value[1:])}"
+                            f"{key} != {Entity.quoteString(str_value[1:])}"
                         )
                     else:
                         where_cond.append(

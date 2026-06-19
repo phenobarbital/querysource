@@ -280,6 +280,20 @@ JIRA_CERT = config.get('JIRA_CERT')
 HTTPCLIENT_MAX_SEMAPHORE = config.getint("HTTPCLIENT_MAX_SEMAPHORE", fallback=5)
 HTTPCLIENT_MAX_WORKERS = config.getint("HTTPCLIENT_MAX_WORKERS", fallback=1)
 
+## MultiQS thread guardrails:
+MULTIQS_MAX_CONCURRENT_THREADS = config.getint(
+    "MULTIQS_MAX_CONCURRENT_THREADS",
+    fallback=4,
+)
+MULTIQS_MAX_SOURCES_PER_REQUEST = config.getint(
+    "MULTIQS_MAX_SOURCES_PER_REQUEST",
+    fallback=25,
+)
+MULTIQS_SOURCE_TIMEOUT_SECONDS = config.getint(
+    "MULTIQS_SOURCE_TIMEOUT_SECONDS",
+    fallback=30,
+)
+
 ## Google API:
 GOOGLE_API_KEY = config.get('GOOGLE_API_KEY')
 GOOGLE_SEARCH_API_KEY = config.get('GOOGLE_SEARCH_API_KEY')

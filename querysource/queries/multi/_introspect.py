@@ -900,7 +900,16 @@ def describe_class(cls: type, category: str | None = None) -> dict:
         example_text = json.dumps(example_dict, indent=2)
     if not example_text and body_literal:
         # rST literal block — typically a YAML config example for destinations.
-        example_text = body_literal
+        # Try to parse as YAML and re-serialize as JSON so the UI shows JSON.
+        try:
+            import yaml  # noqa: PLC0415
+            parsed = yaml.safe_load(body_literal)
+            if isinstance(parsed, dict):
+                example_text = json.dumps(parsed, indent=2)
+            else:
+                example_text = body_literal
+        except Exception:
+            example_text = body_literal
 
     icon = getattr(cls, "_icon", None) or DEFAULT_CATEGORY_ICONS.get(
         category, DEFAULT_CATEGORY_ICONS["Components"]

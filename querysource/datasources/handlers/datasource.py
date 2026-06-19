@@ -1,4 +1,6 @@
+import inspect
 import logging
+import re
 from functools import partial
 import uuid
 from importlib import import_module
@@ -25,6 +27,137 @@ from ...auth import ResourceType
 # ``_logger`` attribute is initialised (e.g. during unit tests that construct
 # the view without going through the full request lifecycle).
 _PBAC_LOGGER = logging.getLogger("querysource.datasources.handlers.datasource")
+
+# Secret-bearing credential keys that must be redacted in API responses.
+_SECRET_KEYS: frozenset[str] = frozenset({
+    "password", "pwd", "secret", "token", "api_key", "apikey", "key",
+    "access_token", "refresh_token", "client_secret", "private_key",
+    "passphrase", "auth_token", "bearer", "credential", "credentials",
+})
+
+# Pattern to detect and mask user:password pairs in DSN strings,
+# e.g. "postgres://user:s3cret@host:5432/db" → "postgres://user:****@host:5432/db"
+_DSN_USERINFO_RE = re.compile(r"(://)([^:@/]+):([^@]+)(@)", re.ASCII)
+
+
+def _redact_datasource(record: dict) -> dict:
+    """Return a COPY of ``record`` with all secret values replaced by '(hidden)'.
+
+    Redacts:
+    - Every key in ``credentials`` whose name is in ``_SECRET_KEYS``.
+    - Any user:password pair embedded in the ``dsn`` field.
+
+    Does NOT mutate the original ``record`` or any nested dicts in place.
+    Works for both plain ``dict`` records (from ``default_sources()``) and
+    dict-serialised ``DataSource`` Model instances.
+
+    Args:
+        record: A datasource record dict (may be a shallow copy already).
+
+    Returns:
+        A new dict with secrets redacted.
+    """
+    out = dict(record)  # shallow copy at top level
+
+    # Redact credentials dict
+    creds = out.get("credentials")
+    if isinstance(creds, dict):
+        out["credentials"] = {
+            k: "(hidden)" if k in _SECRET_KEYS else v
+            for k, v in creds.items()
+        }
+
+    # Redact or remove dsn
+    dsn = out.get("dsn")
+    if isinstance(dsn, str) and dsn:
+        # Replace "://user:secret@" with "://user:****@"
+        out["dsn"] = _DSN_USERINFO_RE.sub(r"\g<1>\g<2>:****\g<4>", dsn)
+
+    return out
+
+
+async def _check_datasource_read(request: web.Request, logger=None) -> None:
+    """Fail-closed PBAC gate for datasource:read.
+
+    Modelled on ``AbstractHandler._enforce_pbac`` (handlers/abstract.py:259).
+    ``DatasourceView`` extends ``BaseView`` (not ``AbstractHandler``), so
+    ``_enforce_pbac`` is NOT available here — we replicate the logic.
+
+    Fast-path no-op when ``app['security']`` is absent (PBAC disabled).
+    When PBAC is enabled but no session can be read, raises 404 (deny).
+
+    Args:
+        request: The current aiohttp web request.
+        logger: Optional logger; falls back to module-level ``_PBAC_LOGGER``.
+
+    Raises:
+        web.HTTPNotFound: When PBAC is enabled but session or evaluator is
+            missing (fail-closed).
+    """
+    _log = logger or _PBAC_LOGGER
+    guardian = request.app.get("security")
+    if guardian is None:
+        return  # PBAC disabled — fast-path no-op
+
+    # Attempt to extract the user session.
+    session = None
+    try:
+        session = await request.app["session"].get_session(request)
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+    if session is None:
+        _log.info(
+            "PBAC denied (no session): datasource/datasource:read"
+        )
+        raise web.HTTPNotFound()
+
+    evaluator = request.app.get("policy_evaluator")
+    if evaluator is None:
+        _log.error(
+            "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
+        )
+        raise web.HTTPNotFound()
+
+    # Evaluate access using the same pattern as AbstractHandler._enforce_pbac.
+    try:
+        from navigator_auth.abac.context import EvalContext
+        from navigator_auth.abac.policies.environment import Environment
+        from navigator_auth.conf import AUTH_SESSION_OBJECT
+    except ImportError:
+        # navigator_auth not installed; skip PBAC check
+        return
+
+    userinfo = (
+        session.get(AUTH_SESSION_OBJECT, {})
+        if hasattr(session, "get") else {}
+    )
+    if not isinstance(userinfo, dict):
+        userinfo = {}
+    user = userinfo if userinfo else None
+
+    ctx = EvalContext(
+        request=request,
+        user=user,
+        userinfo=userinfo,
+        session=session,
+    )
+    result = evaluator.check_access(
+        ctx=ctx,
+        resource_type=ResourceType.DATASOURCE,
+        resource_name="datasource",
+        action="datasource:read",
+        env=Environment(),
+    )
+    if inspect.iscoroutine(result):
+        result = await result
+    if not result.allowed:
+        _log.info(
+            "PBAC denied: datasource/datasource:read policy=%s reason=%s",
+            getattr(result, "matched_policy", None),
+            getattr(result, "reason", None),
+        )
+        raise web.HTTPForbidden()
 
 
 def _item_get(item, key, default=None):
@@ -166,6 +299,12 @@ class DatasourceView(BaseView):
             "406":
                 description: Query Error
         """
+        # SECURITY (FEAT-103): Fail-closed datasource:read PBAC gate.
+        # When PBAC is enabled but no session/evaluator is present, deny.
+        # When PBAC is disabled (security absent), this is a fast no-op.
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
+
         filtering = None
         ds = None
         try:
@@ -215,6 +354,13 @@ class DatasourceView(BaseView):
                             ResourceType.DRIVER, "driver:list",
                         )
                         result = db_items + drv_items
+                        # SECURITY (FEAT-103): Redact all secret values before returning.
+                        result = [
+                            _redact_datasource(
+                                item if isinstance(item, dict) else item.to_dict()
+                            )
+                            for item in result
+                        ]
                         return self.json_response(response=result, headers=headers)
                     except (ValidationError) as ex:
                         error = {
@@ -237,16 +383,16 @@ class DatasourceView(BaseView):
             async with await db.connection() as conn:
                 try:
                     result = await DataSource.get(name=ds, _connection=conn)
-                    try:
-                        # TODO: removing "secrets"
-                        result.credentials['password'] = '(hidden)'
-                    except KeyError:
-                        pass
+                    # SECURITY (FEAT-103): Redact ALL credential secrets (not just password).
+                    result_dict = (
+                        result if isinstance(result, dict) else result.to_dict()
+                    )
+                    result_dict = _redact_datasource(result_dict)
                     headers = {
                         'X-STATUS': 'OK',
                         'X-MESSAGE': f'Datasource Information: {ds}'
                     }
-                    return self.json_response(response=result, headers=headers)
+                    return self.json_response(response=result_dict, headers=headers)
                 except (ValidationError) as ex:
                     error = {
                         "message": f"Data is bad on origin: {ex}",
@@ -314,6 +460,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         ## first, getting the driver:
         try:
@@ -448,6 +596,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         args = self.get_arguments(request=self.request)
         name = None
@@ -534,6 +684,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         ## first, getting the driver:
         try:
@@ -696,5 +848,5 @@ class DatasourceView(BaseView):
                 description: Conflict, a constraint was violated
         """
         raise NotImplementedError(
-            f"Datasource patch method is not implemented Yet."
+            "Datasource patch method is not implemented Yet."
         )
