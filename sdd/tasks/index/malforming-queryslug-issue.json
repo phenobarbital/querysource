@@ -93,7 +93,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -103,8 +103,8 @@
       "parallelism_notes": "Edits .pyx (different files from providers/Rust) but shares the V1 worktree recompile; depends on TASK-704 validators for parity.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-708-cython-fallback-hardening.md"
+      "completed_at": "2026-06-19T13:32:18+00:00",
+      "file": "sdd/tasks/completed/TASK-708-cython-fallback-hardening.md"
     },
     {
       "id": "TASK-709",
