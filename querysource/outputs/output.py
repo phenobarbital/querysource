@@ -218,29 +218,32 @@ class DataOutput:
             try:
                 await writer.get_result()
             except (NoDataFound, DataNotFound) as err:
+                _msg = f"{err!s}" if DEBUG else "Data not found"
                 headers = {
                     'x-status': 'Empty Result',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.no_content(
                     headers=headers
                 )
             except StatementError as err:
+                _msg = f"{err!s}" if DEBUG else "Query Syntax Error"
                 headers = {
                     'x-status': 'Syntax Error',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.error(
-                    "Query Syntax Error: {err}",
+                    f"Query Syntax Error: {err}",
                     status=404,
                     exception=err,
                     headers=headers,
                     content_type='application/json'
                 )
             except (DriverError, QueryException) as err:
+                _msg = f"{err!s}" if DEBUG else "Query execution failed"
                 headers = {
                     'x-status': 'Query Error',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.error(
                     f"Query Error: {err}",
@@ -250,7 +253,6 @@ class DataOutput:
                     content_type='application/json'
                 )
             except Exception as err:  # pylint: disable=W0703
-                logging.exception(err)
                 return self.error(  # pylint: disable=E0702
                     message=f"Query Exception: {err}",
                     status=500,
@@ -260,9 +262,10 @@ class DataOutput:
             try:
                 return await writer.get_response()
             except (TypeError, RuntimeError, ValueError) as err:
+                _msg = f'Writer Error: {err}' if DEBUG else "Output generation failed"
                 headers = {
                     'x-status': 'Output Error',
-                    'x-message': f'Writer Error: {err}'
+                    'x-message': _msg
                 }
                 return self.error(
                     f"Output Error: {err}",
@@ -272,9 +275,10 @@ class DataOutput:
                     content_type='application/json'
                 )
             except Exception as err:  # pylint: disable=W0703
+                _msg = f'Writer Error: {err}' if DEBUG else "Output generation failed"
                 headers = {
                     'x-status': 'QuerySource Error',
-                    'x-message': f'Writer Error: {err}'
+                    'x-message': _msg
                 }
                 return self.error(
                     "Output Exception",

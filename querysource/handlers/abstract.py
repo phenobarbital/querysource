@@ -95,13 +95,26 @@ class AbstractHandler(BaseHandler):
 
     def NotFound(self, message: str, exception: BaseException = None):
         """Raised when Data not Found.
+
+        Routes through ``build_error_payload`` so that in production
+        (``self.debug=False``) the response body never contains raw exception
+        text or internal paths.
         """
-        reason = {
-            "message": message,
-            "error": str(exception)
-        }
+        payload = build_error_payload(
+            category="not_found",
+            status=404,
+            exception=exception,
+            debug=self.debug,
+            logger=self.logger,
+            public_message=message if self.debug else None,
+        )
         args = {
-            "reason": self._json.dumps(reason),
+            "reason": payload["error"],
+            "text": self._json.dumps(payload),
+            "headers": {
+                "X-MESSAGE": payload["error"],
+                "X-STATUS": "404",
+            },
             "content_type": "application/json",
         }
         raise web.HTTPNotFound(**args)

@@ -15,7 +15,7 @@ Public API
 import logging
 import traceback
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 __all__ = ["GENERIC_MESSAGES", "build_error_payload"]
 
@@ -46,7 +46,7 @@ def build_error_payload(
     debug: bool = False,
     logger: Optional[logging.Logger] = None,
     public_message: Optional[str] = None,
-) -> dict:
+) -> dict[str, Any]:
     """Build a client-safe error payload.
 
     Always logs full detail (message + traceback) server-side under a

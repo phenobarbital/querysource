@@ -176,7 +176,7 @@ class AbstractWriter(ABC):
                 return response
             except Exception as ex:  # pylint: disable=W0703
                 return self.error(
-                    message="Error Starting Stream Transmision",
+                    message="Error Starting Stream Transmission",
                     exception=ex,
                     status=500
                 )
