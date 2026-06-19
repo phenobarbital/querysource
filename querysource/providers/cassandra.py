@@ -17,6 +17,7 @@ from asyncdb.exceptions import (
 from ..exceptions import DriverError, ParserError, DataNotFound
 from ..models import QueryModel
 from ..parsers.cql import CQLParser
+from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
 from .abstract import BaseProvider
 
 
@@ -67,16 +68,22 @@ class cassandraProvider(BaseProvider):
                     ) from err
 
     def get_raw_query(self, query):
-        sql = query
-        conditions = {**self.replacement}
-        if self._conditions:
-            return sql.format_map(
-                defaultdict(str, SafeDict(**self._conditions))
-            )
-        else:
-            return sql.format_map(
-                defaultdict(str, SafeDict(**conditions))
-            )
+        # SECURITY (FEAT-103): Two-phase substitution.
+        if HAS_RUST:
+            sql = _rs.safe_format_map(query, self.replacement)
+            if self._conditions:
+                try:
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, {})
+                except ValueError as err:
+                    self._logger.warning(
+                        "get_raw_query: validating substitution rejected conditions: %s", err
+                    )
+                    raise ParserError("Invalid query conditions") from err
+            return sql
+        conditions = {**self.replacement, **(self._conditions or {})}
+        return query.format_map(
+            defaultdict(str, SafeDict(**conditions))
+        )
 
     async def prepare_connection(self):
         if not self._connection:

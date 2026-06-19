@@ -13,7 +13,7 @@ from collections import defaultdict
 import contextlib
 from aiohttp import web
 from datamodel.typedefs import SafeDict
-from datamodel.parsers.json import json_encoder, json_decoder
+from datamodel.parsers.json import json_decoder
 from datamodel.exceptions import ParserError as JSONParserError
 from asyncdb.exceptions import (
     StatementError,
@@ -23,6 +23,7 @@ from asyncdb.exceptions import (
 from ..exceptions import DriverError, ParserError, DataNotFound
 from ..models import QueryModel
 from ..parsers.mongo import MongoParser
+from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
 from .abstract import BaseProvider
 
 
@@ -92,6 +93,21 @@ class documentdbProvider(BaseProvider):
             dict: Processed MongoDB query object
         """
         if self._conditions:
+            # SECURITY (FEAT-103): Two-phase substitution.
+            if HAS_RUST:
+                try:
+                    sql = _rs.safe_format_map(query, self.replacement)
+                    substituted = _rs.safe_format_map_validated(sql, self._conditions, {})
+                    try:
+                        return json_decoder(substituted)
+                    except Exception:
+                        return substituted  # fallback; caller handles type mismatch
+                except ValueError as err:
+                    self._logger.warning(
+                        "get_raw_query: validating substitution rejected conditions: %s", err
+                    )
+                    raise ParserError("Invalid query conditions") from err
+            # Fallback when Rust is unavailable
             try:
                 return query.format_map(
                     defaultdict(str, SafeDict(**self._conditions))

@@ -2,7 +2,11 @@
 
 **Feature**: FEAT-103 — Malforming Query-Slug Issue (SQLi & Datasource Credential Exposure)
 **Spec**: `sdd/specs/malforming-queryslug-issue.spec.md`
+<<<<<<< HEAD
 **Status**: pending
+=======
+**Status**: done
+>>>>>>> 65ad10e22499ec9f2786de723736fa8770a6d7e7
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-707, TASK-708, TASK-709
@@ -143,7 +147,10 @@ async def test_injection_blocked(client, sqli_payloads):
 **Date**: YYYY-MM-DD
 **Notes**:
 **Deviations from spec**: none
+<<<<<<< HEAD
 
 ## Completion Notes
 ✅ Completed: 2026-06-19T15:38:15+00:00
 ✅ Status: verified
+=======
+>>>>>>> 65ad10e22499ec9f2786de723736fa8770a6d7e7

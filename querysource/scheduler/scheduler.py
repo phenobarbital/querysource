@@ -218,6 +218,93 @@ class QSScheduler:
             )
             return None
 
+    def _register_query_row(self, row: dict) -> Optional[str]:
+        """Register the scheduled-query (or multi-query) job for a single row.
+
+        Shared by the startup bulk-load and the runtime :meth:`register_slug`
+        path so both behave identically.
+
+        Args:
+            row: A query row from public.queries.
+
+        Returns:
+            The registered job id, or None when the row has no valid
+            ``attributes.scheduler`` definition.
+        """
+        slug = row["query_slug"]
+        attributes = row.get("attributes") or {}
+        scheduler_def = attributes.get("scheduler")
+        if not scheduler_def:
+            return None
+        schedule_type = scheduler_def.get("schedule_type")
+        schedule = scheduler_def.get("schedule")
+        if not schedule_type or not schedule:
+            self.logger.warning(
+                f"Query '{slug}' has incomplete scheduler definition — skipping"
+            )
+            return None
+        trigger = self._parse_trigger(schedule_type, schedule)
+        if trigger is None:
+            return None
+
+        provider = row.get("provider")
+        if provider == "multi":
+            # Reserved output sub-key — parse, log at DEBUG, do NOT pass into kwargs.
+            reserved_output = scheduler_def.get("output")
+            if reserved_output:
+                self.logger.debug(
+                    "Query '%s' declares reserved attributes.scheduler.output — "
+                    "ignored in v1 (forward-compatible).",
+                    slug,
+                )
+
+            # Misconfig WARN (Q1 resolution from spec §8).
+            raw = row.get("query_raw") or ""
+            try:
+                payload = json.loads(raw) if isinstance(raw, str) and raw.strip() else None
+            except json.JSONDecodeError:
+                payload = None
+            if not (isinstance(payload, dict)
+                    and ("queries" in payload or "files" in payload
+                         or "sources" in payload)):
+                self.logger.warning(
+                    "Multi-query slug '%s' has query_raw that is not a multi-query "
+                    "JSON payload — MultiQS will fall back to single-query mode "
+                    "at runtime.",
+                    slug,
+                )
+
+            job_id = f"multi_{slug}"
+            self._scheduler.add_job(
+                scheduled_multiqs_job,
+                trigger=trigger,
+                id=job_id,
+                name=f"Scheduled multi-query: {slug}",
+                replace_existing=True,
+                kwargs={
+                    "slug": slug,
+                    "notification_manager": self._notification_manager,
+                },
+            )
+            self.logger.info("Registered scheduled multi-query job: %s", job_id)
+            return job_id
+
+        # Single-query path.
+        job_id = f"query_{slug}"
+        self._scheduler.add_job(
+            scheduled_query_job,
+            trigger=trigger,
+            id=job_id,
+            name=f"Scheduled query: {slug}",
+            replace_existing=True,
+            kwargs={
+                "slug": slug,
+                "notification_manager": self._notification_manager,
+            },
+        )
+        self.logger.info(f"Registered scheduled query job: {job_id}")
+        return job_id
+
     def _load_scheduled_queries(self, rows: list) -> int:
         """Register ScheduledQueryJob for rows with attributes.scheduler.
 
@@ -231,92 +318,50 @@ class QSScheduler:
         Returns:
             Number of jobs registered.
         """
-        count = 0
-        for row in rows:
-            slug = row["query_slug"]
-            attributes = row.get("attributes") or {}
-            scheduler_def = attributes.get("scheduler")
-            if not scheduler_def:
-                continue
-            schedule_type = scheduler_def.get("schedule_type")
-            schedule = scheduler_def.get("schedule")
-            if not schedule_type or not schedule:
-                self.logger.warning(
-                    f"Query '{slug}' has incomplete scheduler definition — skipping"
-                )
-                continue
-            trigger = self._parse_trigger(schedule_type, schedule)
-            if trigger is None:
-                continue
+        return sum(1 for row in rows if self._register_query_row(row) is not None)
 
-            provider = row.get("provider")
-            if provider == "multi":
-                # Reserved output sub-key — parse, log at DEBUG, do NOT pass into kwargs.
-                reserved_output = scheduler_def.get("output")
-                if reserved_output:
-                    self.logger.debug(
-                        "Query '%s' declares reserved attributes.scheduler.output — "
-                        "ignored in v1 (forward-compatible).",
-                        slug,
-                    )
+    def _register_cache_row(self, row: dict) -> Optional[str]:
+        """Register the cache-refresh job for a single row.
 
-                # Misconfig WARN (Q1 resolution from spec §8).
-                raw = row.get("query_raw") or ""
-                try:
-                    payload = json.loads(raw) if isinstance(raw, str) and raw.strip() else None
-                except json.JSONDecodeError:
-                    payload = None
-                if not (isinstance(payload, dict)
-                        and ("queries" in payload or "files" in payload
-                             or "sources" in payload)):
-                    self.logger.warning(
-                        "Multi-query slug '%s' has query_raw that is not a multi-query "
-                        "JSON payload — MultiQS will fall back to single-query mode "
-                        "at runtime.",
-                        slug,
-                    )
+        Multi-slugs (provider='multi') are skipped unconditionally: their
+        sub-slug caches are written by normal QS execution.
 
-                job_id = f"multi_{slug}"
-                self._scheduler.add_job(
-                    scheduled_multiqs_job,
-                    trigger=trigger,
-                    id=job_id,
-                    name=f"Scheduled multi-query: {slug}",
-                    replace_existing=True,
-                    kwargs={
-                        "slug": slug,
-                        "notification_manager": self._notification_manager,
-                    },
-                )
-                self.logger.info("Registered scheduled multi-query job: %s", job_id)
-                count += 1
-                continue
+        Args:
+            row: A query row from public.queries.
 
-            # Single-query path — unchanged.
-            job_id = f"query_{slug}"
-            self._scheduler.add_job(
-                scheduled_query_job,
-                trigger=trigger,
-                id=job_id,
-                name=f"Scheduled query: {slug}",
-                replace_existing=True,
-                kwargs={
-                    "slug": slug,
-                    "notification_manager": self._notification_manager,
-                },
-            )
-            self.logger.info(f"Registered scheduled query job: {job_id}")
-            count += 1
-        return count
+        Returns:
+            The registered job id, or None when the row is not cache-schedulable.
+        """
+        if row.get("provider") == "multi":
+            return None
+        slug = row["query_slug"]
+        if not row.get("is_cached", False):
+            return None
+        cache_options = row.get("cache_options") or {}
+        schedule_type = cache_options.get("schedule_type")
+        schedule = cache_options.get("schedule")
+        if not schedule_type or not schedule:
+            return None
+        trigger = self._parse_trigger(schedule_type, schedule)
+        if trigger is None:
+            return None
+        job_id = f"cache_{slug}"
+        self._scheduler.add_job(
+            cache_refresh_job,
+            trigger=trigger,
+            id=job_id,
+            name=f"Cache refresh: {slug}",
+            replace_existing=True,
+            kwargs={
+                "slug": slug,
+                "notification_manager": self._notification_manager,
+            },
+        )
+        self.logger.info(f"Registered cache refresh job: {job_id}")
+        return job_id
 
     def _load_cache_refresh_jobs(self, rows: list) -> int:
         """Register CacheRefreshJob for rows with cache_options schedule and is_cached=True.
-
-        Note:
-            Multi-slugs (provider='multi') are skipped unconditionally: they
-            never receive a ``cache_<slug>`` job because sub-slug caches are
-            written by normal QS execution if ``is_cached=True`` is set on
-            each sub-slug row.
 
         Args:
             rows: Query rows from public.queries.
@@ -324,37 +369,116 @@ class QSScheduler:
         Returns:
             Number of jobs registered.
         """
-        count = 0
-        for row in rows:
-            if row.get("provider") == "multi":
-                continue
-            slug = row["query_slug"]
-            is_cached = row.get("is_cached", False)
-            if not is_cached:
-                continue
-            cache_options = row.get("cache_options") or {}
-            schedule_type = cache_options.get("schedule_type")
-            schedule = cache_options.get("schedule")
-            if not schedule_type or not schedule:
-                continue
-            trigger = self._parse_trigger(schedule_type, schedule)
-            if trigger is None:
-                continue
-            job_id = f"cache_{slug}"
-            self._scheduler.add_job(
-                cache_refresh_job,
-                trigger=trigger,
-                id=job_id,
-                name=f"Cache refresh: {slug}",
-                replace_existing=True,
-                kwargs={
-                    "slug": slug,
-                    "notification_manager": self._notification_manager,
-                },
+        return sum(1 for row in rows if self._register_cache_row(row) is not None)
+
+    # ─── Runtime job management (no restart) ────────────────────────────────
+    # APScheduler supports add/remove/pause/resume on a running scheduler, so a
+    # slug's schedule can be (un)registered live. The DB remains the source of
+    # truth: on the next restart, startup rebuilds every job from public.queries.
+
+    def _slug_job_ids(self, slug: str) -> list:
+        """All possible APScheduler job ids derived from a slug."""
+        return [f"query_{slug}", f"multi_{slug}", f"cache_{slug}"]
+
+    async def _fetch_slug_row(self, slug: str) -> Optional[dict]:
+        """Fetch the schedulable columns for a single slug from public.queries.
+
+        Returns a row dict shaped like the startup loader expects, or None when
+        the slug doesn't exist or the DB pool is unavailable.
+        """
+        if self._db is None:
+            self.logger.error(
+                "QSScheduler: DB pool unavailable; cannot fetch slug '%s'", slug
             )
-            self.logger.info(f"Registered cache refresh job: {job_id}")
-            count += 1
-        return count
+            return None
+        from ..models import QueryModel  # lazy import to avoid an import cycle
+        try:
+            async with await self._db.acquire() as conn:
+                query = await QueryModel.get(query_slug=slug, _connection=conn)
+        except Exception as exc:
+            self.logger.warning(
+                "QSScheduler: slug '%s' not found or query failed: %s", slug, exc
+            )
+            return None
+        if query is None:
+            return None
+        return {
+            "query_slug": getattr(query, "query_slug", slug),
+            "attributes": getattr(query, "attributes", None),
+            "cache_options": getattr(query, "cache_options", None),
+            "provider": getattr(query, "provider", None),
+            "is_cached": getattr(query, "is_cached", False),
+            "query_raw": getattr(query, "query_raw", None),
+        }
+
+    def remove_job(self, job_id: str) -> bool:
+        """Remove a single job from the live scheduler.
+
+        Returns:
+            True if a job was removed, False if it didn't exist.
+        """
+        if self._scheduler is None or self._scheduler.get_job(job_id) is None:
+            return False
+        self._scheduler.remove_job(job_id)
+        self.logger.info("Removed scheduler job: %s", job_id)
+        return True
+
+    def set_job_paused(self, job_id: str, paused: bool) -> bool:
+        """Pause or resume a live job.
+
+        Returns:
+            True on success, False if the job doesn't exist.
+        """
+        if self._scheduler is None or self._scheduler.get_job(job_id) is None:
+            return False
+        if paused:
+            self._scheduler.pause_job(job_id)
+            self.logger.info("Paused scheduler job: %s", job_id)
+        else:
+            self._scheduler.resume_job(job_id)
+            self.logger.info("Resumed scheduler job: %s", job_id)
+        return True
+
+    async def register_slug(self, slug: str) -> dict:
+        """Sync a single slug's scheduled jobs into the live scheduler (no restart).
+
+        Reads the current public.queries row, removes any existing jobs for the
+        slug, then (re)registers query/multi/cache jobs from its current
+        ``attributes.scheduler`` / ``cache_options``. Removing the scheduler
+        definition and calling this effectively unregisters the slug's job.
+
+        Args:
+            slug: The query slug to (re)sync.
+
+        Returns:
+            ``{"slug": ..., "registered": [job_id, ...], "removed": [job_id, ...]}``.
+
+        Raises:
+            RuntimeError: If the scheduler is not running.
+        """
+        if self._scheduler is None:
+            raise RuntimeError("QSScheduler is not running")
+
+        # Remove existing jobs for this slug first (idempotent re-register).
+        removed = []
+        for jid in self._slug_job_ids(slug):
+            if self._scheduler.get_job(jid) is not None:
+                self._scheduler.remove_job(jid)
+                removed.append(jid)
+
+        registered = []
+        row = await self._fetch_slug_row(slug)
+        if row is not None:
+            qjob = self._register_query_row(row)
+            if qjob:
+                registered.append(qjob)
+            cjob = self._register_cache_row(row)
+            if cjob:
+                registered.append(cjob)
+
+        # Don't report a job as both removed and re-registered.
+        removed = [r for r in removed if r not in registered]
+        return {"slug": slug, "registered": registered, "removed": removed}
 
     def setup(self, app: web.Application) -> None:
         """Register startup/shutdown hooks on the aiohttp app.

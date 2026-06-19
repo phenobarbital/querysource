@@ -63,14 +63,25 @@ class SharepointSource(ThreadSource):
         self._tenant_id = self.resolve_credential(
             'tenant_id', creds.get('tenant_id', 'SHAREPOINT_TENANT_ID')
         )
-        # tenant_name is used to build the SharePoint host URL
-        self._tenant_name = creds.get('tenant_name', '') or self.resolve_credential(
-            'tenant_name', 'SHAREPOINT_TENANT_NAME'
+        # tenant_name / tenant_host: used to build the SharePoint host URL.
+        # Accepts either a bare tenant name ("trocglobal") or a full hostname
+        # ("trocglobal.sharepoint.com") via SHAREPOINT_TENANT_HOST.
+        _tenant_raw = (
+            creds.get('tenant_name', '')
+            or creds.get('tenant_host', '')
+            or self.resolve_credential('tenant_name', 'SHAREPOINT_TENANT_NAME')
+            or self.resolve_credential('tenant_host', 'SHAREPOINT_TENANT_HOST')
         )
+        # Strip .sharepoint.com suffix if the full hostname was provided
+        self._tenant_name = _tenant_raw.replace('.sharepoint.com', '').strip()
         self._site = creds.get('site', '')
         source = options.get('source', {})
         self._filename: str = source.get('filename', '')
         self._directory: str = source.get('directory', '')
+        # sheet_name: int (0-based index) or str (sheet name). None reads all sheets.
+        self._sheet_name = source.get('sheet_name', 0)
+        # pd_args: extra kwargs forwarded to pd.read_excel / pd.read_csv (e.g. skiprows, header, usecols).
+        self._pd_args: dict = source.get('pd_args', {})
 
     def _parse_file_content(self, content: bytes) -> pd.DataFrame:
         """Parse raw bytes as Excel or CSV depending on the filename extension."""
@@ -88,10 +99,12 @@ class SharepointSource(ThreadSource):
             engine = 'xlrd' if suffix == '.xls' else 'openpyxl'
             df = pd.read_excel(
                 buf,
+                sheet_name=self._sheet_name,
                 na_values=["NULL", "TBD"],
                 na_filter=True,
                 engine=engine,
                 keep_default_na=False,
+                **self._pd_args,
             )
         else:
             df = pd.read_csv(
@@ -99,6 +112,7 @@ class SharepointSource(ThreadSource):
                 na_values=["NULL", "TBD"],
                 na_filter=True,
                 keep_default_na=False,
+                **self._pd_args,
             )
         df = df.infer_objects()
         return df
@@ -133,6 +147,13 @@ class SharepointSource(ThreadSource):
                 "navconfig SHAREPOINT_TENANT_NAME)."
             )
 
+        # The msgraph/kiota SDK uses platform.version() to build the User-Agent
+        # header. On Linux the string has a trailing space which httpx rejects
+        # as an illegal header value. Patch it before the client is constructed.
+        import platform as _platform  # noqa: PLC0415
+        _orig_version = _platform.version
+        _platform.version = lambda: _orig_version().strip()
+
         credential = ClientSecretCredential(
             self._tenant_id,
             self._client_id,
@@ -146,7 +167,7 @@ class SharepointSource(ThreadSource):
             site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
             if site_host and self._site:
                 site = await client.sites.by_site_id(
-                    f"{site_host}:/sites/{self._site}"
+                    f"{site_host}:/sites/{self._site}:"
                 ).get()
             else:
                 raise RuntimeError(
@@ -159,10 +180,22 @@ class SharepointSource(ThreadSource):
             drives_response = await client.sites.by_site_id(site_id).drives.get()
             drives = drives_response.value if drives_response else []
 
-            # Parse the directory: split on "/" to get library name and subfolder
-            parts = self._directory.split('/', 1) if self._directory else []
-            library_name = parts[0] if parts else 'Documents'
-            subfolder = parts[1] if len(parts) > 1 else ''
+            # Parse directory into (library_name, subfolder).
+            # Single segment (e.g. "Tests") → Documents library + subfolder "Tests".
+            # Multi-segment (e.g. "Documents/Tests") → first segment is library,
+            # rest is subfolder.  "Shared Documents" normalised to "Documents".
+            _dir = (self._directory or '').replace('\\', '/').strip().strip('/')
+            if not _dir:
+                library_name, subfolder = 'Documents', ''
+            else:
+                _parts = _dir.split('/')
+                if len(_parts) == 1:
+                    library_name, subfolder = 'Documents', _parts[0]
+                else:
+                    library_name = _parts[0]
+                    subfolder = '/'.join(_parts[1:])
+                    if library_name.lower() == 'shared documents':
+                        library_name = 'Documents'
 
             # Find the matching drive (case-insensitive)
             drive = None
@@ -182,19 +215,12 @@ class SharepointSource(ThreadSource):
             drive_id = drive.id
 
             # Navigate to the subfolder and find the file
-            if subfolder:
-                path_encoded = subfolder.rstrip('/')
-                item = await (
-                    client.drives.by_drive_id(drive_id)
-                    .items.by_drive_item_id(f"root:/{path_encoded}/{self._filename}:")
-                    .get()
-                )
-            else:
-                item = await (
-                    client.drives.by_drive_id(drive_id)
-                    .items.by_drive_item_id(f"root:/{self._filename}:")
-                    .get()
-                )
+            file_path = f"{subfolder.rstrip('/')}/{self._filename}" if subfolder else self._filename
+            item = await (
+                client.drives.by_drive_id(drive_id)
+                .items.by_drive_item_id(f"root:/{file_path}:")
+                .get()
+            )
 
             if item is None or not hasattr(item, 'id'):
                 raise RuntimeError(
@@ -213,8 +239,9 @@ class SharepointSource(ThreadSource):
                     f"Could not obtain download URL for file '{self._filename}'."
                 )
 
-            # Download the file content using httpx
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
+            # Download the file content using httpx.
+            # Large files (e.g. 100MB+) can take several minutes — use a long timeout.
+            async with httpx.AsyncClient(timeout=600.0) as http_client:
                 response = await http_client.get(download_url)
                 response.raise_for_status()
                 content = response.content

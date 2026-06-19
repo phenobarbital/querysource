@@ -97,11 +97,51 @@ class TableOutput:
             )
             datasource[u.columns] = u.replace(['<NA>', 'None'], None)
             try:
-                datasource.to_sql(
-                    name=table,
-                    con=self._engine.engine(),
-                    **options
-                )
+                engine = self._engine.engine()
+                has_pk = bool(self._pk) and hasattr(self._engine, 'ensure_primary_key')
+                if self._truncate and hasattr(self._engine, 'truncate_table'):
+                    # Keep the table (grants/indexes/comments), wipe rows,
+                    # then upsert. Create the structure + PK first if missing.
+                    datasource.head(0).to_sql(
+                        name=table,
+                        con=engine,
+                        schema=schema,
+                        if_exists='append',
+                        index=False,
+                    )
+                    if has_pk:
+                        self._engine.ensure_primary_key(schema, table, self._pk)
+                    self._engine.truncate_table(schema, table)
+                    datasource.to_sql(
+                        name=table,
+                        con=engine,
+                        **{**options, 'if_exists': 'append'}
+                    )
+                elif has_pk:
+                    # pandas.to_sql never creates a PK, but db_upsert needs one
+                    # for its ON CONFLICT target. Split the write into:
+                    #   1) create the (empty) structure honouring if_exists,
+                    #   2) add the PRIMARY KEY declared in the JSON config,
+                    #   3) insert the data via append + the db_upsert method.
+                    datasource.head(0).to_sql(
+                        name=table,
+                        con=engine,
+                        schema=schema,
+                        if_exists=options.get('if_exists', 'append'),
+                        index=False,
+                    )
+                    self._engine.ensure_primary_key(schema, table, self._pk)
+                    datasource.to_sql(
+                        name=table,
+                        con=engine,
+                        **{**options, 'if_exists': 'append'}
+                    )
+                else:
+                    datasource.to_sql(
+                        name=table,
+                        con=engine,
+                        **options
+                    )
                 logging.debug(
                     f':: Saving Table Data {schema}.{table} ...'
                 )
@@ -113,7 +153,6 @@ class TableOutput:
             on_conflict = 'replace'
             if hasattr(elem, 'if_exists'):
                 on_conflict = elem.if_exists
-            print('AQUI >>', table, schema)
             await self._engine.db_upsert(  # pylint: disable=E1120,E1123 # noqa
                 data=datasource,
                 table=table,

@@ -73,3 +73,16 @@ class TestMultiQSSources:
         assert mqs._queries
         assert mqs._files
         assert mqs._sources
+
+    @pytest.mark.asyncio
+    async def test_guardrail_rejects_too_many_sources(self, monkeypatch):
+        monkeypatch.setattr("querysource.conf.MULTIQS_MAX_SOURCES_PER_REQUEST", 2)
+        mqs = MultiQS(
+            query={
+                "queries": {"q1": {"slug": "s1"}, "q2": {"slug": "s2"}},
+                "files": {"f1": {"path": "/tmp/x.csv", "mime": "text/csv"}},
+            },
+            request=MagicMock(),
+        )
+        with pytest.raises(DriverError):
+            await mqs.query()

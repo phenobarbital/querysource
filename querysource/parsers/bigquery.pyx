@@ -43,8 +43,9 @@ cdef str bq_quote_string(object value):
         return <str>value
     v = str(value)
     # Strip surrounding single quotes if already wrapped by a caller
+    # (is_valid/quoteString) and undo PG-style '' escaping before re-wrapping.
     if v.startswith("'") and v.endswith("'") and len(v) >= 2:
-        v = v[1:-1]
+        v = v[1:-1].replace("''", "'")
     # Escape any literal double quotes inside the string
     v = v.replace('"', '\\"')
     return f'"{v}"'
@@ -160,11 +161,18 @@ cdef class BigQueryParser(SQLParser):
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():
+                # SECURITY (FEAT-103): Validate key as a safe SQL identifier.
                 try:
                     if isinstance(int(key), (int, float)):
                         key = f'"{key}"'
-                except ValueError:
-                    pass
+                    else:
+                        stripped = key.rstrip('|!~#@:')
+                        if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                            continue
+                except (ValueError, TypeError):
+                    stripped = key.rstrip('|!~#@:')
+                    if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                        continue
 
                 # Check if this is a JSON field in cond_definition
                 is_json_field = False
@@ -201,7 +209,8 @@ cdef class BigQueryParser(SQLParser):
                 if isinstance(value, dict):
                     op, v = value.popitem()
                     if op in COMPARISON_TOKENS:
-                        where_cond.append(f"{field_expr} {op} {v}")
+                        # SECURITY: Escape the comparison value
+                        where_cond.append(f"{field_expr} {op} {bq_quote_string(str(v))}")
                     else:
                         # BigQuery: JSON extraction via dict key
                         json_expr = f"JSON_VALUE({field_expr}, '$.{op}')"
@@ -213,7 +222,8 @@ cdef class BigQueryParser(SQLParser):
                     try:
                         fval = value[0]
                         if fval in self.valid_operators:
-                            where_cond.append(f"{field_expr} {fval} {value[1]}")
+                            # SECURITY: Escape second operand
+                            where_cond.append(f"{field_expr} {fval} {bq_quote_string(str(value[1]))}")
                         else:
                             val = ','.join(
                                 [f"{bq_quote_string(v)}" for v in value]
@@ -232,17 +242,24 @@ cdef class BigQueryParser(SQLParser):
                             where_cond.append(f"{field_expr} IN ({val})")
 
                 elif isinstance(value, (str, int)):
-                    if "BETWEEN" in str(value):
-                        where_cond.append(f"({field_expr} {value})")
+                    str_value = str(value)
+                    if "BETWEEN" in str_value:
+                        # SECURITY: Reject BETWEEN clauses with injection markers
+                        upper_val = str_value.upper()
+                        if ('--' in str_value or '/*' in str_value or ';' in str_value
+                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                            continue
+                        where_cond.append(f"({field_expr} {str_value})")
                     elif value in ('null', 'NULL'):
                         where_cond.append(f"{field_expr} IS NULL")
                     elif value in ('!null', '!NULL'):
                         where_cond.append(f"{field_expr} IS NOT NULL")
                     elif end == '!':
-                        where_cond.append(f"{name} != {value}")
-                    elif str(value).startswith('!'):
+                        # SECURITY: Escape the negated value
+                        where_cond.append(f"{name} != {bq_quote_string(str_value)}")
+                    elif str_value.startswith('!'):
                         where_cond.append(
-                            f"{field_expr} != {bq_quote_string(value[1:])}"
+                            f"{field_expr} != {bq_quote_string(str_value[1:])}"
                         )
                     else:
                         where_cond.append(

@@ -14,6 +14,7 @@ from ..base import BaseQuery
 from .transformations import (
     GoogleMaps,
 )
+from ... import conf
 from .operators.filter import Filter
 from .sources import ThreadQuery, FileSource
 from .sources.executors import RemoteConfig
@@ -93,7 +94,8 @@ class MultiQS(BaseQuery):
             ## Getting data from Queries or Files
             self._queries = query.pop('queries', {})
             self._files = query.pop('files', {})
-            self._sources = query.pop('sources', [])
+            raw_sources = query.pop('sources', [])
+            self._sources = self._normalize_sources(raw_sources)
         else:
             self._sources = []
         if not (self.slug or self._queries or self._files or self._sources):
@@ -108,6 +110,58 @@ class MultiQS(BaseQuery):
         self._user_session = user_session
         # FEAT-101: track names of queries dispatched to remote qworker.
         self._remote_queries: list = []
+
+    @staticmethod
+    def _expand_dotted_keys(cfg: dict) -> dict:
+        """Expand dot-notation keys into nested dicts.
+
+        Frontend sends ``{"source.file_id": {"file_id": 123}}`` instead of
+        ``{"source": {"file_id": 123}}``.  For each dotted key, the parent
+        segment becomes the top-level key and the value (a dict) is merged in.
+        Multiple dotted keys sharing the same parent are merged together.
+        """
+        expanded = {}
+        for key, value in cfg.items():
+            if '.' in key:
+                parent = key.split('.')[0]
+                if isinstance(value, dict):
+                    existing = expanded.get(parent, {})
+                    expanded[parent] = {**existing, **value}
+                else:
+                    expanded[key] = value
+            else:
+                expanded[key] = value
+        return expanded
+
+    @staticmethod
+    def _normalize_sources(raw) -> list:
+        """Normalize the ``sources`` payload to the internal list format.
+
+        Accepts two shapes:
+
+        * **List** (canonical internal format)::
+
+            [{"SmartSheetSource": {"credentials": {...}, "source": {...}}}]
+
+        * **Dict** (frontend convenience format)::
+
+            {"alias": {"type": "SmartSheetSource", "source.file_id": {"file_id": 123}}}
+
+          Each entry's ``type`` field is extracted as the source-type key.
+          Dot-notation keys (e.g. ``source.file_id``) are expanded into nested
+          dicts via ``_expand_dotted_keys``.
+        """
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, dict):
+            normalized = []
+            for _alias, cfg in raw.items():
+                cfg = dict(cfg)
+                source_type = cfg.pop('type', _alias)
+                cfg = MultiQS._expand_dotted_keys(cfg)
+                normalized.append({source_type: cfg})
+            return normalized
+        return []
 
     async def query(self):
         """
@@ -147,6 +201,20 @@ class MultiQS(BaseQuery):
                 if isinstance(self._conditions, dict):
                     self._conditions.clear()
                 self._options = {}
+        total_sources = (
+            len(self._queries or {})
+            + len(self._files or {})
+            + len(self._sources or [])
+        )
+        if total_sources > conf.MULTIQS_MAX_SOURCES_PER_REQUEST:
+            raise self.Error(
+                message=(
+                    "Too many MultiQS sources in a single request "
+                    f"({total_sources}). Maximum allowed is "
+                    f"{conf.MULTIQS_MAX_SOURCES_PER_REQUEST}."
+                ),
+            )
+
         if self._queries:
             for name, query in self._queries.items():
                 conditions = self._conditions.pop(name, {})
@@ -205,14 +273,12 @@ class MultiQS(BaseQuery):
                         message=f"Error Starting Query {name}: {ex}",
                         exception=ex
                     ) from ex
-                t.start()
                 tasks[name] = t
         if self._files:
             for name, file in self._files.items():
                 t = FileSource(
                     name, file, self._request, self._queue
                 )
-                t.start()
                 tasks[name] = t
         if self._sources:
             from .sources import SOURCE_REGISTRY  # noqa: PLC0415
@@ -230,42 +296,53 @@ class MultiQS(BaseQuery):
                     )
                     name = source_type if idx == 0 else f"{source_type}_{idx}"
                     t = cls(name, config, self._request, self._queue)
-                    t.start()
                     tasks[name] = t
 
         ## then, run all jobs:
         try:
-            for t in tasks.values():
-                t.join(timeout=30)
-                if t.is_alive():
-                    raise self.Error(
-                        message=f"Source {t.slug!r} timed out after 30 seconds.",
-                    )
-                if t.exc:
-                    ## raise exception for this Query
-                    if isinstance(t.exc, ParserError):
+            max_concurrent = max(1, conf.MULTIQS_MAX_CONCURRENT_THREADS)
+            timeout = conf.MULTIQS_SOURCE_TIMEOUT_SECONDS
+            pending = list(tasks.values())
+            active = []
+
+            while pending or active:
+                while pending and len(active) < max_concurrent:
+                    t = pending.pop(0)
+                    if not t.is_alive():
+                        t.start()
+                    active.append(t)
+                for t in list(active):
+                    t.join(timeout=timeout)
+                    if t.is_alive():
                         raise self.Error(
-                            f"Error parsing Query Slug {t.slug}",
-                            exception=t.exc
+                            message=f"Source {t.slug!r} timed out after {timeout} seconds.",
                         )
-                    if isinstance(t.exc, SlugNotFound):
-                        raise SlugNotFound(
-                            f"Slug Not Found: {t.slug}"
-                        )
-                    if isinstance(t.exc, DataNotFound):
-                        raise DataNotFound(
-                            f"No Data was Found on Query {t.slug}"
-                        )
-                    if isinstance(t.exc, (QueryException, DriverError)):
-                        raise self.Error(
-                            f"Query Error: {str(t.exc)}",
-                            exception=t.exc
-                        )
-                    else:
-                        raise self.Error(
-                            f"Error on Query: {t!s}",
-                            exception=t.exc
-                        )
+                    active.remove(t)
+                    if t.exc:
+                        ## raise exception for this Query
+                        if isinstance(t.exc, ParserError):
+                            raise self.Error(
+                                f"Error parsing Query Slug {t.slug}",
+                                exception=t.exc
+                            )
+                        if isinstance(t.exc, SlugNotFound):
+                            raise SlugNotFound(
+                                f"Slug Not Found: {t.slug}"
+                            )
+                        if isinstance(t.exc, DataNotFound):
+                            raise DataNotFound(
+                                f"No Data was Found on Query {t.slug}"
+                            )
+                        if isinstance(t.exc, (QueryException, DriverError)):
+                            raise self.Error(
+                                f"Query Error: {str(t.exc)}",
+                                exception=t.exc
+                            )
+                        else:
+                            raise self.Error(
+                                f"Error on Query: {t!s}",
+                                exception=t.exc
+                            )
             result = {}
         except (QueryException, DriverError):
             raise
