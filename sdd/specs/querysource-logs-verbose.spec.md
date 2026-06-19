@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-102
 **Date**: 2026-06-19
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: TBD
 
 ---
@@ -426,12 +426,12 @@ ENVIRONMENT = config.get('ENVIRONMENT', fallback='development')  # line 206
 - [x] What does the production error body contain? — *Resolved during intake*:
   `{ "error": <generic>, "status": <code>, "error_id": <id> }`; add `error_id`
   for log correlation. `detail` + `trace` only when `DEBUG=True`.
-- [ ] Exact category → public-message map (wording of each generic message) —
+- [x] Exact category → public-message map (wording of each generic message) —
   *Owner: Jesus Lara* (can be finalized during implementation; default set:
   bad_request → "Invalid query request", query_error → "Query execution failed",
-  not_found → "Resource not found", server_error → "Internal query error").
-- [ ] Confirm the test directory/layout for new tests (`tests/unit` vs `tests/`)
-  before writing Module 4 — *Owner: implementer*.
+  not_found → "Resource not found", server_error → "Internal query error"): accept suggestion
+- [x] Confirm the test directory/layout for new tests (`tests/unit` vs `tests/`)
+  before writing Module 4 — *Owner: implementer*: tests/
 
 ---
 
