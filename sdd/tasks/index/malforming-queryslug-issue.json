@@ -131,7 +131,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -143,8 +143,8 @@
       "parallelism_notes": "End-to-end verification; needs all implementation tasks complete.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-710-integration-poc-regression.md"
+      "completed_at": "2026-06-19T13:40:14+00:00",
+      "file": "sdd/tasks/completed/TASK-710-integration-poc-regression.md"
     }
   ]
 }
