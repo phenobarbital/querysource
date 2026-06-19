@@ -38,6 +38,7 @@ endif
 # Install all dependencies including dev dependencies
 develop: build-rust
 	uv sync --frozen --extra analytics --extra dev
+	$(MAKE) build-inplace
 
 # Build the Rust-accelerated parser extension (querysource.qs_parsers._qs_parsers)
 # Use --manifest-path so maturin reads rust/pyproject.toml (build-backend = maturin),

@@ -471,10 +471,14 @@ class Connection:
                 raise SlugNotFound(
                     f'Invalid Slug Data {slug!s}: {ex}'
                 ) from ex
-            except NoDataFound as ex:
+            except NoDataFound:
+                # Slug simply does not exist: this is an expected 404-style
+                # condition, not an internal failure. Break the exception chain
+                # with ``from None`` so the verbose asyncdb ``NoDataFound``
+                # traceback does not bury the meaningful ``SlugNotFound`` error.
                 raise SlugNotFound(
                     f'Slug not Found {slug!s}'
-                ) from ex
+                ) from None
             except Exception as ex:
                 raise QueryException(
                     f"Error getting Slug: {ex}"

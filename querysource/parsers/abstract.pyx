@@ -223,28 +223,21 @@ cdef class AbstractParser:
             self._page_ = 0
 
     cdef void _grouping_sync(self):
-        cdef list group1 = []
-        cdef list group2 = []
-        cdef str g
+        cdef object group1 = []
+        cdef object group2 = []
         try:
             group1 = self.conditions.pop('group_by', [])
-        except TypeError:
-            g = self.conditions.pop('group_by')
-            group1 = [a.strip() for a in g.split(',')]
         except AttributeError:
             pass
         try:
             group2 = self.conditions.pop('grouping', [])
-        except TypeError:
-            g = self.conditions.pop('grouping')
-            group2 = [a.strip() for a in g.split(',')]
         except AttributeError:
             pass
         if isinstance(group1, str):
             group1 = [a.strip() for a in group1.split(',')]
         if isinstance(group2, str):
             group2 = [a.strip() for a in group2.split(',')]
-        self.grouping = group1 + group2
+        self.grouping = (group1 or []) + (group2 or [])
         if not self.grouping:
             try:
                 self.grouping = self.definition.grouping
