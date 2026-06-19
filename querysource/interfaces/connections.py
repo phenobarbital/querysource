@@ -408,8 +408,15 @@ class Connection:
         """
         try:
             source = DATASOURCES[name]
-        except KeyError:
-            return None
+        except KeyError as exc:
+            # Datasource is not registered: raise a meaningful error instead of
+            # returning a bare ``None``. Callers unpack the result as
+            # ``(source, db)``; returning ``None`` produced the cryptic
+            # "cannot unpack non-iterable NoneType object" 500 error.
+            raise QueryError(
+                f"Datasource '{name}' not found",
+                code=404
+            ) from exc
         if source.driver_type == 'asyncdb':
             ### making an AsyncDB connection:
             # TODO: adding support for other drivers
@@ -471,10 +478,14 @@ class Connection:
                 raise SlugNotFound(
                     f'Invalid Slug Data {slug!s}: {ex}'
                 ) from ex
-            except NoDataFound as ex:
+            except NoDataFound:
+                # Slug simply does not exist: this is an expected 404-style
+                # condition, not an internal failure. Break the exception chain
+                # with ``from None`` so the verbose asyncdb ``NoDataFound``
+                # traceback does not bury the meaningful ``SlugNotFound`` error.
                 raise SlugNotFound(
                     f'Slug not Found {slug!s}'
-                ) from ex
+                ) from None
             except Exception as ex:
                 raise QueryException(
                     f"Error getting Slug: {ex}"

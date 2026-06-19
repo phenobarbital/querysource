@@ -23,6 +23,10 @@ _SENTINEL = object()
 
 
 class AbstractHandler(BaseHandler):
+    # Class-level default so error helpers (Error/critical/Except) can always
+    # read ``self.debug`` even if ``post_init`` has not run (e.g. instances
+    # built via ``__new__`` in tests). ``post_init`` overrides it per-instance.
+    debug: bool = DEBUG
 
     def post_init(self, *args, **kwargs):
         self.logger = logging.getLogger('QS.Handler')
