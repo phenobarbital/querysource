@@ -14,7 +14,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "V1 Rust root. Shares the _qs_parsers crate build with TASK-705/706/708, so sequence in the V1 worktree. Disjoint from V2 (TASK-709).",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-704-rust-validating-substitution.md"
+      "completed_at": "2026-06-19T13:14:14+00:00",
+      "file": "sdd/tasks/completed/TASK-704-rust-validating-substitution.md"
     },
     {
       "id": "TASK-705",
