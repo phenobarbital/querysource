@@ -71,6 +71,6 @@
     },
     "required": []
   },
-  "example": "{\n    \"credentials\": {\n        \"region_name\": \"AWS_REGION_NAME\",        # navconfig var or literal\n        \"bucket\": \"AWS_PLACER_BUCKET\",\n        \"aws_key\": \"AWS_ACCESS_KEY_ID\",\n        \"aws_secret\": \"AWS_SECRET_ACCESS_KEY\"\n    },\n    \"source\": {\n        \"file\": \"metrics_2024-12-09_0003.csv.gz\",\n        \"directory\": \"placer-analytics/bulk-export/\"\n    }\n}",
+  "example": "{\n  \"credentials\": {\n    \"region_name\": \"AWS_REGION_NAME\",\n    \"bucket\": \"AWS_PLACER_BUCKET\",\n    \"aws_key\": \"AWS_ACCESS_KEY_ID\",\n    \"aws_secret\": \"AWS_SECRET_ACCESS_KEY\"\n  },\n  \"source\": {\n    \"file\": \"metrics_2024-12-09_0003.csv.gz\",\n    \"directory\": \"placer-analytics/bulk-export/\"\n  }\n}",
   "icon": "database"
 }
