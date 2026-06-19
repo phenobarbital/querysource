@@ -1,3 +1,4 @@
+import inspect
 import logging
 import re
 from functools import partial
@@ -28,8 +29,10 @@ from ...auth import ResourceType
 _PBAC_LOGGER = logging.getLogger("querysource.datasources.handlers.datasource")
 
 # Secret-bearing credential keys that must be redacted in API responses.
-_SECRET_KEYS: frozenset = frozenset({
+_SECRET_KEYS: frozenset[str] = frozenset({
     "password", "pwd", "secret", "token", "api_key", "apikey", "key",
+    "access_token", "refresh_token", "client_secret", "private_key",
+    "passphrase", "auth_token", "bearer", "credential", "credentials",
 })
 
 # Pattern to detect and mask user:password pairs in DSN strings,
@@ -115,6 +118,46 @@ async def _check_datasource_read(request: web.Request, logger=None) -> None:
             "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
         )
         raise web.HTTPNotFound()
+
+    # Evaluate access using the same pattern as AbstractHandler._enforce_pbac.
+    try:
+        from navigator_auth.abac.context import EvalContext
+        from navigator_auth.abac.policies.environment import Environment
+        from navigator_auth.conf import AUTH_SESSION_OBJECT
+    except ImportError:
+        # navigator_auth not installed; skip PBAC check
+        return
+
+    userinfo = (
+        session.get(AUTH_SESSION_OBJECT, {})
+        if hasattr(session, "get") else {}
+    )
+    if not isinstance(userinfo, dict):
+        userinfo = {}
+    user = userinfo if userinfo else None
+
+    ctx = EvalContext(
+        request=request,
+        user=user,
+        userinfo=userinfo,
+        session=session,
+    )
+    result = evaluator.check_access(
+        ctx=ctx,
+        resource_type=ResourceType.DATASOURCE,
+        resource_name="datasource",
+        action="datasource:read",
+        env=Environment(),
+    )
+    if inspect.iscoroutine(result):
+        result = await result
+    if not result.allowed:
+        _log.info(
+            "PBAC denied: datasource/datasource:read policy=%s reason=%s",
+            getattr(result, "matched_policy", None),
+            getattr(result, "reason", None),
+        )
+        raise web.HTTPForbidden()
 
 
 def _item_get(item, key, default=None):
@@ -417,6 +460,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         ## first, getting the driver:
         try:
@@ -551,6 +596,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         args = self.get_arguments(request=self.request)
         name = None
@@ -637,6 +684,8 @@ class DatasourceView(BaseView):
             "409":
                 description: Conflict, a constraint was violated
         """
+        log = getattr(self, "_logger", None) or _PBAC_LOGGER
+        await _check_datasource_read(self.request, logger=log)
         data = await self.json_data()
         ## first, getting the driver:
         try:

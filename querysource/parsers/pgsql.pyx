@@ -106,8 +106,8 @@ cdef class pgSQLParser(SQLParser):
                         else:
                             if _format in ('date', 'datetime'):
                                 # SECURITY: Escape BETWEEN boundary values
-                                safe_v0 = Entity.escapeString(str(value[0]))
-                                safe_v1 = Entity.escapeString(str(value[1]))
+                                safe_v0 = str(value[0]).replace("'", "''")
+                                safe_v1 = str(value[1]).replace("'", "''")
                                 if end == '!':
                                     where_cond.append(f"{name} NOT BETWEEN '{safe_v0}' AND '{safe_v1}'")
                                 else:
@@ -140,10 +140,12 @@ cdef class pgSQLParser(SQLParser):
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
                     if end == '~':
-                        val = str_value[:-1] + "%'"
+                        base = str_value[:-1].replace("'", "''")
+                        val = f"'{base}%'"
                         where_cond.append(f"{name} ILIKE {val}")
                     elif end == '!~':
-                        val = str_value[:-1] + "%'"
+                        base = str_value[:-1].replace("'", "''")
+                        val = f"'{base}%'"
                         where_cond.append(f"{name} NOT ILIKE {val}")
                     elif "BETWEEN" in str_value:
                         # SECURITY: Reject BETWEEN clauses with injection markers
@@ -177,7 +179,7 @@ cdef class pgSQLParser(SQLParser):
                                 )
                             else:
                                 # SECURITY: Escape value before type cast
-                                safe_val = Entity.escapeString(str_value)
+                                safe_val = str_value.replace("'", "''")
                                 where_cond.append(
                                     f"'{safe_val}'::character varying = ANY({key})"
                                 )
@@ -197,13 +199,13 @@ cdef class pgSQLParser(SQLParser):
                                 continue
                         elif _format in ('tsrange', 'tstzrange'):
                             # SECURITY: Escape timestamp value
-                            safe_val = Entity.escapeString(str_value)
+                            safe_val = str_value.replace("'", "''")
                             where_cond.append(
                                 f"'{safe_val}'::timestamptz <@ {key}::tstzrange"
                             )
                         elif _format == 'daterange':
                             # SECURITY: Escape date value
-                            safe_val = Entity.escapeString(str_value)
+                            safe_val = str_value.replace("'", "''")
                             where_cond.append(
                                 f"'{safe_val}'::date <@ {key}::daterange"
                             )

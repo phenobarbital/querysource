@@ -13,7 +13,7 @@ from collections import defaultdict
 import contextlib
 from aiohttp import web
 from datamodel.typedefs import SafeDict
-from datamodel.parsers.json import json_encoder, json_decoder
+from datamodel.parsers.json import json_decoder
 from datamodel.exceptions import ParserError as JSONParserError
 from asyncdb.exceptions import (
     StatementError,
@@ -97,8 +97,12 @@ class documentdbProvider(BaseProvider):
             if HAS_RUST:
                 try:
                     sql = _rs.safe_format_map(query, self.replacement)
-                    return _rs.safe_format_map_validated(sql, self._conditions, {})
-                except Exception as err:
+                    substituted = _rs.safe_format_map_validated(sql, self._conditions, {})
+                    try:
+                        return json_decoder(substituted)
+                    except Exception:
+                        return substituted  # fallback; caller handles type mismatch
+                except ValueError as err:
                     self._logger.warning(
                         "get_raw_query: validating substitution rejected conditions: %s", err
                     )

@@ -49,13 +49,14 @@ fn check_injection(value: &str) -> Result<(), String> {
     let upper = value.to_uppercase();
     for marker in INJECTION_MARKERS {
         if value.contains(marker) {
-            return Err(format!("Injection marker detected in value"));
+            return Err(format!("Injection marker '{}' detected in value", marker));
         }
     }
+    // Split on non-alphanumeric chars and check each word token
+    let words: Vec<&str> = upper.split(|c: char| !c.is_alphanumeric()).collect();
     for kw in SQL_KEYWORDS {
-        // Reject if value *starts with* a SQL keyword (common attack pattern)
-        if upper.starts_with(kw) || upper.contains(&format!(" {} ", kw)) {
-            return Err(format!("SQL keyword detected in value"));
+        if words.iter().any(|w| w == kw) {
+            return Err(format!("SQL keyword '{}' detected in value", kw));
         }
     }
     Ok(())
@@ -65,10 +66,10 @@ fn check_injection(value: &str) -> Result<(), String> {
 ///
 /// Valid identifiers: alphanumeric + underscore only, no quotes or special chars.
 fn check_identifier_key(key: &str) -> Result<(), String> {
-    if key.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
         Ok(())
     } else {
-        Err(format!("Invalid identifier key"))
+        Err(format!("Invalid identifier key '{}': only [A-Za-z0-9_.] allowed", key))
     }
 }
 
@@ -115,7 +116,7 @@ pub fn safe_format_map_validated_rust(
                 // Only substitute simple identifiers (same rule as safe_format_map_rust)
                 if !key.is_empty()
                     && !key.contains('{')
-                    && key.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
                 {
                     if let Some(value) = conditions.get(key) {
                         // Detect context from surrounding chars
@@ -145,13 +146,13 @@ pub fn safe_format_map_validated_rust(
                                 // Emit an escaped identifier body (no extra double-quotes)
                                 // An identifier with double-quote breakout must be rejected
                                 if value.contains('"') || value.contains('\\') {
-                                    return Err(format!("Identifier breakout attempt detected"));
+                                    return Err(format!("Identifier breakout attempt detected for key '{}'", key));
                                 }
                                 // Extra check: reject SQL keywords in identifier position
                                 let upper = value.to_uppercase();
                                 for kw in SQL_KEYWORDS {
                                     if upper.contains(kw) {
-                                        return Err(format!("SQL keyword in identifier context"));
+                                        return Err(format!("SQL keyword '{}' in identifier context for key '{}'", kw, key));
                                     }
                                 }
                                 value.clone()
@@ -172,8 +173,12 @@ pub fn safe_format_map_validated_rust(
             result.push('{');
             i += 1;
         } else {
-            result.push(bytes[i] as char);
-            i += 1;
+            // Safety: template is a valid UTF-8 str. We only index at byte positions
+            // where we know we're not in the middle of a multi-byte sequence, because
+            // we only advance i by 1 here. For correct UTF-8, use char-aware advance.
+            let ch = template[i..].chars().next().unwrap_or('\0');
+            result.push(ch);
+            i += ch.len_utf8();
         }
     }
 
@@ -203,7 +208,20 @@ pub fn safe_format_map_validated(
     // Extract Python dicts to Rust HashMaps
     let mut conds: HashMap<String, String> = HashMap::new();
     for (k, v) in conditions.iter() {
-        if let (Ok(key), Ok(val)) = (k.extract::<String>(), v.extract::<String>()) {
+        if let Ok(key) = k.extract::<String>() {
+            let val = if let Ok(s) = v.extract::<String>() {
+                s
+            } else if let Ok(b) = v.extract::<bool>() {
+                b.to_string()
+            } else if let Ok(n) = v.extract::<i64>() {
+                n.to_string()
+            } else if let Ok(f) = v.extract::<f64>() {
+                f.to_string()
+            } else if v.is_none() {
+                "NULL".to_string()
+            } else {
+                v.str().map(|s| s.to_string()).unwrap_or_default()
+            };
             conds.insert(key, val);
         }
     }
@@ -259,7 +277,7 @@ pub fn safe_format_map_rust(template: &str, replacements: &HashMap<String, Strin
                     && !key.contains('{')
                     && key
                         .chars()
-                        .all(|c| c.is_alphanumeric() || c == '_')
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
                 {
                     if let Some(value) = replacements.get(key) {
                         result.push_str(value);
@@ -272,8 +290,12 @@ pub fn safe_format_map_rust(template: &str, replacements: &HashMap<String, Strin
             result.push('{');
             i += 1;
         } else {
-            result.push(bytes[i] as char);
-            i += 1;
+            // Safety: template is a valid UTF-8 str. We only index at byte positions
+            // where we know we're not in the middle of a multi-byte sequence, because
+            // we only advance i by 1 here. For correct UTF-8, use char-aware advance.
+            let ch = template[i..].chars().next().unwrap_or('\0');
+            result.push(ch);
+            i += ch.len_utf8();
         }
     }
     result
@@ -443,5 +465,26 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r, "SELECT * FROM t {unmatched}");
+    }
+
+    #[test]
+    fn test_check_identifier_key_with_dot() {
+        assert!(check_identifier_key("schema.table").is_ok());
+        assert!(check_identifier_key("public.users").is_ok());
+        assert!(check_identifier_key("simple_key").is_ok());
+        assert!(check_identifier_key("key with space").is_err());
+        assert!(check_identifier_key("").is_err());
+    }
+
+    #[test]
+    fn test_check_injection_standalone_union() {
+        // "x UNION y" — UNION is a standalone word → reject
+        assert!(check_injection("x UNION y").is_err());
+    }
+
+    #[test]
+    fn test_check_injection_non_word_union() {
+        // "xUNIONy" — UNION is NOT a standalone word → allow
+        assert!(check_injection("xUNIONy").is_ok());
     }
 }

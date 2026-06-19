@@ -87,7 +87,7 @@ class sqlserverProvider(BaseProvider):
             if self._conditions:
                 try:
                     sql = _rs.safe_format_map_validated(sql, self._conditions, {})
-                except Exception as err:
+                except ValueError as err:
                     self._logger.warning(
                         "get_raw_query: validating substitution rejected conditions: %s", err
                     )

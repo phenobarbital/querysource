@@ -123,8 +123,8 @@ cdef class SOQLParser(SQLParser):
                     else:
                         if _format == 'date':
                             # SECURITY: Escape BETWEEN boundary values
-                            safe_v0 = Entity.escapeString(str(value[0]))
-                            safe_v1 = Entity.escapeString(str(value[1]))
+                            safe_v0 = str(value[0]).replace("'", "''")
+                            safe_v1 = str(value[1]).replace("'", "''")
                             where_cond.append(
                                 f"{key} BETWEEN '{safe_v0}' AND '{safe_v1}'"
                             )

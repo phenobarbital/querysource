@@ -328,12 +328,16 @@ fn process_str_value(
 ) -> Option<String> {
     // ILIKE pattern
     if end == "~" {
-        let val = format!("{}%'", &value[..value.len().saturating_sub(1)]);
+        let base = &value[..value.len().saturating_sub(1)];
+        let base_escaped = base.replace("'", "''");
+        let val = format!("'{base_escaped}%'");
         return Some(format!("{} ILIKE {}", name, val));
     }
     // NOT ILIKE pattern
     if end == "!~" {
-        let val = format!("{}%'", &value[..value.len().saturating_sub(1)]);
+        let base = &value[..value.len().saturating_sub(1)];
+        let base_escaped = base.replace("'", "''");
+        let val = format!("'{base_escaped}%'");
         return Some(format!("{} NOT ILIKE {}", name, val));
     }
     // BETWEEN in value string — validate for injection
