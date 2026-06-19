@@ -22,6 +22,7 @@ from ..exceptions import (
 )
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
+from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
 from ..types.validators import is_empty
 from .abstract import BaseProvider
 
@@ -160,25 +161,47 @@ class sqlProvider(BaseProvider):
             ) from ex
 
     def raw_query(self, query: str):
-        sql = query
-        conditions = {**self.replacement}
-        if self._conditions:
-            conditions = {**conditions, **self._conditions}
-        return sql.format_map(
+        # SECURITY (FEAT-103): Two-phase substitution:
+        # Phase 1 — substitute trusted SQL fragments from `replacement` using
+        #   safe_format_map (no-escape); these are internally assembled values.
+        # Phase 2 — substitute untrusted request conditions using the validating
+        #   substitution; rejects injection-shaped values.
+        if HAS_RUST:
+            # Phase 1: trusted replacement fragments
+            sql = _rs.safe_format_map(query, self.replacement)
+            # Phase 2: untrusted user-supplied conditions (if any)
+            if self._conditions:
+                try:
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, {})
+                except Exception as err:
+                    self._logger.warning(
+                        "raw_query: validating substitution rejected conditions: %s", err
+                    )
+                    raise ParserError("Invalid query conditions") from err
+            return sql
+        # Fallback when Rust is unavailable (should not happen in production)
+        conditions = {**self.replacement, **(self._conditions or {})}
+        return query.format_map(
             defaultdict(str, SafeDict(**conditions))
         )
 
     def get_raw_query(self, query: str):
-        sql = query
-        conditions = {**self.replacement}
-        if self._conditions:
-            return sql.format_map(
-                defaultdict(str, SafeDict(**self._conditions))
-            )
-        else:
-            return sql.format_map(
-                defaultdict(str, SafeDict(**conditions))
-            )
+        # SECURITY (FEAT-103): same two-phase approach as raw_query.
+        if HAS_RUST:
+            sql = _rs.safe_format_map(query, self.replacement)
+            if self._conditions:
+                try:
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, {})
+                except Exception as err:
+                    self._logger.warning(
+                        "get_raw_query: validating substitution rejected conditions: %s", err
+                    )
+                    raise ParserError("Invalid query conditions") from err
+            return sql
+        conditions = {**self.replacement, **(self._conditions or {})}
+        return query.format_map(
+            defaultdict(str, SafeDict(**conditions))
+        )
 
     async def columns(self):
         """Return the columns (fields) involved on the query (when possible).
