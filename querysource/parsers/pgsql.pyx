@@ -60,11 +60,18 @@ cdef class pgSQLParser(SQLParser):
         if self.filter:
             where_cond = []
             for key, value in self.filter.items():
+                # SECURITY (FEAT-103): Validate key as a safe SQL identifier.
                 try:
                     if isinstance(int(key), (int, float)):
                         key = f'"{key}"'
-                except ValueError:
-                    pass
+                    else:
+                        stripped = key.rstrip('|!~#@:')
+                        if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                            continue
+                except (ValueError, TypeError):
+                    stripped = key.rstrip('|!~#@:')
+                    if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
+                        continue
                 try:
                     _format = self.cond_definition[key]
                 except KeyError:
@@ -83,7 +90,9 @@ cdef class pgSQLParser(SQLParser):
                 if isinstance(value, dict):
                     op, v = value.popitem()
                     if op in COMPARISON_TOKENS:
-                        where_cond.append(f"{key} {op} {v}")
+                        # SECURITY: Escape the comparison value
+                        safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
+                        where_cond.append(f"{key} {op} {safe_v}")
                     else:
                         # currently, discard any non-supported comparison token
                         continue
@@ -91,13 +100,18 @@ cdef class pgSQLParser(SQLParser):
                     try:
                         fval = value[0]
                         if fval in self.valid_operators:
-                            where_cond.append(f"{key} {fval} {value[1]}")
+                            # SECURITY: Escape second operand
+                            safe_v = Entity.quoteString(str(value[1])) if value[1] not in ('null', 'NULL') else str(value[1])
+                            where_cond.append(f"{key} {fval} {safe_v}")
                         else:
                             if _format in ('date', 'datetime'):
+                                # SECURITY: Escape BETWEEN boundary values
+                                safe_v0 = Entity.escapeString(str(value[0]))
+                                safe_v1 = Entity.escapeString(str(value[1]))
                                 if end == '!':
-                                    where_cond.append(f"{name} NOT BETWEEN '{value[0]}' AND '{value[1]}'")
+                                    where_cond.append(f"{name} NOT BETWEEN '{safe_v0}' AND '{safe_v1}'")
                                 else:
-                                    where_cond.append(f"{name} BETWEEN '{value[0]}' AND '{value[1]}'")
+                                    where_cond.append(f"{name} BETWEEN '{safe_v0}' AND '{safe_v1}'")
                                 continue
                             # is a list of values
                             val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209
@@ -124,21 +138,20 @@ cdef class pgSQLParser(SQLParser):
                         else:
                             where_cond.append(f"{key} IN {val}")
                 elif isinstance(value, (str, int)):
+                    str_value = str(value)
                     if end == '~':
-                        val = value[:-1] + "%'"
+                        val = str_value[:-1] + "%'"
                         where_cond.append(f"{name} ILIKE {val}")
                     elif end == '!~':
-                        val = value[:-1] + "%'"
+                        val = str_value[:-1] + "%'"
                         where_cond.append(f"{name} NOT ILIKE {val}")
-                    elif "BETWEEN" in str(value):
-                        if isinstance(value, str) and "'" not in value:
-                            where_cond.append(
-                                f"({key} {value})"
-                            )
-                        else:
-                            where_cond.append(
-                                f"({key} {value})"
-                            )
+                    elif "BETWEEN" in str_value:
+                        # SECURITY: Reject BETWEEN clauses with injection markers
+                        upper_val = str_value.upper()
+                        if ('--' in str_value or '/*' in str_value or ';' in str_value
+                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                            continue
+                        where_cond.append(f"({key} {str_value})")
                     elif value in ('null', 'NULL'):
                         where_cond.append(
                             f"{key} IS NULL"
@@ -148,12 +161,13 @@ cdef class pgSQLParser(SQLParser):
                             f"{key} IS NOT NULL"
                         )
                     elif end == '!':
+                        # SECURITY: Escape the negated value
                         where_cond.append(
-                            f"{name} != {value}"
+                            f"{name} != {Entity.quoteString(str_value)}"
                         )
-                    elif str(value).startswith('!'):
+                    elif str_value.startswith('!'):
                         where_cond.append(
-                            f"{key} != {Entity.quoteString(value[1:])}"
+                            f"{key} != {Entity.quoteString(str_value[1:])}"
                         )
                     else:
                         if _format == 'array':
@@ -162,25 +176,36 @@ cdef class pgSQLParser(SQLParser):
                                     f"{value} = ANY({key})"
                                 )
                             else:
+                                # SECURITY: Escape value before type cast
+                                safe_val = Entity.escapeString(str_value)
                                 where_cond.append(
-                                    f"{value}::character varying = ANY({key})"
+                                    f"'{safe_val}'::character varying = ANY({key})"
                                 )
                         elif _format == 'numrange':
-                            where_cond.append(
-                                f"{value}::numeric <@ {key}"
-                            )
+                            # SECURITY: Validate numeric value
+                            try:
+                                float(str_value)
+                                where_cond.append(f"{str_value}::numeric <@ {key}")
+                            except (ValueError, TypeError):
+                                continue
                         elif _format in ('int4range', 'int8range'):
-                            where_cond.append(
-                                f"{value}::integer <@ {key}::int4range"
-                            )
+                            # SECURITY: Validate integer value
+                            try:
+                                int(str_value)
+                                where_cond.append(f"{str_value}::integer <@ {key}::int4range")
+                            except (ValueError, TypeError):
+                                continue
                         elif _format in ('tsrange', 'tstzrange'):
-                            # sample f.past_quarter @> order_date
+                            # SECURITY: Escape timestamp value
+                            safe_val = Entity.escapeString(str_value)
                             where_cond.append(
-                                f"{value}::timestamptz <@ {key}::tstzrange"
+                                f"'{safe_val}'::timestamptz <@ {key}::tstzrange"
                             )
                         elif _format == 'daterange':
+                            # SECURITY: Escape date value
+                            safe_val = Entity.escapeString(str_value)
                             where_cond.append(
-                                f"{value}::date <@ {key}::daterange"
+                                f"'{safe_val}'::date <@ {key}::daterange"
                             )
                         else:
                             if is_camel_case(key):
