@@ -216,10 +216,13 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: claude-sonnet-4-6 (SDD Worker)
+**Date**: 2026-06-19
+**Notes**: Created `querysource/utils/errors.py` with `GENERIC_MESSAGES` dict and
+`build_error_payload()` exactly as specified. All 14 unit tests in
+`tests/test_error_formatter.py` pass. Linting clean. The formatter is pure Python
+(stdlib only: uuid, traceback, logging), accepts `debug` as a parameter from callers
+so it stays testable without navconfig. `traceback.format_exc()` returns
+"NoneType: None" when no exception is active — normalised to empty string.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -10,7 +10,18 @@ from collections.abc import Callable
 from aiohttp import web
 import aiohttp_cors
 from navigator.views import BaseHandler, BaseView
+from ..conf import EXCLUDED_QUERY_PARAMETERS
 from .parseqs import is_parseable
+
+
+def _is_excluded_param(key: str) -> bool:
+    """Return True when ``key`` is an authentication/transport-related query
+    parameter (e.g. ``auth``, ``apikey``) that must not reach the query parser.
+
+    Matching is case-insensitive against the configured
+    ``EXCLUDED_QUERY_PARAMETERS`` blocklist.
+    """
+    return key.lower() in EXCLUDED_QUERY_PARAMETERS
 
 
 class QueryHandler(BaseHandler):
@@ -18,7 +29,10 @@ class QueryHandler(BaseHandler):
     def query_parameters(self, request: web.Request = None) -> dict:
         if not request:
             request = self.request
-        return {key: val for (key, val) in request.query.items()}
+        return {
+            key: val for (key, val) in request.query.items()
+            if not _is_excluded_param(key)
+        }
 
     def parse_qs(self, request: web.Request = None) -> Optional[dict]:
         """get_queryparams.
@@ -39,6 +53,8 @@ class QueryHandler(BaseHandler):
         try:
             qry = {}
             for key, val in request.rel_url.query.items():
+                if _is_excluded_param(key):
+                    continue
                 if (parser := is_parseable(val)):
                     qry[key] = parser(val)
                 else:
@@ -63,7 +79,10 @@ class QueryView(BaseView):
     def query_parameters(self, request: web.Request = None) -> dict:
         if not request:
             request = self.request
-        return {key: val for (key, val) in request.query.items()}
+        return {
+            key: val for (key, val) in request.query.items()
+            if not _is_excluded_param(key)
+        }
 
     def parse_qs(self, request: web.Request = None) -> Optional[dict]:
         """get_queryparams.
@@ -84,6 +103,8 @@ class QueryView(BaseView):
         try:
             qry = {}
             for key, val in request.rel_url.query.items():
+                if _is_excluded_param(key):
+                    continue
                 if (parser := is_parseable(val)):
                     qry[key] = parser(val)
                 else:

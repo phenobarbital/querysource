@@ -14,7 +14,7 @@ policies:
       - "slug:*"
       - "datasource:*"
       - "driver:*"
-      - "raw_query"
+      - "raw_query:*"
     actions:
       - "slug:execute"
       - "slug:list"
