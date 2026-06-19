@@ -182,10 +182,14 @@ def test_handler_except_redacts_in_production(monkeypatch):
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: claude-sonnet-4-6 (SDD Worker)
+**Date**: 2026-06-19
+**Notes**: Refactored `AbstractHandler.Error()` and `.Except()` to delegate to
+`build_error_payload()`. Both methods now produce client-safe payloads gated on
+`self.debug`. `X-ERROR` header is absent in production and only emitted when
+`self.debug=True`. The unused `traceback` import was removed. All existing HTTP
+status code ladders preserved unchanged. MultiQuery path (handlers/multi.py
+lines 255-292) unchanged — it calls these methods, which now automatically
+produce redacted output.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

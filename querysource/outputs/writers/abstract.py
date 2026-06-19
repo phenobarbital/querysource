@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from typing import Any, Union
 from abc import ABC, abstractmethod
 from hashlib import sha1
-import traceback
 
+from navconfig import DEBUG
 from navconfig.logging import logging
 from asyncdb.exceptions import NoDataFound, StatementError
 from aiohttp import web
@@ -15,6 +15,7 @@ from aiohttp.web_exceptions import (
 from ...interfaces.queries import AbstractQuery
 from ...libs.encoders import DefaultEncoder
 from ...utils.functions import check_empty
+from ...utils.errors import build_error_payload
 from ...exceptions import (
     CacheException,
     DataNotFound,
@@ -175,7 +176,7 @@ class AbstractWriter(ABC):
                 return response
             except Exception as ex:  # pylint: disable=W0703
                 return self.error(
-                    message="Error Starting Stream Transmision",
+                    message="Error Starting Stream Transmission",
                     exception=ex,
                     status=500
                 )
@@ -209,20 +210,37 @@ class AbstractWriter(ABC):
         headers: dict = None,
         content_type: str = 'application/json'
     ):
-        trace = None
-        message = f"{message}: {exception!s}"
-        if exception:
-            trace = traceback.format_exc(limit=10)
-        reason = {
-            "error": str(message),
-            "trace": trace
-        }
+        """Build a client-safe error payload and return the appropriate aiohttp exception.
+
+        Delegates body construction to ``build_error_payload``, which logs full
+        detail (message + traceback) server-side and returns a minimal payload in
+        production (``DEBUG=False``) or a verbose one in development.
+
+        Note: This method RETURNS the exception object (unlike ``DataOutput.error``
+        which raises). Callers are responsible for raising or returning the result.
+        """
+        # Map HTTP status to a formatter category
+        if status == 404:
+            category = "not_found"
+        elif status >= 500:
+            category = "server_error"
+        else:
+            category = "query_error"
+
+        payload = build_error_payload(
+            category=category,
+            status=status,
+            exception=exception,
+            debug=DEBUG,
+            logger=self.logger,
+            public_message=message if DEBUG else None,
+        )
         args = {
-            "reason": self._json.dumps(reason),
+            "text": self._json.dumps(payload),
+            "content_type": content_type,
             "headers": {
-                "content_type": content_type,
-                "X-MESSAGE": str(message),
-                "X-STATUS": str(status)
+                "X-MESSAGE": payload["error"],
+                "X-STATUS": str(status),
             }
         }
         if status == 400:
