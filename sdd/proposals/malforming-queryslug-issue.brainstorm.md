@@ -97,19 +97,62 @@ before it touches the SQL string. This is the "validate + typed escaping" decisi
 implemented in Rust to remove the unsafe Python `str.format_map(SafeDict(...))` path
 entirely.
 
-Concretely:
-- Add a Rust `safe_format_map_validated(template, replacements, cond_definition)`
-  that, for each `{key}` placeholder, runs the value through `validators::is_valid`
-  / `escape_string` / `quote_string` (already implemented) and **rejects** values
-  that fail validation (raising a Python exception → 400) instead of substituting
-  raw text. Structural placeholders (table/column/tenant) are only accepted when
-  they match a strict identifier pattern.
+**Why not just change the existing `safe_format_map`?** Because it is a *structural
+template-assembly* helper, not a value-substitution helper. It has ~10 internal
+callers (`rust/src/sql_parser.rs`, `pgsql_parser.rs`, `filter_common.rs`,
+`bigquery_parser.rs`) that feed it **already-built, already-escaped SQL fragments** —
+`{fields}` (a quoted field list), `{filter}`/`{where_cond}`/`{and_cond}` (a fully-
+formed WHERE clause whose leaf values were already escaped by `filter_conditions`),
+`{limit}` (`LIMIT 10`), `{tablename}` (`schema.table`). If `safe_format_map` escaped
+its inputs, it would **double-escape and corrupt** those fragments and break every
+PG/MSSQL/BigQuery query in the system. The two operations have opposite contracts:
+`safe_format_map` assembles *trusted* fragments and must NOT escape; the fix
+sanitizes *untrusted leaf values* and must escape. They stay separate functions so a
+caller can never confuse "trusted assembly" with "untrusted input."
+
+Escaping therefore happens at a new, distinct layer at the boundary where untrusted
+request conditions first enter. There are two viable sub-shapes:
+
+**Sub-shape A1 — sanitize-then-reuse (reuses `safe_format_map` unchanged):**
+- Add a Rust `sanitize_conditions(conditions, cond_definition) -> dict` that runs
+  every value (and key) through `validators::is_valid` / `escape_string` /
+  `quote_string` and **rejects** (raises → 400) anything failing validation.
+- `raw_query()` calls `sanitize_conditions(...)` first, then feeds the sanitized
+  dict to the existing `safe_format_map(template, sanitized)` — no change to
+  `safe_format_map` or its 10 callers.
+- **Limitation:** the sanitizer can't see the text around each `{placeholder}`, so
+  it can only produce correct output if templates use a *standardized, unquoted*
+  placeholder convention (`WHERE x = {slug}`, never `WHERE x = '{slug}'`). It cannot
+  safely cover free-form legacy templates that wrap placeholders in quotes.
+
+**Sub-shape A2 — context-aware validating substitution (new substitution pass):**
+- Add a Rust `safe_format_map_validated(template, conditions, cond_definition)` that
+  walks the template, and for each `{key}` placeholder inspects the surrounding
+  characters to detect its context (bare, inside `'...'` literal, inside `"..."`
+  identifier), validates the value for that context, and emits a correctly
+  quoted/escaped token — or rejects. `is_valid` already carries a `noquote` flag for
+  exactly this.
+- **Advantage:** safe for **free-form, DB-stored templates** regardless of whether
+  the author quoted the placeholder — which is the real production situation (see
+  resolved open question below).
+
+**Resolution / decision:** adopt **A2 as the primary mechanism** because raw-slug
+templates are DB-stored, free-form, and author-written (none live in the repo, and
+quoting is not uniform — keys flow into `"..."` identifier context, values into
+`'...'` literal context). A1 alone cannot protect those. Additionally, **standardize
+new raw-slug templates to a typed, unquoted placeholder convention** so A1-style
+pre-sanitization is possible going forward and A2 has unambiguous context; the
+sanitizer + the context pass then reinforce each other (defense-in-depth).
+
+Wiring (both sub-shapes share this):
 - Replace `sqlProvider.raw_query()` / `defaultProvider.raw_query()` Python
-  `format_map` calls with the new Rust call.
-- Ensure the parser `filter_conditions` WHERE-builder always takes the
-  `HAS_RUST` Rust path (`_rs.filter_conditions`) and that the Rust path escapes the
-  literal-value fallthrough that the Python `f"{key} = {value}"` branch leaves
-  unescaped.
+  `format_map(SafeDict(...))` with the Rust call above.
+- Ensure the parser `filter_conditions` WHERE-builder always takes the `HAS_RUST`
+  Rust path (`_rs.filter_conditions`) and that the Rust path escapes **every**
+  interpolation site — not only string values but also the raw **key**, **operator**,
+  and **dict/list/BETWEEN value** branches (`f"{key} {op} {v}"`, `f"{key} = {value}"`,
+  `f"({key} {value})"`) that the Cython fallback leaves unescaped. The PoC breaks out
+  via the condition *key* into a `"..."` identifier, so key sanitization is required.
 - Plus V2: full credential redaction helper + PBAC `datasource:read` gate
   (fail-closed) on `DatasourceView.get()`.
 
@@ -143,8 +186,11 @@ Concretely:
 🔗 **Existing Code to Reuse:**
 - `rust/src/validators.rs` — `escape_string` (138), `quote_string` (164),
   `is_valid` (257), `is_pgconstant`/`is_pg_function`/`to_string`.
-- `rust/src/safe_dict.rs` — `safe_format_map` (extend with a validating variant).
-- `rust/src/sql_parser.rs`, `rust/src/pgsql_parser.rs` — existing `filter_conditions`.
+- `rust/src/safe_dict.rs` — `safe_format_map` left UNCHANGED (10 internal callers
+  depend on no-escape behavior); add a SIBLING `safe_format_map_validated` (A2) or a
+  `sanitize_conditions` step (A1) alongside it.
+- `rust/src/sql_parser.rs`, `rust/src/pgsql_parser.rs` — existing `filter_conditions`
+  (must escape key/op/value at every interpolation site, not only string values).
 - `rust/src/lib.rs` — `#[pymodule]` wiring (add the new function here).
 - `querysource/qs_parsers/__init__.py` — Python-facing re-exports + `HAS_RUST`.
 - `querysource/providers/sql.py` / `default.py` — `raw_query()` substitution sites.
@@ -343,14 +389,15 @@ superseded by the Rust path. Option C is deferred as a larger hardening epic.
 
 | Affected Component | Impact Type | Notes |
 |---|---|---|
-| `rust/src/safe_dict.rs` | extends | add `safe_format_map_validated` (escaping/validating) |
+| `rust/src/safe_dict.rs` | extends | add SIBLING `safe_format_map_validated` (A2) / `sanitize_conditions` (A1); existing `safe_format_map` UNCHANGED |
 | `rust/src/validators.rs` | depends on | reuse `escape_string`/`quote_string`/`is_valid` |
 | `rust/src/lib.rs` | modifies | register new `#[pyfunction]` in the `#[pymodule]` |
 | `querysource/qs_parsers/__init__.py` | modifies | re-export new function; `HAS_RUST` |
 | `querysource/providers/sql.py` | modifies | `raw_query()` → Rust validating call |
 | `querysource/providers/default.py` | modifies | `raw_query()` → Rust validating call |
 | `querysource/providers/mysql.py`, `sqlserver.py`, `cassandra.py`, `documentdb.py` | modifies | same `raw_query`/`get_raw_query` pattern |
-| `querysource/parsers/abstract.pyx` | modifies | always take Rust filter path; remove unescaped fallthrough |
+| `querysource/parsers/sql.pyx`, `pgsql.pyx` (+ `sqlserver.pyx`, `cql.pyx`, `bigquery.pyx`, `sosql.pyx`) | modifies | always take Rust filter path; escape key/op/dict/BETWEEN/value sites in the Cython fallback |
+| `rust/src/sql_parser.rs`, `pgsql_parser.rs` | modifies | ensure `filter_conditions` escapes every interpolation site (key/op/value) |
 | `querysource/datasources/handlers/datasource.py` | modifies | redaction helper + fail-closed PBAC on `get()` |
 | CI / build | depends on | `maturin` rebuild of `_qs_parsers` wheel; recompile `.pyx` |
 | Ops / DB (follow-up) | depends on | least-privilege role + REVOKE on `pg_catalog`/`information_schema` |
@@ -412,14 +459,21 @@ class BaseProvider(...):
         ...
         self._conditions = copy.deepcopy(conditions)       # line 82 (request-derived)
 
-# From querysource/parsers/abstract.pyx  (Cython)
-class AbstractParser:
-    async def filter_conditions(self, sql):                # line 113
-        if HAS_RUST and self.filter:                       # line 118 — Rust path
+# From querysource/parsers/sql.pyx  (Cython base SQL parser; pgProvider uses pgsql.pyx)
+class SQLParser(AbstractParser):
+    async def filter_conditions(self, sql):                # sql.pyx:113 / pgsql.pyx:36
+        if HAS_RUST and self.filter:                       # sql.pyx:118 — Rust path (RUNS IN PROD)
             return _rs.filter_conditions(sql, dict(self.filter), dict(self.cond_definition))
-        # Python fallback builds WHERE via f-strings; some values via
-        # Entity.quoteString, but a fallthrough is UNESCAPED:
-        where_cond.append(f"{key} = {value}")              # line 191-192 <-- UNSAFE fallthrough
+        # Cython fallback builds WHERE via f-strings. UNSAFE interpolation is NOT
+        # limited to string values — keys, operators and dict/list/BETWEEN values
+        # are interpolated raw:
+        key = f'"{key}"'                                   # sql.pyx:127 (key → "..." identifier ctx)
+        where_cond.append(f"{key} {op} {v}")               # sql.pyx:139  <-- raw op + value
+        where_cond.append(f"({key} {value})")              # sql.pyx:162-168 (BETWEEN) <-- raw
+        where_cond.append(f"{key}={Entity.quoteString(value)}")  # sql.pyx:188/192 (escaped path)
+        where_cond.append(f"{key} = {value}")              # sql.pyx:192 (bool) <-- raw fallthrough
+# pgsql.pyx mirrors this: key-quoting at :65/:74, raw op at :86/:208, raw BETWEEN/value paths.
+# The PoC payload leads with `"` because it breaks out of the `f'"{key}"'` identifier context.
 
 # From querysource/queries/qs.py
 class QS(BaseQuery):
@@ -484,9 +538,16 @@ from querysource.qs_parsers import _qs_parsers as _rs   # querysource/parsers/cq
   and `/api/v1/datasources` (services.py:277).
 
 ### Does NOT Exist (Anti-Hallucination)
-- ~~`_qs_parsers.safe_format_map_validated`~~ — does **not** exist yet; must be
-  added. The shipped `safe_format_map` does **plain** substitution **without
-  escaping**, so simply swapping to it does NOT fix the injection.
+- ~~`_qs_parsers.safe_format_map_validated`~~ / ~~`sanitize_conditions`~~ — do **not**
+  exist yet; one must be added (A2 / A1). The shipped `safe_format_map` does **plain**
+  substitution **without escaping** and has ~10 internal Rust callers that rely on
+  that (it assembles already-built SQL fragments). It must NOT be changed to escape —
+  doing so would double-escape `{filter}`/`{fields}`/`{limit}`/`{tablename}` and break
+  every parser. Add a sibling function instead.
+- ~~A uniform/quoted placeholder convention in raw-slug templates~~ — does NOT exist.
+  Templates are DB-stored, free-form, author-written; placeholders appear in both
+  `'...'` literal and `"..."` identifier contexts. This is why A2 (context-aware) is
+  required and A1 alone is insufficient for legacy slugs.
 - ~~`querysource/providers/db.py` / `pg.py` `raw_query`~~ — these do not define their
   own `raw_query`; `pgProvider` inherits from `sqlProvider` (sql.py).
 - ~~A `datasource:read` PBAC action on the GET path~~ — currently only
@@ -497,11 +558,27 @@ from querysource.qs_parsers import _qs_parsers as _rs   # querysource/parsers/cq
 
 ---
 
+## Resolved Decisions
+
+- **[RESOLVED] Raw-slug placeholder-quoting convention & substitution sub-shape.**
+  Raw-slug templates are DB-stored, free-form, and author-written — none exist in the
+  repo, and placeholders appear in mixed contexts (`"..."` identifier for keys,
+  `'...'` literal for values; the PoC breaks out via the *key* into identifier
+  context). There is therefore no uniform/controllable quoting convention to rely on.
+  **Decision:** adopt **sub-shape A2 (context-aware `safe_format_map_validated`)** as
+  the primary mechanism so legacy free-form templates are protected; do **not** change
+  the existing `safe_format_map` (its 10 callers assemble trusted fragments and would
+  break). Additionally **standardize new raw-slug templates to typed, unquoted
+  placeholders**, enabling A1-style pre-sanitization as a reinforcing second layer.
+  Escaping must cover **keys, operators, and dict/list/BETWEEN values**, not only
+  string values.
+
 ## Open Questions
 
-- [ ] Where is `cond_definition` / per-slug placeholder metadata stored for raw
-      slugs, and is it rich enough to distinguish *literal* vs *identifier*
-      placeholders? If not, define a per-slug allowlist source. — *Owner: Jesús*
+- [ ] Is `cond_definition` populated for raw slugs (it drives per-placeholder type
+      hints for `is_valid`)? If sparse, A2 must fall back to safe defaults
+      (treat unknown placeholders as quoted literals; reject SQL-shaped tokens). —
+      *Owner: Jesús*
 - [ ] Does any production consumer legitimately read `credentials`/`dsn` from
       `GET /api/v1/datasource`? If so, design the gated reveal endpoint/permission
       before redacting. — *Owner: Jesús*
