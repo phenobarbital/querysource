@@ -14,7 +14,7 @@
       "feature_id": "FEAT-102",
       "feature": "querysource-logs-verbose",
       "spec": "sdd/specs/querysource-logs-verbose.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "Foundation module. TASK-701 and TASK-702 both import build_error_payload from this; must complete first.",
       "assigned_to": null,
       "started_at": "2026-06-19T12:33:51+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-700-shared-error-formatter.md"
+      "completed_at": "2026-06-19T12:35:13+00:00",
+      "file": "sdd/tasks/completed/TASK-700-shared-error-formatter.md"
     },
     {
       "id": "TASK-701",
