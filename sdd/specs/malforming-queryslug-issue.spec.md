@@ -8,7 +8,7 @@ base_branch: main
 **Feature ID**: FEAT-103
 **Date**: 2026-06-19
 **Author**: Jesús / Claude (SDD)
-**Status**: draft
+**Status**: approved
 **Target version**: 4.4.4
 
 > Input: `sdd/proposals/malforming-queryslug-issue.brainstorm.md` (Recommended Option A,
@@ -484,12 +484,12 @@ m.add_function(wrap_pyfunction!(sql_parser::filter_conditions, m)?)?; // line 58
 - [x] Why not change `safe_format_map`? — *Resolved in brainstorm*: ~10 internal Rust
   callers assemble already-built SQL fragments; escaping there double-escapes/corrupts
   them. Add a sibling function instead.
-- [ ] Is `cond_definition` populated for raw slugs (it drives per-placeholder type
+- [x] Is `cond_definition` populated for raw slugs (it drives per-placeholder type
   hints for `is_valid`)? If sparse, A2 uses safe defaults (quoted-literal + reject
-  SQL-shaped tokens). — *Owner: Jesús*
-- [ ] Does any production consumer legitimately read `credentials`/`dsn` from
+  SQL-shaped tokens). — *Owner: Jesús*: cond_definition populated by a dictionary
+- [x] Does any production consumer legitimately read `credentials`/`dsn` from
   `GET /api/v1/datasource`? If so, design a separate PBAC-gated reveal endpoint
-  before full redaction. — *Owner: Jesús*
+  before full redaction. — *Owner: Jesús*: let's design a separate PBAC-gated reveal endpoint.
 - [ ] Is `maturin` wheel rebuild + `.pyx` recompile already part of the hotfix release
   pipeline for `main`, or must it be added for this branch? — *Owner: Ops*
 - [ ] Ops follow-up (separate ticket): dedicated least-privilege DB role + `REVOKE` on
