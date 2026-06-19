@@ -1,0 +1,78 @@
+{
+  "name": "NormalizeColumns",
+  "category": "Transformations",
+  "description": "Normalize every column name into a database-safe identifier (lowercase, accent-stripped, symbols collapsed to an underscore, truncated to a maximum length, collisions de-duplicated).",
+  "usage": "Drop it as a ``Transform`` step before a table/database destination. With no parameters it applies safe defaults (lowercase, strip accents, 63-byte max). Use ``overrides`` to pin specific source columns to an exact target name.",
+  "attributes": [
+    {
+      "name": "max_length",
+      "type": "int",
+      "default": 63,
+      "required": false,
+      "description": "Maximum identifier length. Defaults to 63 (the PostgreSQL identifier byte limit)."
+    },
+    {
+      "name": "case",
+      "type": "str",
+      "default": "lower",
+      "required": false,
+      "description": "Case handling: \"lower\", \"upper\" or \"preserve\"."
+    },
+    {
+      "name": "strip_accents",
+      "type": "bool",
+      "default": true,
+      "required": false,
+      "description": "Remove diacritics (\"Regi\u00f3n\" -> \"region\")."
+    },
+    {
+      "name": "replacement",
+      "type": "str",
+      "default": "_",
+      "required": false,
+      "description": "String that replaces runs of non-alphanumeric characters."
+    },
+    {
+      "name": "overrides",
+      "type": "dict",
+      "default": null,
+      "required": false,
+      "description": "Mapping {original_name: target_name} pinning specific source columns to an exact name, bypassing normalization for those columns."
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "NormalizeColumns",
+    "type": "object",
+    "properties": {
+      "max_length": {
+        "type": "integer",
+        "description": "Maximum identifier length. Defaults to 63 (the PostgreSQL identifier byte limit).",
+        "default": 63
+      },
+      "case": {
+        "type": "string",
+        "description": "Case handling: \"lower\", \"upper\" or \"preserve\".",
+        "default": "lower"
+      },
+      "strip_accents": {
+        "type": "boolean",
+        "description": "Remove diacritics (\"Regi\u00f3n\" -> \"region\").",
+        "default": true
+      },
+      "replacement": {
+        "type": "string",
+        "description": "String that replaces runs of non-alphanumeric characters.",
+        "default": "_"
+      },
+      "overrides": {
+        "type": "object",
+        "description": "Mapping {original_name: target_name} pinning specific source columns to an exact name, bypassing normalization for those columns."
+      }
+    },
+    "additionalProperties": true,
+    "description": "Normalize all column names into database-safe identifiers. All attributes are optional; with no parameters safe defaults are applied."
+  },
+  "example": "{\"Transform\": [{\"NormalizeColumns\": {}}]}",
+  "icon": "shuffle"
+}
