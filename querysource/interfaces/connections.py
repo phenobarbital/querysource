@@ -408,8 +408,15 @@ class Connection:
         """
         try:
             source = DATASOURCES[name]
-        except KeyError:
-            return None
+        except KeyError as exc:
+            # Datasource is not registered: raise a meaningful error instead of
+            # returning a bare ``None``. Callers unpack the result as
+            # ``(source, db)``; returning ``None`` produced the cryptic
+            # "cannot unpack non-iterable NoneType object" 500 error.
+            raise QueryError(
+                f"Datasource '{name}' not found",
+                code=404
+            ) from exc
         if source.driver_type == 'asyncdb':
             ### making an AsyncDB connection:
             # TODO: adding support for other drivers
