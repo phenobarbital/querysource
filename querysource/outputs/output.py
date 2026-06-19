@@ -150,9 +150,9 @@ class DataOutput:
             public_message=message if DEBUG else None,
         )
         args = {
-            "reason": self._json.dumps(payload),
+            "text": self._json.dumps(payload),
+            "content_type": content_type,
             "headers": {
-                "content_type": content_type,
                 "X-MESSAGE": payload["error"],
                 "X-STATUS": str(status),
             }
