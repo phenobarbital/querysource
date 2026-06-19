@@ -10,7 +10,44 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
-use crate::validators::{field_components, is_camel_case, is_integer, quote_string};
+use crate::validators::{escape_string, field_components, is_camel_case, is_integer, quote_string};
+
+// ---------------------------------------------------------------------------
+// Security helpers (PgSQL-specific)
+// ---------------------------------------------------------------------------
+
+/// Validate and produce a safe SQL identifier for the given key.
+///
+/// Numeric keys are double-quoted. Simple identifiers (alphanumeric + underscore + dot)
+/// pass through. Anything else is rejected.
+fn pg_safe_identifier_key(key: &str) -> Option<String> {
+    let stripped = key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'));
+    if stripped.parse::<i64>().is_ok() || is_integer(stripped) {
+        return Some(format!("\"{}\"", key));
+    }
+    if stripped.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        Some(key.to_string())
+    } else {
+        None // reject
+    }
+}
+
+/// Validate that an operator is in the allowlist.
+fn pg_validate_operator(op: &str) -> bool {
+    COMPARISON_TOKENS.contains(&op)
+        || VALID_OPERATORS.contains(&op)
+        || ["->>", "->", "@>", "<@"].contains(&op)
+}
+
+/// Validate a BETWEEN clause for injection markers.
+fn pg_validate_between(value: &str) -> bool {
+    let upper = value.to_uppercase();
+    !value.contains("--")
+        && !value.contains("/*")
+        && !value.contains(';')
+        && !upper.contains("UNION")
+        && !upper.contains("SELECT")
+}
 
 /// PostgreSQL comparison tokens.
 const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
@@ -123,12 +160,8 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
     let value = &entry.value;
     let _format = entry.format_hint.as_deref();
 
-    // Quote numeric keys
-    let formatted_key = if key.parse::<i64>().is_ok() || is_integer(key) {
-        format!("\"{}\"", key)
-    } else {
-        key.clone()
-    };
+    // SECURITY: Validate and produce a safe identifier; reject malicious keys.
+    let formatted_key = pg_safe_identifier_key(key)?;
 
     // Get field components
     let components = field_components(key);
@@ -171,9 +204,16 @@ fn process_dict_value(
 
     let (op, v) = &entries[0];
 
+    // SECURITY: Operator must be in allowlist
+    if !pg_validate_operator(op) {
+        return None; // discard unknown/unsafe operators
+    }
+
     // Standard comparison tokens
     if COMPARISON_TOKENS.contains(&op.as_str()) {
-        return Some(format!("{} {} {}", key, op, v.as_str()));
+        // SECURITY: escape the comparison value
+        let safe_v = quote_string(&escape_string(&v.as_str()), true);
+        return Some(format!("{} {} {}", key, op, safe_v));
     }
 
     // JSONB operators
@@ -184,7 +224,8 @@ fn process_dict_value(
     {
         let val_str = v.as_str();
         if v.is_str() || v.is_int() {
-            return Some(format!("{} {} {}", key, op, quote_string(&val_str, true)));
+            // SECURITY: escape string values
+            return Some(format!("{} {} {}", key, op, quote_string(&escape_string(&val_str), true)));
         } else {
             return Some(format!("{} {} {}", key, op, val_str));
         }
@@ -226,16 +267,19 @@ fn process_list_value(
 
     let first_str = items[0].as_str();
 
-    // Check if first item is a valid operator
+    // Check if first item is a valid operator (allowlist enforced)
     if VALID_OPERATORS.contains(&first_str.as_str()) && items.len() > 1 {
-        return Some(format!("{} {} {}", key, first_str, items[1].as_str()));
+        // SECURITY: escape the second value
+        let safe_v = quote_string(&escape_string(&items[1].as_str()), true);
+        return Some(format!("{} {} {}", key, first_str, safe_v));
     }
 
     // date/datetime BETWEEN
     if _format == Some("date") || _format == Some("datetime") {
         if items.len() >= 2 {
-            let v0 = items[0].as_str();
-            let v1 = items[1].as_str();
+            // SECURITY: escape BETWEEN boundary values
+            let v0 = escape_string(&items[0].as_str());
+            let v1 = escape_string(&items[1].as_str());
             if end == "!" {
                 return Some(format!("{} NOT BETWEEN '{}' AND '{}'", name, v0, v1));
             } else {
@@ -244,10 +288,10 @@ fn process_list_value(
         }
     }
 
-    // Build IN clause from list values
+    // Build IN clause from list values — each item escaped
     let val_str: String = items
         .iter()
-        .map(|v| quote_string(&v.as_str(), true))
+        .map(|v| quote_string(&escape_string(&v.as_str()), true))
         .collect::<Vec<_>>()
         .join(",");
 
@@ -292,8 +336,11 @@ fn process_str_value(
         let val = format!("{}%'", &value[..value.len().saturating_sub(1)]);
         return Some(format!("{} NOT ILIKE {}", name, val));
     }
-    // BETWEEN in value string
+    // BETWEEN in value string — validate for injection
     if value.contains("BETWEEN") {
+        if !pg_validate_between(value) {
+            return None; // reject unsafe BETWEEN
+        }
         return Some(format!("({} {})", key, value));
     }
     // NULL checks
@@ -303,44 +350,62 @@ fn process_str_value(
     if value == "!null" || value == "!NULL" {
         return Some(format!("{} IS NOT NULL", key));
     }
-    // Negation with end marker
+    // Negation with end marker — SECURITY: escape value
     if end == "!" {
-        return Some(format!("{} != {}", name, value));
+        return Some(format!("{} != {}", name, quote_string(&escape_string(value), true)));
     }
-    // Negation with ! prefix
+    // Negation with ! prefix — SECURITY: escape after stripping prefix
     if value.starts_with('!') {
         return Some(format!(
             "{} != {}",
             key,
-            quote_string(&value[1..], true)
+            quote_string(&escape_string(&value[1..]), true)
         ));
     }
 
     // PostgreSQL type-specific handling
     match _format {
         Some("array") => {
-            if value.parse::<i64>().is_ok() {
-                Some(format!("{} = ANY({})", value, key))
+            // SECURITY: escape the value used in array containment check
+            let safe_val = escape_string(value);
+            if safe_val.parse::<i64>().is_ok() {
+                Some(format!("{} = ANY({})", safe_val, key))
             } else {
-                Some(format!("{}::character varying = ANY({})", value, key))
+                Some(format!("{}::character varying = ANY({})", safe_val, key))
             }
         }
-        Some("numrange") => Some(format!("{}::numeric <@ {}", value, key)),
+        Some("numrange") => {
+            // Only allow numeric values for range types
+            if value.parse::<f64>().is_ok() {
+                Some(format!("{}::numeric <@ {}", value, key))
+            } else {
+                None // reject non-numeric
+            }
+        }
         Some("int4range") | Some("int8range") => {
-            Some(format!("{}::integer <@ {}::int4range", value, key))
+            if value.parse::<i64>().is_ok() {
+                Some(format!("{}::integer <@ {}::int4range", value, key))
+            } else {
+                None
+            }
         }
         Some("tsrange") | Some("tstzrange") => {
-            Some(format!("{}::timestamptz <@ {}::tstzrange", value, key))
+            // Escape timestamp values
+            let safe_val = escape_string(value);
+            Some(format!("{}::timestamptz <@ {}::tstzrange", safe_val, key))
         }
-        Some("daterange") => Some(format!("{}::date <@ {}::daterange", value, key)),
+        Some("daterange") => {
+            let safe_val = escape_string(value);
+            Some(format!("{}::date <@ {}::daterange", safe_val, key))
+        }
         _ => {
-            // Default: quote value, handle CamelCase key quoting
+            // Default: quote and escape value, handle CamelCase key quoting
             let final_key = if is_camel_case(key) {
                 format!("\"{}\"", key)
             } else {
                 key.to_string()
             };
-            Some(format!("{}={}", final_key, quote_string(value, true)))
+            Some(format!("{}={}", final_key, quote_string(&escape_string(value), true)))
         }
     }
 }
