@@ -352,6 +352,16 @@ DEFAULT_QUERY_FORMAT = config.get(
     fallback='native'
 )
 
+## Query parameters that must never reach the query parser.
+# Authentication/transport-related params (e.g. ?auth=..., ?apikey=...) get
+# appended to API URLs by upstream gateways/clients and would otherwise be
+# interpreted as query conditions/filters by QuerySource and MultiQuery.
+# Configurable via the EXCLUDED_QUERY_PARAMETERS env var (comma-separated).
+# Matched case-insensitively against query-parameter names.
+EXCLUDED_QUERY_PARAMETERS: set = {
+    p.strip().lower() for p in config.getlist('EXCLUDED_QUERY_PARAMETERS') if p.strip()
+} or {'auth', 'apikey', 'api_key', 'authorization'}
+
 ## Geoloc Support:
 GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
 
