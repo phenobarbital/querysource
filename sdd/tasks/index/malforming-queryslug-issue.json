@@ -73,7 +73,7 @@
       "feature_id": "FEAT-103",
       "feature": "malforming-queryslug-issue",
       "spec": "sdd/specs/malforming-queryslug-issue.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -83,8 +83,8 @@
       "parallelism_notes": "Imports safe_format_map_validated (needs TASK-706 re-export). Touches providers/*.py.",
       "assigned_to": null,
       "started_at": "2026-06-19T13:09:34+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-707-provider-raw-query-wiring.md"
+      "completed_at": "2026-06-19T13:23:12+00:00",
+      "file": "sdd/tasks/completed/TASK-707-provider-raw-query-wiring.md"
     },
     {
       "id": "TASK-708",
