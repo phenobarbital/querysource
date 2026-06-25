@@ -14,6 +14,10 @@ from asyncdb.exceptions import (
     StatementError
 )
 from navigator.views import BaseView
+from navigator_auth.decorators import (
+    is_authenticated,
+    user_session
+)
 from ...conf import default_dsn
 from ...utils.functions import anonymize
 from ...utils.parseqs import ParseDict
@@ -173,6 +177,7 @@ def _item_get(item, key, default=None):
     return getattr(item, key, default)
 
 
+@user_session()
 class DatasourceView(BaseView):
     """API View for managing datasources.
     """
