@@ -43,6 +43,24 @@ class SharepointSource(ThreadSource):
                 "directory": "Shared Documents/General/Schedule"
             }
         }
+
+    Alternatively, pass a full file ``url`` and let the component derive
+    ``tenant_name``, ``site``, ``directory`` and ``filename`` from it (only the
+    auth credentials are still required)::
+
+        {
+            "credentials": {
+                "client_id": "SHAREPOINT_APP_ID",
+                "client_secret": "SHAREPOINT_APP_SECRET",
+                "tenant_id": "SHAREPOINT_TENANT_ID"
+            },
+            "source": {
+                "url": "https://<tenant>.sharepoint.com/sites/<site>/Shared Documents/<path>/<file>.xlsx"
+            }
+        }
+
+    Any explicitly-configured ``site``/``directory``/``filename`` takes
+    precedence over the values parsed from ``url``.
     """
 
     def __init__(
@@ -82,6 +100,63 @@ class SharepointSource(ThreadSource):
         self._sheet_name = source.get('sheet_name', 0)
         # pd_args: extra kwargs forwarded to pd.read_excel / pd.read_csv (e.g. skiprows, header, usecols).
         self._pd_args: dict = source.get('pd_args', {})
+        # url: full SharePoint file URL. When provided, tenant_name/site/directory/
+        # filename are derived from it. Explicitly-configured values still win, so
+        # the URL only fills in whatever was left unset.
+        url = source.get('url') or options.get('url')
+        if url:
+            parsed = self._parse_sharepoint_url(url)
+            # tenant_name resolves to a placeholder ('SHAREPOINT_TENANT_NAME') when
+            # unset, so treat that as empty too.
+            if not self._tenant_name or self._tenant_name == 'SHAREPOINT_TENANT_NAME':
+                self._tenant_name = parsed['tenant_name']
+            self._site = self._site or parsed['site']
+            self._directory = self._directory or parsed['directory']
+            self._filename = self._filename or parsed['filename']
+
+    @staticmethod
+    def _parse_sharepoint_url(url: str) -> dict:
+        """Split a full SharePoint file URL into its component parts.
+
+        Handles canonical URLs such as::
+
+            https://<tenant>.sharepoint.com/sites/<site>/Shared Documents/<path>/<file>.xlsx
+
+        and sharing-style URLs that prepend tokens before ``/sites/`` (e.g.
+        ``/:x:/r/sites/...``). Percent-encoded characters (``%20``) and query
+        strings are handled.
+
+        Returns a dict with ``tenant_name``, ``site``, ``directory`` and
+        ``filename``. ``directory`` keeps the document library as its first
+        segment (e.g. ``"Shared Documents/Reports/Data"``), matching what
+        :meth:`fetch` expects.
+        """
+        from urllib.parse import urlparse, unquote  # noqa: PLC0415
+
+        parsed = urlparse(url.strip())
+        # Host: "<tenant>.sharepoint.com" -> tenant name
+        host = parsed.netloc
+        tenant_name = host.split('.', 1)[0] if host else ''
+        # Path: decode %20 etc. and drop leading/trailing slashes.
+        parts = [p for p in unquote(parsed.path).strip('/').split('/') if p]
+        # Locate the "/sites/<site>" (or "/teams/<site>") segment; everything
+        # after it is library + subfolders + filename. Searching by name also
+        # skips sharing-link prefixes like ":x:/r".
+        site = ''
+        rest = parts
+        for i, seg in enumerate(parts):
+            if seg.lower() in ('sites', 'teams') and i + 1 < len(parts):
+                site = parts[i + 1]
+                rest = parts[i + 2:]
+                break
+        filename = rest[-1] if rest else ''
+        directory = '/'.join(rest[:-1]) if len(rest) > 1 else ''
+        return {
+            'tenant_name': tenant_name,
+            'site': site,
+            'directory': directory,
+            'filename': filename,
+        }
 
     def _parse_file_content(self, content: bytes) -> pd.DataFrame:
         """Parse raw bytes as Excel or CSV depending on the filename extension."""
