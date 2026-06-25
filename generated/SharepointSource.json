@@ -5,6 +5,13 @@
   "usage": "Authenticates via Microsoft Graph client credentials (client_id, client_secret, tenant_id) and downloads the specified file from the given SharePoint site and directory path.",
   "attributes": [
     {
+      "name": "url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
       "name": "credentials.client_id",
       "type": "Any",
       "default": "SHAREPOINT_APP_ID",
@@ -73,6 +80,13 @@
       "default": {},
       "required": false,
       "description": ""
+    },
+    {
+      "name": "source.url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
     }
   ],
   "json_schema": {
@@ -80,6 +94,7 @@
     "type": "object",
     "title": "SharepointSource",
     "properties": {
+      "url": {},
       "credentials": {
         "type": "object",
         "properties": {
@@ -97,7 +112,8 @@
           "filename": {},
           "directory": {},
           "sheet_name": {},
-          "pd_args": {}
+          "pd_args": {},
+          "url": {}
         }
       }
     },
