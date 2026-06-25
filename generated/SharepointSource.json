@@ -7,8 +7,8 @@
     {
       "name": "url",
       "type": "Any",
-      "default": null,
-      "required": true,
+      "default": "",
+      "required": false,
       "description": ""
     },
     {
@@ -84,8 +84,8 @@
     {
       "name": "source.url",
       "type": "Any",
-      "default": null,
-      "required": true,
+      "default": "",
+      "required": false,
       "description": ""
     }
   ],
@@ -114,15 +114,10 @@
           "sheet_name": {},
           "pd_args": {},
           "url": {}
-        },
-        "required": [
-          "url"
-        ]
+        }
       }
     },
-    "required": [
-      "url"
-    ]
+    "required": []
   },
   "example": "{\n  \"credentials\": {\n    \"client_id\": \"SHAREPOINT_APP_ID\",\n    \"client_secret\": \"SHAREPOINT_APP_SECRET\",\n    \"tenant_id\": \"SHAREPOINT_TENANT_ID\",\n    \"tenant_name\": \"mytenant\",\n    \"site\": \"Roadshows\"\n  },\n  \"source\": {\n    \"filename\": \"2025 Events Master Schedule.xlsx\",\n    \"directory\": \"Shared Documents/General/Schedule\"\n  }\n}",
   "icon": "database"

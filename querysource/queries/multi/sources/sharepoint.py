@@ -44,9 +44,11 @@ class SharepointSource(ThreadSource):
             }
         }
 
-    Alternatively, pass a full file ``url`` and let the component derive
-    ``tenant_name``, ``site``, ``directory`` and ``filename`` from it (only the
-    auth credentials are still required)::
+    Alternatively, pass the full file ``url`` (copied straight from the
+    browser/Share dialog — sharing links and subsites included) and the file is
+    resolved directly via the Microsoft Graph ``/shares`` endpoint. Only the
+    auth credentials are required; ``tenant_name``/``site``/``directory`` are
+    not needed::
 
         {
             "credentials": {
@@ -55,12 +57,11 @@ class SharepointSource(ThreadSource):
                 "tenant_id": "SHAREPOINT_TENANT_ID"
             },
             "source": {
-                "url": "https://<tenant>.sharepoint.com/sites/<site>/Shared Documents/<path>/<file>.xlsx"
+                "url": "https://<tenant>.sharepoint.com/:x:/r/sites/<site>/<subsite>/<path>/<file>.xlsx?..."
             }
         }
 
-    Any explicitly-configured ``site``/``directory``/``filename`` takes
-    precedence over the values parsed from ``url``.
+    ``sheet_name`` and ``pd_args`` still apply when reading the downloaded file.
     """
 
     def __init__(
@@ -100,63 +101,27 @@ class SharepointSource(ThreadSource):
         self._sheet_name = source.get('sheet_name', 0)
         # pd_args: extra kwargs forwarded to pd.read_excel / pd.read_csv (e.g. skiprows, header, usecols).
         self._pd_args: dict = source.get('pd_args', {})
-        # url: full SharePoint file URL. When provided, tenant_name/site/directory/
-        # filename are derived from it. Explicitly-configured values still win, so
-        # the URL only fills in whatever was left unset.
-        url = source.get('url') or options.get('url')
-        if url:
-            parsed = self._parse_sharepoint_url(url)
-            # tenant_name resolves to a placeholder ('SHAREPOINT_TENANT_NAME') when
-            # unset, so treat that as empty too.
-            if not self._tenant_name or self._tenant_name == 'SHAREPOINT_TENANT_NAME':
-                self._tenant_name = parsed['tenant_name']
-            self._site = self._site or parsed['site']
-            self._directory = self._directory or parsed['directory']
-            self._filename = self._filename or parsed['filename']
+        # url: full SharePoint file URL, including sharing links such as
+        # ".../:x:/r/sites/<site>/<subsite>/<path>/<file>.xlsx?d=...&web=1".
+        # When set, the file is resolved directly via the Microsoft Graph
+        # /shares endpoint (server-side), so tenant_name/site/directory do NOT
+        # need to be configured and subsites work transparently.
+        self._url: str = source.get('url', '') or options.get('url', '') or ''
 
     @staticmethod
-    def _parse_sharepoint_url(url: str) -> dict:
-        """Split a full SharePoint file URL into its component parts.
+    def _encode_share_url(url: str) -> str:
+        """Encode a SharePoint URL into a Graph ``shares`` id.
 
-        Handles canonical URLs such as::
-
-            https://<tenant>.sharepoint.com/sites/<site>/Shared Documents/<path>/<file>.xlsx
-
-        and sharing-style URLs that prepend tokens before ``/sites/`` (e.g.
-        ``/:x:/r/sites/...``). Percent-encoded characters (``%20``) and query
-        strings are handled.
-
-        Returns a dict with ``tenant_name``, ``site``, ``directory`` and
-        ``filename``. ``directory`` keeps the document library as its first
-        segment (e.g. ``"Shared Documents/Reports/Data"``), matching what
-        :meth:`fetch` expects.
+        Per https://learn.microsoft.com/graph/api/shares-get the share id is
+        ``"u!"`` followed by the unpadded base64url encoding of the UTF-8 URL.
+        Works for canonical and sharing URLs alike — Graph resolves the share
+        itself, so no client-side path parsing (and no subsite ambiguity) is
+        involved.
         """
-        from urllib.parse import urlparse, unquote  # noqa: PLC0415
+        import base64  # noqa: PLC0415
 
-        parsed = urlparse(url.strip())
-        # Host: "<tenant>.sharepoint.com" -> tenant name
-        host = parsed.netloc
-        tenant_name = host.split('.', 1)[0] if host else ''
-        # Path: decode %20 etc. and drop leading/trailing slashes.
-        parts = [p for p in unquote(parsed.path).strip('/').split('/') if p]
-        # Locate the "/sites/<site>" (or "/teams/<site>") segment; everything
-        # after it is library + subfolders + filename. Searching by name also
-        # skips sharing-link prefixes like ":x:/r".
-        site = ''
-        rest = parts
-        for i, seg in enumerate(parts):
-            if seg.lower() in ('sites', 'teams') and i + 1 < len(parts):
-                site = parts[i + 1]
-                rest = parts[i + 2:]
-                break
-        filename = rest[-1] if rest else ''
-        directory = '/'.join(rest[:-1]) if len(rest) > 1 else ''
-        return {
-            'tenant_name': tenant_name,
-            'site': site,
-            'directory': directory,
-            'filename': filename,
-        }
+        b64 = base64.urlsafe_b64encode(url.strip().encode('utf-8')).decode('ascii')
+        return 'u!' + b64.rstrip('=')
 
     def _parse_file_content(self, content: bytes) -> pd.DataFrame:
         """Parse raw bytes as Excel or CSV depending on the filename extension."""
@@ -190,6 +155,11 @@ class SharepointSource(ThreadSource):
                 **self._pd_args,
             )
         df = df.infer_objects()
+        # A spreadsheet can yield non-string column names (date/number header
+        # cells, or blank/merged headers -> NaN). Those break JSON output
+        # ("Dict key must be str") and DB writes, so coerce any non-str header.
+        if isinstance(df, pd.DataFrame):
+            df.columns = [c if isinstance(c, str) else str(c) for c in df.columns]
         return df
 
     async def fetch(self) -> pd.DataFrame:
@@ -216,12 +186,6 @@ class SharepointSource(ThreadSource):
                 "pip install httpx"
             ) from exc
 
-        if not self._tenant_name or self._tenant_name == 'SHAREPOINT_TENANT_NAME':
-            raise ValueError(
-                "SharePoint tenant_name must be configured (via credentials or "
-                "navconfig SHAREPOINT_TENANT_NAME)."
-            )
-
         # The msgraph/kiota SDK uses platform.version() to build the User-Agent
         # header. On Linux the string has a trailing space which httpx rejects
         # as an illegal header value. Patch it before the client is constructed.
@@ -238,70 +202,92 @@ class SharepointSource(ThreadSource):
             scopes = ["https://graph.microsoft.com/.default"]
             client = GraphServiceClient(credentials=credential, scopes=scopes)
 
-            # Resolve the site ID
-            site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
-            if site_host and self._site:
-                site = await client.sites.by_site_id(
-                    f"{site_host}:/sites/{self._site}:"
-                ).get()
-            else:
-                raise RuntimeError(
-                    "SharePoint tenant_name and site must be specified to locate the site."
+            if self._url:
+                # Resolve the file directly from its (sharing) URL via /shares.
+                # Graph handles subsites, document libraries, folders and
+                # sharing-link tokens server-side — nothing is parsed here.
+                shares_id = self._encode_share_url(self._url)
+                item = await (
+                    client.shares.by_shared_drive_item_id(shares_id)
+                    .drive_item.get()
                 )
-
-            site_id = site.id
-
-            # Get drives (document libraries) for the site
-            drives_response = await client.sites.by_site_id(site_id).drives.get()
-            drives = drives_response.value if drives_response else []
-
-            # Parse directory into (library_name, subfolder).
-            # Single segment (e.g. "Tests") → Documents library + subfolder "Tests".
-            # Multi-segment (e.g. "Documents/Tests") → first segment is library,
-            # rest is subfolder.  "Shared Documents" normalised to "Documents".
-            _dir = (self._directory or '').replace('\\', '/').strip().strip('/')
-            if not _dir:
-                library_name, subfolder = 'Documents', ''
+                if item is None or not getattr(item, 'id', None):
+                    raise RuntimeError(
+                        f"Could not resolve SharePoint file from url: {self._url}"
+                    )
+                # Use the resolved item name so extension detection works.
+                if not self._filename:
+                    self._filename = getattr(item, 'name', '') or 'download'
             else:
-                _parts = _dir.split('/')
-                if len(_parts) == 1:
-                    library_name, subfolder = 'Documents', _parts[0]
+                if not self._tenant_name or self._tenant_name == 'SHAREPOINT_TENANT_NAME':
+                    raise ValueError(
+                        "SharePoint tenant_name must be configured (via credentials "
+                        "or navconfig SHAREPOINT_TENANT_NAME), or pass a full 'url'."
+                    )
+                # Resolve the site ID
+                site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
+                if site_host and self._site:
+                    site = await client.sites.by_site_id(
+                        f"{site_host}:/sites/{self._site}:"
+                    ).get()
                 else:
-                    library_name = _parts[0]
-                    subfolder = '/'.join(_parts[1:])
-                    if library_name.lower() == 'shared documents':
-                        library_name = 'Documents'
+                    raise RuntimeError(
+                        "SharePoint tenant_name and site must be specified to locate the site."
+                    )
 
-            # Find the matching drive (case-insensitive)
-            drive = None
-            for d in drives:
-                if d.name and d.name.lower() == library_name.lower():
-                    drive = d
-                    break
-            if drive is None and drives:
-                drive = drives[0]  # fallback to first drive
+                site_id = site.id
 
-            if drive is None:
-                raise RuntimeError(
-                    f"No document library found for site '{self._site}' "
-                    f"matching '{library_name}'."
+                # Get drives (document libraries) for the site
+                drives_response = await client.sites.by_site_id(site_id).drives.get()
+                drives = drives_response.value if drives_response else []
+
+                # Parse directory into (library_name, subfolder).
+                # Single segment (e.g. "Tests") → Documents library + subfolder "Tests".
+                # Multi-segment (e.g. "Documents/Tests") → first segment is library,
+                # rest is subfolder.  "Shared Documents" normalised to "Documents".
+                _dir = (self._directory or '').replace('\\', '/').strip().strip('/')
+                if not _dir:
+                    library_name, subfolder = 'Documents', ''
+                else:
+                    _parts = _dir.split('/')
+                    if len(_parts) == 1:
+                        library_name, subfolder = 'Documents', _parts[0]
+                    else:
+                        library_name = _parts[0]
+                        subfolder = '/'.join(_parts[1:])
+                        if library_name.lower() == 'shared documents':
+                            library_name = 'Documents'
+
+                # Find the matching drive (case-insensitive)
+                drive = None
+                for d in drives:
+                    if d.name and d.name.lower() == library_name.lower():
+                        drive = d
+                        break
+                if drive is None and drives:
+                    drive = drives[0]  # fallback to first drive
+
+                if drive is None:
+                    raise RuntimeError(
+                        f"No document library found for site '{self._site}' "
+                        f"matching '{library_name}'."
+                    )
+
+                drive_id = drive.id
+
+                # Navigate to the subfolder and find the file
+                file_path = f"{subfolder.rstrip('/')}/{self._filename}" if subfolder else self._filename
+                item = await (
+                    client.drives.by_drive_id(drive_id)
+                    .items.by_drive_item_id(f"root:/{file_path}:")
+                    .get()
                 )
 
-            drive_id = drive.id
-
-            # Navigate to the subfolder and find the file
-            file_path = f"{subfolder.rstrip('/')}/{self._filename}" if subfolder else self._filename
-            item = await (
-                client.drives.by_drive_id(drive_id)
-                .items.by_drive_item_id(f"root:/{file_path}:")
-                .get()
-            )
-
-            if item is None or not hasattr(item, 'id'):
-                raise RuntimeError(
-                    f"File '{self._filename}' not found in SharePoint directory "
-                    f"'{self._directory}'."
-                )
+                if item is None or not hasattr(item, 'id'):
+                    raise RuntimeError(
+                        f"File '{self._filename}' not found in SharePoint directory "
+                        f"'{self._directory}'."
+                    )
 
             # Get the download URL from the item's additional data
             download_url = (
