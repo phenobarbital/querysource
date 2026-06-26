@@ -20,6 +20,7 @@ policies:
       - "slug:list"
       - "datasource:use"
       - "datasource:list"
+      - "datasource:read"
       - "driver:use"
       - "driver:list"
       - "raw_query:execute"
