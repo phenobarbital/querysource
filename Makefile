@@ -10,6 +10,13 @@ PYTHON_VERSION := 3.11
 HAS_UV := $(shell command -v uv 2> /dev/null)
 HAS_PIP := $(shell command -v pip 2> /dev/null)
 
+# Run maturin via `uv run` so it resolves the project venv (.venv) regardless of
+# whether the venv is activated or on PATH. `--with maturin` ensures the tool is
+# available ephemerally, so no separate `uv pip install maturin` step is needed.
+# (Each Makefile recipe line runs in its own subshell, so installing maturin in
+# one line does not put it on PATH for the next.)
+MATURIN := uv run --with maturin maturin
+
 # Install uv for faster workflows
 install-uv:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -45,8 +52,7 @@ develop: build-rust
 # avoiding the "build-backend not set to maturin" warning emitted when reading the
 # root pyproject.toml (which uses setuptools for the rest of the project).
 build-rust:
-	@command -v maturin >/dev/null 2>&1 || uv pip install maturin
-	maturin develop --release --manifest-path rust/Cargo.toml
+	$(MATURIN) develop --release --manifest-path rust/Cargo.toml
 
 # Stage the compiled Rust extension (.so) INTO the source tree so that
 # `uv build` (setuptools backend) bundles it into the wheel. setuptools only
@@ -56,8 +62,7 @@ build-rust:
 # tree, so the wheel would otherwise ship without the Rust extension.
 RUST_WHEEL_OUT := target/wheels
 stage-rust:
-	@command -v maturin >/dev/null 2>&1 || uv pip install maturin
-	maturin build --release -i python --manifest-path rust/Cargo.toml --out $(RUST_WHEEL_OUT)
+	$(MATURIN) build --release -i python --manifest-path rust/Cargo.toml --out $(RUST_WHEEL_OUT)
 	@whl=$$(ls -t $(RUST_WHEEL_OUT)/qs_parsers-*.whl | head -1); \
 	  test -n "$$whl" || { echo "ERROR: maturin produced no wheel in $(RUST_WHEEL_OUT)"; exit 1; }; \
 	  echo "Staging Rust extension from $$whl"; \

@@ -16,7 +16,11 @@ authors = [
 ]
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
-requires-python = ">=3.10.1"
+# Upper-bounded at <3.13: core C-extension deps (e.g. async-notify) only
+# publish wheels up to cp312, and Python 3.14 only ships cryptography>=48
+# (cffi>=2). Without this cap, downstream universal resolvers attempt
+# 3.13/3.14 and fail to find a solution.
+requires-python = ">=3.10.1,<3.13"
 keywords = ["querysource", "database", "query", "aiohttp", "web service"]
 
 classifiers = [
@@ -95,10 +99,9 @@ dependencies = [
     "polars==1.27.1",
     "contextily==1.6.2",
     "jenkspy==0.4.1",
-    # timezonefinder moved to the optional [geo] extra: it hard-pins cffi<2,
-    # which is incompatible with cryptography>=46.0.7 (cffi>=2) pulled in by
-    # navconfig>=2.2.0. It is only used by the lazily-imported fn_get_timezone
-    # helper, so it is opt-in via `pip install querysource[geo]`.
+    # timezonefinder lives in the optional [geo] extra: it is only used by the
+    # lazily-imported fn_get_timezone helper, so it is opt-in via
+    # `pip install querysource[geo]`. See the [geo] extra for its version floor.
     "ipyleaflet==0.19.2",
     # Text processing
     "rapidfuzz==3.11.0",
@@ -137,9 +140,13 @@ vectors = [
 ]
 
 geo = [
-    # Pulled out of the core deps because timezonefinder pins cffi<2, which
-    # conflicts with navconfig>=2.2.0's cryptography>=46.0.7 (cffi>=2).
-    "timezonefinder==6.5.5",
+    # timezonefinder is kept in this optional extra (used only by the
+    # lazily-imported fn_get_timezone helper). Left unpinned: navconfig>=2.2.0
+    # pulls cryptography>=46.0.7, which requires cffi>=2 on Python>=3.9, so the
+    # resolver is transitively forced to timezonefinder>=8.1.0 (the first
+    # version that relaxes its hard cffi<2 pin to cffi<3). Older versions pin
+    # cffi<2 and would conflict.
+    "timezonefinder",
 ]
 
 sharepoint = [

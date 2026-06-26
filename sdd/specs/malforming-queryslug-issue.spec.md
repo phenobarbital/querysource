@@ -1,6 +1,6 @@
 ---
-type: hotfix
-base_branch: main
+type: feature
+base_branch: dev
 ---
 
 # Feature Specification: Malforming Query-Slug Issue — SQL Injection & Datasource Credential Exposure
