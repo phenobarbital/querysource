@@ -14,6 +14,7 @@ from asyncdb.exceptions import (
     StatementError
 )
 from navigator.views import BaseView
+from navigator_session import get_session
 from navigator_auth.decorators import (
     is_authenticated,
     user_session
@@ -104,11 +105,15 @@ async def _check_datasource_read(request: web.Request, logger=None) -> None:
         return  # PBAC disabled — fast-path no-op
 
     # Attempt to extract the user session.
+    # Use navigator_session.get_session() — the same proven path as
+    # AbstractHandler._get_user_session (handlers/abstract.py:301). The
+    # session storage object under ``app['session']`` is NOT the right
+    # API here and was silently failing, denying valid sessions.
     session = None
     try:
-        session = await request.app["session"].get_session(request)
-    except Exception:  # pylint: disable=broad-except
-        pass
+        session = await get_session(request, new=False)
+    except RuntimeError:
+        _log.error("QS: User Session system is not installed.")
 
     if session is None:
         _log.info(
