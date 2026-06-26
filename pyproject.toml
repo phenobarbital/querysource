@@ -16,11 +16,10 @@ authors = [
 ]
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
-# Upper-bounded at <3.13: core C-extension deps (e.g. async-notify) only
-# publish wheels up to cp312, and Python 3.14 only ships cryptography>=48
-# (cffi>=2). Without this cap, downstream universal resolvers attempt
-# 3.13/3.14 and fail to find a solution.
-requires-python = ">=3.10.1,<3.13"
+# Upper-bounded at <3.14: Python 3.14 only ships cryptography>=48 (cffi>=2).
+# Without this cap, downstream universal resolvers attempt 3.14 and fail to
+# find a solution.
+requires-python = ">=3.10.1,<3.14"
 keywords = ["querysource", "database", "query", "aiohttp", "web service"]
 
 classifiers = [
@@ -33,6 +32,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: BSD License",
     "Framework :: AsyncIO",
     "Environment :: Web Environment",
