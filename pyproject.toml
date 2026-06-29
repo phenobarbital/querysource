@@ -193,6 +193,12 @@ include = ["querysource", "querysource.*"]
 querysource = ["py.typed"]
 "querysource.qs_parsers" = ["*.so", "*.pyd"]
 
+# Exclude Cython-generated intermediate sources from the wheel.
+# These .c/.cpp files are build artifacts (the compiled .so already ships)
+# and only bloat the wheel (~20% of its size). .pxd are kept to allow cimport.
+[tool.setuptools.exclude-package-data]
+"*" = ["*.c", "*.cpp", "*.pyx"]
+
 [tool.pytest.ini_options]
 addopts = [
     "--strict-config",
