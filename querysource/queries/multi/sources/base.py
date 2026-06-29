@@ -61,6 +61,39 @@ class ThreadSource(threading.Thread, ABC):
                 pass
         return value
 
+    def apply_date_mask(self, text: str) -> str:
+        """Substitute runtime date tokens in a path or filename.
+
+        Supports ``{today}`` and ``{yesterday}`` with an optional strftime
+        format after a colon (default ``%Y%m%d``). Evaluated at fetch time, so
+        daily-rotated files can be addressed by date::
+
+            "daily_extract_{today:%Y%m%d}.csv"
+            # -> "daily_extract_20260629.csv"
+
+        Non-string or token-free values are returned unchanged.
+
+        Args:
+            text: The path/filename, possibly containing date tokens.
+
+        Returns:
+            The string with every ``{today}``/``{yesterday}`` token replaced.
+        """
+        if not isinstance(text, str) or '{' not in text:
+            return text
+        import re  # noqa: PLC0415
+        import datetime  # noqa: PLC0415
+
+        now = datetime.datetime.now()
+
+        def _repl(match: "re.Match") -> str:
+            token = match.group(1)
+            fmt = match.group(2) or '%Y%m%d'
+            when = now if token == 'today' else now - datetime.timedelta(days=1)
+            return when.strftime(fmt)
+
+        return re.sub(r'\{(today|yesterday)(?::([^}]+))?\}', _repl, text)
+
     @property
     def slug(self) -> str:
         """Return a slug-like identifier for this source.

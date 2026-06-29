@@ -62,6 +62,11 @@ class SharepointSource(ThreadSource):
         }
 
     ``sheet_name`` and ``pd_args`` still apply when reading the downloaded file.
+
+    For daily-rotated files addressed via ``site``/``directory``/``filename``
+    (not ``url``), ``directory`` and ``filename`` accept date masks resolved at
+    fetch time, e.g. ``"extract_{today:%Y%m%d}.csv"`` (see
+    :meth:`ThreadSource.apply_date_mask`).
     """
 
     def __init__(
@@ -224,6 +229,10 @@ class SharepointSource(ThreadSource):
                         "SharePoint tenant_name must be configured (via credentials "
                         "or navconfig SHAREPOINT_TENANT_NAME), or pass a full 'url'."
                     )
+                # Resolve runtime date masks, e.g.
+                # "extract_{today:%Y%m%d}.csv" -> "extract_20260629.csv".
+                self._directory = self.apply_date_mask(self._directory)
+                self._filename = self.apply_date_mask(self._filename)
                 # Resolve the site ID
                 site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
                 if site_host and self._site:
