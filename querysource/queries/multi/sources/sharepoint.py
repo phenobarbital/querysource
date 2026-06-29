@@ -64,9 +64,15 @@ class SharepointSource(ThreadSource):
     ``sheet_name`` and ``pd_args`` still apply when reading the downloaded file.
 
     For daily-rotated files addressed via ``site``/``directory``/``filename``
-    (not ``url``), ``directory`` and ``filename`` accept date masks resolved at
-    fetch time, e.g. ``"extract_{today:%Y%m%d}.csv"`` (see
-    :meth:`ThreadSource.apply_date_mask`).
+    (not ``url``), declare ``masks`` and reference them in ``directory``/
+    ``filename``; they are resolved at fetch time::
+
+        "source": {
+            "filename": "extract_{filedate}.csv",
+            "masks": {"{filedate}": ["today", {"mask": "%Y%m%d"}]}
+        }
+
+    See :meth:`ThreadSource.resolve_masks` for the available functions.
     """
 
     def __init__(
@@ -112,6 +118,9 @@ class SharepointSource(ThreadSource):
         # /shares endpoint (server-side), so tenant_name/site/directory do NOT
         # need to be configured and subsites work transparently.
         self._url: str = source.get('url', '') or options.get('url', '') or ''
+        # masks may also be declared inside the "source" block.
+        if source.get('masks'):
+            self._masks = {**self._masks, **source['masks']}
 
     @staticmethod
     def _encode_share_url(url: str) -> str:
@@ -229,10 +238,10 @@ class SharepointSource(ThreadSource):
                         "SharePoint tenant_name must be configured (via credentials "
                         "or navconfig SHAREPOINT_TENANT_NAME), or pass a full 'url'."
                     )
-                # Resolve runtime date masks, e.g.
-                # "extract_{today:%Y%m%d}.csv" -> "extract_20260629.csv".
-                self._directory = self.apply_date_mask(self._directory)
-                self._filename = self.apply_date_mask(self._filename)
+                # Resolve config masks, e.g. {"{filedate}": ["today", {"mask": "%Y%m%d"}]}
+                # turns "extract_{filedate}.csv" -> "extract_20260629.csv".
+                self._directory = self.resolve_masks(self._directory)
+                self._filename = self.resolve_masks(self._filename)
                 # Resolve the site ID
                 site_host = f"{self._tenant_name}.sharepoint.com" if self._tenant_name else None
                 if site_host and self._site:

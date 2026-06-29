@@ -25,9 +25,10 @@ class FileSource(ThreadSource):
     and puts the resulting DataFrame into the shared queue.  Inherits the
     thread/event-loop/queue boilerplate from :class:`ThreadSource`.
 
-    ``path`` may contain date masks resolved at load time, e.g.
-    ``"/data/report_{today:%Y%m%d}.csv"`` -> ``"/data/report_20260629.csv"``
-    (see :meth:`ThreadSource.apply_date_mask`).
+    ``path`` may contain ``masks`` placeholders resolved at load time, e.g.
+    ``"masks": {"{filedate}": ["today", {"mask": "%Y%m%d"}]}`` turns
+    ``"/data/report_{filedate}.csv"`` into ``"/data/report_20260629.csv"``
+    (see :meth:`ThreadSource.resolve_masks`).
     """
 
     def __init__(
@@ -38,13 +39,16 @@ class FileSource(ThreadSource):
         queue: asyncio.Queue,
     ):
         # Extract file-specific options BEFORE passing remaining dict to super.
-        self.file_path = file_options.pop('path')
-        if isinstance(self.file_path, str):
-            # Resolve date masks first, e.g. "report_{today:%Y%m%d}.csv".
-            self.file_path = Path(self.apply_date_mask(self.file_path)).resolve()
+        raw_path = file_options.pop('path')
         self._mime = file_options.pop('mime')
         self._params: dict = file_options
+        # super() sets self._masks (and pops 'masks' from file_options so it is
+        # not forwarded to pandas), so resolve the path AFTER it.
         super().__init__(name, file_options, request, queue)
+        if isinstance(raw_path, str):
+            self.file_path = Path(self.resolve_masks(raw_path)).resolve()
+        else:
+            self.file_path = raw_path
 
     def _get_file_content(self):
         """Return file content, handling compressed files if needed."""

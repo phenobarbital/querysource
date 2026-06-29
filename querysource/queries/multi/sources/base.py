@@ -32,6 +32,11 @@ class ThreadSource(threading.Thread, ABC):
         self._name = name
         self._options = options
         self._request = request
+        # masks: {"{name}": [fn, {args}]} specs resolved at fetch time via
+        # fnExecutor (flowtask-compatible). Popped so it never leaks downstream.
+        self._masks: dict = (
+            options.pop('masks', {}) or {}
+        ) if isinstance(options, dict) else {}
         self.logger = logging.getLogger(__name__)
 
     def resolve_credential(self, key: str, value: str) -> str:
@@ -61,38 +66,39 @@ class ThreadSource(threading.Thread, ABC):
                 pass
         return value
 
-    def apply_date_mask(self, text: str) -> str:
-        """Substitute runtime date tokens in a path or filename.
+    def resolve_masks(self, text: str) -> str:
+        """Resolve ``masks`` placeholders in a path or filename.
 
-        Supports ``{today}`` and ``{yesterday}`` with an optional strftime
-        format after a colon (default ``%Y%m%d``). Evaluated at fetch time, so
-        daily-rotated files can be addressed by date::
+        Masks are declared in the source config under ``masks`` as
+        ``{"{name}": [function, {args}]}`` and resolved at fetch time via
+        :func:`querysource.utils.fn.fnExecutor` (same mechanism, and same
+        function vocabulary, as flowtask). Any function from
+        ``querysource.utils.functions`` is available — ``today``, ``yesterday``,
+        ``fdom``, ``ldom``, ``fdow``, ``ldow``, ``previous_month``,
+        ``last_year``, etc. A plain (non-list) value is used verbatim.
 
-            "daily_extract_{today:%Y%m%d}.csv"
-            # -> "daily_extract_20260629.csv"
+        Example::
 
-        Non-string or token-free values are returned unchanged.
+            "masks": {"{filedate}": ["today", {"mask": "%Y%m%d"}]}
+            # "extract_{filedate}.csv" -> "extract_20260629.csv"
+
+        Non-string, token-free, or mask-less values are returned unchanged.
 
         Args:
-            text: The path/filename, possibly containing date tokens.
+            text: The path/filename, possibly containing ``{name}`` tokens.
 
         Returns:
-            The string with every ``{today}``/``{yesterday}`` token replaced.
+            The string with every declared mask replaced.
         """
-        if not isinstance(text, str) or '{' not in text:
+        if not isinstance(text, str) or '{' not in text or not self._masks:
             return text
-        import re  # noqa: PLC0415
-        import datetime  # noqa: PLC0415
+        from ....utils.fn import fnExecutor  # noqa: PLC0415
 
-        now = datetime.datetime.now()
-
-        def _repl(match: "re.Match") -> str:
-            token = match.group(1)
-            fmt = match.group(2) or '%Y%m%d'
-            when = now if token == 'today' else now - datetime.timedelta(days=1)
-            return when.strftime(fmt)
-
-        return re.sub(r'\{(today|yesterday)(?::([^}]+))?\}', _repl, text)
+        for name, spec in self._masks.items():
+            if name in text:
+                value = fnExecutor(spec) if isinstance(spec, list) else spec
+                text = text.replace(name, str(value))
+        return text
 
     @property
     def slug(self) -> str:
