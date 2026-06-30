@@ -162,6 +162,9 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
         r = self.app.router.add_post('/api/v1/queries/run', ds.query)
         routes.append(r)
+        # Driver-agnostic schema introspection (tables + lazy columns):
+        r = self.app.router.add_post('/api/v1/queries/schema', ds.schema)
+        routes.append(r)
 
         ### Logging Service:
         lg = LoggingService()

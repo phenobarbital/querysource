@@ -1,5 +1,7 @@
+from typing import Optional
 from rethinkdb.errors import RqlRuntimeError, RqlDriverError
 from ..exceptions import QueryError, QueryException
+from ..datasources.introspection import get_introspector
 from .base import BaseQuery
 
 
@@ -11,6 +13,46 @@ class Executor(BaseQuery):
     """
     async def close(self):
         pass
+
+    async def introspect(self, table: Optional[dict] = None):
+        """Schema introspection for the resolved driver/datasource.
+
+        Resolves the connection exactly like ``query()``/``dry_run()`` (named
+        datasource first, otherwise the default driver) and delegates to the
+        per-driver strategy in ``datasources.introspection``.
+
+        Returns the list of tables with column counts by default, or the
+        columns of a single table when ``table={'schema': ..., 'table': ...}``
+        is provided (lazy column loading).
+        """
+        if datasource := self._query.datasource:
+            source, db = await self.datasource(datasource)
+            driver = getattr(source, 'driver', None)
+        elif drv := self._query.driver:
+            _, db = await self.default_driver(drv)
+            driver = drv
+        else:
+            raise QueryError(
+                message='QS: a driver or datasource is required for introspection',
+                code=410  # bad request
+            )
+        introspector = get_introspector(driver)
+        if not introspector.supported:
+            raise QueryError(message=introspector.reason, code=400)
+        try:
+            async with await db.connection() as conn:
+                if table and table.get('table'):
+                    return await introspector.columns(
+                        conn, table.get('schema'), table.get('table')
+                    )
+                return await introspector.tables(conn)
+        except QueryError:
+            raise
+        except Exception as ex:
+            raise QueryException(
+                message=f'QS: Schema introspection error: {ex}',
+                code=500
+            ) from ex
 
     def start(self, data):
         try:

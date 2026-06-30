@@ -104,6 +104,49 @@ class QueryExecutor(AbstractHandler):
         query.start(data)
         return query
 
+    async def schema(self, request):
+        """schema.
+
+        Driver-agnostic schema introspection. Given a ``driver`` or
+        ``datasource`` (same payload shape as ``query``), returns the list of
+        tables with column counts, or — when a ``table`` object
+        (``{"schema": ..., "table": ...}``) is provided — the columns of that
+        single table (lazy loading). The per-driver strategy lives in
+        ``querysource.datasources.introspection``.
+        """
+        payload = await self.get_payload(request)
+        if not payload:
+            return self.error(
+                response='QS: Missing driver or datasource for introspection.',
+                status=410  # bad request
+            )
+        try:
+            query = self.get_executor(payload, request)
+        except QueryError as ex:
+            return self.error(response=ex.message, status=ex.code)
+        except Exception as ex:
+            self.logger.error(str(ex), stack_info=True)
+            return self.critical(reason={"message": str(ex)}, status=500)
+        # PBAC: enforce the same datasource/driver checks as a query run.
+        await self._enforce_payload(request, payload, query)
+        table = payload.get('table') if isinstance(payload, dict) else None
+        try:
+            result = await query.introspect(table=table)
+            return self.json_response(
+                response=result,
+                status=200,
+                headers=self.default_headers()
+            )
+        except (QueryError, QueryException) as ex:
+            return self.error(response=ex.message, status=ex.code)
+        except Exception as ex:
+            self.logger.error(str(ex), stack_info=True)
+            return self.critical(
+                reason={"message": str(ex)},
+                exception=ex,
+                status=500
+            )
+
     async def query(self, request):
         """query.
         Description: get a Query Object a making a query to Backend.
