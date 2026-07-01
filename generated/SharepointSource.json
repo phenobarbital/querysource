@@ -87,6 +87,13 @@
       "default": "",
       "required": false,
       "description": ""
+    },
+    {
+      "name": "source.masks",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
     }
   ],
   "json_schema": {
@@ -113,7 +120,8 @@
           "directory": {},
           "sheet_name": {},
           "pd_args": {},
-          "url": {}
+          "url": {},
+          "masks": {}
         }
       }
     },

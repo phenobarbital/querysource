@@ -119,8 +119,10 @@ class SharepointSource(ThreadSource):
         # need to be configured and subsites work transparently.
         self._url: str = source.get('url', '') or options.get('url', '') or ''
         # masks may also be declared inside the "source" block.
-        if source.get('masks'):
-            self._masks = {**self._masks, **source['masks']}
+        # Use an explicit default so schema introspection marks it optional.
+        _source_masks = source.get('masks', {})
+        if _source_masks:
+            self._masks = {**self._masks, **_source_masks}
 
     @staticmethod
     def _encode_share_url(url: str) -> str:
