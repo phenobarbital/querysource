@@ -186,6 +186,128 @@ class TestEnforcePbac:
                 )
 
     @pytest.mark.asyncio
+    async def test_sessionless_authz_evaluated_as_authorized_group(self, handler):
+        """A stamped sessionless request is evaluated under the synthetic
+        'authorized' identity (not bypassed) when the flag is enabled."""
+        captured = {}
+        evaluator = MagicMock()
+
+        def capture(ctx, **kwargs):
+            captured['ctx'] = ctx
+            return MagicMock(allowed=True)
+
+        evaluator.check_access = capture
+
+        req = MagicMock()
+        req.app = {"security": MagicMock(), "policy_evaluator": evaluator}
+        store = {"authz_backend": "authz_useragent"}
+        req.get = lambda k, d=None: store.get(k, d)
+        req.__setitem__ = MagicMock(side_effect=lambda k, v: store.update({k: v}))
+
+        with patch(
+            "querysource.handlers.abstract.get_session",
+            AsyncMock(return_value=None),
+        ), patch(
+            "querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ",
+            True,
+        ):
+            # Must NOT raise — evaluator allowed it
+            await handler._enforce_pbac(
+                req,
+                resource_type="slug",
+                resource_name="x",
+                action="slug:execute",
+            )
+
+        assert captured, "check_access was not called — request was bypassed"
+        ctx = captured['ctx']
+        assert ctx.userinfo["username"] == "authz:authz_useragent"
+        assert "authorized" in ctx.userinfo["groups"]
+        assert "authz_useragent" in ctx.userinfo["groups"]
+        assert ctx.user is None
+
+    @pytest.mark.asyncio
+    async def test_sessionless_authz_denied_by_policy(self, handler):
+        """Sessionless authz still hits the evaluator — a policy deny → 404."""
+        evaluator = MagicMock()
+        evaluator.check_access = MagicMock(
+            return_value=MagicMock(allowed=False, matched_policy=None, reason="no policy")
+        )
+        req = MagicMock()
+        req.app = {"security": MagicMock(), "policy_evaluator": evaluator}
+        store = {"authz_backend": "authz_useragent"}
+        req.get = lambda k, d=None: store.get(k, d)
+        req.__setitem__ = MagicMock(side_effect=lambda k, v: store.update({k: v}))
+
+        with patch(
+            "querysource.handlers.abstract.get_session",
+            AsyncMock(return_value=None),
+        ), patch(
+            "querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ",
+            True,
+        ):
+            with pytest.raises(web.HTTPNotFound):
+                await handler._enforce_pbac(
+                    req,
+                    resource_type="slug",
+                    resource_name="x",
+                    action="slug:execute",
+                )
+        assert evaluator.check_access.called
+
+    @pytest.mark.asyncio
+    async def test_sessionless_denied_when_not_stamped(self, handler):
+        """Flag on but request NOT stamped by navigator-auth → fail-closed 404."""
+        evaluator = MagicMock()
+        req = MagicMock()
+        req.app = {"security": MagicMock(), "policy_evaluator": evaluator}
+        store = {}
+        req.get = lambda k, d=None: store.get(k, d)
+        req.__setitem__ = MagicMock(side_effect=lambda k, v: store.update({k: v}))
+
+        with patch(
+            "querysource.handlers.abstract.get_session",
+            AsyncMock(return_value=None),
+        ), patch(
+            "querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ",
+            True,
+        ):
+            with pytest.raises(web.HTTPNotFound):
+                await handler._enforce_pbac(
+                    req,
+                    resource_type="slug",
+                    resource_name="x",
+                    action="slug:execute",
+                )
+        assert not evaluator.check_access.called
+
+    @pytest.mark.asyncio
+    async def test_sessionless_denied_when_flag_off(self, handler):
+        """Stamped request but flag off (default) → fail-closed 404."""
+        evaluator = MagicMock()
+        req = MagicMock()
+        req.app = {"security": MagicMock(), "policy_evaluator": evaluator}
+        store = {"authz_backend": "authz_useragent"}
+        req.get = lambda k, d=None: store.get(k, d)
+        req.__setitem__ = MagicMock(side_effect=lambda k, v: store.update({k: v}))
+
+        with patch(
+            "querysource.handlers.abstract.get_session",
+            AsyncMock(return_value=None),
+        ), patch(
+            "querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ",
+            False,
+        ):
+            with pytest.raises(web.HTTPNotFound):
+                await handler._enforce_pbac(
+                    req,
+                    resource_type="slug",
+                    resource_name="x",
+                    action="slug:execute",
+                )
+        assert not evaluator.check_access.called
+
+    @pytest.mark.asyncio
     async def test_enforce_pbac_passes_request_into_evalcontext(self, handler):
         """The live request object must be forwarded into EvalContext."""
         captured_kwargs = {}

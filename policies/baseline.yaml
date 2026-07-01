@@ -24,6 +24,9 @@ policies:
       Soft baseline: any authenticated user may use all QuerySource resources.
       Lowest priority and non-enforcing so specific deny/allow policies override
       it without removing this file. Anonymous requests are still denied (404).
+      Sessionless-authorized clients (group "authorized", stamped by a
+      navigator-auth authz_* backend) are excluded: they are authorized, not
+      authenticated, and only get what policies/authorized.yaml grants them.
     resources:
       - "*:*"
     actions:
@@ -31,5 +34,7 @@ policies:
     subjects:
       groups:
         - "*"
+      exclude_groups:
+        - authorized
     priority: 1
     enforcing: false

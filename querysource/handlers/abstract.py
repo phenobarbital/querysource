@@ -6,6 +6,8 @@ from navconfig import DEBUG
 from navconfig.logging import logging
 from navigator.views import BaseHandler
 from navigator_session import get_session, SessionData
+# Config:
+from ..conf import QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
 # Queries:
 from ..queries.qs import QS
 # Output Formats:
@@ -346,15 +348,46 @@ class AbstractHandler(BaseHandler):
             raise web.HTTPNotFound()
 
         session = await self._get_user_session(request)
+        authz_userinfo = None
         if session is None:
-            # Fail-closed: no session → deny
-            self.logger.info(
-                "PBAC denied (no session): %s/%s action=%s",
-                resource_type,
-                resource_name,
-                action,
-            )
-            raise web.HTTPNotFound()
+            # Sessionless authorization: requests authorized by a
+            # navigator-auth authz backend (IP / host / User-Agent, e.g.
+            # authz_allowed_ips, authz_useragent) legitimately carry no user
+            # session. When QS_PBAC_ALLOW_SESSIONLESS_AUTHZ is enabled and
+            # navigator-auth stamped the request, do NOT bypass PBAC: evaluate
+            # it under a synthetic identity whose groups are ``authorized``
+            # plus the granting backend name, so explicit allow policies
+            # (e.g. policies/authorized.yaml) decide what such clients may do.
+            if QS_PBAC_ALLOW_SESSIONLESS_AUTHZ:
+                try:
+                    from navigator_auth.conf import AUTHZ_BACKEND_KEY
+                except ImportError:
+                    AUTHZ_BACKEND_KEY = 'authz_backend'
+                authz_backend = request.get(AUTHZ_BACKEND_KEY)
+                if authz_backend:
+                    backend = str(authz_backend)
+                    authz_userinfo = {
+                        'username': f'authz:{backend}',
+                        'groups': ['authorized', backend],
+                        'roles': [],
+                    }
+                    self.logger.info(
+                        "PBAC sessionless authz (backend=%s): evaluating "
+                        "%s/%s action=%s as group 'authorized'",
+                        backend,
+                        resource_type,
+                        resource_name,
+                        action,
+                    )
+            if authz_userinfo is None:
+                # Fail-closed: no session and no sessionless authz → deny
+                self.logger.info(
+                    "PBAC denied (no session): %s/%s action=%s",
+                    resource_type,
+                    resource_name,
+                    action,
+                )
+                raise web.HTTPNotFound()
 
         evaluator = request.app.get('policy_evaluator')
         if evaluator is None:
@@ -369,13 +402,18 @@ class AbstractHandler(BaseHandler):
         from navigator_auth.abac.policies.environment import Environment
         from navigator_auth.conf import AUTH_SESSION_OBJECT
 
-        userinfo = (
-            session.get(AUTH_SESSION_OBJECT, {})
-            if hasattr(session, 'get') else {}
-        )
-        if not isinstance(userinfo, dict):
-            userinfo = {}
-        user = userinfo if userinfo else None
+        if authz_userinfo is not None:
+            # Authorized-but-not-authenticated: synthetic identity, no user.
+            userinfo = authz_userinfo
+            user = None
+        else:
+            userinfo = (
+                session.get(AUTH_SESSION_OBJECT, {})
+                if hasattr(session, 'get') else {}
+            )
+            if not isinstance(userinfo, dict):
+                userinfo = {}
+            user = userinfo if userinfo else None
 
         ctx = EvalContext(
             request=request,

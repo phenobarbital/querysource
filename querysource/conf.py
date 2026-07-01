@@ -430,6 +430,18 @@ QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
 
+# Allow requests that carry no user session but were authorized by a
+# sessionless navigator-auth authz backend (IP / host / User-Agent, e.g.
+# authz_allowed_ips, authz_useragent) to be evaluated by PBAC instead of being
+# denied outright (fail-closed). The request must be stamped by navigator-auth
+# (request[AUTHZ_BACKEND_KEY]); it is then evaluated under a synthetic identity
+# with groups ['authorized', <backend>], so an explicit allow policy (see
+# policies/authorized.yaml) must still grant access — this is NOT a bypass.
+# Default: False (keep fail-closed behaviour).
+QS_PBAC_ALLOW_SESSIONLESS_AUTHZ = config.getboolean(
+    'QS_PBAC_ALLOW_SESSIONLESS_AUTHZ', fallback=False
+)
+
 # ── Airtable Integration (FEAT-096) ───────────────────────────────────────────
 # OAuth2 client credentials (server-side; never sent to the browser).
 AIRTABLE_CLIENT_ID = config.get('AIRTABLE_CLIENT_ID')
