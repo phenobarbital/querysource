@@ -9,13 +9,24 @@ name = "_qs_parsers"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module"] }
+pyo3 = { version = "0.24" }
 rayon = "1.10"
 regex = "1.11"
 once_cell = "1.20"
 
 [dev-dependencies]
 proptest = "1.4"
+
+# `extension-module` tells PyO3 the symbols it needs (Py_InitializeEx, etc.)
+# will be provided at dlopen time by an embedding Python process, so it must
+# NOT link libpython itself. That's correct for the cdylib maturin builds,
+# but it breaks `cargo test`, which links a normal executable and therefore
+# needs those symbols resolved directly against libpython.
+# Gate it behind a feature (on by default, so `cargo build`/`maturin build`
+# are unaffected) and run tests with `cargo test --no-default-features`.
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
 
 [profile.release]
 opt-level = 3

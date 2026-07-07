@@ -250,7 +250,8 @@ pub fn to_unquoted(value: &str) -> String {
 /// Mirrors `is_valid()` from validators.pyx.
 /// Returns the properly formatted value for SQL inclusion.
 ///
-/// Type dispatch:
+/// Type dispatch (case-insensitive — callers such as the Navigator frontend
+/// persist `cond_definition` hints in upper case, e.g. `"STRING"`):
 /// - `literal` → escape_string
 /// - `integer`/`int`/`float`/`numeric`/`decimal` → unquoted
 /// - `string`/`varchar`/`field` → quote_string(escape_string(v))
@@ -271,9 +272,10 @@ pub fn is_valid(
     type_hint: Option<&str>,
     noquote: bool,
 ) -> String {
-    // Type hint dispatch
+    // Type hint dispatch (case-insensitive)
     if let Some(t) = type_hint {
-        match t {
+        let lowered = t.to_lowercase();
+        match lowered.as_str() {
             "literal" => return escape_string(value),
             "int" | "integer" | "float" | "numeric" | "decimal" | "epoch" => {
                 return to_unquoted(value);
@@ -414,6 +416,24 @@ mod tests {
     #[test]
     fn test_is_valid_string() {
         assert_eq!(is_valid("x", "hello", Some("string"), false), "'hello'");
+    }
+
+    /// FEAT-103: cond_definition hints arrive upper-cased from the Navigator
+    /// frontend (`"STRING"`, `"INTEGER"`, `"BOOLEAN"`, `"ARRAY"`) — dispatch
+    /// must be case-insensitive.
+    #[test]
+    fn test_is_valid_uppercase_hint_matches_lowercase() {
+        assert_eq!(is_valid("x", "42", Some("INTEGER"), false), "42");
+        assert_eq!(is_valid("x", "hello", Some("STRING"), false), "'hello'");
+        assert_eq!(is_valid("x", "true", Some("BOOLEAN"), false), "TRUE");
+        assert_eq!(
+            is_valid("x", "'a','b','c'", Some("ARRAY"), false),
+            "'a','b','c'"
+        );
+        assert_eq!(
+            is_valid("x", "'a','b','c'", Some("array"), false),
+            is_valid("x", "'a','b','c'", Some("ARRAY"), false)
+        );
     }
 
     #[test]
