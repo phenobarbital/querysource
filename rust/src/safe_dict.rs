@@ -487,4 +487,73 @@ mod tests {
         // "xUNIONy" — UNION is NOT a standalone word → allow
         assert!(check_injection("xUNIONy").is_ok());
     }
+
+    // --- FEAT-103 cond_definition wiring tests ---
+
+    /// `array` hint in Bare context emits a pre-rendered list verbatim
+    /// (e.g. `IN ({ids})` with conditions={"ids": "'a','b','c'"}).
+    #[test]
+    fn cond_definition_array_hint_bare_context_passthrough() {
+        let r = safe_format_map_validated_rust(
+            "SELECT * FROM t WHERE id IN ({ids})",
+            &map(&[("ids", "'a','b','c'")]),
+            &map(&[("ids", "array")]),
+        )
+        .unwrap();
+        assert_eq!(r, "SELECT * FROM t WHERE id IN ('a','b','c')");
+    }
+
+    /// `array` hint does NOT bypass injection checks: check_injection runs
+    /// before the type-hint dispatch, so a `;`/comment/keyword payload is
+    /// still rejected even though the hint would otherwise pass the value
+    /// through unquoted.
+    #[test]
+    fn cond_definition_array_hint_rejects_injection_payload() {
+        let r = safe_format_map_validated_rust(
+            "SELECT * FROM t WHERE id IN ({ids})",
+            &map(&[("ids", "'a'); DROP TABLE t;--")]),
+            &map(&[("ids", "array")]),
+        );
+        assert!(r.is_err(), "Expected rejection of injection payload under array hint");
+
+        let r2 = safe_format_map_validated_rust(
+            "SELECT * FROM t WHERE id IN ({ids})",
+            &map(&[("ids", "1 UNION SELECT password FROM users")]),
+            &map(&[("ids", "array")]),
+        );
+        assert!(r2.is_err(), "Expected rejection of UNION payload under array hint");
+    }
+
+    /// cond_definition hints in upper case (as persisted by the Navigator
+    /// frontend) match the same as lower case.
+    #[test]
+    fn cond_definition_uppercase_hint_matches_lowercase() {
+        let upper = safe_format_map_validated_rust(
+            "WHERE id IN ({ids})",
+            &map(&[("ids", "'a','b'")]),
+            &map(&[("ids", "ARRAY")]),
+        )
+        .unwrap();
+        let lower = safe_format_map_validated_rust(
+            "WHERE id IN ({ids})",
+            &map(&[("ids", "'a','b'")]),
+            &map(&[("ids", "array")]),
+        )
+        .unwrap();
+        assert_eq!(upper, lower);
+        assert_eq!(upper, "WHERE id IN ('a','b')");
+    }
+
+    /// Regression: with an empty cond_definition (pre-fix behavior), a bare
+    /// placeholder still falls through to the generic quoting logic.
+    #[test]
+    fn cond_definition_empty_preserves_generic_quoting() {
+        let r = safe_format_map_validated_rust(
+            "WHERE tag = {tag}",
+            &map(&[("tag", "hello")]),
+            &map(&[]),
+        )
+        .unwrap();
+        assert_eq!(r, "WHERE tag = 'hello'");
+    }
 }

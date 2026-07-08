@@ -97,7 +97,7 @@ class documentdbProvider(BaseProvider):
             if HAS_RUST:
                 try:
                     sql = _rs.safe_format_map(query, self.replacement)
-                    substituted = _rs.safe_format_map_validated(sql, self._conditions, {})
+                    substituted = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
                     try:
                         return json_decoder(substituted)
                     except Exception:
@@ -108,6 +108,13 @@ class documentdbProvider(BaseProvider):
                     )
                     raise ParserError("Invalid query conditions") from err
             # Fallback when Rust is unavailable
+            # DIVERGENCE (FEAT-103): pure-Python fallback has no injection
+            # validation and ignores cond_definition entirely — type hints
+            # (e.g. "array") only take effect via the Rust path. Accepted
+            # because the Rust extension is required in all supported
+            # deployments; replicating context-aware validation in pure
+            # Python would duplicate the security-critical logic in two
+            # places.
             try:
                 return query.format_map(
                     defaultdict(str, SafeDict(**self._conditions))
