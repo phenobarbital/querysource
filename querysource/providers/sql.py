@@ -172,7 +172,7 @@ class sqlProvider(BaseProvider):
             # Phase 2: untrusted user-supplied conditions (if any)
             if self._conditions:
                 try:
-                    sql = _rs.safe_format_map_validated(sql, self._conditions, {})
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
                 except ValueError as err:
                     self._logger.warning(
                         "raw_query: validating substitution rejected conditions: %s", err
@@ -180,6 +180,12 @@ class sqlProvider(BaseProvider):
                     raise ParserError("Invalid query conditions") from err
             return sql
         # Fallback when Rust is unavailable (should not happen in production)
+        # DIVERGENCE (FEAT-103): pure-Python fallback has no injection
+        # validation and ignores cond_definition entirely — type hints
+        # (e.g. "array") only take effect via the Rust path. Accepted
+        # because the Rust extension is required in all supported
+        # deployments; replicating context-aware validation in pure Python
+        # would duplicate the security-critical logic in two places.
         conditions = {**self.replacement, **(self._conditions or {})}
         return query.format_map(
             defaultdict(str, SafeDict(**conditions))
@@ -191,13 +197,19 @@ class sqlProvider(BaseProvider):
             sql = _rs.safe_format_map(query, self.replacement)
             if self._conditions:
                 try:
-                    sql = _rs.safe_format_map_validated(sql, self._conditions, {})
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
                 except ValueError as err:
                     self._logger.warning(
                         "get_raw_query: validating substitution rejected conditions: %s", err
                     )
                     raise ParserError("Invalid query conditions") from err
             return sql
+        # DIVERGENCE (FEAT-103): pure-Python fallback has no injection
+        # validation and ignores cond_definition entirely — type hints
+        # (e.g. "array") only take effect via the Rust path. Accepted
+        # because the Rust extension is required in all supported
+        # deployments; replicating context-aware validation in pure Python
+        # would duplicate the security-critical logic in two places.
         conditions = {**self.replacement, **(self._conditions or {})}
         return query.format_map(
             defaultdict(str, SafeDict(**conditions))

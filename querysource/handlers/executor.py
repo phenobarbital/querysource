@@ -120,6 +120,12 @@ class QueryExecutor(AbstractHandler):
                 response='QS: Missing driver or datasource for introspection.',
                 status=410  # bad request
             )
+        # `table` is an introspection-only field (lazy column loading). Pull it
+        # out BEFORE building the Query model: the model is strict and rejects
+        # unknown kwargs, so leaving `table` in the payload makes get_executor
+        # fail on the columns request while the tables request (no `table`)
+        # succeeds.
+        table = payload.pop('table', None) if isinstance(payload, dict) else None
         try:
             query = self.get_executor(payload, request)
         except QueryError as ex:
@@ -129,7 +135,6 @@ class QueryExecutor(AbstractHandler):
             return self.critical(reason={"message": str(ex)}, status=500)
         # PBAC: enforce the same datasource/driver checks as a query run.
         await self._enforce_payload(request, payload, query)
-        table = payload.get('table') if isinstance(payload, dict) else None
         try:
             result = await query.introspect(table=table)
             return self.json_response(
