@@ -25,10 +25,8 @@ from .conf import (
     asyncpg_url,
     default_dsn,
     QUERYSET_REDIS,
-    MEMCACHE_SERVICE
 )
 from .types import Singleton
-import jsonpickle
 from .exceptions import (
     ConfigError
 )
@@ -65,10 +63,9 @@ class QueryConnection(Connection, metaclass=Singleton):
         self._connected: bool = False
         self.lazy: bool = kwargs.get('lazy', False)
         self._redis: Callable = None
-        self._memcached: Callable = None
-        # Cache (redis/memcached) AsyncDB instances are constructed eagerly
-        # but without an explicit loop — they bind to the running loop on
-        # first connect, which is aiohttp's loop.
+        # Cache (redis) AsyncDB instances are constructed eagerly but without
+        # an explicit loop — they bind to the running loop on first connect,
+        # which is aiohttp's loop.
         self.start_cache(QUERYSET_REDIS)
         self._json = JSONContent()
     async def __aenter__(self) -> "QueryConnection":
@@ -83,15 +80,9 @@ class QueryConnection(Connection, metaclass=Singleton):
 
 
     def start_cache(self, dsn):
-        ### redis connection:
         self._redis = AsyncDB(
             'redis',
             dsn=dsn,
-        )
-        # memcached connection:
-        self._memcached = AsyncDB(
-            'memcache',
-            params=MEMCACHE_SERVICE,
         )
 
     def pool(self):
@@ -271,15 +262,6 @@ class QueryConnection(Connection, metaclass=Singleton):
                             )
                         )
                         continue
-                    # SAVING DATASOURCES IN MEMORY (memcached)
-                    try:
-                        async with await self._memcached.connection() as conn:
-                            ds = jsonpickle.encode(DATASOURCES[name])
-                            await conn.set(name, ds)
-                    except (ProviderError, DriverError, TypeError, ValueError) as ex:
-                        self.logger.warning(
-                            str(ex)
-                        )
         self._connected = True
 
     async def query_table_exists(self, connection: Callable, program: str) -> bool:

@@ -19,9 +19,9 @@ class memcacheDriver(NoSQLDriver):
 
 
 try:
-    redis_default = memcacheDriver(
+    memcache_default = memcacheDriver(
         host=MEMCACHE_HOST,
         port=MEMCACHE_PORT
     )
 except ValueError:
-    redis_default = None
+    memcache_default = None
