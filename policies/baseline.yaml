@@ -1,0 +1,40 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# ─── Soft baseline ──────────────────────────────────────────────────────────
+# Permite que QS_PBAC_ENABLED=True opere SIN hard-enforcement: cualquier usuario
+# autenticado puede usar todos los recursos de QuerySource. Los anónimos siguen
+# bloqueados (fail-closed en el handler → 404).
+#
+# Es un PISO, no un override: priority baja + enforcing:false para que cualquier
+# política posterior (deny o un allow más específico, con priority mayor) la
+# sobreescriba sin necesidad de borrar este archivo. El deny gana en empate; el
+# allow necesita priority estrictamente mayor.
+#
+# Para endurecer un recurso: añade un `deny` (o un `allow` más estrecho) con
+# priority > 1 en el archivo de ese recurso (slugs.yaml, datasources.yaml, …).
+# Cuando termines de migrar a políticas explícitas, elimina este archivo.
+# ────────────────────────────────────────────────────────────────────────────
+policies:
+  - name: authenticated_allow_all
+    effect: allow
+    description: >
+      Soft baseline: any authenticated user may use all QuerySource resources.
+      Lowest priority and non-enforcing so specific deny/allow policies override
+      it without removing this file. Anonymous requests are still denied (404).
+      Sessionless-authorized clients (group "authorized", stamped by a
+      navigator-auth authz_* backend) are excluded: they are authorized, not
+      authenticated, and only get what policies/authorized.yaml grants them.
+    resources:
+      - "*:*"
+    actions:
+      - "*"
+    subjects:
+      groups:
+        - "*"
+      exclude_groups:
+        - authorized
+    priority: 1
+    enforcing: false

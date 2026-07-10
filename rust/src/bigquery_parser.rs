@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 
 use crate::filter_common::apply_where_clause;
 use crate::safe_dict::safe_format_map_rust;
-use crate::validators::{bq_quote_string, field_components, is_integer, quote_string};
+use crate::validators::{bq_quote_string, field_components, is_integer};
 
 /// BigQuery comparison tokens.
 const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];

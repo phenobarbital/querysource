@@ -46,6 +46,16 @@ class Forecast(AbstractTransform):
         }
     """
 
+    @classmethod
+    def supported_models(cls) -> list[str]:
+        """Return the forecast model names accepted by ``model``.
+
+        Single source of truth shared by the ``run()`` dispatch and the
+        ``Forecast.catalog.yaml`` ``model`` enum (resolved via the
+        ``enum_from_class`` directive).
+        """
+        return ["ARIMA", "SARIMA", "Exponential"]
+
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         self.reset_index: bool = bool(kwargs.pop('reset_index', True))
         self._order = tuple(kwargs.pop('order', [1, 1, 1]))
@@ -54,6 +64,10 @@ class Forecast(AbstractTransform):
         self.model_args: dict = kwargs.pop('model_args', {})
 
         super(Forecast, self).__init__(data, **kwargs)
+        # ``value_column`` is a single-column alias for ``columns`` (the list of
+        # series to forecast); promote it when ``columns`` was not supplied.
+        if not hasattr(self, 'columns') and hasattr(self, 'value_column'):
+            self.columns = [self.value_column]
         if not hasattr(self, 'index_column'):
             raise DriverError(
                 "Forecast Transform: Missing Index on definition"
@@ -224,7 +238,7 @@ class Forecast(AbstractTransform):
             # df.sort_values(by=[self.by_group, self.index_column], inplace=True)
             df[self.index_column] = pd.to_datetime(df[self.index_column])
             print(df[self.index_column].dtype)  # Check after operation
-            self.colum_info(df)
+            self._print_info(df)
             return df
         except (ValueError, KeyError) as err:
             raise QueryException(

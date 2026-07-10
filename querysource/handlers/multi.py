@@ -140,7 +140,8 @@ class QueryHandler(AbstractHandler):
             data = {}
             _queries = options.get('queries', {})
             _files = options.get('files', {})
-            if not (_queries or _files):  # Check if both are effectively empty
+            _sources = options.get('sources', {})
+            if not (_queries or _files or _sources):  # Check if all inputs are effectively empty
                 raise self.Error(
                     message='Invalid POST Option passed to MultiQuery.',
                     code=400
@@ -203,9 +204,9 @@ class QueryHandler(AbstractHandler):
             "writer_options": writer_options,
         }
         ## Step 1: PBAC pre-flight (all-or-nothing) before thread fan-out.
-        # Detect raw inline query: any non-slug, non-file query component.
+        # Detect raw inline query: any non-slug, non-file/source query component.
         _has_raw = bool(
-            not slug and not _queries and not _files
+            not slug and not _queries and not _files and not _sources
         ) or bool(
             isinstance(options, dict) and options.get('query') and
             not _queries and not _files and not slug
@@ -364,6 +365,7 @@ class QueryHandler(AbstractHandler):
                     'X-Total-Time': f'{total_time:.2f} seconds',
                 }
             )
+        output_errors: list[str] = []
         if isinstance(data, dict):
             if 'Output' in options:
                 ## Optionally saving result to destination (registry-based dispatch)
@@ -379,7 +381,7 @@ class QueryHandler(AbstractHandler):
                                 step_name,
                                 dest_err,
                             )
-                            # Per spec: continue to next destination on failure
+                            output_errors.append(f"{step_name}: {dest_err}")
         ### Step 6: passing Result to DataOutput
         try:
             if result is None or isinstance(result, DataFrame) and result.empty:
@@ -410,6 +412,8 @@ class QueryHandler(AbstractHandler):
             remote_queries = getattr(qs, '_remote_queries', [])
             if remote_queries:
                 response.headers['X-Remote-Queries'] = ','.join(remote_queries)
+            if output_errors:
+                response.headers['X-Output-Errors'] = ' | '.join(output_errors)
             return response
         except (DataNotFound) as ex:
             return self.NoData(

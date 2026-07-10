@@ -5,6 +5,13 @@
   "usage": "Authenticates via Microsoft Graph client credentials (client_id, client_secret, tenant_id) and downloads the specified file from the given SharePoint site and directory path.",
   "attributes": [
     {
+      "name": "url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
       "name": "credentials.client_id",
       "type": "Any",
       "default": "SHAREPOINT_APP_ID",
@@ -33,6 +40,13 @@
       "description": ""
     },
     {
+      "name": "credentials.tenant_host",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
       "name": "credentials.site",
       "type": "Any",
       "default": "",
@@ -52,6 +66,34 @@
       "default": "",
       "required": false,
       "description": ""
+    },
+    {
+      "name": "source.sheet_name",
+      "type": "Any",
+      "default": 0,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.pd_args",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.masks",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
     }
   ],
   "json_schema": {
@@ -59,6 +101,7 @@
     "type": "object",
     "title": "SharepointSource",
     "properties": {
+      "url": {},
       "credentials": {
         "type": "object",
         "properties": {
@@ -66,6 +109,7 @@
           "client_secret": {},
           "tenant_id": {},
           "tenant_name": {},
+          "tenant_host": {},
           "site": {}
         }
       },
@@ -73,12 +117,16 @@
         "type": "object",
         "properties": {
           "filename": {},
-          "directory": {}
+          "directory": {},
+          "sheet_name": {},
+          "pd_args": {},
+          "url": {},
+          "masks": {}
         }
       }
     },
     "required": []
   },
-  "example": "{\n    \"credentials\": {\n        \"client_id\": \"SHAREPOINT_APP_ID\",        # navconfig var or literal\n        \"client_secret\": \"SHAREPOINT_APP_SECRET\",\n        \"tenant_id\": \"SHAREPOINT_TENANT_ID\",\n        \"tenant_name\": \"mytenant\",               # optional, defaults to \"sharepoint\"\n        \"site\": \"Roadshows\"\n    },\n    \"source\": {\n        \"filename\": \"2025 Events Master Schedule.xlsx\",\n        \"directory\": \"Shared Documents/General/Schedule\"\n    }\n}",
+  "example": "{\n  \"credentials\": {\n    \"client_id\": \"SHAREPOINT_APP_ID\",\n    \"client_secret\": \"SHAREPOINT_APP_SECRET\",\n    \"tenant_id\": \"SHAREPOINT_TENANT_ID\",\n    \"tenant_name\": \"mytenant\",\n    \"site\": \"Roadshows\"\n  },\n  \"source\": {\n    \"filename\": \"2025 Events Master Schedule.xlsx\",\n    \"directory\": \"Shared Documents/General/Schedule\"\n  }\n}",
   "icon": "database"
 }

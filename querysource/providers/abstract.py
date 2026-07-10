@@ -130,6 +130,21 @@ class BaseProvider(ABC):
         """
         return self._definition
 
+    def _get_cond_definition(self) -> dict:
+        """Return the per-placeholder type hints (`cond_definition`) declared on
+        the Query definition, used by the Rust validating substitution
+        (`safe_format_map_validated`) to type-check raw-query conditions.
+
+        Supports both `QueryModel` objects (attribute access) and plain dicts,
+        and normalizes a missing/None definition to an empty dict.
+        """
+        definition = self._definition
+        if isinstance(definition, dict):
+            cond_definition = definition.get('cond_definition')
+        else:
+            cond_definition = getattr(definition, 'cond_definition', None)
+        return cond_definition or {}
+
     def NotFound(self, message: str):
         """Raised when Data not Found.
         """

@@ -1,0 +1,138 @@
+# Companion documentation for the ``pivot`` transform (class: pivot).
+#
+# Reshapes long -> wide via pandas pivot_table (type=pivot) or crosstab
+# (type=crosstab). NOTE: the runtime aggregation key is ``aggregate`` (NOT
+# ``aggfunc`` as the docstring says), and ``type`` accepts ``pivot``/``crosstab``
+# (the docstring's ``pivot_table`` is not wired). ``index`` and ``columns`` are
+# required; ``values``/``aggregate``/``totals`` are pulled via kwargs (not
+# introspected).
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: pivot
+category: Transformations
+icon: shuffle
+
+description: >-
+  Reshape a long-format DataFrame into a wide table using pandas pivot_table (or
+  crosstab), turning a column's unique values into new column headers.
+
+usage: >-
+  ``index`` (required) sets the row keys; ``columns`` (required) is the column
+  whose unique values become headers; ``values`` populates the cells.
+  ``aggregate`` is the aggregation applied to duplicate entries (default
+  ``first``). ``type`` selects ``pivot`` (pandas pivot_table) or ``crosstab``.
+  ``fill_value`` fills missing cells; ``multilevel`` keeps multi-level headers.
+
+attributes:
+  - name: index
+    type: list
+    required: true
+    description: >-
+      Column(s) used as the pivot row index. A single column name or a list.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Row index column(s).
+  - name: columns
+    type: list
+    required: true
+    description: >-
+      Column whose unique values become the new column headers.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Column(s) becoming the new headers.
+  - name: values
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column(s) whose values populate the pivot cells. Optional for ``pivot``.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Value column(s) to aggregate into cells.
+  - name: aggregate
+    type: str
+    required: false
+    default: first
+    description: >-
+      Aggregation function applied to duplicate entries (pandas ``aggfunc``),
+      e.g. ``first``, ``sum``, ``mean``, ``count``. Default ``first``.
+  - name: type
+    type: str
+    required: false
+    default: pivot
+    enum: [pivot, crosstab]
+    description: >-
+      Engine to use: ``pivot`` (pandas pivot_table, default) or ``crosstab``
+      (pandas crosstab).
+  - name: fill_value
+    required: false
+    default: null
+    description: Value used for missing cells in the result (e.g. ``0``).
+    schema:
+      description: Value used for missing cells in the result.
+  - name: multilevel
+    type: bool
+    required: false
+    default: false
+    description: >-
+      If ``True``, keep multi-level column headers; otherwise flatten them to
+      ``"<value>_<column>"``.
+  - name: totals
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Add a totals/margins row and column (pandas ``margins``).
+    schema:
+      type: object
+      description: Totals/margins configuration.
+      properties:
+        name:
+          type: string
+          description: Label for the totals row/column (pandas margins_name).
+      required: [name]
+  - name: pd_args
+    type: dict
+    required: false
+    default: {}
+    description: Extra keyword arguments forwarded to the underlying pandas call.
+    schema:
+      type: object
+  - name: reset_index
+    type: bool
+    required: false
+    default: true
+    description: If ``True`` (default), reset the result index after pivoting.
+
+schema:
+  title: pivot
+  description: >-
+    Pivot a DataFrame into a wide table. ``index`` and ``columns`` are required.
+  required: [index, columns]
+  additionalProperties: true
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Transform": [
+      {
+        "pivot": {
+          "type": "pivot",
+          "fill_value": 0,
+          "index": ["warehouse_alias", "warehouse_number"],
+          "columns": "dates",
+          "values": ["#_of_adjustments", "quantity_in", "quantity_out"],
+          "aggregate": "first",
+          "reset_index": true
+        }
+      }
+    ]
+  }

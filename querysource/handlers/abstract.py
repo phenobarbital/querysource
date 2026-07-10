@@ -1,5 +1,4 @@
 import inspect
-import traceback
 from typing import Optional
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPException
@@ -7,6 +6,8 @@ from navconfig import DEBUG
 from navconfig.logging import logging
 from navigator.views import BaseHandler
 from navigator_session import get_session, SessionData
+# Config:
+from ..conf import QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
 # Queries:
 from ..queries.qs import QS
 # Output Formats:
@@ -14,6 +15,7 @@ from ..types import mime_formats, mime_types
 from ..exceptions import (
     QueryException
 )
+from ..utils.errors import build_error_payload
 from ..utils.events import enable_uvloop
 
 enable_uvloop()
@@ -23,6 +25,10 @@ _SENTINEL = object()
 
 
 class AbstractHandler(BaseHandler):
+    # Class-level default so error helpers (Error/critical/Except) can always
+    # read ``self.debug`` even if ``post_init`` has not run (e.g. instances
+    # built via ``__new__`` in tests). ``post_init`` overrides it per-instance.
+    debug: bool = DEBUG
 
     def post_init(self, *args, **kwargs):
         self.logger = logging.getLogger('QS.Handler')
@@ -95,13 +101,26 @@ class AbstractHandler(BaseHandler):
 
     def NotFound(self, message: str, exception: BaseException = None):
         """Raised when Data not Found.
+
+        Routes through ``build_error_payload`` so that in production
+        (``self.debug=False``) the response body never contains raw exception
+        text or internal paths.
         """
-        reason = {
-            "message": message,
-            "error": str(exception)
-        }
+        payload = build_error_payload(
+            category="not_found",
+            status=404,
+            exception=exception,
+            debug=self.debug,
+            logger=self.logger,
+            public_message=message if self.debug else None,
+        )
         args = {
-            "reason": self._json.dumps(reason),
+            "reason": payload["error"],
+            "text": self._json.dumps(payload),
+            "headers": {
+                "X-MESSAGE": payload["error"],
+                "X-STATUS": "404",
+            },
             "content_type": "application/json",
         }
         raise web.HTTPNotFound(**args)
@@ -117,29 +136,42 @@ class AbstractHandler(BaseHandler):
         """Error.
 
         Useful Function to raise Errors.
+
+        Builds a client-safe error payload via ``build_error_payload``.
+        In production (``self.debug=False``) no traceback, raw DB text, or
+        internal paths are exposed to the client; full detail is logged
+        server-side tagged with ``error_id``.
+
         Args:
-            reason (dict): Message object
-            message (str): Exception Message.
-            exception (BaseException, optional): Exception captured. Defaults to None.
-            code (int, optional): Error Code. Defaults to 500.
+            reason (dict): Ignored — present for backwards-compatibility.
+                The body is now always built by ``build_error_payload``.
+            message (str): Exception message / short description.
+            exception (BaseException, optional): Caught exception. Defaults to None.
+            stacktrace (str, optional): Pre-captured traceback string.
+                Forwarded to the server log only; never in the client body.
+            code (int, optional): HTTP error code. Defaults to 400.
         """
-        # message = f"{message}: {exception!s}"
-        try:
-            reason_exception = f"{exception.decode()!s}"
-        except Exception:
-            reason_exception = str(exception)
-        if not reason:
-            reason = {
-                "error": message,
-                "reason": reason_exception
-            }
-        if stacktrace:
-            reason["trace"] = stacktrace
+        # Map HTTP status code to a formatter category
+        if code == 404:
+            category = "not_found"
+        elif code in (400, 401, 402, 403, 406, 412, 428):
+            category = "query_error"
+        else:
+            category = "server_error"
+
+        payload = build_error_payload(
+            category=category,
+            status=code,
+            exception=exception,
+            debug=self.debug,
+            logger=self.logger,
+            public_message=message if self.debug else None,
+        )
         args = {
-            "reason": message,
-            "text": self._json.dumps(reason),
+            "reason": payload["error"],
+            "text": self._json.dumps(payload),
             "headers": {
-                "X-MESSAGE": str(message),
+                "X-MESSAGE": payload["error"],
                 "X-STATUS": str(code),
             },
             "content_type": "application/json",
@@ -171,28 +203,47 @@ class AbstractHandler(BaseHandler):
         headers: dict = None,
         code: int = 500
     ) -> HTTPException:
-        trace = None
+        """Except.
+
+        Handles unexpected / server-side exceptions.
+
+        Delegates to ``build_error_payload`` which logs the full traceback
+        server-side tagged with ``error_id``.  In production (``self.debug=False``)
+        the client body contains only ``error``, ``status``, and ``error_id`` —
+        no traceback, no raw exception text, no ``X-ERROR`` header.
+
+        Args:
+            reason (dict): Ignored — present for backwards-compatibility.
+            message (str): Short description of the failure context.
+            exception (BaseException, optional): Caught exception.
+            stacktrace (str, optional): Pre-captured traceback string (logged only).
+            headers (dict, optional): Extra headers to add to the response.
+            code (int, optional): HTTP status code. Defaults to 500.
+        """
         if not headers:
             headers = {}
-        if exception is not None:
-            trace = traceback.format_exc(limit=20)
-        if not reason:
-            reason = {
-                "error": message,
-                "reason": str(exception),
-                "trace": self._json.dumps(trace)
-            }
-        if stacktrace:
-            reason["trace"] = stacktrace
+
+        payload = build_error_payload(
+            category="server_error",
+            status=code,
+            exception=exception,
+            debug=self.debug,
+            logger=self.logger,
+            public_message=message if self.debug else None,
+        )
+        response_headers: dict = {
+            "X-MESSAGE": payload["error"],
+            "X-STATUS": str(code),
+            **headers,
+        }
+        # Only expose the raw exception string in the X-ERROR header when debug
+        if self.debug and exception is not None:
+            response_headers["X-ERROR"] = str(exception)
+
         args = {
-            "reason": message,
-            "text": self._json.dumps(reason),
-            "headers": {
-                "X-MESSAGE": str(message),
-                "X-STATUS": str(code),
-                "X-ERROR": str(exception),
-                **headers
-            },
+            "reason": payload["error"],
+            "text": self._json.dumps(payload),
+            "headers": response_headers,
             "content_type": "application/json",
         }
         if code == 500:
@@ -297,15 +348,46 @@ class AbstractHandler(BaseHandler):
             raise web.HTTPNotFound()
 
         session = await self._get_user_session(request)
+        authz_userinfo = None
         if session is None:
-            # Fail-closed: no session → deny
-            self.logger.info(
-                "PBAC denied (no session): %s/%s action=%s",
-                resource_type,
-                resource_name,
-                action,
-            )
-            raise web.HTTPNotFound()
+            # Sessionless authorization: requests authorized by a
+            # navigator-auth authz backend (IP / host / User-Agent, e.g.
+            # authz_allowed_ips, authz_useragent) legitimately carry no user
+            # session. When QS_PBAC_ALLOW_SESSIONLESS_AUTHZ is enabled and
+            # navigator-auth stamped the request, do NOT bypass PBAC: evaluate
+            # it under a synthetic identity whose groups are ``authorized``
+            # plus the granting backend name, so explicit allow policies
+            # (e.g. policies/authorized.yaml) decide what such clients may do.
+            if QS_PBAC_ALLOW_SESSIONLESS_AUTHZ:
+                try:
+                    from navigator_auth.conf import AUTHZ_BACKEND_KEY
+                except ImportError:
+                    AUTHZ_BACKEND_KEY = 'authz_backend'
+                authz_backend = request.get(AUTHZ_BACKEND_KEY)
+                if authz_backend:
+                    backend = str(authz_backend)
+                    authz_userinfo = {
+                        'username': f'authz:{backend}',
+                        'groups': ['authorized', backend],
+                        'roles': [],
+                    }
+                    self.logger.info(
+                        "PBAC sessionless authz (backend=%s): evaluating "
+                        "%s/%s action=%s as group 'authorized'",
+                        backend,
+                        resource_type,
+                        resource_name,
+                        action,
+                    )
+            if authz_userinfo is None:
+                # Fail-closed: no session and no sessionless authz → deny
+                self.logger.info(
+                    "PBAC denied (no session): %s/%s action=%s",
+                    resource_type,
+                    resource_name,
+                    action,
+                )
+                raise web.HTTPNotFound()
 
         evaluator = request.app.get('policy_evaluator')
         if evaluator is None:
@@ -320,13 +402,18 @@ class AbstractHandler(BaseHandler):
         from navigator_auth.abac.policies.environment import Environment
         from navigator_auth.conf import AUTH_SESSION_OBJECT
 
-        userinfo = (
-            session.get(AUTH_SESSION_OBJECT, {})
-            if hasattr(session, 'get') else {}
-        )
-        if not isinstance(userinfo, dict):
-            userinfo = {}
-        user = userinfo if userinfo else None
+        if authz_userinfo is not None:
+            # Authorized-but-not-authenticated: synthetic identity, no user.
+            userinfo = authz_userinfo
+            user = None
+        else:
+            userinfo = (
+                session.get(AUTH_SESSION_OBJECT, {})
+                if hasattr(session, 'get') else {}
+            )
+            if not isinstance(userinfo, dict):
+                userinfo = {}
+            user = userinfo if userinfo else None
 
         ctx = EvalContext(
             request=request,

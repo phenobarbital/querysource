@@ -1,0 +1,73 @@
+version: "1.0"
+
+defaults:
+  effect: deny
+
+# ─── Sessionless-authorized clients ─────────────────────────────────────────
+# Requests que navigator-auth deja pasar por un backend authz_* (whitelist de
+# IP / host / User-Agent) están *autorizados* pero NO *autenticados*: no traen
+# usuario ni sesión. Con QS_PBAC_ALLOW_SESSIONLESS_AUTHZ=True, QuerySource los
+# evalúa bajo una identidad sintética:
+#
+#   username: "authz:<backend>"           (p.ej. authz:authz_useragent)
+#   groups:   ["authorized", "<backend>"] (p.ej. authz_useragent)
+#
+# El baseline (baseline.yaml) los excluye explícitamente, así que SOLO las
+# políticas de este archivo (o cualquier otra que apunte a esos grupos) les
+# conceden acceso. Para restringir por backend concreto, usa el nombre del
+# backend como grupo en vez de "authorized":
+#
+#   subjects:
+#     groups:
+#       - authz_useragent   # sólo grants de User-Agent (p.ej. Power BI)
+#
+# Para restringir slugs, estrecha el patrón de resources: "slug:epson_*".
+# ────────────────────────────────────────────────────────────────────────────
+policies:
+  - name: authorized_clients_execute_slugs
+    effect: allow
+    description: >
+      Sessionless clients authorized by a navigator-auth authz backend
+      (IP / host / User-Agent whitelists) may execute query slugs.
+    resources:
+      - "slug:*"
+    actions:
+      - "slug:execute"
+    subjects:
+      groups:
+        - authorized
+    priority: 10
+
+  # Ejecutar un slug encadena tres checks PBAC: slug:execute →
+  # datasource:use → driver:use (handlers/service.py y handlers/executor.py).
+  # Estas dos políticas completan la cadena. Sólo la acción ":use" — las
+  # acciones administrativas (datasource:read, datasource:list, …) siguen
+  # denegadas para los sessionless-authorized.
+  - name: authorized_clients_use_datasources
+    effect: allow
+    description: >
+      Sessionless-authorized clients may use the datasource backing a slug
+      they are allowed to execute. Grants only datasource:use — read/list
+      and management actions remain denied.
+    resources:
+      - "datasource:*"
+    actions:
+      - "datasource:use"
+    subjects:
+      groups:
+        - authorized
+    priority: 10
+
+  - name: authorized_clients_use_drivers
+    effect: allow
+    description: >
+      Sessionless-authorized clients may use the driver backing a slug
+      they are allowed to execute. Grants only driver:use.
+    resources:
+      - "driver:*"
+    actions:
+      - "driver:use"
+    subjects:
+      groups:
+        - authorized
+    priority: 10

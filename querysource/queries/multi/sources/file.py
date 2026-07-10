@@ -24,6 +24,11 @@ class FileSource(ThreadSource):
     Reads the file (CSV or Excel, optionally compressed with gzip or zip)
     and puts the resulting DataFrame into the shared queue.  Inherits the
     thread/event-loop/queue boilerplate from :class:`ThreadSource`.
+
+    ``path`` may contain ``masks`` placeholders resolved at load time, e.g.
+    ``"masks": {"{filedate}": ["today", {"mask": "%Y%m%d"}]}`` turns
+    ``"/data/report_{filedate}.csv"`` into ``"/data/report_20260629.csv"``
+    (see :meth:`ThreadSource.resolve_masks`).
     """
 
     def __init__(
@@ -34,12 +39,16 @@ class FileSource(ThreadSource):
         queue: asyncio.Queue,
     ):
         # Extract file-specific options BEFORE passing remaining dict to super.
-        self.file_path = file_options.pop('path')
-        if isinstance(self.file_path, str):
-            self.file_path = Path(self.file_path).resolve()
+        raw_path = file_options.pop('path')
         self._mime = file_options.pop('mime')
         self._params: dict = file_options
+        # super() sets self._masks (and pops 'masks' from file_options so it is
+        # not forwarded to pandas), so resolve the path AFTER it.
         super().__init__(name, file_options, request, queue)
+        if isinstance(raw_path, str):
+            self.file_path = Path(self.resolve_masks(raw_path)).resolve()
+        else:
+            self.file_path = raw_path
 
     def _get_file_content(self):
         """Return file content, handling compressed files if needed."""

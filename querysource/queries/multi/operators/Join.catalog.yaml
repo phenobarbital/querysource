@@ -1,0 +1,151 @@
+# Companion documentation for the ``Join`` operator (class: Join).
+#
+# Source of truth for everything code introspection cannot infer: the fact that
+# Join is written as a LIST of join rules, the value enums, and the nested
+# shapes of ``args``, ``using``/``on`` and ``join_conditions``.
+#
+# Hybrid merge: introspection finds the attribute NAMES (type, left, right,
+# join_conditions, on); this file fixes their types, adds the missing
+# ``using``/``args`` fields, and supplies per-field JSON-Schema fragments.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Join
+category: Operators
+icon: git-merge
+
+description: >-
+  Join two or more DataFrames on shared columns (SQL-style inner/left/right/outer
+  merge) inside a MultiQuery pipeline.
+
+usage: >-
+  ``Join`` is written as a LIST of join rules — add one object per "+". Each rule
+  merges two named DataFrames from the pipeline data dictionary. A rule joins
+  ``left`` and ``right`` when both are given; if only ``right`` is given it joins
+  against the previous result; ``using``/``on`` select the join key columns
+  (omit to join on the index). Rules are applied in order, each feeding the next.
+
+# Attributes — merged by ``name`` onto the introspected list.
+attributes:
+  - name: type
+    type: str
+    required: false
+    default: inner
+    enum: [inner, left, right, outer]
+    description: >-
+      Join type, mapped to the pandas merge ``how``: ``inner`` (default),
+      ``left``, ``right`` or ``outer``.
+  - name: left
+    type: str
+    required: false
+    default: null
+    description: >-
+      Name of the left DataFrame key in the pipeline data dictionary. Optional:
+      when omitted the previous/first DataFrame is used as the left side.
+  - name: right
+    type: str
+    required: false
+    default: null
+    description: >-
+      Name of the right DataFrame key in the pipeline data dictionary. This is
+      the DataFrame merged into the left side.
+  - name: using
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column name(s) to join on — a list of strings present in both DataFrames.
+      Omit to join on the index.
+    schema:
+      type: array
+      items:
+        type: string
+      description: Join key columns shared by both DataFrames.
+  - name: 'on'
+    type: list
+    required: false
+    default: null
+    description: >-
+      Alias of ``using`` (back-compat). Accepts a single column or a list of
+      column names; internally normalized to ``using``.
+    schema:
+      type: array
+      items:
+        type: string
+      description: Alias of ``using`` — join key column(s).
+  - name: args
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Extra keyword arguments forwarded to ``pandas.merge``. The most common is
+      ``validate`` (the cardinality check).
+    schema:
+      type: object
+      description: Extra pandas.merge keyword arguments.
+      properties:
+        validate:
+          type: string
+          enum: [one_to_one, one_to_many, many_to_one, many_to_many]
+          description: >-
+            Cardinality rule checked after the merge — one_to_one, one_to_many,
+            many_to_one or many_to_many. Raises if the relationship is violated.
+      additionalProperties: true
+  - name: join_conditions
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column-to-column filters applied immediately after the merge. A list of
+      conditions; each compares a left column against a right column using an
+      evaluative expression.
+    schema:
+      type: array
+      description: Column-to-column conditions applied after the merge.
+      items:
+        type: object
+        properties:
+          left:
+            type: string
+            description: Left column name.
+          right:
+            type: string
+            description: Right column name.
+          expression:
+            type: string
+            default: '=='
+            description: >-
+              Evaluative comparison operator between the two columns
+              (e.g. ``==``, ``!=``, ``>=``, ``<=``, ``>``, ``<``).
+        required: [left, right]
+        additionalProperties: false
+
+# Top-level shape: Join is an ARRAY of rule objects (the object schema above
+# becomes each array item).
+schema:
+  type: array
+  title: Join
+  description: >-
+    A list of join rules. Each item merges two DataFrames; rules are applied in
+    order so the output of one rule feeds the next.
+  minItems: 1
+  additionalProperties: true
+
+example: |-
+  {
+    "Join": [
+      {
+        "type": "inner",
+        "left": "actors",
+        "right": "film_actors",
+        "using": ["actor_id"],
+        "args": { "validate": "one_to_many" }
+      },
+      {
+        "type": "inner",
+        "right": "films",
+        "using": ["film_id"],
+        "args": { "validate": "many_to_many" }
+      }
+    ]
+  }

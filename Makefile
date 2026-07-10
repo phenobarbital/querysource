@@ -1,7 +1,7 @@
 # QuerySource Makefile
 # This Makefile provides a set of commands to manage the QuerySource project.
 
-.PHONY: venv install develop setup dev release format lint test clean distclean lock sync build-rust
+.PHONY: venv install develop setup dev release format lint test clean distclean lock sync build-rust stage-rust
 
 # Python version to use
 PYTHON_VERSION := 3.11
@@ -9,6 +9,13 @@ PYTHON_VERSION := 3.11
 # Auto-detect available tools
 HAS_UV := $(shell command -v uv 2> /dev/null)
 HAS_PIP := $(shell command -v pip 2> /dev/null)
+
+# Run maturin via `uv run` so it resolves the project venv (.venv) regardless of
+# whether the venv is activated or on PATH. `--with maturin` ensures the tool is
+# available ephemerally, so no separate `uv pip install maturin` step is needed.
+# (Each Makefile recipe line runs in its own subshell, so installing maturin in
+# one line does not put it on PATH for the next.)
+MATURIN := uv run --with maturin maturin
 
 # Install uv for faster workflows
 install-uv:
@@ -38,14 +45,32 @@ endif
 # Install all dependencies including dev dependencies
 develop: build-rust
 	uv sync --frozen --extra analytics --extra dev
+	$(MAKE) build-inplace
 
 # Build the Rust-accelerated parser extension (querysource.qs_parsers._qs_parsers)
 # Use --manifest-path so maturin reads rust/pyproject.toml (build-backend = maturin),
 # avoiding the "build-backend not set to maturin" warning emitted when reading the
 # root pyproject.toml (which uses setuptools for the rest of the project).
 build-rust:
-	@command -v maturin >/dev/null 2>&1 || uv pip install maturin
-	maturin develop --release --manifest-path rust/Cargo.toml
+	$(MATURIN) develop --release --manifest-path rust/Cargo.toml
+
+# Stage the compiled Rust extension (.so) INTO the source tree so that
+# `uv build` (setuptools backend) bundles it into the wheel. setuptools only
+# packages a pre-existing artifact via package-data
+# ("querysource.qs_parsers" = ["*.so", "*.pyd"]); it never invokes maturin.
+# `maturin develop` installs into the venv (site-packages), NOT the source
+# tree, so the wheel would otherwise ship without the Rust extension.
+RUST_WHEEL_OUT := target/wheels
+stage-rust:
+	$(MATURIN) build --release -i python --manifest-path rust/Cargo.toml --out $(RUST_WHEEL_OUT)
+	@whl=$$(ls -t $(RUST_WHEEL_OUT)/qs_parsers-*.whl | head -1); \
+	  test -n "$$whl" || { echo "ERROR: maturin produced no wheel in $(RUST_WHEEL_OUT)"; exit 1; }; \
+	  echo "Staging Rust extension from $$whl"; \
+	  tmp=$$(mktemp -d); \
+	  unzip -o -q "$$whl" -d "$$tmp"; \
+	  find "$$tmp" -name '_qs_parsers*.so' -exec cp {} querysource/qs_parsers/ \; ; \
+	  rm -rf "$$tmp"; \
+	  ls -la querysource/qs_parsers/_qs_parsers*.so
 
 # Alternative: install without lock file (faster for development)
 develop-fast:
@@ -113,8 +138,13 @@ build-inplace:
 	@echo "Building Cython extensions in place..."
 	python setup.py build_ext --inplace
 
-# Full build using uv
+# Full build using uv.
+# Order matters: `clean` wipes every *.so, so the Rust extension must be
+# (re)staged AFTER clean and BEFORE `uv build` packages the wheel. Running
+# stage-rust from the recipe (not as a prerequisite) guarantees that order
+# even under `make -j`.
 build: clean
+	$(MAKE) stage-rust
 	@echo "Building package with uv..."
 	uv build
 

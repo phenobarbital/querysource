@@ -1,0 +1,169 @@
+# Companion documentation for the ``Filter`` operator (class: Filter).
+#
+# Source of truth for what introspection cannot infer: the create_filter
+# condition shape ({column, expression, value}), the set of comparison
+# expressions, the named ``filter_conditions`` functions, and the ``fields``
+# equality-selection mapping.
+#
+# ``conditions``, ``filter`` and ``filter_conditions`` are each OPTIONAL and may
+# be combined freely (not mutually exclusive). ``conditions`` and ``filter``
+# share the create_filter spec format; ``filter_conditions`` keys are named
+# functions from ``querysource.types.dt.filters``.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Filter
+category: Operators
+icon: filter
+
+description: >-
+  Filter the rows of a DataFrame using declarative conditions, named filter
+  functions, and/or column equality selection, combined with a logical AND/OR.
+
+usage: >-
+  Provide any combination of: ``conditions``/``filter`` (a list of
+  ``{column, expression, value}`` specs built by create_filter), ``fields`` (a
+  column-to-value equality selection), and ``filter_conditions`` (a mapping of
+  named filter function to its keyword arguments). ``operator`` chooses how the
+  ``filter`` conditions are combined — ``&`` (AND, default) or ``|`` (OR). All
+  inputs are optional and may be used together.
+
+attributes:
+  - name: conditions
+    type: list
+    required: false
+    default: null
+    description: >-
+      List of filter conditions in create_filter format
+      (``{column, expression, value}``). Optional; combinable with ``filter``
+      and ``filter_conditions``.
+    schema:
+      type: array
+      description: Filter conditions (create_filter format).
+      items:
+        $ref: '#/$defs/filterCondition'
+  - name: filter
+    type: list
+    required: false
+    default: []
+    description: >-
+      List of filter specs (same ``{column, expression, value}`` format as
+      ``conditions``) passed to create_filter; the resulting masks are joined
+      with ``operator``.
+    schema:
+      type: array
+      description: Filter specs (create_filter format).
+      items:
+        $ref: '#/$defs/filterCondition'
+  - name: fields
+    type: dict
+    required: false
+    default: {}
+    description: >-
+      Column-to-value equality selection: keep only rows where each column
+      equals the given value (a list value matches any of its entries).
+    schema:
+      type: object
+      description: "Column equality filter — {column: value | [values]}."
+      additionalProperties:
+        description: Value (or list of values, OR-combined) the column must equal.
+  - name: filter_conditions
+    type: dict
+    required: false
+    default: {}
+    description: >-
+      Mapping of named filter function (from querysource.types.dt.filters) to
+      its keyword arguments, applied in order before the other filters.
+    schema:
+      type: object
+      description: Named filter functions and their keyword arguments.
+      propertyNames:
+        $ref: '#/$defs/filterFunc'
+      additionalProperties:
+        type: object
+        description: Keyword arguments forwarded to the filter function.
+  - name: operator
+    type: str
+    required: false
+    default: '&'
+    enum: ['&', '|']
+    description: >-
+      Logical operator joining the ``filter`` conditions — ``&`` (AND, default)
+      or ``|`` (OR).
+
+schema:
+  title: Filter
+  description: >-
+    Reduce a DataFrame to the rows satisfying the given conditions / functions /
+    field selections (SQL WHERE-like).
+  additionalProperties: true
+  defs:
+    filterExpression:
+      type: string
+      description: >-
+        Comparison or text/null operator applied to a column. ``expression`` may
+        also be a list to chain operators (create_filter_chain).
+      enum:
+        - '=='
+        - '!='
+        - '>'
+        - '<'
+        - '>='
+        - '<='
+        - gt
+        - lt
+        - contains
+        - not_contains
+        - startswith
+        - not_startswith
+        - endswith
+        - not_endswith
+        - regex
+        - not_regex
+        - fullmatch
+        - is_null
+        - not_null
+        - is_empty
+        - func
+        - function
+    filterCondition:
+      type: object
+      description: A single create_filter condition.
+      properties:
+        column:
+          type: string
+          description: Column to test (must exist in the DataFrame).
+        expression:
+          default: '=='
+          description: >-
+            Comparison operator, or a list of operators to chain. Defaults to
+            ``==``.
+          oneOf:
+            - $ref: '#/$defs/filterExpression'
+            - type: array
+              items:
+                $ref: '#/$defs/filterExpression'
+        value:
+          description: >-
+            Value to compare against — a scalar, ``{"$column": "other_col"}`` for
+            column-to-column comparison, or a function name when ``expression``
+            is ``func``/``function``. Omitted for ``is_null``/``not_null``/``is_empty``.
+      required: [column]
+      additionalProperties: true
+    filterFunc:
+      type: string
+      description: Named filter function from querysource.types.dt.filters.
+      # Bound live to Filter.filter_functions() so the list cannot drift from
+      # the functions the module actually exposes.
+      enum_from_class: filter_functions
+
+example: |-
+  {
+    "Filter": {
+      "conditions": [
+        {"column": "status", "expression": "==", "value": "active"},
+        {"column": "revenue", "expression": ">", "value": 1000}
+      ],
+      "operator": "&"
+    }
+  }

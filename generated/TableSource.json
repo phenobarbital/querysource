@@ -40,6 +40,6 @@
       "table"
     ]
   },
-  "example": "{\n    \"driver\": \"pg\",\n    \"schema\": \"troc\",\n    \"table\": \"stores\",\n    \"filter\": {\"active\": true},\n    \"credentials\": {         # optional\n        \"host\": \"localhost\",\n        \"port\": 5432,\n        \"user\": \"myuser\",\n        \"password\": \"mypassword\",\n        \"database\": \"mydb\"\n    }\n}",
+  "example": "{\n  \"driver\": \"pg\",\n  \"schema\": \"troc\",\n  \"table\": \"stores\",\n  \"filter\": {\n    \"active\": true\n  },\n  \"credentials\": {\n    \"host\": \"localhost\",\n    \"port\": 5432,\n    \"user\": \"myuser\",\n    \"password\": \"mypassword\",\n    \"database\": \"mydb\"\n  }\n}",
   "icon": "database"
 }

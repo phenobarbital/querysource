@@ -64,6 +64,19 @@ class GroupBy(AbstractOperator):
         'avg_first_last'
     ]
 
+    @classmethod
+    def aggregation_functions(cls) -> list[str]:
+        """Return every aggregation function name accepted by ``columns`` values.
+
+        Single source of truth shared by the runtime — which gates each function
+        through the module-level ``numeric_required`` table — and the
+        ``GroupBy.catalog.yaml`` ``aggFunc`` enum (resolved via the
+        ``enum_from_class`` companion directive). Keeping both consumers on this
+        one list means the documented enum can never drift from what the code
+        actually accepts.
+        """
+        return list(numeric_required.keys()) + list(cls.supported_functions)
+
     def __init__(self, data: dict, **kwargs) -> None:
         self._columns: dict = kwargs.get('columns', {})
         self._by: list = kwargs.get('by', [])

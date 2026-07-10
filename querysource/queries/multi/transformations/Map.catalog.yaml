@@ -1,0 +1,102 @@
+# Companion documentation for the ``Map`` transform (class: Map).
+#
+# Source of truth for what introspection cannot infer: the required ``fields``
+# mapping and the union of value forms it accepts (rename a source column, or
+# apply named transform functions from querysource.types.dt.transforms).
+#
+# Map is one entry inside a ``Transform:`` list. After editing run
+# ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: Map
+category: Transformations
+icon: shuffle
+
+description: >-
+  Rename, select, or compute columns in a DataFrame (shape mapping) inside a
+  MultiQuery ``Transform`` step.
+
+usage: >-
+  ``fields`` maps each target column to a source. A string value renames/copies
+  a source column; an object value ``{func: {args}}`` applies one or more named
+  transform functions; a list value applies a positional function call
+  (``[func, {args}]``) or several. ``drop_columns`` removes columns after
+  mapping.
+
+attributes:
+  - name: fields
+    type: dict
+    required: true
+    description: >-
+      Mapping of target column name to its source: a source column name
+      (rename/copy), an object of transform-function calls, or a list of
+      positional function calls.
+    schema:
+      type: object
+      description: Target column -> source column or transform-function spec.
+      additionalProperties:
+        oneOf:
+          - type: string
+            description: Source column name to copy/rename from.
+          - type: object
+            description: "Transform functions to apply: {function: {args}}."
+            propertyNames:
+              $ref: '#/$defs/transformFunc'
+            additionalProperties:
+              type: object
+              description: Keyword arguments for the transform function.
+          - type: array
+            description: "Positional function call(s): [function, {args}] or a list thereof."
+  - name: drop_columns
+    type: list
+    required: false
+    default: null
+    description: >-
+      Column name(s) to drop from the result after mapping.
+    schema:
+      type: array
+      items:
+        type: string
+      description: Columns to drop after mapping.
+  - name: replace_columns
+    type: bool
+    required: false
+    default: false
+    description: >-
+      If ``True``, drop each mapped source column after copying it to the target
+      (replace in-place). When ``False`` (default) the source column is kept.
+  - name: reset_index
+    type: bool
+    required: false
+    default: false
+    description: >-
+      If ``True``, reset the DataFrame index (``drop=True``) after mapping.
+      Default ``False``.
+
+schema:
+  title: Map
+  description: >-
+    Reshape a DataFrame by mapping target columns to source columns or transform
+    functions. ``fields`` is required.
+  required: [fields]
+  additionalProperties: true
+  defs:
+    transformFunc:
+      type: string
+      description: Named transform function from querysource.types.dt.transforms.
+      # Bound live to Map.transform_functions() so the list cannot drift.
+      enum_from_class: transform_functions
+
+example: |-
+  {
+    "Transform": [
+      {
+        "Map": {
+          "fields": {
+            "customer_name": "name",
+            "total_amount": "revenue"
+          },
+          "reset_index": true
+        }
+      }
+    ]
+  }

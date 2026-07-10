@@ -205,11 +205,22 @@ pub fn quote_string(value: &str, no_dblquoting: bool) -> String {
 /// BigQuery strings enclosed in double quotes do not require single-quote
 /// escaping, so "Sam's Club" is valid as-is.  Internal double quotes are
 /// backslash-escaped.  Null sentinel values are passed through unquoted.
+///
+/// The value may arrive either raw (`Sam's Club`, from `_parser_conditions`)
+/// or already single-quoted by `is_valid`/`quoteString` (`'BBY102'`, from the
+/// `filter_conditions` URL-param path).  To stay idempotent we unwrap a
+/// surrounding pair of single quotes and undo PG-style `''` escaping before
+/// re-wrapping in BigQuery double quotes; raw values pass through untouched.
 pub fn bq_quote_string(value: &str) -> String {
     if value == "null" || value == "NULL" {
         return value.to_string();
     }
-    let v = value.replace('"', "\\\"");
+    let inner = if value.len() >= 2 && value.starts_with('\'') && value.ends_with('\'') {
+        value[1..value.len() - 1].replace("''", "'")
+    } else {
+        value.to_string()
+    };
+    let v = inner.replace('"', "\\\"");
     format!("\"{}\"", v)
 }
 
@@ -239,7 +250,8 @@ pub fn to_unquoted(value: &str) -> String {
 /// Mirrors `is_valid()` from validators.pyx.
 /// Returns the properly formatted value for SQL inclusion.
 ///
-/// Type dispatch:
+/// Type dispatch (case-insensitive — callers such as the Navigator frontend
+/// persist `cond_definition` hints in upper case, e.g. `"STRING"`):
 /// - `literal` → escape_string
 /// - `integer`/`int`/`float`/`numeric`/`decimal` → unquoted
 /// - `string`/`varchar`/`field` → quote_string(escape_string(v))
@@ -260,9 +272,10 @@ pub fn is_valid(
     type_hint: Option<&str>,
     noquote: bool,
 ) -> String {
-    // Type hint dispatch
+    // Type hint dispatch (case-insensitive)
     if let Some(t) = type_hint {
-        match t {
+        let lowered = t.to_lowercase();
+        match lowered.as_str() {
             "literal" => return escape_string(value),
             "int" | "integer" | "float" | "numeric" | "decimal" | "epoch" => {
                 return to_unquoted(value);
@@ -405,6 +418,24 @@ mod tests {
         assert_eq!(is_valid("x", "hello", Some("string"), false), "'hello'");
     }
 
+    /// FEAT-103: cond_definition hints arrive upper-cased from the Navigator
+    /// frontend (`"STRING"`, `"INTEGER"`, `"BOOLEAN"`, `"ARRAY"`) — dispatch
+    /// must be case-insensitive.
+    #[test]
+    fn test_is_valid_uppercase_hint_matches_lowercase() {
+        assert_eq!(is_valid("x", "42", Some("INTEGER"), false), "42");
+        assert_eq!(is_valid("x", "hello", Some("STRING"), false), "'hello'");
+        assert_eq!(is_valid("x", "true", Some("BOOLEAN"), false), "TRUE");
+        assert_eq!(
+            is_valid("x", "'a','b','c'", Some("ARRAY"), false),
+            "'a','b','c'"
+        );
+        assert_eq!(
+            is_valid("x", "'a','b','c'", Some("array"), false),
+            is_valid("x", "'a','b','c'", Some("ARRAY"), false)
+        );
+    }
+
     #[test]
     fn test_is_valid_null() {
         assert_eq!(is_valid("x", "null", None, false), "null");
@@ -441,5 +472,27 @@ mod tests {
             is_valid("x", "some_value", None, false),
             "'some_value'"
         );
+    }
+
+    #[test]
+    fn test_bq_quote_string_raw() {
+        // Path A: raw value from _parser_conditions
+        assert_eq!(bq_quote_string("Sam's Club"), "\"Sam's Club\"");
+        assert_eq!(bq_quote_string("BBY102"), "\"BBY102\"");
+    }
+
+    #[test]
+    fn test_bq_quote_string_pre_quoted() {
+        // Path B: value already single-quoted by is_valid/quoteString.
+        // Must NOT double-wrap (regression: store_id="'BBY102'").
+        assert_eq!(bq_quote_string("'BBY102'"), "\"BBY102\"");
+        // PG-style '' escaping is undone when unwrapping.
+        assert_eq!(bq_quote_string("'Sam''s Club'"), "\"Sam's Club\"");
+    }
+
+    #[test]
+    fn test_bq_quote_string_null_passthrough() {
+        assert_eq!(bq_quote_string("null"), "null");
+        assert_eq!(bq_quote_string("NULL"), "NULL");
     }
 }

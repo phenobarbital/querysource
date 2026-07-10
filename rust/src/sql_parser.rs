@@ -8,13 +8,80 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
-use crate::validators::{field_components, quote_string};
+use crate::validators::{escape_string, field_components, quote_string};
 
 /// Comparison tokens recognized in filter conditions.
 const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
 
 /// Valid SQL operators for list-based conditions.
 const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "IS"];
+
+// ---------------------------------------------------------------------------
+// Security helpers — key/operator validation
+// ---------------------------------------------------------------------------
+
+/// Quote a key string as a safe SQL identifier.
+///
+/// Any key that is not a simple identifier (`[A-Za-z0-9_]+`) is rejected with Err.
+/// Numeric-only keys are double-quoted. Simple identifier keys are returned as-is.
+fn safe_identifier_key(key: &str) -> Result<String, String> {
+    // Strip QS suffix chars (|, !, ~, #, @, :) from the *raw* key before validation
+    let stripped = key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'));
+
+    if stripped.parse::<i64>().is_ok() {
+        // Numeric identifier — wrap in double quotes
+        return Ok(format!("\"{}\"", key));
+    }
+
+    // Allow simple identifiers (letters, digits, underscore) plus schema-qualified names
+    // (single dot allowed: schema.table). Anything else (quotes, spaces, SQL chars) is
+    // rejected.
+    if stripped.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        Ok(key.to_string())
+    } else {
+        Err(format!("Invalid identifier key: contains unsafe characters"))
+    }
+}
+
+/// Validate that an operator is in the allowlist.
+fn validate_operator(op: &str) -> Result<(), String> {
+    if COMPARISON_TOKENS.contains(&op) || VALID_OPERATORS.contains(&op) {
+        Ok(())
+    } else {
+        Err(format!("Operator not in allowlist"))
+    }
+}
+
+/// Validate and escape a scalar value for use in a WHERE clause.
+///
+/// Null sentinels (`null`/`NULL`) pass through; everything else is `quote_string`-escaped.
+fn safe_scalar_value(value: &str) -> String {
+    match value {
+        "null" | "NULL" | "!null" | "!NULL" => value.to_string(),
+        v if v.parse::<i64>().is_ok() || v.parse::<f64>().is_ok() => v.to_string(),
+        _ => quote_string(&escape_string(value), true),
+    }
+}
+
+/// Validate a BETWEEN clause string to ensure it doesn't contain injection.
+///
+/// Expected form: `BETWEEN 'a' AND 'b'` or `BETWEEN 1 AND 2`.
+/// Returns Err if the value looks malformed or contains injection markers.
+fn validate_between_clause(value: &str) -> Result<(), String> {
+    let upper = value.to_uppercase();
+    if !upper.contains("BETWEEN") {
+        return Err("Not a BETWEEN clause".to_string());
+    }
+    // Reject comment markers and statement terminators
+    if value.contains("--") || value.contains("/*") || value.contains(';') {
+        return Err("Injection markers in BETWEEN clause".to_string());
+    }
+    // Reject UNION/SELECT inside BETWEEN
+    if upper.contains("UNION") || upper.contains("SELECT") {
+        return Err("SQL keywords in BETWEEN clause".to_string());
+    }
+    Ok(())
+}
 
 // NOTE: Rust regex crate does not support lookaheads.
 // We use manual string parsing for GROUP BY and SELECT..FROM extraction.
@@ -131,6 +198,12 @@ fn find_first_keyword_at_depth(
 /// Build WHERE clauses from a filter map.
 ///
 /// Mirrors `SQLParser.filter_conditions()` from sql.pyx.
+///
+/// SECURITY: All interpolation sites are now escaped/validated:
+/// - Keys: must be valid identifiers (alphanumeric + underscore) or numeric (double-quoted).
+/// - Operators: must be in the COMPARISON_TOKENS / VALID_OPERATORS allowlist.
+/// - Values: scalar → escaped via `safe_scalar_value`; lists → each item via `quote_string`;
+///            BETWEEN clauses → validated for injection markers.
 #[pyfunction]
 #[pyo3(signature = (sql, filter_dict, cond_definition))]
 pub fn filter_conditions(
@@ -143,19 +216,16 @@ pub fn filter_conditions(
     for (key_obj, value_obj) in filter_dict.iter() {
         let key: String = key_obj.extract()?;
 
-        // Check if key is numeric → quote it
-        let formatted_key = if key.parse::<i64>().is_ok() {
-            format!("\"{key}\"")
-        } else {
-            key.clone()
-        };
+        // SECURITY: Validate and produce a safe identifier for this key.
+        let formatted_key = safe_identifier_key(&key)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
 
-        // Get format hint from cond_definition (unused in this function currently)
+        // Get format hint from cond_definition
         let _format: Option<String> = cond_definition
             .get_item(&key)?
             .and_then(|v| v.extract().ok());
 
-        // Parse field_components for the key
+        // Parse field_components for the key (suffix detection)
         let components = field_components(&key);
         let (_, name, end) = if !components.is_empty() {
             components[0].clone()
@@ -165,28 +235,31 @@ pub fn filter_conditions(
 
         // Handle different value types
         if let Ok(dict_val) = value_obj.downcast::<PyDict>() {
-            // Dict value → comparison operator
+            // Dict value → comparison operator + value
             if let Some((op_obj, v_obj)) = dict_val.iter().next() {
                 let op: String = op_obj.extract()?;
-                let v: String = v_obj.extract().unwrap_or_default();
-                if COMPARISON_TOKENS.contains(&op.as_str()) {
-                    where_cond.push(format!("{formatted_key} {op} {v}"));
+                // SECURITY: Operator must be in allowlist
+                if validate_operator(&op).is_err() {
+                    // Discard unknown/unsafe operators (same behavior as before: skip)
+                    continue;
                 }
-                // Non-supported comparison tokens are discarded
+                // SECURITY: Escape the comparison value
+                let v: String = v_obj.extract().unwrap_or_default();
+                let safe_v = safe_scalar_value(&v);
+                where_cond.push(format!("{formatted_key} {op} {safe_v}"));
             }
         } else if let Ok(list_val) = value_obj.extract::<Vec<String>>() {
             if !list_val.is_empty() {
                 let first = &list_val[0];
                 if VALID_OPERATORS.contains(&first.as_str()) && list_val.len() > 1 {
-                    where_cond.push(format!(
-                        "{formatted_key} {first} {}",
-                        list_val[1]
-                    ));
+                    // SECURITY: Operator allowlisted above; escape the second value
+                    let safe_v = safe_scalar_value(&list_val[1]);
+                    where_cond.push(format!("{formatted_key} {first} {safe_v}"));
                 } else {
-                    // IN clause
+                    // IN clause — escape each item
                     let val_str: String = list_val
                         .iter()
-                        .map(|v| quote_string(v, true))
+                        .map(|v| quote_string(&escape_string(v), true))
                         .collect::<Vec<_>>()
                         .join(",");
                     if end == "!" {
@@ -197,6 +270,7 @@ pub fn filter_conditions(
                 }
             }
         } else if let Ok(bool_val) = value_obj.extract::<bool>() {
+            // Boolean: TRUE/FALSE are safe SQL literals
             where_cond.push(format!("{formatted_key} = {bool_val}"));
         } else if let Ok(str_val) = value_obj.extract::<String>() {
             build_string_condition(
@@ -205,7 +279,7 @@ pub fn filter_conditions(
                 &name,
                 &end,
                 &mut where_cond,
-            );
+            )?;
         } else if let Ok(int_val) = value_obj.extract::<i64>() {
             let str_val = int_val.to_string();
             build_string_condition(
@@ -214,14 +288,14 @@ pub fn filter_conditions(
                 &name,
                 &end,
                 &mut where_cond,
-            );
+            )?;
         } else {
-            // Fallback: extract as string and quote
+            // Fallback: extract as string and quote (always safe via quote_string)
             if let Ok(s) = value_obj.str() {
                 let s_str = s.to_string();
                 where_cond.push(format!(
                     "{formatted_key}={}",
-                    quote_string(&s_str, true)
+                    quote_string(&escape_string(&s_str), true)
                 ));
             }
         }
@@ -231,29 +305,36 @@ pub fn filter_conditions(
 }
 
 /// Build a WHERE condition from a string or integer value.
+///
+/// SECURITY: validates BETWEEN clauses; escapes negation and default values.
 fn build_string_condition(
     key: &str,
     value: &str,
     name: &str,
     end: &str,
     where_cond: &mut Vec<String>,
-) {
+) -> PyResult<()> {
     if value.contains("BETWEEN") {
+        // SECURITY: validate the BETWEEN clause for injection markers
+        validate_between_clause(value)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
         where_cond.push(format!("({key} {value})"));
     } else if value == "null" || value == "NULL" {
         where_cond.push(format!("{key} IS NULL"));
     } else if value == "!null" || value == "!NULL" {
         where_cond.push(format!("{key} IS NOT NULL"));
     } else if end == "!" {
-        where_cond.push(format!("{name} != {value}"));
+        // SECURITY: escape the negated value
+        where_cond.push(format!("{name} != {}", quote_string(&escape_string(value), true)));
     } else if value.starts_with('!') {
         where_cond.push(format!(
             "{key} != {}",
-            quote_string(&value[1..], true)
+            quote_string(&escape_string(&value[1..]), true)
         ));
     } else {
-        where_cond.push(format!("{key}={}", quote_string(value, true)));
+        where_cond.push(format!("{key}={}", quote_string(&escape_string(value), true)));
     }
+    Ok(())
 }
 
 /// Apply WHERE conditions to SQL, handling {filter}, {where_cond}, {and_cond} placeholders.

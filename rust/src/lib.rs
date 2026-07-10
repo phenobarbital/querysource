@@ -53,6 +53,7 @@ fn _qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // -- SafeDict --
     m.add_function(wrap_pyfunction!(safe_dict::safe_format_map, m)?)?;
+    m.add_function(wrap_pyfunction!(safe_dict::safe_format_map_validated, m)?)?;
 
     // -- SQL Parser --
     m.add_function(wrap_pyfunction!(sql_parser::filter_conditions, m)?)?;

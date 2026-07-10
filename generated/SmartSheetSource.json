@@ -42,6 +42,6 @@
     },
     "required": []
   },
-  "example": "{\n    \"credentials\": {\n        \"api_key\": \"SMARTSHEET_API_KEY\"   # navconfig var or literal\n    },\n    \"source\": {\n        \"file_id\": 8504624500658052\n    }\n}",
+  "example": "{\n  \"credentials\": {\n    \"api_key\": \"SMARTSHEET_API_KEY\"\n  },\n  \"source\": {\n    \"file_id\": 8504624500658052\n  }\n}",
   "icon": "database"
 }

@@ -1,5 +1,7 @@
 """Functions for FilterRows."""
+import datetime
 import re
+from decimal import Decimal
 from typing import Optional
 import pandas as pd
 import numpy as np
@@ -9,6 +11,12 @@ from ...utils.getfunc import getFunction
 
 
 valid_operators = ['+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', '/', '//']
+
+# Operators that produce a boolean mask suitable for filtering rows.
+# Used to validate `expression` in the numeric and datetime branches of
+# build_condition, where the original code interpolated any string and
+# deferred the failure to pandas eval.
+comparison_operators = frozenset({'==', '!=', '>', '<', '>=', '<='})
 
 
 def build_condition(expression: str, column: str, value, condition: dict, df: pd.DataFrame = None) -> str:
@@ -50,7 +58,12 @@ def build_condition(expression: str, column: str, value, condition: dict, df: pd
         return f"~(df['{column}'].isnull() | (df['{column}'] == ''))"
     elif expression == "is_empty":
         return f"(df['{column}'] == '')"
-    elif isinstance(value, (int, float)):
+    elif isinstance(value, (int, float, Decimal)):
+        if expression not in comparison_operators:
+            raise QueryException(
+                f"Invalid expression '{expression}' for numeric value on column "
+                f"'{column}'. Allowed: {sorted(comparison_operators)}"
+            )
         condition['value'] = value
         return "(df['{column}'] {expression} {value})".format_map(
             condition
@@ -94,9 +107,15 @@ def build_condition(expression: str, column: str, value, condition: dict, df: pd
                 raise QueryException(
                     f"Invalid expression: {expression}"
                 )
-    elif isinstance(value, (np.datetime64, np.timedelta64, pd.Timestamp)):
-        if isinstance(value, pd.Timestamp):
-            condition['value'] = f"pd.Timestamp('{value}')"
+    elif isinstance(value, (np.datetime64, np.timedelta64, datetime.date)):
+        # datetime.date catches datetime.datetime and pd.Timestamp via subclassing.
+        if expression not in comparison_operators:
+            raise QueryException(
+                f"Invalid expression '{expression}' for datetime value on column "
+                f"'{column}'. Allowed: {sorted(comparison_operators)}"
+            )
+        if isinstance(value, datetime.date):
+            condition['value'] = f"pd.Timestamp('{pd.Timestamp(value)}')"
         else:
             condition['value'] = value
         return "(df['{column}'] {expression} {value})".format_map(

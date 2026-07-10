@@ -401,6 +401,267 @@ class SchemaIntrospectable:
 
 
 # ---------------------------------------------------------------------------
+# Companion-file documentation (hybrid model)
+# ---------------------------------------------------------------------------
+#
+# A component may ship a sibling ``<module>.catalog.yaml`` file holding the
+# documentation the code cannot express by itself: per-field prose,
+# schema-level constraints (``oneOf``, ``additionalProperties``), the usage
+# example, icon, and display name. The companion is MERGED onto whatever the
+# introspection helpers derive from the class — code owns the structure
+# (property names/types/required when introspectable), the companion owns the
+# prose and constraints. This keeps docs editable without touching Python and
+# avoids depending solely on docstrings/pydoc.
+
+
+def _companion_paths(cls: type) -> list:
+    """Return candidate companion-file paths for a class, most-specific first.
+
+    Looks for two sibling files next to the class source: ``<ClassName>.catalog.yaml``
+    (preferred — unambiguous when several components share a module, e.g.
+    ``filter/flt.py`` → ``Filter.catalog.yaml``) and ``<module>.catalog.yaml``
+    (e.g. ``sources/query.py`` → ``query.catalog.yaml``). Returns ``[]`` when the
+    class source file cannot be located.
+    """
+    from pathlib import Path
+    try:
+        src = inspect.getfile(cls)
+    except (TypeError, OSError):
+        return []
+    p = Path(src)
+    return [
+        p.with_name(f"{cls.__name__}.catalog.yaml"),
+        p.with_name(f"{p.stem}.catalog.yaml"),
+    ]
+
+
+def load_companion_doc(cls: type) -> dict | None:
+    """Load and parse a class's sibling ``.catalog.yaml`` companion doc.
+
+    Tries ``<ClassName>.catalog.yaml`` then ``<module>.catalog.yaml`` (see
+    :func:`_companion_paths`). Returns the parsed mapping, or ``None`` when no
+    companion file exists, PyYAML is unavailable, or the file does not parse to
+    a mapping.
+    """
+    path = next((p for p in _companion_paths(cls) if p.is_file()), None)
+    if path is None:
+        return None
+    try:
+        import yaml
+    except ImportError:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "PyYAML not installed; ignoring companion doc %s", path
+        )
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 — surface parse errors as a warning
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "Failed to parse companion doc %s: %s", path, exc
+        )
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _resolve_class_enum(cls: type, attr: str) -> list | None:
+    """Resolve a class attribute/classmethod into a list of enum values.
+
+    The named attribute may be a classmethod/callable (called with no args), a
+    ``dict`` (its keys are used), or a list/tuple/set. Returns ``None`` — with a
+    warning — when the attribute is missing or yields an unusable value, so a
+    stale directive degrades to "no enum constraint" rather than crashing docs.
+    """
+    target = getattr(cls, attr, None)
+    if target is None:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "enum_from_class: %s has no attribute %r", cls.__qualname__, attr
+        )
+        return None
+    if callable(target):
+        try:
+            target = target()
+        except Exception as exc:  # noqa: BLE001
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "enum_from_class: %s.%s() raised %s", cls.__qualname__, attr, exc
+            )
+            return None
+    if isinstance(target, dict):
+        return list(target.keys())
+    if isinstance(target, (list, tuple, set)):
+        return list(target)
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "enum_from_class: %s.%s is not a list/dict/callable", cls.__qualname__, attr
+    )
+    return None
+
+
+def _resolve_class_directives(node, cls: type) -> None:
+    """In-place: resolve ``enum_from_class`` directives anywhere in a schema.
+
+    Walks nested dicts/lists; whenever a mapping carries ``enum_from_class``, the
+    directive is replaced by a concrete ``enum`` list pulled from the class — so
+    a documented enum stays bound to the code that defines the valid values.
+    """
+    if isinstance(node, dict):
+        if "enum_from_class" in node:
+            values = _resolve_class_enum(cls, node.pop("enum_from_class"))
+            if values is not None:
+                node["enum"] = values
+        for value in node.values():
+            _resolve_class_directives(value, cls)
+    elif isinstance(node, list):
+        for item in node:
+            _resolve_class_directives(item, cls)
+
+
+def build_companion_catalog(
+    cls: type,
+    introspected_attrs: list[dict] | None = None,
+) -> dict | None:
+    """Build a ``_catalog``-shaped override dict from a class's companion doc.
+
+    Performs the hybrid merge: ``introspected_attrs`` (from the code) form the
+    structural baseline; the companion's ``attributes`` overlay prose (and any
+    explicitly-declared ``type``/``default``/``required``) by ``name`` and append
+    fields the code did not expose. A ``json_schema`` is then synthesized from
+    the merged attributes and the companion's ``schema:`` block (``title``,
+    ``description``, ``oneOf``/``anyOf``/``allOf``, ``required``,
+    ``additionalProperties``, ``comment``).
+
+    Args:
+        cls: The component class.
+        introspected_attrs: Attribute dicts already derived from introspection
+            (``[{name, type, default, required}, ...]``). Defaults to empty.
+
+    Returns:
+        A dict with keys ``display_name``, ``description``, ``usage``,
+        ``category``, ``icon``, ``example``, ``attributes``, ``json_schema`` —
+        directly consumable by the registry/``describe_class`` override paths —
+        or ``None`` when the class has no companion file.
+    """
+    doc = load_companion_doc(cls)
+    if not doc:
+        return None
+
+    # Per-attribute keys carried into the merge. ``schema`` is an explicit
+    # JSON-Schema fragment for complex fields (nested objects, arrays of
+    # objects); ``enum`` is a shorthand for a constrained scalar.
+    _ATTR_KEYS = ("type", "default", "required", "description", "schema", "enum")
+
+    # --- merge attributes: code structure + companion prose -----------------
+    merged: dict[str, dict] = {}
+    for a in introspected_attrs or []:
+        merged[a["name"]] = dict(a)
+    for a in doc.get("attributes") or []:
+        name = a.get("name")
+        if not name:
+            continue
+        if name in merged:
+            for key in _ATTR_KEYS:
+                if key in a:
+                    merged[name][key] = a[key]
+        else:
+            merged[name] = {
+                "name": name,
+                "type": a.get("type", "Any"),
+                "default": a.get("default"),
+                "required": a.get("required", False),
+                "description": a.get("description", ""),
+                **{k: a[k] for k in ("schema", "enum") if k in a},
+            }
+    attributes = list(merged.values())
+
+    # --- synthesize property schemas ---------------------------------------
+    # An explicit ``schema`` fragment wins; otherwise derive from the type
+    # string and layer on an optional ``enum`` shorthand.
+    properties: dict = {}
+    for a in attributes:
+        if isinstance(a.get("schema"), dict):
+            prop = dict(a["schema"])
+        else:
+            prop = _type_to_json_schema(a.get("type", "Any"))
+            if a.get("enum"):
+                prop["enum"] = a["enum"]
+        if a.get("description") and "description" not in prop:
+            prop["description"] = a["description"]
+        if a.get("default") is not None and "default" not in prop:
+            prop["default"] = a["default"]
+        properties[a["name"]] = prop
+
+    schema_block = doc.get("schema") or {}
+
+    # Object-level schema (the per-item shape): properties + structural
+    # constraints. Reused as ``items`` when the component is a list of objects.
+    object_schema: dict = {"type": "object", "properties": properties}
+    if "required" in schema_block:
+        object_schema["required"] = schema_block["required"]
+    else:
+        derived_required = [a["name"] for a in attributes if a.get("required")]
+        if derived_required:
+            object_schema["required"] = derived_required
+    for key in ("oneOf", "anyOf", "allOf"):
+        if key in schema_block:
+            object_schema[key] = schema_block[key]
+    if schema_block.get("comment"):
+        object_schema["$comment"] = schema_block["comment"]
+    object_schema["additionalProperties"] = schema_block.get(
+        "additionalProperties", True
+    )
+
+    title = schema_block.get("title") or doc.get("display_name") or cls.__name__
+    description = schema_block.get("description")
+
+    if schema_block.get("type") == "array":
+        # Component is written as a LIST of rule objects (e.g. Join). The
+        # object schema becomes the array's ``items``.
+        json_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "array",
+            "title": title,
+            "items": object_schema,
+        }
+        if description:
+            json_schema["description"] = description
+        for key in ("minItems", "maxItems"):
+            if key in schema_block:
+                json_schema[key] = schema_block[key]
+    else:
+        json_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": title,
+            **object_schema,
+        }
+        if description:
+            json_schema["description"] = description
+
+    # Reusable sub-schemas: a companion ``schema.defs`` mapping is emitted as
+    # ``$defs`` at the schema root, so per-attribute ``schema`` fragments can
+    # ``$ref: '#/$defs/<name>'`` instead of duplicating large enums.
+    if isinstance(schema_block.get("defs"), dict):
+        json_schema["$defs"] = schema_block["defs"]
+
+    # Bind ``enum_from_class`` directives to live class values so documented
+    # enums cannot drift from the code that defines the valid options.
+    _resolve_class_directives(json_schema, cls)
+
+    return {
+        "display_name": doc.get("display_name"),
+        "description": doc.get("description"),
+        "usage": doc.get("usage"),
+        "category": doc.get("category"),
+        "icon": doc.get("icon"),
+        "example": doc.get("example"),
+        "attributes": attributes,
+        "json_schema": json_schema,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Module-level docstring parser
 # ---------------------------------------------------------------------------
 #
@@ -639,7 +900,16 @@ def describe_class(cls: type, category: str | None = None) -> dict:
         example_text = json.dumps(example_dict, indent=2)
     if not example_text and body_literal:
         # rST literal block — typically a YAML config example for destinations.
-        example_text = body_literal
+        # Try to parse as YAML and re-serialize as JSON so the UI shows JSON.
+        try:
+            import yaml  # noqa: PLC0415
+            parsed = yaml.safe_load(body_literal)
+            if isinstance(parsed, dict):
+                example_text = json.dumps(parsed, indent=2)
+            else:
+                example_text = body_literal
+        except Exception:
+            example_text = body_literal
 
     icon = getattr(cls, "_icon", None) or DEFAULT_CATEGORY_ICONS.get(
         category, DEFAULT_CATEGORY_ICONS["Components"]
@@ -654,11 +924,12 @@ def describe_class(cls: type, category: str | None = None) -> dict:
         "icon": icon,
     }
 
-    # Optional class-level ``_catalog`` dict overrides any of the parsed
-    # fields. Used by components whose docstring/__init__ don't accurately
-    # describe their user-facing config shape (e.g. ``ThreadQuery``, which is
-    # dispatched via the YAML ``queries:`` block, not as a named source).
-    overrides = getattr(cls, "_catalog", None)
+    # A sibling ``<module>.catalog.yaml`` companion file (preferred) or a
+    # class-level ``_catalog`` dict (legacy) overrides any of the parsed fields.
+    # Used by components whose docstring/__init__ don't accurately describe
+    # their user-facing config shape (e.g. ``ThreadQuery``, which is dispatched
+    # via the YAML ``queries:`` block, not as a named source).
+    overrides = build_companion_catalog(cls) or getattr(cls, "_catalog", None)
     if isinstance(overrides, dict):
         if overrides.get("display_name"):
             result["name"] = overrides["display_name"]

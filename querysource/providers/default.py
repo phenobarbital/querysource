@@ -15,6 +15,7 @@ from asyncdb.exceptions import ProviderError, DriverError, NoDataFound
 from ..models import QueryModel
 from ..exceptions import QueryException, ParserError
 from ..parsers.sql import SQLParser
+from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
 from .abstract import BaseProvider
 
 
@@ -65,11 +66,27 @@ class defaultProvider(BaseProvider):
                 ) from ex
 
     def raw_query(self, query: str):
-        sql = query
-        conditions = {**self.replacement}
-        if self._conditions:
-            conditions = {**conditions, **self._conditions}
-        return sql.format_map(
+        # SECURITY (FEAT-103): Two-phase substitution (trusted replacement first,
+        # then validating substitution for user-supplied conditions).
+        if HAS_RUST:
+            sql = _rs.safe_format_map(query, self.replacement)
+            if self._conditions:
+                try:
+                    sql = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
+                except ValueError as err:
+                    self._logger.warning(
+                        "raw_query: validating substitution rejected conditions: %s", err
+                    )
+                    raise ParserError("Invalid query conditions") from err
+            return sql
+        # DIVERGENCE (FEAT-103): pure-Python fallback (HAS_RUST=False) has no
+        # injection validation and ignores cond_definition entirely — type
+        # hints (e.g. "array") only take effect via the Rust path. Accepted
+        # because the Rust extension is required in all supported
+        # deployments; replicating context-aware validation in pure Python
+        # would duplicate the security-critical logic in two places.
+        conditions = {**self.replacement, **(self._conditions or {})}
+        return query.format_map(
             defaultdict(str, SafeDict(**conditions))
         )
 

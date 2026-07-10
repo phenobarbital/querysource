@@ -1,0 +1,87 @@
+# Companion documentation for the ``tOrder`` transform (class: tOrder).
+#
+# Sorts a DataFrame by one or more columns (pandas sort_values). ``columns`` is
+# required. ``ascending`` may be a single bool or one bool per column.
+# ``pd_args`` is inherited from the tPandas base. No code changes — clean.
+#
+# After editing run ``generate-multiquery-docs`` (the pre-commit hook does this).
+
+display_name: tOrder
+category: Transformations
+icon: shuffle
+
+description: >-
+  Sort a DataFrame by one or more columns, with configurable direction and NaN
+  placement (pandas sort_values).
+
+usage: >-
+  ``columns`` lists the sort keys (a single name or a list). ``ascending`` is a
+  single bool applied to all, or a list with one bool per column. ``na_position``
+  controls whether NaNs go first or last.
+
+attributes:
+  - name: columns
+    type: list
+    required: true
+    description: >-
+      Column name or list of column names to sort by.
+    schema:
+      $ref: '#/$defs/columnRef'
+      description: Sort key column(s).
+  - name: ascending
+    type: list
+    required: false
+    default: true
+    description: >-
+      Sort direction: a single bool for all columns, or a list with one bool per
+      column (``True`` = ascending). Default ``True``.
+    schema:
+      oneOf:
+        - type: boolean
+        - type: array
+          items:
+            type: boolean
+      description: Single direction or one per column.
+  - name: na_position
+    type: str
+    required: false
+    default: last
+    enum: [first, last]
+    description: >-
+      Where to place NaN values — ``first`` or ``last`` (default).
+  - name: pd_args
+    type: dict
+    required: false
+    default: {}
+    description: >-
+      Extra keyword arguments forwarded to pandas ``sort_values``.
+    schema:
+      type: object
+
+schema:
+  title: tOrder
+  description: >-
+    Sort a DataFrame by ``columns``. ``columns`` is required.
+  required: [columns]
+  additionalProperties: true
+  defs:
+    columnRef:
+      description: A single column name or a list of column names.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+
+example: |-
+  {
+    "Transform": [
+      {
+        "tOrder": {
+          "columns": ["revenue", "date"],
+          "ascending": [false, true],
+          "na_position": "last"
+        }
+      }
+    ]
+  }

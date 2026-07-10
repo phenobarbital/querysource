@@ -280,6 +280,20 @@ JIRA_CERT = config.get('JIRA_CERT')
 HTTPCLIENT_MAX_SEMAPHORE = config.getint("HTTPCLIENT_MAX_SEMAPHORE", fallback=5)
 HTTPCLIENT_MAX_WORKERS = config.getint("HTTPCLIENT_MAX_WORKERS", fallback=1)
 
+## MultiQS thread guardrails:
+MULTIQS_MAX_CONCURRENT_THREADS = config.getint(
+    "MULTIQS_MAX_CONCURRENT_THREADS",
+    fallback=4,
+)
+MULTIQS_MAX_SOURCES_PER_REQUEST = config.getint(
+    "MULTIQS_MAX_SOURCES_PER_REQUEST",
+    fallback=25,
+)
+MULTIQS_SOURCE_TIMEOUT_SECONDS = config.getint(
+    "MULTIQS_SOURCE_TIMEOUT_SECONDS",
+    fallback=30,
+)
+
 ## Google API:
 GOOGLE_API_KEY = config.get('GOOGLE_API_KEY')
 GOOGLE_SEARCH_API_KEY = config.get('GOOGLE_SEARCH_API_KEY')
@@ -352,6 +366,16 @@ DEFAULT_QUERY_FORMAT = config.get(
     fallback='native'
 )
 
+## Query parameters that must never reach the query parser.
+# Authentication/transport-related params (e.g. ?auth=..., ?apikey=...) get
+# appended to API URLs by upstream gateways/clients and would otherwise be
+# interpreted as query conditions/filters by QuerySource and MultiQuery.
+# Configurable via the EXCLUDED_QUERY_PARAMETERS env var (comma-separated).
+# Matched case-insensitively against query-parameter names.
+EXCLUDED_QUERY_PARAMETERS: set = {
+    p.strip().lower() for p in config.getlist('EXCLUDED_QUERY_PARAMETERS') if p.strip()
+} or {'auth', 'apikey', 'api_key', 'authorization'}
+
 ## Geoloc Support:
 GEOLOC_API_KEY = config.get('GEOLOC_API_KEY')
 
@@ -405,6 +429,18 @@ os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
 QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
+
+# Allow requests that carry no user session but were authorized by a
+# sessionless navigator-auth authz backend (IP / host / User-Agent, e.g.
+# authz_allowed_ips, authz_useragent) to be evaluated by PBAC instead of being
+# denied outright (fail-closed). The request must be stamped by navigator-auth
+# (request[AUTHZ_BACKEND_KEY]); it is then evaluated under a synthetic identity
+# with groups ['authorized', <backend>], so an explicit allow policy (see
+# policies/authorized.yaml) must still grant access — this is NOT a bypass.
+# Default: False (keep fail-closed behaviour).
+QS_PBAC_ALLOW_SESSIONLESS_AUTHZ = config.getboolean(
+    'QS_PBAC_ALLOW_SESSIONLESS_AUTHZ', fallback=False
+)
 
 # ── Airtable Integration (FEAT-096) ───────────────────────────────────────────
 # OAuth2 client credentials (server-side; never sent to the browser).

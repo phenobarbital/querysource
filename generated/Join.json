@@ -1,62 +1,149 @@
 {
   "name": "Join",
   "category": "Operators",
-  "description": "Join two or more DataFrames on shared columns or index.",
-  "usage": "Use in a MultiQuery pipeline to combine DataFrames by matching rows on one or more columns, equivalent to SQL JOIN operations.",
+  "description": "Join two or more DataFrames on shared columns (SQL-style inner/left/right/outer merge) inside a MultiQuery pipeline.",
+  "usage": "``Join`` is written as a LIST of join rules \u2014 add one object per \"+\". Each rule merges two named DataFrames from the pipeline data dictionary. A rule joins ``left`` and ``right`` when both are given; if only ``right`` is given it joins against the previous result; ``using``/``on`` select the join key columns (omit to join on the index). Rules are applied in order, each feeding the next.",
   "attributes": [
     {
       "name": "type",
       "type": "str",
       "default": "inner",
       "required": false,
-      "description": ""
+      "description": "Join type, mapped to the pandas merge ``how``: ``inner`` (default), ``left``, ``right`` or ``outer``."
     },
     {
       "name": "left",
-      "type": "Any",
+      "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Name of the left DataFrame key in the pipeline data dictionary. Optional: when omitted the previous/first DataFrame is used as the left side."
     },
     {
       "name": "right",
-      "type": "Any",
+      "type": "str",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Name of the right DataFrame key in the pipeline data dictionary. This is the DataFrame merged into the left side."
     },
     {
       "name": "join_conditions",
-      "type": "Any",
+      "type": "list",
       "default": null,
       "required": false,
-      "description": ""
+      "description": "Column-to-column filters applied immediately after the merge. A list of conditions; each compares a left column against a right column using an evaluative expression."
     },
     {
       "name": "on",
-      "type": "Any",
+      "type": "list",
       "default": null,
-      "required": true,
-      "description": ""
+      "required": false,
+      "description": "Alias of ``using`` (back-compat). Accepts a single column or a list of column names; internally normalized to ``using``."
+    },
+    {
+      "name": "using",
+      "type": "list",
+      "default": null,
+      "required": false,
+      "description": "Column name(s) to join on \u2014 a list of strings present in both DataFrames. Omit to join on the index."
+    },
+    {
+      "name": "args",
+      "type": "dict",
+      "default": null,
+      "required": false,
+      "description": "Extra keyword arguments forwarded to ``pandas.merge``. The most common is ``validate`` (the cardinality check)."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
+    "type": "array",
     "title": "Join",
-    "properties": {
-      "type": {
-        "type": "string"
+    "items": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "inner",
+            "left",
+            "right",
+            "outer"
+          ],
+          "description": "Join type, mapped to the pandas merge ``how``: ``inner`` (default), ``left``, ``right`` or ``outer``.",
+          "default": "inner"
+        },
+        "left": {
+          "type": "string",
+          "description": "Name of the left DataFrame key in the pipeline data dictionary. Optional: when omitted the previous/first DataFrame is used as the left side."
+        },
+        "right": {
+          "type": "string",
+          "description": "Name of the right DataFrame key in the pipeline data dictionary. This is the DataFrame merged into the left side."
+        },
+        "join_conditions": {
+          "type": "array",
+          "description": "Column-to-column conditions applied after the merge.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "string",
+                "description": "Left column name."
+              },
+              "right": {
+                "type": "string",
+                "description": "Right column name."
+              },
+              "expression": {
+                "type": "string",
+                "default": "==",
+                "description": "Evaluative comparison operator between the two columns (e.g. ``==``, ``!=``, ``>=``, ``<=``, ``>``, ``<``)."
+              }
+            },
+            "required": [
+              "left",
+              "right"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Alias of ``using`` \u2014 join key column(s)."
+        },
+        "using": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Join key columns shared by both DataFrames."
+        },
+        "args": {
+          "type": "object",
+          "description": "Extra pandas.merge keyword arguments.",
+          "properties": {
+            "validate": {
+              "type": "string",
+              "enum": [
+                "one_to_one",
+                "one_to_many",
+                "many_to_one",
+                "many_to_many"
+              ],
+              "description": "Cardinality rule checked after the merge \u2014 one_to_one, one_to_many, many_to_one or many_to_many. Raises if the relationship is violated."
+            }
+          },
+          "additionalProperties": true
+        }
       },
-      "left": {},
-      "right": {},
-      "join_conditions": {},
-      "on": {}
+      "additionalProperties": true
     },
-    "required": [
-      "on"
-    ]
+    "description": "A list of join rules. Each item merges two DataFrames; rules are applied in order so the output of one rule feeds the next.",
+    "minItems": 1
   },
-  "example": "{\n    \"Join\": {\n        \"type\": \"inner\",\n        \"left\": \"revenue\",\n        \"right\": \"costs\",\n        \"on\": \"date\"\n    }\n}",
+  "example": "{\n  \"Join\": [\n    {\n      \"type\": \"inner\",\n      \"left\": \"actors\",\n      \"right\": \"film_actors\",\n      \"using\": [\"actor_id\"],\n      \"args\": { \"validate\": \"one_to_many\" }\n    },\n    {\n      \"type\": \"inner\",\n      \"right\": \"films\",\n      \"using\": [\"film_id\"],\n      \"args\": { \"validate\": \"many_to_many\" }\n    }\n  ]\n}",
   "icon": "git-merge"
 }

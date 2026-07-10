@@ -1,8 +1,8 @@
-import traceback
 from typing import Union
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
 
+from navconfig import DEBUG
 from navconfig.logging import logging
 from datamodel.parsers.encoders import DefaultEncoder
 from asyncdb.exceptions import NoDataFound, StatementError, DriverError
@@ -11,6 +11,7 @@ from ..exceptions import (
     DataNotFound,
     QueryException,
 )
+from ..utils.errors import build_error_payload
 from .writers import (
     jsonWriter,
     CSVWriter,
@@ -122,20 +123,38 @@ class DataOutput:
         headers: dict = None,
         content_type: str = 'application/json'
     ) -> BaseException:
-        trace = None
-        message = f"{message}: {exception!s}"
-        if exception:
-            trace = traceback.format_exc(limit=10)
-        reason = {
-            "error": message,
-            "trace": self._json.dumps(trace)
-        }
+        """Build a client-safe error payload and raise the appropriate aiohttp exception.
+
+        Delegates body construction to ``build_error_payload``, which logs full
+        detail (message + traceback) server-side and returns a minimal payload in
+        production (``DEBUG=False``) or a verbose one in development.
+
+        Note: This method always RAISES (never returns) — callers use the
+        ``return self.error(...)`` idiom to satisfy linters, but execution never
+        reaches the ``return`` statement.
+        """
+        # Map HTTP status to a formatter category
+        if status == 404:
+            category = "not_found"
+        elif status >= 500:
+            category = "server_error"
+        else:
+            category = "query_error"
+
+        payload = build_error_payload(
+            category=category,
+            status=status,
+            exception=exception,
+            debug=DEBUG,
+            logger=self.logger,
+            public_message=message if DEBUG else None,
+        )
         args = {
-            "reason": reason,
+            "text": self._json.dumps(payload),
+            "content_type": content_type,
             "headers": {
-                "content_type": content_type,
-                "X-MESSAGE": str(message).replace('\n', ', '),
-                "X-STATUS": str(status).replace('\n', ', ')
+                "X-MESSAGE": payload["error"],
+                "X-STATUS": str(status),
             }
         }
         if status == 400:
@@ -158,7 +177,7 @@ class DataOutput:
             obj = web.HTTPBadRequest(**args)
         if headers:
             for header, value in headers.items():
-                obj.headers[header] = value
+                obj.headers[header] = str(value)
         raise obj
 
     def no_content(self, headers: dict = None, content_type: str = 'application/json') -> web.Response:
@@ -199,29 +218,32 @@ class DataOutput:
             try:
                 await writer.get_result()
             except (NoDataFound, DataNotFound) as err:
+                _msg = f"{err!s}" if DEBUG else "Data not found"
                 headers = {
                     'x-status': 'Empty Result',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.no_content(
                     headers=headers
                 )
             except StatementError as err:
+                _msg = f"{err!s}" if DEBUG else "Query Syntax Error"
                 headers = {
                     'x-status': 'Syntax Error',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.error(
-                    "Query Syntax Error: {err}",
+                    f"Query Syntax Error: {err}",
                     status=404,
                     exception=err,
                     headers=headers,
                     content_type='application/json'
                 )
             except (DriverError, QueryException) as err:
+                _msg = f"{err!s}" if DEBUG else "Query execution failed"
                 headers = {
                     'x-status': 'Query Error',
-                    'x-message': f"{err!s}"
+                    'x-message': _msg
                 }
                 return self.error(
                     f"Query Error: {err}",
@@ -231,7 +253,6 @@ class DataOutput:
                     content_type='application/json'
                 )
             except Exception as err:  # pylint: disable=W0703
-                logging.exception(err)
                 return self.error(  # pylint: disable=E0702
                     message=f"Query Exception: {err}",
                     status=500,
@@ -241,9 +262,10 @@ class DataOutput:
             try:
                 return await writer.get_response()
             except (TypeError, RuntimeError, ValueError) as err:
+                _msg = f'Writer Error: {err}' if DEBUG else "Output generation failed"
                 headers = {
                     'x-status': 'Output Error',
-                    'x-message': f'Writer Error: {err}'
+                    'x-message': _msg
                 }
                 return self.error(
                     f"Output Error: {err}",
@@ -253,9 +275,10 @@ class DataOutput:
                     content_type='application/json'
                 )
             except Exception as err:  # pylint: disable=W0703
+                _msg = f'Writer Error: {err}' if DEBUG else "Output generation failed"
                 headers = {
                     'x-status': 'QuerySource Error',
-                    'x-message': f'Writer Error: {err}'
+                    'x-message': _msg
                 }
                 return self.error(
                     "Output Exception",

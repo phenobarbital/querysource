@@ -31,29 +31,51 @@
       "default": null,
       "required": false,
       "description": "Named datasource (connection) to use when running a raw ``query``. Takes precedence over ``driver``."
+    },
+    {
+      "name": "remote",
+      "type": "bool",
+      "default": false,
+      "required": false,
+      "description": "When ``True``, dispatch this query to a remote qworker server instead of executing locally. Requires either a ``worker`` key on the same entry or the central ``QWORKER_HOST`` / ``QWORKER_PORT`` configuration."
+    },
+    {
+      "name": "worker",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
     }
   ],
   "json_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
     "title": "Query",
-    "description": "A single entry under the MultiQS ``queries:`` block. Must provide either ``slug`` or ``query`` (but not both).",
+    "type": "object",
     "properties": {
       "slug": {
         "type": "string",
-        "description": "Stored query slug."
+        "description": "Stored query slug to execute. Mutually exclusive with ``query``."
       },
       "query": {
         "type": "string",
-        "description": "Raw SQL statement."
+        "description": "Raw SQL string to execute. Mutually exclusive with ``slug``."
       },
       "driver": {
         "type": "string",
-        "description": "Driver alias for raw queries."
+        "description": "Default driver to use when running a raw ``query`` (e.g. ``pg``, ``mysql``, ``bigquery``)."
       },
       "datasource": {
         "type": "string",
-        "description": "Named datasource for raw queries."
+        "description": "Named datasource (connection) to use when running a raw ``query``. Takes precedence over ``driver``."
+      },
+      "remote": {
+        "type": "boolean",
+        "description": "When ``True``, dispatch this query to a remote qworker server instead of executing locally. Requires either a ``worker`` key on the same entry or the central ``QWORKER_HOST`` / ``QWORKER_PORT`` configuration.",
+        "default": false
+      },
+      "worker": {
+        "type": "string",
+        "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
       }
     },
     "oneOf": [
@@ -68,8 +90,10 @@
         ]
       }
     ],
-    "additionalProperties": true
+    "$comment": "oneOf enforces mutual exclusion: a query must have exactly one of 'slug' (named query) or 'query' (raw SQL), not both.",
+    "additionalProperties": true,
+    "description": "A single entry under the MultiQS ``queries:`` block. Must provide either ``slug`` or ``query`` (but not both)."
   },
-  "example": "{\n  \"queries\": {\n    \"stores\": {\n      \"query\": \"select * from hisense.stores\",\n      \"driver\": \"pg\"\n    },\n    \"products\": {\n      \"slug\": \"all_products\"\n    }\n  }\n}",
+  "example": "{\n  \"queries\": {\n    \"stores\": {\n      \"query\": \"select * from hisense.stores\",\n      \"driver\": \"pg\"\n    },\n    \"products\": {\n      \"slug\": \"all_products\"\n    },\n    \"remote_orders\": {\n      \"slug\": \"daily_orders\",\n      \"remote\": true,\n      \"worker\": \"qworker1.internal:8888\",\n      \"store_id\": 42\n    }\n  }\n}",
   "icon": "database"
 }
