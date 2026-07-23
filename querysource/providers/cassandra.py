@@ -17,7 +17,9 @@ from asyncdb.exceptions import (
 from ..exceptions import DriverError, ParserError, DataNotFound
 from ..models import QueryModel
 from ..parsers.cql import CQLParser
-from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
+from ..qs_parsers import HAS_RUST
+if HAS_RUST:
+    from ..qs_parsers import _qs_parsers as _rs
 from .abstract import BaseProvider
 
 
