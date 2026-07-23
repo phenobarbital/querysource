@@ -15,7 +15,9 @@ from asyncdb.exceptions import ProviderError, DriverError, NoDataFound
 from ..models import QueryModel
 from ..exceptions import QueryException, ParserError
 from ..parsers.sql import SQLParser
-from ..qs_parsers import _qs_parsers as _rs, HAS_RUST
+from ..qs_parsers import HAS_RUST
+if HAS_RUST:
+    from ..qs_parsers import _qs_parsers as _rs
 from .abstract import BaseProvider
 
 
