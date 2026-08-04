@@ -299,9 +299,12 @@ def drop_duplicates(df: pd.DataFrame, columns: Optional[list] = None, **kwargs):
     :return: The DataFrame with duplicates dropped.
     """
     if columns and isinstance(columns, list):
-        df.set_index(columns, inplace=True, drop=False)
-        df = df.sort_values(by=columns)
-        df = df.drop_duplicates(subset=columns, **kwargs)
+        # NOTE: do not ``set_index(columns, drop=False)`` here — it leaves the
+        # same names as both an index level and a column, which makes the
+        # subsequent ``sort_values(by=columns)`` raise "is both an index level
+        # and a column label, which is ambiguous". Sorting on the columns
+        # directly keeps ``keep='first'`` deterministic without that clash.
+        df = df.sort_values(by=columns).drop_duplicates(subset=columns, **kwargs)
     return df
 
 
