@@ -10,12 +10,11 @@ PYTHON_VERSION := 3.11
 HAS_UV := $(shell command -v uv 2> /dev/null)
 HAS_PIP := $(shell command -v pip 2> /dev/null)
 
-# Run maturin via `uv run` so it resolves the project venv (.venv) regardless of
-# whether the venv is activated or on PATH. `--with maturin` ensures the tool is
-# available ephemerally, so no separate `uv pip install maturin` step is needed.
-# (Each Makefile recipe line runs in its own subshell, so installing maturin in
-# one line does not put it on PATH for the next.)
-MATURIN := uv run --with maturin maturin
+# maturin is a dev dependency (pyproject.toml), so it lives in .venv/bin/.
+# Run it via the venv Python so it always targets the project virtualenv.
+# NOTE: `uv run --with maturin` must NOT be used — it creates an ephemeral
+# environment and maturin installs the extension there instead of .venv.
+MATURIN := .venv/bin/maturin
 
 # Install uv for faster workflows
 install-uv:
