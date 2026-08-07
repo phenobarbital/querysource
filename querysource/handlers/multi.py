@@ -295,7 +295,12 @@ class QueryHandler(AbstractHandler):
                 )
             # X-Output-Errors retained as supplementary detail (not the only
             # signal anymore — the status code + body now carry the failure).
-            err.headers['X-Output-Errors'] = f"{step}: {oe}"
+            # HTTP header values may not contain embedded CR/LF (aiohttp
+            # raises on write) — destination messages (e.g. TableOutput's
+            # multi-line "Unconsumed column names" text) are collapsed to a
+            # single line here; the full detail is still in the body.
+            header_detail = " ".join(str(oe).splitlines())
+            err.headers['X-Output-Errors'] = f"{step}: {header_detail}"
             raise err
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()

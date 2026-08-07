@@ -127,6 +127,17 @@ def build_error_payload(
     else:
         safe_message = GENERIC_MESSAGES.get(category, GENERIC_MESSAGES[_DEFAULT_CATEGORY])
 
+    # 5b. Callers (AbstractHandler.NotFound/Error/Except) reuse this value
+    # verbatim as both the HTTP reason phrase and the X-MESSAGE header —
+    # neither may contain embedded CR/LF (RFC 7230), which aiohttp enforces
+    # by raising ValueError. Real destination failure text (e.g.
+    # TableOutput's multi-line "Unconsumed column names" message, now
+    # surfaced verbatim per the OutputError override above) can legitimately
+    # contain newlines, so collapse them to keep the message intact while
+    # staying header/reason-safe.
+    if safe_message:
+        safe_message = " ".join(safe_message.splitlines())
+
     # 6. Build and return the payload
     payload: dict = {
         "error": safe_message,
