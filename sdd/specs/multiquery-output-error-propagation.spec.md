@@ -56,10 +56,18 @@ swallowing** and let the typed error propagate.
 - Have the HTTP API return a **real error response** (non-2xx) whose body
   carries the destination step name and the underlying error detail, so
   `navigator-front-next` can display it to the user.
+- **Expose the real error detail to the client body.** The current
+  `build_error_payload` (`querysource/utils/errors.py:41`) redacts the raw
+  error in production (`debug=False`) — the client only gets a generic message
+  + `error_id`. For Output/destination failures this MUST be overridden so the
+  actual underlying message (the same text seen in the execution log, e.g.
+  `'date' is both an index level and a column label`, `duplicate key value...`,
+  `Unconsumed column names`) reaches the client body. This is an accepted
+  tradeoff because the consumer is an internal tool.
 - **Fail-fast**: stop at the first failing destination and raise immediately.
 - **Differentiated HTTP status**: data/validation errors (PK collision, missing
-  column, numeric overflow, cast errors) → `4xx` (422/400); infrastructure
-  errors (connection, timeout) → `500`.
+  column, numeric overflow, cast errors) → **`422`**; infrastructure errors
+  (connection, timeout) → `500`.
 - **Consolidate** Output execution into a single authoritative code path to
   eliminate the current double-execution / double-error-handling between
   `MultiQS` and the handler.
@@ -88,7 +96,20 @@ that carries `step_name` + underlying detail, and let it propagate:
   `self.Error(...)` returns a non-2xx HTTP response with the message in the
   body.
 - The HTTP status is chosen by classifying the underlying exception:
-  data/validation → 422/400, infrastructure → 500.
+  data/validation → **422**, infrastructure → 500.
+- The **real error detail is exposed in the response body**. This requires two
+  concrete changes to the error layer:
+  1. `AbstractHandler.Error()` (`handlers/abstract.py:128`) must **support 422**
+     — today its code→category map (line 157: `400,401,402,403,406,412,428`)
+     and its `if/elif` chain (lines 179-194) do NOT include 422, so a `code=422`
+     silently falls through to `HTTPBadRequest` (400). Add
+     `422 → HTTPUnprocessableEntity` and map it to the `query_error` category.
+  2. For `OutputError`, the underlying detail must be passed through to the
+     client even in production. Either pass the destination message as
+     `public_message` to `build_error_payload` (which overrides the generic
+     text, `utils/errors.py:68`), or add a dedicated `output_error`/`detail`
+     field to the payload for this error class. The generic-redaction default
+     stays for all other error types.
 - The `X-Output-Errors` header is **retained** as supplementary detail, but is
   no longer the *only* signal — the status code and body now reflect the
   failure.
@@ -175,10 +196,22 @@ class OutputError(QueryException):
 - **Path**: `querysource/handlers/multi.py`
 - **Responsibility**: Remove the duplicate Output loop / `output_errors`
   swallow (lines 368-417 region). Rely on `MultiQS` raising. Map
-  `OutputError.category` → HTTP status (data → 422/400, infra → 500) via
+  `OutputError.category` → HTTP status (data → 422, infra → 500) via
   `self.Error`. Keep populating the `X-Output-Errors` header from the raised
   error for supplementary detail.
-- **Depends on**: Module 1, Module 2.
+- **Depends on**: Module 1, Module 2, Module 4.
+
+### Module 4: Error layer — 422 support + client-visible Output detail
+- **Path**: `querysource/handlers/abstract.py` (`Error`) and
+  `querysource/utils/errors.py` (`build_error_payload`)
+- **Responsibility**:
+  1. Add `422 → HTTPUnprocessableEntity` to `Error()` and include 422 in the
+     `query_error` category map (currently absent → 422 falls through to 400).
+  2. Make the underlying `OutputError` detail reach the client body even in
+     production — pass it as `public_message` (or a dedicated `detail` field)
+     for this error class only, leaving the generic redaction intact for every
+     other error type.
+- **Depends on**: Module 1.
 
 ---
 
@@ -216,9 +249,11 @@ def failing_destination(monkeypatch):
 > This feature is complete when ALL of the following are true:
 
 - [ ] When any Output destination fails, `MultiQS.query()` **raises** (verified: it no longer returns a success result).
-- [ ] The HTTP API returns a **non-2xx** response for a failed Output, with the failing step name and underlying error detail in the response **body**.
+- [ ] The HTTP API returns a **non-2xx** response for a failed Output, with the failing step name and the **real underlying error detail** (the same text seen in the execution log) in the response **body** — even in production (`debug=False`).
+- [ ] `AbstractHandler.Error()` returns a genuine **422** (`HTTPUnprocessableEntity`) when given `code=422` (verified it no longer falls through to 400).
 - [ ] Fail-fast: given multiple Output destinations, a failure in destination N prevents destinations N+1… from running.
-- [ ] Data/validation errors (PK collision, missing column, numeric overflow, cast) map to `4xx` (422/400); infrastructure errors map to `500`.
+- [ ] Data/validation errors (PK collision, missing column, numeric overflow, cast) map to **422**; infrastructure errors map to `500`.
+- [ ] The redaction override applies **only** to `OutputError` — other error types keep the generic client-safe payload (no regression in the security posture for non-Output errors).
 - [ ] Output is executed in exactly **one** authoritative path (no double write, verified against `handlers/multi.py` and `queries/multi/__init__.py`).
 - [ ] A successful MultiQuery + Output still returns `200` (no regression) — verified with an existing passing pipeline.
 - [ ] The `X-Output-Errors` header is still populated for supplementary detail.
@@ -267,8 +302,21 @@ class QueryHandler(AbstractHandler):
 # querysource/handlers/abstract.py
 class AbstractHandler:
     def NoData(self, ...):   # line 83
-    def Error(self, message, *, exception=None, code=..., ...):   # line 128
+    def Error(self, reason=None, message=None, exception=None,
+              stacktrace=None, code=400) -> HTTPException:   # line 128
+        # code→category map at line 157: 400,401,402,403,406,412,428 -> "query_error"
+        #   ** 422 is NOT listed -> becomes "server_error" category **
+        # if/elif chain 179-194 has NO 422 branch -> falls to else: HTTPBadRequest (400)
+        # body built by build_error_payload; public_message = message if self.debug else None (168)
     def Except(self, message, *, exception=None, ...):            # line 197
+
+# querysource/utils/errors.py
+def build_error_payload(category, status, exception=None, debug=False,
+                        logger=None, public_message=None) -> dict:   # line 41
+    # ALWAYS logs full detail server-side under error_id
+    # returns {"error", "status", "error_id"}  (prod)
+    # adds {"detail": str(exception), "trace": ...} ONLY when debug=True  (121-122)
+    # public_message overrides the generic "error" field when provided (68, 110-114)
 
 # querysource/exceptions.py
 class OutputError(QueryException):   # line 74
@@ -289,6 +337,8 @@ class PgOutput:
 - ~~`MultiQS.raise_output_errors`~~ — no such flag/attribute today.
 - ~~`OutputError.step_name` / `OutputError.category`~~ — do NOT exist yet; Module 1 adds them.
 - ~~a shared Output executor utility~~ — Output is currently duplicated inline in `MultiQS.query()` and `QueryHandler.query()`; no shared function exists.
+- ~~`Error(code=422)` support~~ — 422 is NOT handled by `AbstractHandler.Error()` today (falls through to 400); Module 4 adds `HTTPUnprocessableEntity`.
+- ~~client-visible raw error detail in production~~ — `build_error_payload` redacts it unless `debug=True`; Module 4 opts `OutputError` out of the redaction.
 
 ---
 
@@ -313,6 +363,16 @@ class PgOutput:
 - **Backwards compatibility**: any consumer relying on the old "200 + swallow"
   behavior will now receive a non-2xx. This is intentional, but must be called
   out in release notes for `navigator-front-next`.
+- **Data exposure (accepted tradeoff)**: exposing the raw destination error to
+  the client can leak column names and, in some DB messages, row values (e.g.
+  `duplicate key value ... (project_company, period)=(Epson, 2026-01-01)`).
+  This is **accepted** because `navigator-front-next` is an internal tool for
+  internal users. The override is **scoped to `OutputError` only** — every
+  other error type keeps the redacted client-safe payload. If this API is ever
+  exposed to external consumers, revisit this decision.
+- **422 support gap**: `Error()` does not currently emit 422 (it falls through
+  to 400). Module 4 must add it, otherwise the differentiated-status goal is
+  silently wrong.
 
 ### External Dependencies
 | Package | Version | Reason |
@@ -327,8 +387,9 @@ class PgOutput:
 - [x] HTTP status for destination failures — *Resolved*: **differentiate** — data/validation → 4xx (422/400), infrastructure → 500.
 - [x] Keep "continue on failure" behavior? — *Resolved*: **no** — always raise; retain `X-Output-Errors` header only as supplementary detail.
 - [x] Two Output execution paths — *Resolved*: **consolidate to a single authoritative path**; verify at implementation which path is the live one.
-- [ ] Exact 4xx code for data errors: `400` vs `422`? — *Owner: Juan* (decide during implementation; lean `422` for validation-type failures).
-- [ ] Precise data-vs-infra classifier: which underlying exception types map to which category? — *Owner: Juan*.
+- [x] Exact 4xx code for data errors: `400` vs `422`? — *Resolved*: **422** (`HTTPUnprocessableEntity`). Requires adding 422 support to `AbstractHandler.Error()` (Module 4).
+- [x] Expose the real error detail to the client? — *Resolved*: **yes** — propagate the underlying Output error message (the execution-log text) to the client body, overriding the production redaction **for `OutputError` only**. Accepted data-exposure tradeoff since the consumer is an internal tool.
+- [ ] Precise data-vs-infra classifier: which underlying exception types map to 422 vs 500? — *Owner: Juan* (starting point: `data`/422 → `IntegrityError`, `DataError`, column/type `ProgrammingError`; `infra`/500 → `OperationalError`, `InterfaceError`, timeouts; **default 500** when unrecognized).
 
 ---
 
@@ -348,3 +409,4 @@ class PgOutput:
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-08-06 | Juan | Initial draft |
+| 0.2 | 2026-08-06 | Juan | Resolve 422; add client-visible Output detail (Module 4: 422 support + build_error_payload override for OutputError); document redaction finding and data-exposure tradeoff. |
