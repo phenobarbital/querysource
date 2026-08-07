@@ -92,6 +92,20 @@ def build_error_payload(category, status, exception=None, debug=False,
 - ~~`build_error_payload(..., expose_detail=True)`~~ — no such flag today; you add the mechanism.
 - ~~`web.HTTPUnprocessableEntity` already imported in abstract.py~~ — verify the `web` import and use `web.HTTPUnprocessableEntity`.
 
+### Contract drift found at implementation time
+- `build_error_payload` (`querysource/utils/errors.py:41`) declares a bare
+  `*` as its FIRST parameter — every argument (`category`, `status`,
+  `exception`, `debug`, `logger`, `public_message`) is **keyword-only**. The
+  spec's Test Specification calls it positionally
+  (`build_error_payload("query_error", 422, ...)`), which would raise
+  `TypeError`. Tests in `tests/unit/test_error_payload.py` use keyword
+  arguments to match the live signature.
+- `GENERIC_MESSAGES` already contains an `"output_error"` category entry
+  (pre-existing, used by `DataOutput.error`/`AbstractWriter.error` elsewhere)
+  — unrelated to this task's `OutputError`-detail-exposure mechanism, which
+  is implemented as an `isinstance(exception, OutputError)` check inside
+  `build_error_payload`, independent of the `category` argument passed in.
+
 ---
 
 ## Implementation Notes
@@ -157,7 +171,28 @@ when done.
 
 ## Completion Note
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Deviations from spec**: none
+**Completed by**: sdd-worker (Claude Opus 4.8)
+**Date**: 2026-08-07
+**Notes**: Added `422` to `AbstractHandler.Error()`'s code→category map
+(now `query_error`) and a `code == 422 -> web.HTTPUnprocessableEntity`
+branch. In `build_error_payload()`, scoped the redaction override to
+`OutputError` only: when `exception` is an `OutputError` and no explicit
+`public_message` is given, its message is used as the public `"error"`
+field even when `debug=False`; every other exception type is unaffected
+(verified with `QueryException` — stays redacted). Full detail is still
+always logged server-side under `error_id`, unchanged.
+Found and documented a contract drift: `build_error_payload` is fully
+keyword-only (`*` is its first parameter), not positional as the task's
+Test Specification assumed — tests updated accordingly (see "Contract
+drift found at implementation time" above).
+Validated in the worktree-local venv (`.venv-wt`) with the real dependency
+chain installed (asyncdb, navconfig, navigator-api, weasyprint, sqlalchemy)
+so `querysource.handlers.abstract` imports for real:
+`pytest tests/unit/test_error_payload.py tests/unit/test_output_error.py -v`
+→ 8 passed. `ruff check querysource/utils/errors.py
+querysource/handlers/abstract.py tests/unit/test_error_payload.py` shows
+only pre-existing baseline violations (verified via diff against the
+pre-change file — 0 new violations introduced).
+**Deviations from spec**: none (only a documented, backward-fixing
+correction to the task's test-call convention to match the live
+keyword-only signature).

@@ -32,7 +32,7 @@
       "feature_id": "FEAT-146",
       "feature": "multiquery-output-error-propagation",
       "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -41,9 +41,9 @@
       "parallel": true,
       "parallelism_notes": "Touches handlers/abstract.py and utils/errors.py only — disjoint from TASK-713 (queries/multi/__init__.py). Can run in a separate worktree concurrently with TASK-713 once TASK-711 is done.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-712-error-layer-422-and-detail.md"
+      "started_at": "2026-08-07T04:35:00+00:00",
+      "completed_at": "2026-08-07T04:50:00+00:00",
+      "file": "sdd/tasks/completed/TASK-712-error-layer-422-and-detail.md"
     },
     {
       "id": "TASK-713",
