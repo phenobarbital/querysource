@@ -210,3 +210,11 @@ raised. Fixed by collapsing `safe_message` to a single line (`"
 building the payload — `debug=True`'s separate `"detail"` field keeps the
 original, unflattened text. See `tests/integration/test_multiquery_output_errors.py::test_unconsumed_columns_returns_422_with_detail`,
 which reproduces and guards this.
+
+**Addendum 2 (post-implementation code review)**: the same CR/LF class of
+bug was also found in `AbstractHandler.Except()`'s debug-only `X-ERROR`
+header (`response_headers["X-ERROR"] = str(exception)`, unsanitized) — not
+originally part of this task's diff, but newly and easily reachable once
+FEAT-146 started routing multi-line `OutputError` text through `Except()`
+for the infra/500 case (TASK-714). Fixed alongside the `step_name`
+sanitization in commit `5dff823`.

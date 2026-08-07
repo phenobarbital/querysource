@@ -186,3 +186,13 @@ already used twice elsewhere in this same file).
 `self.Except` vs `self.Error` responder choice for the 500 case (functionally
 equivalent 500 response, and it also gets the OutputError detail exposed via
 the same `build_error_payload` override).
+
+**Addendum (post-implementation code review)**: a follow-up review after
+TASK-715 found that `oe.step_name` — attacker-influenced (it's the Output
+step's dict key straight from the request body) — was written into the
+`X-Output-Errors` header without the same CR/LF sanitization applied to the
+message text, allowing a crafted step name to crash header serialization.
+Fixed in commit `5dff823` by sanitizing `step` the same way as
+`header_detail`, plus a regression test
+(`tests/unit/test_handler_output_status.py::test_output_error_crlf_step_name_does_not_crash_response`)
+confirmed to fail without the fix.
