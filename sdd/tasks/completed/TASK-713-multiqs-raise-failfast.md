@@ -151,7 +151,39 @@ index when done.
 
 ## Completion Note
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Deviations from spec**: none
+**Completed by**: sdd-worker (Claude Opus 4.8)
+**Date**: 2026-08-07
+**Notes**: Replaced the swallow at the Output loop (queries/multi/__init__.py,
+Step 5) with fail-fast raising:
+- `except OutputError as oe`: fills in `step_name` if the destination didn't
+  set it (matches today's real `TableOutput`/`PgOutput` behavior, which
+  raises a plain `OutputError` with no `step_name`/`category`), best-effort
+  classifies `category` via a new small, centralized
+  `classify_output_error()` helper when not already set, logs, then
+  re-raises.
+- `except DataNotFound`: re-raised unchanged (explicit branch placed before
+  the generic `Exception` catch, per the acceptance criterion).
+- `except Exception as dest_err`: wraps in a new `OutputError(step_name=...,
+  category=classify_output_error(dest_err))` chained `from dest_err`.
+Added `classify_output_error()` (module-level, `queries/multi/__init__.py`):
+inspects `exc.__cause__` (falls back to `exc` itself) by class name only —
+`IntegrityError`/`DataError`/`ProgrammingError` -> `"data"`;
+`OperationalError`/`InterfaceError`/`TimeoutError`/`ConnectionError` ->
+`"infra"`; anything else -> `None` (TASK-714 maps `None`/`"infra"` -> 500,
+per spec's "default 500 when unrecognized"). This is intentionally the
+small, best-effort classifier the spec's still-open owner-Juan question
+asks for — e.g. it will not correctly classify `'Unconsumed column names'`
+style errors that postgres.py's `_execute` currently re-raises as a bare
+`OutputError` without a typed cause; refining this is left as explicit
+follow-up (see spec §8).
+Added `tests/unit/test_multiqs_output_raise.py`: drives the REAL
+`MultiQS.query()` end-to-end by faking only `ThreadQuery` (no real
+thread/DB) and `get_destination`, exercising the actual Step 5 loop.
+Verified in `.venv-wt` (full dependency chain installed):
+`pytest tests/unit/test_multiqs_output_raise.py -v` -> 5 passed. `ruff
+check querysource/queries/multi/__init__.py` — verified via diff against
+the pre-change file: only 1 new violation, a `LOG015` on the added
+`logging.error(...)` call, which mirrors the exact pre-existing pattern
+this module already uses everywhere else (kept per the task's explicit
+"keep the logging.error(...) line" instruction).
+**Deviations from spec**: none.
