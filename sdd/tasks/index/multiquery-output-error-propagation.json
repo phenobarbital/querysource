@@ -14,16 +14,16 @@
       "feature_id": "FEAT-146",
       "feature": "multiquery-output-error-propagation",
       "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Root task — every other task imports the enriched OutputError. Must land first; nothing else can start in parallel with it.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-711-outputerror-enrichment.md"
+      "started_at": "2026-08-07T04:30:00+00:00",
+      "completed_at": "2026-08-07T04:33:34+00:00",
+      "file": "sdd/tasks/completed/TASK-711-outputerror-enrichment.md"
     },
     {
       "id": "TASK-712",
@@ -35,7 +35,9 @@
       "status": "pending",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-711"],
+      "depends_on": [
+        "TASK-711"
+      ],
       "parallel": true,
       "parallelism_notes": "Touches handlers/abstract.py and utils/errors.py only — disjoint from TASK-713 (queries/multi/__init__.py). Can run in a separate worktree concurrently with TASK-713 once TASK-711 is done.",
       "assigned_to": null,
@@ -53,7 +55,9 @@
       "status": "pending",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-711"],
+      "depends_on": [
+        "TASK-711"
+      ],
       "parallel": true,
       "parallelism_notes": "Touches queries/multi/__init__.py only — disjoint from TASK-712 (handlers/abstract.py, utils/errors.py). Can run concurrently with TASK-712 once TASK-711 is done.",
       "assigned_to": null,
@@ -71,7 +75,11 @@
       "status": "pending",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-711", "TASK-712", "TASK-713"],
+      "depends_on": [
+        "TASK-711",
+        "TASK-712",
+        "TASK-713"
+      ],
       "parallel": false,
       "parallelism_notes": "Integrates the raising path (713) with the error layer (712); depends on both plus 711. Must run after them; not parallelizable.",
       "assigned_to": null,
@@ -89,7 +97,9 @@
       "status": "pending",
       "priority": "medium",
       "effort": "M",
-      "depends_on": ["TASK-714"],
+      "depends_on": [
+        "TASK-714"
+      ],
       "parallel": false,
       "parallelism_notes": "End-to-end HTTP tests exercising the full assembled path; must run after the implementation tasks are complete.",
       "assigned_to": null,

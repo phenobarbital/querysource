@@ -146,9 +146,15 @@ implement per scope, make the tests pass, move this file to
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (Claude Opus 4.8)
+**Date**: 2026-08-07
+**Notes**: `OutputError.__init__` extended with keyword-only `step_name` and
+`category` (both default `None`), forwarding `message`/`code`/`**kwargs` to
+`QueryException.__init__` unchanged. Added `tests/unit/test_output_error.py`
+covering backwards compatibility, attribute storage, and default values.
+Verified in an isolated worktree-local editable venv (`.venv-wt`, built via
+`uv venv .venv-wt && uv pip install -e . --no-deps`) so `import querysource`
+resolved to this worktree's code, not the repo-root editable install —
+`pytest tests/unit/test_output_error.py -v` → 3 passed. `ruff check
+querysource/exceptions.py tests/unit/test_output_error.py` clean.
 **Deviations from spec**: none
