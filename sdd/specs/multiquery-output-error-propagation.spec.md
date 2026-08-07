@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-146
 **Date**: 2026-08-06
 **Author**: Juan (jfrruffato@trocglobal.com)
-**Status**: draft
+**Status**: approved
 **Target version**: 4.6.0
 
 ---
