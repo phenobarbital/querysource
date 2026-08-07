@@ -278,7 +278,13 @@ class QueryHandler(AbstractHandler):
             # itself a QueryException subclass.
             trace = traceback.format_exc()
             self.logger.exception(oe, stack_info=True)
-            step = getattr(oe, "step_name", None) or "Output"
+            # step_name is attacker-influenced (it's the Output step's dict
+            # key straight from the request body — e.g. an unregistered
+            # destination name echoed back by get_destination()'s error), so
+            # it must be sanitized the same way header_detail is below.
+            step = " ".join(
+                str(getattr(oe, "step_name", None) or "Output").splitlines()
+            )
             if getattr(oe, "category", None) == "data":
                 err = self.Error(
                     message=str(oe),

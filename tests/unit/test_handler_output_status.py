@@ -96,3 +96,29 @@ async def test_output_error_x_output_errors_header_populated():
     resp = await _drive_query_expecting_output_error(oe)
     assert "X-Output-Errors" in resp.headers
     assert "TableOutput" in resp.headers["X-Output-Errors"]
+
+
+@pytest.mark.asyncio
+async def test_output_error_crlf_step_name_does_not_crash_response():
+    """Regression: step_name is attacker-influenced (the Output step's dict
+    key straight from the request body — e.g. get_destination() echoes an
+    unregistered destination name verbatim into its OutputError message).
+    A step_name containing embedded CR/LF must not crash header
+    serialization (aiohttp raises ValueError on raw CR/LF in a header
+    value) — it must be sanitized to a single line."""
+    oe = OutputError(
+        "duplicate key value ...",
+        step_name="TableOutput\r\nX-Injected: evil",
+        category="data",
+    )
+    resp = await _drive_query_expecting_output_error(oe)
+    assert resp.status == 422
+    header_value = resp.headers["X-Output-Errors"]
+    assert "\r" not in header_value
+    assert "\n" not in header_value
+    # Reproduce the exact failure mode aiohttp hits when writing headers to
+    # the wire: _serialize_headers raises ValueError on embedded CR/LF.
+    from aiohttp._http_writer import _serialize_headers
+
+    status_line = f"HTTP/1.1 {resp.status} {resp.reason}"
+    _serialize_headers(status_line, resp.headers)  # must not raise
