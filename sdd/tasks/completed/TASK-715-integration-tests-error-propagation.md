@@ -113,7 +113,59 @@ starting. Inspect existing `tests/integration/` harness first. Move to
 
 ## Completion Note
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Deviations from spec**: none
+**Completed by**: sdd-worker (Claude Opus 4.8)
+**Date**: 2026-08-07
+**Notes**: Created `tests/integration/test_multiquery_output_errors.py`,
+driving the real HTTP stack end-to-end (aiohttp `TestClient` ->
+`QueryHandler.query()` -> `MultiQS.query()` -> the Output loop -> the
+OutputError-to-status mapping -> the JSON response) with only the
+non-deterministic collaborators faked: `ThreadQuery` (no real thread/DB
+query), `get_destination` (controls the Output step), and — success-path
+only — `DataOutput` (its formatting internals are unrelated to this
+feature). No live Postgres or network access required. 4 tests, all
+passing:
+- `test_pk_collision_returns_422_with_detail` — a destination raising an
+  exception named `IntegrityError` (matching `classify_output_error()`'s
+  best-effort name-based check) -> 422, duplicate-key text in body,
+  `X-Output-Errors` header present.
+- `test_unconsumed_columns_returns_422_with_detail` — models the real
+  `TableOutput/postgres.py` shape (`OutputError` chained from a
+  `ProgrammingError`-named cause) -> 422, multi-line detail text preserved
+  (modulo the CRLF fix below) in body.
+- `test_infra_error_returns_500` — a destination raising an
+  `OperationalError`-named exception -> 500.
+- `test_successful_output_still_returns_200` — healthy pipeline, Output
+  runs once, still 200.
+Verified in `.venv-wt`: `pytest tests/integration/test_multiquery_output_errors.py -v`
+-> 4 passed; full FEAT-146 suite (`test_output_error.py`,
+`test_error_payload.py`, `test_multiqs_output_raise.py`,
+`test_handler_output_status.py`, this file) -> 21 passed. `ruff check` on
+the new file: clean.
+
+**Bug found and fixed while writing these tests (technically an
+implementation change, called out explicitly per this task's own
+instruction to report rather than silently expand scope)**: the
+`test_unconsumed_columns_returns_422_with_detail` scenario — the feature's
+own headline motivating case — crashed the server with
+`ValueError: Reason cannot contain \r or \n` (and, once that path was
+patched, a second `ValueError: Forbidden control character detected in
+headers`). Root cause: TASK-712's detail-exposure override lets a raw,
+potentially multi-line destination message flow into `payload["error"]`,
+which `AbstractHandler.Error()`/`Except()` reuse verbatim as the HTTP
+`reason` phrase and the `X-MESSAGE` header, and `handlers/multi.py`'s new
+`except OutputError` branch reuses `str(oe)` verbatim as the
+`X-Output-Errors` header value — none of which may contain embedded CR/LF.
+Fixed with two minimal, surgical changes:
+1. `querysource/utils/errors.py::build_error_payload` — collapse
+   `safe_message` to a single line before building the payload (`debug=True`'s
+   separate `"detail"` field keeps the original text unflattened).
+2. `querysource/handlers/multi.py`'s `except OutputError` branch — collapse
+   `str(oe)` to a single line before assigning it to the `X-Output-Errors`
+   header.
+Both are noted as an addendum on `TASK-712`'s completion note (the file
+`build_error_payload` lives in). Without this fix, the exact scenario this
+feature exists to surface ("Unconsumed column names") would 500-crash the
+server instead of returning a clean 422 — this was a completion blocker,
+not an optional follow-up, so it was fixed here rather than deferred.
+**Deviations from spec**: none in intent; see the bug-fix note above for
+the one small, necessarily in-scope implementation correction.

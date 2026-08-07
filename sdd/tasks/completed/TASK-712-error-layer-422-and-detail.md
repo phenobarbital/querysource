@@ -196,3 +196,17 @@ pre-change file — 0 new violations introduced).
 **Deviations from spec**: none (only a documented, backward-fixing
 correction to the task's test-call convention to match the live
 keyword-only signature).
+
+**Addendum (found during TASK-715 integration testing)**: exposing the raw
+`OutputError` message verbatim (this task's core change) surfaced a latent
+bug — real destination messages can contain embedded newlines (e.g.
+`TableOutput/postgres.py`'s multi-line "Unconsumed column names" text), and
+`AbstractHandler.Error()`/`Except()` reuse `payload["error"]` verbatim as
+both the HTTP `reason` phrase and the `X-MESSAGE` header value. Both aiohttp
+and the HTTP spec forbid embedded CR/LF there — `web.HTTPUnprocessableEntity(reason=...)`
+raised `ValueError` at test time, and downstream header serialization also
+raised. Fixed by collapsing `safe_message` to a single line (`"
+".join(safe_message.splitlines())`) in `build_error_payload()` right before
+building the payload — `debug=True`'s separate `"detail"` field keeps the
+original, unflattened text. See `tests/integration/test_multiquery_output_errors.py::test_unconsumed_columns_returns_422_with_detail`,
+which reproduces and guards this.

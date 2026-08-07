@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-08-06T00:00:00Z",
-  "completed_at": null,
+  "completed_at": "2026-08-07T05:20:00+00:00",
   "tasks": [
     {
       "id": "TASK-711",
@@ -94,7 +94,7 @@
       "feature_id": "FEAT-146",
       "feature": "multiquery-output-error-propagation",
       "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -103,9 +103,9 @@
       "parallel": false,
       "parallelism_notes": "End-to-end HTTP tests exercising the full assembled path; must run after the implementation tasks are complete.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-715-integration-tests-error-propagation.md"
+      "started_at": "2026-08-07T05:06:00+00:00",
+      "completed_at": "2026-08-07T05:20:00+00:00",
+      "file": "sdd/tasks/completed/TASK-715-integration-tests-error-propagation.md"
     }
   ]
 }
