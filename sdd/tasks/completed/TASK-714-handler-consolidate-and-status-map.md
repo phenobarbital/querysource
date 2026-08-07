@@ -84,6 +84,23 @@ def Error(self, reason=None, message=None, exception=None,
 - ~~a shared Output executor already used by both handler and MultiQS~~ — the point of this task is to leave MultiQS as the single executor.
 - ~~`self.Error(code=422)` before TASK-712~~ — depends on TASK-712 landing first.
 
+### Contract drift found at implementation time
+- The Implementation Notes' suggested snippet (`code = 422 if ... else 500;
+  raise self.Error(..., code=code)`) assumes `self.Error(code=500)` produces
+  a real 500. It does not: `AbstractHandler.Error()`'s if/elif chain
+  (`handlers/abstract.py`) has no `code == 500` branch, so it falls through
+  to `else: web.HTTPBadRequest` — i.e. a genuine **400**, not 500. This was
+  caught by the unit tests (`test_output_error_category_infra_maps_to_500`
+  failed with `400 == 500` before the fix). Fixing `Error()` itself was out
+  of file-scope for this task (only `querysource/handlers/multi.py` is
+  listed). Instead, the "infra"/unknown branch uses the existing
+  `self.Except(code=500)` responder (already correctly producing
+  `HTTPInternalServerError`, used elsewhere in this same file for
+  unexpected errors), and the "data" branch keeps using `self.Error(code=422)`.
+  Both routes call `build_error_payload`, whose `isinstance(exception,
+  OutputError)` override (TASK-712) applies regardless of which responder
+  calls it, so the real detail still reaches the body either way.
+
 ---
 
 ## Implementation Notes
@@ -142,7 +159,30 @@ update the per-spec index when done.
 
 ## Completion Note
 
-**Completed by**:
-**Date**:
-**Notes**:
-**Deviations from spec**: none
+**Completed by**: sdd-worker (Claude Opus 4.8)
+**Date**: 2026-08-07
+**Notes**: Removed the handler's duplicate Output loop and the
+`output_errors`/`X-Output-Errors`-on-200 swallow (former region ~368-417);
+`get_destination` import dropped (no longer used in this file). Output now
+runs exactly once, in `MultiQS.query()` (TASK-713). Added an `except
+OutputError as oe` branch BEFORE `except (QueryException, DriverError)` at
+the `qs.query()` call site: `category == "data"` -> `self.Error(code=422)`;
+everything else (`"infra"` or unrecognized/`None`) -> `self.Except(code=500)`
+(see "Contract drift" above for why `self.Except` rather than
+`self.Error(code=500)`). Both paths get an `X-Output-Errors` header set
+post-construction on the returned `HTTPException` for supplementary detail.
+Added `tests/unit/test_handler_output_status.py` driving the REAL
+`QueryHandler.query()` with only `MultiQS.query` patched to raise the
+enriched `OutputError` — this genuinely caught the `Error(code=500)` gap
+above (first run: 2/4 failing with `400 == 500`; fixed, then 4/4 passing).
+Verified in `.venv-wt`:
+`pytest tests/unit/test_handler_output_status.py -v` -> 4 passed. `ruff
+check querysource/handlers/multi.py` — diffed against the pre-change file:
+net violation count went from 7 (baseline) to 7 (2 removed by deleting the
+old loop's `BLE001`/`SIM102`, 1 added `TRY401` on the new
+`self.logger.exception(oe, ...)` call, which mirrors the exact pattern
+already used twice elsewhere in this same file).
+**Deviations from spec**: none in intent; see "Contract drift" note for the
+`self.Except` vs `self.Error` responder choice for the 500 case (functionally
+equivalent 500 response, and it also gets the OutputError detail exposed via
+the same `build_error_payload` override).
