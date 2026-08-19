@@ -185,7 +185,15 @@ class MultiQS(BaseQuery):
                 self._options = slug_data
                 self._queries = slug_data.pop('queries', {})
                 self._files = slug_data.pop('files', {})
-                self._sources = slug_data.pop('sources', [])
+                # Normalize sources exactly like the inline (__init__) path does
+                # (see line ~98). Without this, a slug whose `sources` is the
+                # dict convenience form ({"alias": {"type": ...}}) is left as a
+                # raw dict, and the dispatch loop's `for entry in self._sources:
+                # for source_type, config in entry.items()` iterates the dict's
+                # string keys, raising "'str' object has no attribute 'items'".
+                self._sources = self._normalize_sources(
+                    slug_data.pop('sources', [])
+                )
                 # TODO: making replacements based on POST data.
             else:
                 # Single-query slug: wrap it for the multi-query executor
