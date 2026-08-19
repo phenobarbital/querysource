@@ -154,7 +154,7 @@ class AbstractHandler(BaseHandler):
         # Map HTTP status code to a formatter category
         if code == 404:
             category = "not_found"
-        elif code in (400, 401, 402, 403, 406, 412, 428):
+        elif code in (400, 401, 402, 403, 406, 412, 422, 428):
             category = "query_error"
         else:
             category = "server_error"
@@ -190,6 +190,8 @@ class AbstractHandler(BaseHandler):
             obj = web.HTTPPreconditionFailed(**args)
         elif code == 428:
             obj = web.HTTPPreconditionRequired(**args)
+        elif code == 422:  # Unprocessable Entity (e.g. data/validation errors)
+            obj = web.HTTPUnprocessableEntity(**args)
         else:
             obj = web.HTTPBadRequest(**args)
         return obj
@@ -238,7 +240,12 @@ class AbstractHandler(BaseHandler):
         }
         # Only expose the raw exception string in the X-ERROR header when debug
         if self.debug and exception is not None:
-            response_headers["X-ERROR"] = str(exception)
+            # HTTP header values may not contain embedded CR/LF (aiohttp
+            # raises on write) — FEAT-146 routes multi-line OutputError text
+            # through this path via Except(code=500), so collapse to a
+            # single line here too (same treatment as payload["error"] in
+            # build_error_payload and the X-Output-Errors header).
+            response_headers["X-ERROR"] = " ".join(str(exception).splitlines())
 
         args = {
             "reason": payload["error"],
