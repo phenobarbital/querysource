@@ -7,7 +7,8 @@ from ...exceptions import (
     QueryException,
     DriverError,
     DataNotFound,
-    ParserError
+    ParserError,
+    OutputError
 )
 from importlib import import_module
 from ..base import BaseQuery
@@ -19,6 +20,36 @@ from .operators.filter import Filter
 from .sources import ThreadQuery, FileSource
 from .sources.executors import RemoteConfig
 from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
+
+
+# Best-effort data-vs-infra classification for MultiQuery Output/destination
+# failures (FEAT-146). Deliberately small and centralized so it can be
+# refined later (spec §8: precise classifier is an open question). Matches
+# on the underlying (chained) exception's class name rather than importing
+# a specific driver's exception module, so this stays dependency-light and
+# works across destinations. Defaults to ``None`` (-> HTTP 500 downstream)
+# when unrecognized, to avoid masking infrastructure issues as client errors.
+_DATA_ERROR_TYPES = frozenset({"IntegrityError", "DataError", "ProgrammingError"})
+_INFRA_ERROR_TYPES = frozenset({
+    "OperationalError", "InterfaceError", "TimeoutError", "ConnectionError"
+})
+
+
+def classify_output_error(exc: BaseException) -> Optional[str]:
+    """Classify a destination failure as ``"data"`` or ``"infra"``.
+
+    Inspects the chained cause (``exc.__cause__``) when present, since
+    destinations typically wrap the real driver exception via
+    ``raise OutputError(...) from err``. Returns ``None`` when the
+    exception type is not recognized.
+    """
+    cause = exc.__cause__ if exc.__cause__ is not None else exc
+    type_name = type(cause).__name__
+    if type_name in _DATA_ERROR_TYPES:
+        return "data"
+    if type_name in _INFRA_ERROR_TYPES:
+        return "infra"
+    return None
 
 
 def get_operator_module(clsname: str):
@@ -185,7 +216,15 @@ class MultiQS(BaseQuery):
                 self._options = slug_data
                 self._queries = slug_data.pop('queries', {})
                 self._files = slug_data.pop('files', {})
-                self._sources = slug_data.pop('sources', [])
+                # Normalize sources exactly like the inline (__init__) path does
+                # (see line ~98). Without this, a slug whose `sources` is the
+                # dict convenience form ({"alias": {"type": ...}}) is left as a
+                # raw dict, and the dispatch loop's `for entry in self._sources:
+                # for source_type, config in entry.items()` iterates the dict's
+                # string keys, raising "'str' object has no attribute 'items'".
+                self._sources = self._normalize_sources(
+                    slug_data.pop('sources', [])
+                )
                 # TODO: making replacements based on POST data.
             else:
                 # Single-query slug: wrap it for the multi-query executor
@@ -529,6 +568,9 @@ class MultiQS(BaseQuery):
             # reduce to one single Dataframe:
             result = list(result.values())[0]
         ### Step 5: Optionally saving result to destination (registry-based dispatch)
+        # Single authoritative Output executor (FEAT-146): fail-fast — the
+        # first destination failure raises immediately and stops the loop
+        # (no "continue to next destination" swallow).
         if _output:
             for step in _output:
                 for step_name, component in step.items():
@@ -537,13 +579,31 @@ class MultiQS(BaseQuery):
                         destination_cls = get_destination(step_name)
                         obj = destination_cls(data=result, **component)
                         result = await obj.run()
+                    except OutputError as oe:
+                        if getattr(oe, "step_name", None) is None:
+                            oe.step_name = step_name
+                        if getattr(oe, "category", None) is None:
+                            oe.category = classify_output_error(oe)
+                        logging.error(
+                            "MultiQS: output destination '%s' failed: %s",
+                            step_name,
+                            oe,
+                        )
+                        raise
+                    except DataNotFound:
+                        # Preserve DataNotFound semantics unchanged.
+                        raise
                     except Exception as dest_err:
                         logging.error(
                             "MultiQS: output destination '%s' failed: %s",
                             step_name,
                             dest_err,
                         )
-                        # Per spec: continue to next destination on failure
+                        raise OutputError(
+                            str(dest_err),
+                            step_name=step_name,
+                            category=classify_output_error(dest_err),
+                        ) from dest_err
         if result is None or len(result) == 0:
             raise DataNotFound(
                 "QS Empty Result"

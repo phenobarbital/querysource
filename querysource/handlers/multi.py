@@ -9,10 +9,10 @@ from ..exceptions import (
     DriverError,
     QueryException,
     SlugNotFound,
+    OutputError,
 )
 from .abstract import AbstractHandler
 from ..queries import MultiQS
-from ..outputs.destinations import get_destination
 from ..queries.multi.operators import Filter, GroupBy
 from ..conf import (
     CSV_DEFAULT_DELIMITER,
@@ -264,6 +264,50 @@ class QueryHandler(AbstractHandler):
                 exception=pe,
                 code=401
             )
+        except OutputError as oe:
+            # FEAT-146: MultiQS is the single authoritative Output executor;
+            # a raised OutputError means a destination failed. Map its
+            # category to a differentiated HTTP status: data -> 422 (via
+            # self.Error, a client/query_error category) and infra/unknown
+            # -> 500 (via self.Except, the existing server-error responder —
+            # self.Error() has no code=500 branch and would otherwise fall
+            # through to 400). Both routes call build_error_payload, which
+            # exposes the real OutputError detail in the body regardless of
+            # `debug` (TASK-712). Placed BEFORE the broader
+            # (QueryException, DriverError) branch since OutputError is
+            # itself a QueryException subclass.
+            trace = traceback.format_exc()
+            self.logger.exception(oe, stack_info=True)
+            # step_name is attacker-influenced (it's the Output step's dict
+            # key straight from the request body — e.g. an unregistered
+            # destination name echoed back by get_destination()'s error), so
+            # it must be sanitized the same way header_detail is below.
+            step = " ".join(
+                str(getattr(oe, "step_name", None) or "Output").splitlines()
+            )
+            if getattr(oe, "category", None) == "data":
+                err = self.Error(
+                    message=str(oe),
+                    exception=oe,
+                    stacktrace=trace,
+                    code=422,
+                )
+            else:
+                err = self.Except(
+                    message=str(oe),
+                    exception=oe,
+                    stacktrace=trace,
+                    code=500,
+                )
+            # X-Output-Errors retained as supplementary detail (not the only
+            # signal anymore — the status code + body now carry the failure).
+            # HTTP header values may not contain embedded CR/LF (aiohttp
+            # raises on write) — destination messages (e.g. TableOutput's
+            # multi-line "Unconsumed column names" text) are collapsed to a
+            # single line here; the full detail is still in the body.
+            header_detail = " ".join(str(oe).splitlines())
+            err.headers['X-Output-Errors'] = f"{step}: {header_detail}"
+            raise err
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()
             _remote_queries_on_err = getattr(qs, '_remote_queries', [])
@@ -365,23 +409,11 @@ class QueryHandler(AbstractHandler):
                     'X-Total-Time': f'{total_time:.2f} seconds',
                 }
             )
-        output_errors: list[str] = []
-        if isinstance(data, dict):
-            if 'Output' in options:
-                ## Optionally saving result to destination (registry-based dispatch)
-                for step in options['Output']:
-                    for step_name, component in step.items():
-                        try:
-                            destination_cls = get_destination(step_name)
-                            obj = destination_cls(data=result, **component)
-                            result = await obj.run()
-                        except Exception as dest_err:
-                            self.logger.error(
-                                "QueryHandler: output destination '%s' failed: %s",
-                                step_name,
-                                dest_err,
-                            )
-                            output_errors.append(f"{step_name}: {dest_err}")
+        # FEAT-146: Output is now executed exactly once, solely by
+        # MultiQS.query() above (single authoritative Output executor). A
+        # failed destination raises OutputError there and is mapped to a
+        # 422/500 response in the `except OutputError` branch — there is no
+        # longer a duplicate Output loop here.
         ### Step 6: passing Result to DataOutput
         try:
             if result is None or isinstance(result, DataFrame) and result.empty:
@@ -412,8 +444,6 @@ class QueryHandler(AbstractHandler):
             remote_queries = getattr(qs, '_remote_queries', [])
             if remote_queries:
                 response.headers['X-Remote-Queries'] = ','.join(remote_queries)
-            if output_errors:
-                response.headers['X-Output-Errors'] = ' | '.join(output_errors)
             return response
         except (DataNotFound) as ex:
             return self.NoData(

@@ -72,4 +72,24 @@ class ParserError(QueryException):
 
 
 class OutputError(QueryException):
-    pass
+    """Raised when a MultiQuery Output/destination fails.
+
+    Optionally carries the failing destination ``step_name`` and an error
+    ``category`` (``"data"`` | ``"infra"``) so the HTTP handler layer can
+    pick an appropriate status code (422 vs 500). Both are backwards
+    compatible: existing ``OutputError(message)`` call sites keep working
+    unchanged.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        code: int = 0,
+        *,
+        step_name: str = None,
+        category: str = None,
+        **kwargs,
+    ):
+        super().__init__(message, code=code, **kwargs)
+        self.step_name = step_name
+        self.category = category

@@ -1,0 +1,111 @@
+{
+  "feature": "multiquery-output-error-propagation",
+  "feature_id": "FEAT-146",
+  "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-08-06T00:00:00Z",
+  "completed_at": "2026-08-07T05:20:00+00:00",
+  "tasks": [
+    {
+      "id": "TASK-711",
+      "slug": "outputerror-enrichment",
+      "title": "Enrich OutputError with step_name and category",
+      "feature_id": "FEAT-146",
+      "feature": "multiquery-output-error-propagation",
+      "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Root task — every other task imports the enriched OutputError. Must land first; nothing else can start in parallel with it.",
+      "assigned_to": null,
+      "started_at": "2026-08-07T04:30:00+00:00",
+      "completed_at": "2026-08-07T04:33:34+00:00",
+      "file": "sdd/tasks/completed/TASK-711-outputerror-enrichment.md"
+    },
+    {
+      "id": "TASK-712",
+      "slug": "error-layer-422-and-detail",
+      "title": "Error layer: add 422 support + expose OutputError detail to client",
+      "feature_id": "FEAT-146",
+      "feature": "multiquery-output-error-propagation",
+      "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-711"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Touches handlers/abstract.py and utils/errors.py only — disjoint from TASK-713 (queries/multi/__init__.py). Can run in a separate worktree concurrently with TASK-713 once TASK-711 is done.",
+      "assigned_to": null,
+      "started_at": "2026-08-07T04:35:00+00:00",
+      "completed_at": "2026-08-07T04:50:00+00:00",
+      "file": "sdd/tasks/completed/TASK-712-error-layer-422-and-detail.md"
+    },
+    {
+      "id": "TASK-713",
+      "slug": "multiqs-raise-failfast",
+      "title": "MultiQS: raise Output errors (fail-fast) instead of swallowing",
+      "feature_id": "FEAT-146",
+      "feature": "multiquery-output-error-propagation",
+      "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-711"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Touches queries/multi/__init__.py only — disjoint from TASK-712 (handlers/abstract.py, utils/errors.py). Can run concurrently with TASK-712 once TASK-711 is done.",
+      "assigned_to": null,
+      "started_at": "2026-08-07T04:35:00+00:00",
+      "completed_at": "2026-08-07T04:55:00+00:00",
+      "file": "sdd/tasks/completed/TASK-713-multiqs-raise-failfast.md"
+    },
+    {
+      "id": "TASK-714",
+      "slug": "handler-consolidate-and-status-map",
+      "title": "Handler: consolidate Output path + map OutputError to 422/500",
+      "feature_id": "FEAT-146",
+      "feature": "multiquery-output-error-propagation",
+      "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-711",
+        "TASK-712",
+        "TASK-713"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Integrates the raising path (713) with the error layer (712); depends on both plus 711. Must run after them; not parallelizable.",
+      "assigned_to": null,
+      "started_at": "2026-08-07T04:56:00+00:00",
+      "completed_at": "2026-08-07T05:05:00+00:00",
+      "file": "sdd/tasks/completed/TASK-714-handler-consolidate-and-status-map.md"
+    },
+    {
+      "id": "TASK-715",
+      "slug": "integration-tests-error-propagation",
+      "title": "Integration tests: Output failures surface as HTTP 422/500 with detail",
+      "feature_id": "FEAT-146",
+      "feature": "multiquery-output-error-propagation",
+      "spec": "sdd/specs/multiquery-output-error-propagation.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-714"
+      ],
+      "parallel": false,
+      "parallelism_notes": "End-to-end HTTP tests exercising the full assembled path; must run after the implementation tasks are complete.",
+      "assigned_to": null,
+      "started_at": "2026-08-07T05:06:00+00:00",
+      "completed_at": "2026-08-07T05:20:00+00:00",
+      "file": "sdd/tasks/completed/TASK-715-integration-tests-error-propagation.md"
+    }
+  ]
+}

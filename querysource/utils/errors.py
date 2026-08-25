@@ -17,6 +17,8 @@ import traceback
 import uuid
 from typing import Any, Optional
 
+from ..exceptions import OutputError
+
 __all__ = ["GENERIC_MESSAGES", "build_error_payload"]
 
 # ---------------------------------------------------------------------------
@@ -68,6 +70,14 @@ def build_error_payload(
         public_message: If supplied, overrides the generic message from
             ``GENERIC_MESSAGES`` in the public ``"error"`` field.
 
+    Note:
+        When ``exception`` is a ``querysource.exceptions.OutputError`` and no
+        ``public_message`` is supplied, the exception's own message is used
+        as the public ``"error"`` field **even when** ``debug=False``. This
+        is a scoped, accepted data-exposure tradeoff for MultiQuery Output
+        failures only (FEAT-146) — every other exception type keeps the
+        generic redacted message in production.
+
     Returns:
         dict: Client-safe payload.  Production shape::
 
@@ -106,11 +116,27 @@ def build_error_payload(
     )
 
     # 5. Resolve the public message (never expose raw DB / internal text)
-    safe_message = (
-        public_message
-        if public_message is not None
-        else GENERIC_MESSAGES.get(category, GENERIC_MESSAGES[_DEFAULT_CATEGORY])
-    )
+    # Scoped override (FEAT-146): OutputError detail is client-visible even
+    # in production (debug=False), since navigator-front-next needs the real
+    # destination failure text to surface to the user. Every other exception
+    # type keeps the generic, redacted message.
+    if public_message is not None:
+        safe_message = public_message
+    elif isinstance(exception, OutputError):
+        safe_message = detail
+    else:
+        safe_message = GENERIC_MESSAGES.get(category, GENERIC_MESSAGES[_DEFAULT_CATEGORY])
+
+    # 5b. Callers (AbstractHandler.NotFound/Error/Except) reuse this value
+    # verbatim as both the HTTP reason phrase and the X-MESSAGE header —
+    # neither may contain embedded CR/LF (RFC 7230), which aiohttp enforces
+    # by raising ValueError. Real destination failure text (e.g.
+    # TableOutput's multi-line "Unconsumed column names" message, now
+    # surfaced verbatim per the OutputError override above) can legitimately
+    # contain newlines, so collapse them to keep the message intact while
+    # staying header/reason-safe.
+    if safe_message:
+        safe_message = " ".join(safe_message.splitlines())
 
     # 6. Build and return the payload
     payload: dict = {
