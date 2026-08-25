@@ -104,7 +104,7 @@ dependencies = [
     # `pip install querysource[geo]`. See the [geo] extra for its version floor.
     "ipyleaflet==0.19.2",
     # Text processing
-    "rapidfuzz==3.11.0",
+    "rapidfuzz==3.14.5",
     "nltk>=3.9.3",
     "wordcloud==1.9.4",
     "thefuzz==0.22.1",
