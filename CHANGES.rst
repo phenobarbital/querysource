@@ -1,6 +1,38 @@
 Unreleased
 ==========
 
+Row-oriented outputs — DataFrame results and swallowed errors
+-------------------------------------------------------------
+
+The ``iter`` output format now honours its contract and returns a list of
+dictionaries for ``pandas.DataFrame`` results (``bigquery``, ``deltatbl``,
+``iceberg`` providers) instead of passing the frame through. Iterating a
+DataFrame yields column names, not rows, so every writer declaring
+``output_format = 'iter'`` received garbage: ``aiocsv`` raised
+``AttributeError`` in ``CSVWriter``/``TSVWriter`` and the writers'
+``TmpFile.__aexit__`` returned a truthy value, suppressing the exception —
+``slug:csv`` answered HTTP 200 with only the header line. ``slug:txt`` and the
+report writers (``slug:html``, ``slug:pdf``) were broken by the same cause.
+
+- ``iterFormat.serialize`` converts DataFrames to records
+  (``NaN``/``NaT``/``NA`` -> ``None``) via the new
+  ``querysource.utils.dataframes`` helpers.
+- ``CSVWriter``/``TSVWriter`` apply the same normalisation defensively, for
+  callers handing a frame straight to a writer.
+- ``TmpFile.__aexit__`` no longer suppresses exceptions, so writer errors
+  surface as HTTP 500 instead of a silent, truncated 200.
+Drop invalid ``Content-Range`` header from streamed responses
+------------------------------------------------------------
+
+``AbstractWriter.stream_response()`` advertised
+``Content-Range: bytes 0-16384/<content-length>`` on ``200`` responses that
+carry the **full** body. The header is only defined for ``206``/``416``
+(RFC 9110 s14.4), the range is off by one (inclusive positions, so
+``0-16384`` spans 16385 bytes) and for any body under 16385 bytes the
+last-byte-pos exceeded the complete length, making the field value invalid.
+QuerySource does not honour request ``Range`` headers at all, so nothing
+relied on it. ``Content-Length`` is unchanged.
+
 FEAT-090 — Query Slug list pagination
 -------------------------------------
 

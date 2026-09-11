@@ -2,6 +2,7 @@ import csv
 from io import StringIO
 from aiocsv import AsyncDictWriter
 from aiohttp import web
+from ...utils.dataframes import df_to_records, is_dataframe
 from .abstract import AbstractWriter
 
 
@@ -18,7 +19,10 @@ class TmpFile:
 
     async def __aexit__(self, exc_type, exc, tb):
         self.output.seek(0)
-        return self
+        # A truthy return from __aexit__ suppresses the in-flight exception:
+        # any error raised while writing rows was silently dropped and the
+        # response went out as HTTP 200 with only the header line.
+        return False
 
     def get(self):
         return self.output.getvalue()
@@ -32,6 +36,10 @@ class TSVWriter(AbstractWriter):
     async def get_response(self) -> web.StreamResponse:
         try:
             await self.get_buffer()
+            if is_dataframe(self.data):
+                # Defence in depth: the 'iter' output format already normalises
+                # DataFrames, but a writer can also be handed one directly.
+                self.data = df_to_records(self.data)
             tmp = TmpFile()
             async with tmp.open_buffer() as afp:
                 writer = AsyncDictWriter(afp, self.columns, restval="NULL", quoting=csv.QUOTE_NONE, delimiter='\t', skipinitialspace=True)

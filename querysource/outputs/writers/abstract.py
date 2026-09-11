@@ -15,6 +15,7 @@ from aiohttp.web_exceptions import (
 from ...interfaces.queries import AbstractQuery
 from ...libs.encoders import DefaultEncoder
 from ...utils.functions import check_empty
+from ...utils.dataframes import df_to_records
 from ...utils.errors import build_error_payload
 from ...exceptions import (
     CacheException,
@@ -157,10 +158,9 @@ class AbstractWriter(ABC):
         content_length = len(data)
         response.content_length = content_length
         if self.response_type == 'stream':  # an stream response:
+            # NOTE: no Content-Range header here: the full body is sent with a
+            # 200 status and range requests are not supported.
             chunk_size = 16384
-            response.headers[
-                "Content-Range"
-            ] = f"bytes 0-{chunk_size}/{content_length}"
             try:
                 i = 0
                 await response.prepare(self.request)
@@ -305,8 +305,9 @@ class AbstractWriter(ABC):
                     from pandas import DataFrame
                     if isinstance(self.query, DataFrame):
                         if self.output_format == 'iter':
-                             # convert dataframe into a list of dictionaries:
-                            self.data = self.query.to_dict(orient='records')
+                            # convert dataframe into a list of dictionaries,
+                            # same normalisation the 'iter' format applies:
+                            self.data = df_to_records(self.query)
                         else:
                             self.data = self.query
                         error = None
