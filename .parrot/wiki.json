@@ -1,0 +1,29 @@
+{
+  "wiki_name": "querysource",
+  "storage_dir": ".parrot/wiki",
+  "backend": "sqlite",
+  "include_suffixes": [],
+  "exclude_dirs": [
+    ".parrot/wiki"
+  ],
+  "body_max_chars": 16000,
+  "max_file_kb": 512,
+  "claude": {
+    "nudge_cooldown_seconds": 60,
+    "nudge_tools": [
+      "Grep",
+      "Glob",
+      "Read",
+      "Bash"
+    ]
+  },
+  "sync_graph": false,
+  "arango_database": null,
+  "arango_credentials_env": "ARANGODB",
+  "arango_text_analyzer": "text_en",
+  "vault_dir": null,
+  "namespaces": {},
+  "obsidian_sync": null,
+  "symbol_depth": 2,
+  "structural_backend": true
+}

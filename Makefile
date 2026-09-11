@@ -28,9 +28,14 @@ venv:
 	@echo 'run `source .venv/bin/activate` to start develop with QuerySource.'
 
 # Install production dependencies using lock file
-install: build-rust
+# NOTE: uv sync must run BEFORE build-rust — build-rust invokes .venv/bin/maturin,
+# which only exists once it has been installed. maturin is a `dev`-only extra
+# (see pyproject.toml), so it is excluded from `--no-dev` and installed explicitly.
+install:
 	uv sync --frozen --no-dev --extra analytics --extra vectors
 	uv pip install navigator-api[uvloop,locale]
+	uv pip install "maturin>=1.7,<2.0"
+	$(MAKE) build-rust
 	@echo "Production dependencies installed. Use 'make develop' for development setup."
 
 # Generate lock files (uv only)
@@ -42,8 +47,13 @@ else
 endif
 
 # Install all dependencies including dev dependencies
-develop: build-rust
+# NOTE: uv sync must run BEFORE build-rust — build-rust invokes .venv/bin/maturin,
+# which is installed by the `dev` extra during uv sync. Making build-rust a
+# prerequisite (instead of a recipe step) would run it first and fail on a
+# fresh .venv where maturin isn't installed yet.
+develop:
 	uv sync --frozen --extra analytics --extra dev
+	$(MAKE) build-rust
 	$(MAKE) build-inplace
 
 # Build the Rust-accelerated parser extension (querysource.qs_parsers._qs_parsers)

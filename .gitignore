@@ -14,6 +14,11 @@ __pycache__
 *.pyc
 *.cpp
 *.c
+# wiki
+.parrot/wiki/*
+.parrot/wiki/wiki.db
+.parrot/wiki/wiki.lock
+.parrot/wiki/wiki_stats.json
 # Migrations Folder
 migrations/
 extensions/
