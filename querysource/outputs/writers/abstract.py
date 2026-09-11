@@ -15,6 +15,7 @@ from aiohttp.web_exceptions import (
 from ...interfaces.queries import AbstractQuery
 from ...libs.encoders import DefaultEncoder
 from ...utils.functions import check_empty
+from ...utils.dataframes import df_to_records
 from ...utils.errors import build_error_payload
 from ...exceptions import (
     CacheException,
@@ -304,8 +305,9 @@ class AbstractWriter(ABC):
                     from pandas import DataFrame
                     if isinstance(self.query, DataFrame):
                         if self.output_format == 'iter':
-                             # convert dataframe into a list of dictionaries:
-                            self.data = self.query.to_dict(orient='records')
+                            # convert dataframe into a list of dictionaries,
+                            # same normalisation the 'iter' format applies:
+                            self.data = df_to_records(self.query)
                         else:
                             self.data = self.query
                         error = None

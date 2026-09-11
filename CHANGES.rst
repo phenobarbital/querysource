@@ -1,6 +1,26 @@
 Unreleased
 ==========
 
+Row-oriented outputs — DataFrame results and swallowed errors
+-------------------------------------------------------------
+
+The ``iter`` output format now honours its contract and returns a list of
+dictionaries for ``pandas.DataFrame`` results (``bigquery``, ``deltatbl``,
+``iceberg`` providers) instead of passing the frame through. Iterating a
+DataFrame yields column names, not rows, so every writer declaring
+``output_format = 'iter'`` received garbage: ``aiocsv`` raised
+``AttributeError`` in ``CSVWriter``/``TSVWriter`` and the writers'
+``TmpFile.__aexit__`` returned a truthy value, suppressing the exception —
+``slug:csv`` answered HTTP 200 with only the header line. ``slug:txt`` and the
+report writers (``slug:html``, ``slug:pdf``) were broken by the same cause.
+
+- ``iterFormat.serialize`` converts DataFrames to records
+  (``NaN``/``NaT``/``NA`` -> ``None``) via the new
+  ``querysource.utils.dataframes`` helpers.
+- ``CSVWriter``/``TSVWriter`` apply the same normalisation defensively, for
+  callers handing a frame straight to a writer.
+- ``TmpFile.__aexit__`` no longer suppresses exceptions, so writer errors
+  surface as HTTP 500 instead of a silent, truncated 200.
 Drop invalid ``Content-Range`` header from streamed responses
 ------------------------------------------------------------
 
