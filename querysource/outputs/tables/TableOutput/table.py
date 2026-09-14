@@ -98,10 +98,21 @@ class TableOutput:
             datasource[u.columns] = u.replace(['<NA>', 'None'], None)
             try:
                 engine = self._engine.engine()
-                has_pk = bool(self._pk) and hasattr(self._engine, 'ensure_primary_key')
+                has_upsert_keys = bool(self._pk) and hasattr(
+                    self._engine, 'ensure_upsert_constraint'
+                )
+                table_existed = (
+                    self._engine.table_exists(schema, table)
+                    if has_upsert_keys
+                    else True
+                )
+                created_table = (
+                    options.get('if_exists') == 'replace' or not table_existed
+                )
                 if self._truncate and hasattr(self._engine, 'truncate_table'):
                     # Keep the table (grants/indexes/comments), wipe rows,
-                    # then upsert. Create the structure + PK first if missing.
+                    # then upsert. Create the structure and its upsert
+                    # constraint first if missing.
                     datasource.head(0).to_sql(
                         name=table,
                         con=engine,
@@ -109,19 +120,25 @@ class TableOutput:
                         if_exists='append',
                         index=False,
                     )
-                    if has_pk:
-                        self._engine.ensure_primary_key(schema, table, self._pk)
+                    if has_upsert_keys:
+                        self._engine.ensure_upsert_constraint(
+                            schema,
+                            table,
+                            self._pk,
+                            create_primary_key=created_table,
+                        )
                     self._engine.truncate_table(schema, table)
                     datasource.to_sql(
                         name=table,
                         con=engine,
                         **{**options, 'if_exists': 'append'}
                     )
-                elif has_pk:
-                    # pandas.to_sql never creates a PK, but db_upsert needs one
-                    # for its ON CONFLICT target. Split the write into:
+                elif has_upsert_keys:
+                    # pandas.to_sql never creates a PK or UNIQUE constraint,
+                    # but db_upsert needs one for its ON CONFLICT target.
+                    # Split the write into:
                     #   1) create the (empty) structure honouring if_exists,
-                    #   2) add the PRIMARY KEY declared in the JSON config,
+                    #   2) add an upsert constraint for the configured keys,
                     #   3) insert the data via append + the db_upsert method.
                     datasource.head(0).to_sql(
                         name=table,
@@ -130,7 +147,12 @@ class TableOutput:
                         if_exists=options.get('if_exists', 'append'),
                         index=False,
                     )
-                    self._engine.ensure_primary_key(schema, table, self._pk)
+                    self._engine.ensure_upsert_constraint(
+                        schema,
+                        table,
+                        self._pk,
+                        create_primary_key=created_table,
+                    )
                     datasource.to_sql(
                         name=table,
                         con=engine,
