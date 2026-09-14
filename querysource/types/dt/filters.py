@@ -299,12 +299,17 @@ def drop_duplicates(df: pd.DataFrame, columns: Optional[list] = None, **kwargs):
     :return: The DataFrame with duplicates dropped.
     """
     if columns and isinstance(columns, list):
-        # NOTE: do not ``set_index(columns, drop=False)`` here — it leaves the
-        # same names as both an index level and a column, which makes the
-        # subsequent ``sort_values(by=columns)`` raise "is both an index level
-        # and a column label, which is ambiguous". Sorting on the columns
-        # directly keeps ``keep='first'`` deterministic without that clash.
-        df = df.sort_values(by=columns).drop_duplicates(subset=columns, **kwargs)
+        # NOTE: do NOT sort before dropping. ``sort_values(by=columns)`` is
+        # unnecessary for ``keep='first'`` (drop_duplicates already keeps the
+        # first occurrence in the DataFrame's existing order) and it is fragile:
+        # with a multi-column subset, if any column holds mixed/unorderable
+        # values (e.g. an object column mixing str and NaN, or ints and str),
+        # ``sort_values`` raises ``TypeError: '<' not supported between
+        # instances of ...`` — which the Filter operator swallows, so the rows
+        # are never de-duplicated and the downstream upsert then fails with a
+        # CardinalityViolation. Dropping directly on the subset is order-stable
+        # and type-agnostic.
+        df = df.drop_duplicates(subset=columns, **kwargs)
     return df
 
 
