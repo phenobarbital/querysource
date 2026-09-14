@@ -1,3 +1,11 @@
+---
+# SDD flow type and base branch (FEAT-145).
+# - type: feature  (default)  → base_branch: dev (or any non-main branch)
+# - type: hotfix              → base_branch MUST be: main
+type: feature
+base_branch: dev
+---
+
 # Brainstorm: <Title>
 
 **Date**: YYYY-MM-DD
@@ -164,7 +172,7 @@
 
 #### Classes & Signatures
 ```python
-# From parrot/path/to/file.py:NN
+# From querysource/path/to/file.py:NN
 class ExistingClass(BaseClass):
     attribute: Type  # line NN
     async def method(self, param: Type) -> ReturnType:  # line NN
@@ -174,23 +182,41 @@ class ExistingClass(BaseClass):
 #### Verified Imports
 ```python
 # These imports have been confirmed to work:
-from parrot.module import ClassName  # parrot/module/__init__.py:NN
+from querysource.module import ClassName  # querysource/module/__init__.py:NN
 ```
 
 #### Key Attributes & Constants
 <!-- List attributes/constants that tasks will need to reference -->
-- `ClassName.attribute_name` → `Type` (parrot/path/file.py:NN)
+- `ClassName.attribute_name` → `Type` (querysource/path/file.py:NN)
 
 ### Does NOT Exist (Anti-Hallucination)
 <!-- List things that might seem like they should exist but DO NOT.
      This prevents implementing agents from assuming these are available. -->
-- ~~`parrot.module.NonExistentThing`~~ — does not exist
+- ~~`querysource.module.NonExistentThing`~~ — does not exist
 - ~~`ClassName.phantom_attribute`~~ — not a real attribute
+
+---
+
+## Parallelism Assessment
+
+<!-- Evaluate the feature's decomposition potential for parallel development.
+     This informs sdd-spec's worktree strategy section. -->
+
+- **Internal parallelism**: <!-- Can this feature's tasks be split into independent worktrees? -->
+- **Cross-feature independence**: <!-- Does this feature conflict with any in-flight specs? List shared files or modules. -->
+- **Recommended isolation**: <!-- per-spec | mixed -->
+- **Rationale**: <!-- Brief explanation of why the recommended isolation makes sense. -->
 
 ---
 
 ## Open Questions
 
-<!-- Anything unresolved. Each should have an owner if possible. -->
+<!-- Anything unresolved. Each should have an owner if possible.
+     Convention (important — consumed by /sdd-spec):
+       [ ] unresolved question — *Owner: name*
+       [x] resolved question — *Owner: name*: <answer text>
+     When you resolve a question, flip the checkbox to [x] and append the
+     answer after the final `:` on the owner line. /sdd-spec carries these
+     forward into the spec body instead of re-asking them. -->
 - [ ] Question 1 — *Owner: name*
 - [ ] Question 2 — *Owner: name*

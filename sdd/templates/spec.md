@@ -1,3 +1,11 @@
+---
+# SDD flow type and base branch (FEAT-145).
+# - type: feature  (default)  → base_branch: dev (or any non-main branch)
+# - type: hotfix              → base_branch MUST be: main
+type: feature
+base_branch: dev
+---
+
 # Feature Specification: <Feature Name>
 
 **Feature ID**: FEAT-<NNN>
@@ -37,7 +45,7 @@ ComponentA ──→ ComponentB ──→ ComponentC
 ```
 
 ### Integration Points
-<!-- How does this feature integrate with existing AI-Parrot components? -->
+<!-- How does this feature integrate with existing QuerySource components? -->
 
 | Existing Component | Integration Type | Notes |
 |---|---|---|
@@ -66,15 +74,43 @@ class NewComponent:
 > Define the discrete modules that will be implemented.
 > These directly map to Task Artifacts in Phase 2.
 
+#### Delegation-eligible modules
+
+Mark which modules can be implemented by the targeted writer from an
+already-decided TASK packet. Architecture decisions always stay with the
+thinking model; eligibility only means "the design is complete enough that
+writing the code is mechanical".
+
+| Module | Eligible? | Decided patterns / exact contracts | Why not (if no) |
+|---|---|---|---|
+| M1: <name> | yes / no | <signatures, error codes, file layout already fixed> | <open design question> |
+
+
 ### Module 1: <Name>
-- **Path**: `parrot/path/to/module.py`
+- **Path**: `querysource/path/to/module.py`
 - **Responsibility**: What this module does
 - **Depends on**: existing module or Module N from this spec
+- **Interface Skeleton** *(signatures + docstrings only — bodies belong to task blueprints, FEAT-545)*:
+  ```python
+  # querysource/path/to/module.py  (new | modifies querysource/path/to/module.py:NN)
+  class NewComponent(ExistingBase):  # ExistingBase verified: querysource/providers/abstract.py:NN
+      """<purpose>."""
+      async def method(self, param: Type) -> ReturnType:
+          """<contract: returns …; raises … when …>."""
+  ```
 
 ### Module 2: <Name>
-- **Path**: `parrot/path/to/module2.py`
+- **Path**: `querysource/path/to/module2.py`
 - **Responsibility**: ...
 - **Depends on**: Module 1
+- **Interface Skeleton** *(signatures + docstrings only — bodies belong to task blueprints, FEAT-545)*:
+  ```python
+  # querysource/path/to/module.py  (new | modifies querysource/path/to/module.py:NN)
+  class NewComponent(ExistingBase):  # ExistingBase verified: querysource/providers/abstract.py:NN
+      """<purpose>."""
+      async def method(self, param: Type) -> ReturnType:
+          """<contract: returns …; raises … when …>."""
+  ```
 
 ---
 
@@ -124,14 +160,14 @@ def sample_config():
 ### Verified Imports
 <!-- Exact import statements confirmed to work. Agents MUST use these verbatim. -->
 ```python
-from parrot.module import ClassName  # verified: parrot/module/__init__.py:NN
+from querysource.module import ClassName  # verified: querysource/module/__init__.py:NN
 ```
 
 ### Existing Class Signatures
 <!-- Exact signatures of classes/methods that tasks will extend or call.
      Include attribute types and method signatures with line numbers. -->
 ```python
-# parrot/path/to/file.py
+# querysource/path/to/file.py
 class ExistingClass(BaseClass):
     attribute: Type  # line NN
     async def method(self, param: Type) -> ReturnType:  # line NN
@@ -146,16 +182,21 @@ class ExistingClass(BaseClass):
 ### Does NOT Exist (Anti-Hallucination)
 <!-- Things that look plausible but DO NOT exist in the codebase.
      Prevents agents from inventing imports or attributes. -->
-- ~~`parrot.module.NonExistentThing`~~ — does not exist
+- ~~`querysource.module.NonExistentThing`~~ — does not exist
 - ~~`ClassName.phantom_method()`~~ — not a real method
 
 ---
 
 ## 7. Implementation Notes & Constraints
 
+> Architecture decisions stay with the thinking model. A delegated
+> implementation may only express a decision already recorded here and in
+> the TASK's implementation blocks — it must never invent an API, choose a
+> file, or resolve an open design question.
+
 
 ### Patterns to Follow
-- Use `AbstractBase` pattern from `parrot/base/`
+- Use `AbstractBase` pattern from `querysource/providers/`
 - Follow async-first design throughout
 - Pydantic models for all structured data
 - Comprehensive logging with `self.logger`
@@ -177,6 +218,24 @@ class ExistingClass(BaseClass):
 
 - [ ] Question 1 — *Owner: name*
 - [ ] Question 2 — *Owner: name*
+
+---
+
+## 9. Design Research Cross-Check
+
+> Independent design opinion from the `codex` seat over the **accepted exploration
+> doc** (never over this spec). Model: `<model>` · Status: completed | skipped (<reason>)
+> · Transcript: `sdd/state/<FEAT-ID>/design_research/`
+> Every row is a suggestion the reviewer made; the disposition is the spec author's
+> call (CONFIRM = folded into the spec, REJECT = reason recorded, ESCALATE = §8 question).
+
+| # | Suggestion (kind) | Disposition | Reason | Landed in |
+|---|---|---|---|---|
+| S1 | <title> (architecture) | CONFIRM | <why adopted> | §2 Overview |
+| S2 | <title> (testing) | REJECT | <why not> | — |
+| S3 | <title> (risk) | ESCALATE | <what the human must decide> | §8 Q<N> |
+
+Summary: **<C>** confirmed · **<R>** rejected · **<E>** escalated.
 
 ---
 

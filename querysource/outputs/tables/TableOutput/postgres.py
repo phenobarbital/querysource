@@ -388,35 +388,84 @@ class PgOutput(AbstractOutput):
                 f"Error opening database connection: {err}"
             ) from err
 
-    def ensure_primary_key(self, schema: str, table: str, pk: List[str]) -> None:
-        """Create the table's PRIMARY KEY when it is missing.
+    def table_exists(self, schema: str, table: str) -> bool:
+        """Return whether *schema.table* exists before a Pandas write."""
+        relname = f'"{schema}"."{table}"'
+        with self._engine.connect() as conn:
+            return conn.execute(
+                text("SELECT to_regclass(:rel)"),
+                {"rel": relname},
+            ).scalar() is not None
 
-        ``pandas.DataFrame.to_sql`` never emits a PRIMARY KEY / UNIQUE
-        constraint, yet :meth:`db_upsert` relies on one for its
-        ``INSERT ... ON CONFLICT`` statement. After the table structure is
-        created we add the PK declared in the JSON config (``pk``) so the
-        upsert has a conflict target. Idempotent: skips the ``ALTER`` when a
-        primary key already exists (e.g. ``if_exists='append'`` re-runs).
+    def ensure_upsert_constraint(
+        self,
+        schema: str,
+        table: str,
+        upsert_keys: List[str],
+        create_primary_key: bool = False,
+    ) -> None:
+        """Ensure *upsert_keys* can be used as an ``ON CONFLICT`` target.
+
+        The legacy ``pk`` configuration is an upsert-key declaration, not
+        necessarily the table's primary key. PostgreSQL can use either a
+        PRIMARY KEY or a UNIQUE constraint for ``ON CONFLICT``. A matching
+        existing constraint is retained. Only a table created by this write
+        receives a PRIMARY KEY; an existing table receives a UNIQUE constraint
+        when it has no matching conflict target.
         """
-        if not pk:
+        if not upsert_keys:
             return
         relname = f'"{schema}"."{table}"'
-        cols = ", ".join(f'"{c}"' for c in pk)
+        cols = ", ".join(f'"{column}"' for column in upsert_keys)
         with self._engine.begin() as conn:
-            already = conn.execute(
+            constraints = conn.execute(
                 text(
-                    "SELECT 1 FROM pg_index i "
-                    "WHERE i.indrelid = CAST(:rel AS regclass) "
-                    "AND i.indisprimary"
+                    "SELECT c.contype, "
+                    "array_agg(a.attname ORDER BY key.ordinality) "
+                    "FROM pg_constraint c "
+                    "JOIN unnest(c.conkey) WITH ORDINALITY "
+                    "AS key(attnum, ordinality) ON TRUE "
+                    "JOIN pg_attribute a "
+                    "ON a.attrelid = c.conrelid AND a.attnum = key.attnum "
+                    "WHERE c.conrelid = CAST(:rel AS regclass) "
+                    "AND c.contype IN ('p', 'u') "
+                    "GROUP BY c.oid, c.contype"
                 ),
                 {"rel": relname},
-            ).first()
-            if not already:
+            ).all()
+            has_primary_key = any(kind == "p" for kind, _ in constraints)
+            has_upsert_constraint = any(
+                len(columns) == len(upsert_keys)
+                and set(columns) == set(upsert_keys)
+                for _, columns in constraints
+            )
+            if has_upsert_constraint:
+                return
+            if create_primary_key and not has_primary_key:
+                self.logger.warning(
+                    ":: No PRIMARY KEY on %s; adding (%s) for upserts",
+                    relname,
+                    cols,
+                )
                 conn.execute(
                     text(f"ALTER TABLE {relname} ADD PRIMARY KEY ({cols})")
                 )
                 self.logger.debug(
                     f":: Added PRIMARY KEY ({cols}) on {relname}"
+                )
+            else:
+                if not has_primary_key:
+                    self.logger.warning(
+                        ":: Existing table %s has no PRIMARY KEY; adding "
+                        "UNIQUE (%s) for upserts",
+                        relname,
+                        cols,
+                    )
+                conn.execute(
+                    text(f"ALTER TABLE {relname} ADD UNIQUE ({cols})")
+                )
+                self.logger.debug(
+                    f":: Added UNIQUE ({cols}) on {relname} for upserts"
                 )
 
     def truncate_table(self, schema: str, table: str) -> None:
