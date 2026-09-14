@@ -47,20 +47,38 @@ Check:
   ```
   and STOP.
 
-### 3. Detect Context
+### 3. Ensure the Worktree
 
-With per-spec indexes (FEAT-145), commits land in whatever branch you are on
-— worktree or main repo. Both are safe because each feature owns its own
-index file, so there is no shared mutable state to collide on.
+The worktree is created by whoever is about to write code in it — not at
+planning time (FEAT-552). `/sdd-task` no longer creates one, so this step
+provisions it, idempotently: already inside the right worktree, it is a no-op
+that prints the path you are already in.
+
+Everything the step needs is in the per-spec index header resolved in §1
+(`feature_id`, `feature`, `spec`, `type`, `base_branch`):
 
 ```bash
-CURRENT_DIR=$(pwd)
-CURRENT_BRANCH=$(git branch --show-current)
+WT=$(python -m scripts.sdd.ensure_worktree \
+       --slug "<feature-slug>" \
+       --feature-id "<FEAT-ID>" \
+       --spec "<spec-path>" \
+       --index "sdd/tasks/index/<feature-slug>.json")
+cd "$WT"
 ```
 
-For the recommended layout, you should be inside a feature worktree (path
-contains `.claude/worktrees/`). If not, that's fine — just confirm the
-branch matches the feature you intend to work on.
+For a hotfix (`type: hotfix` in the index header) pass `--jira-key <KEY>`
+instead of `--feature-id`; the CLI applies the FEAT-466 naming and branches
+from `origin/main`.
+
+If the command exits non-zero, **STOP** and show its message verbatim. Do NOT
+fall back to implementing on `<base_branch>` — an un-isolated implementation is
+exactly what this step exists to prevent. The two messages you are most likely
+to see are a leftover branch with no worktree, and task artifacts missing from
+the base you branched off (fetch and re-run).
+
+With per-spec indexes (FEAT-145), commits then land in the worktree's own
+branch. Each feature owns its own index file, so parallel worktrees never
+collide on shared mutable state.
 
 ### 4. Mark In-Progress (in place)
 
@@ -166,35 +184,50 @@ Follow the **Agent Instructions** section in the task file:
 
 Otherwise, keep going until the task is **done**.
 
+
+#### Delegated implementation (only when the task has `## Delegation Contract`)
+
+Use this branch ONLY when the task file contains a `## Delegation Contract`
+section AND the `parrot-targeted-writer` MCP server is available. Otherwise
+implement the task yourself — the normal route is the default.
+
+1. Call MCP tool `writer_generate` (server `parrot-targeted-writer`) with `task_path`.
+2. On `status: error` with a contract code (`stale_target`, `missing_block`,
+   `placeholder_code`, `underspecified_create`, …): fix the packet in the task file
+   (refresh hashes with `sha256sum`, complete the design) and retry once, or implement
+   the task yourself. The workflow **never silently invokes another coder** — no other
+   coding tool is substituted when delegation fails.
+3. On `ok`: read `data.patch_path` with `source_read` in ranges of at most 350 lines and
+   review EVERY hunk against the task's Codebase Contract. Never apply a patch you have
+   not fully read. If a hunk is wrong, do not apply: fix the packet/blocks and regenerate
+   at most once more, else implement normally.
+4. Call `writer_apply` with `artifact_id` and `reviewed_sha256 = data.patch_sha256`
+   (verify it equals `sha256sum artifacts/tool-optimizations/<id>/patch.diff`).
+5. Run the task's acceptance tests yourself. The writer never runs tests; a model's claim
+   that tests passed is not execution evidence.
+6. Continue with the normal validate → commit → SDD state steps. SDD files
+   (`sdd/tasks/index/*.json`, task files) are never edited by the writer.
+
 ### 8. Mark Done (in place)
 
 After the code is committed, update the per-spec index in the same branch
 — no `cd` to the main repo (FEAT-145).
 
+> **CRITICAL — use the script, do NOT hand-roll the move.** Closing a task
+> means *moving* its file from `active/` to `completed/`. Agents that paraphrase
+> this as a `Write`/copy leave the `active/` file behind; when the feature
+> branch merges, both copies land on the base branch as a "stalled" orphan.
+> `scripts/sdd/close_task.sh` does the move with `git mv` and HARD-VERIFIES that
+> no `active/` copy survives (exit 3 if it does). Always call it verbatim.
+
 ```bash
-INDEX="sdd/tasks/index/<feature-slug>.json"
-NOW=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)
+# Move active → completed, stamp the index (status/completed_at/verification/file),
+# stage the change, and assert active/ is clean. Idempotent.
+scripts/sdd/close_task.sh TASK-<NNN> <feature-slug> verified
 
-# Move task file from active to completed (in-place)
-mkdir -p sdd/tasks/completed/
-mv sdd/tasks/active/TASK-<NNN>-<slug>.md sdd/tasks/completed/
-
-# Update index: set status → "done", completed_at → now
-jq --arg id "<TASK-NNN>" --arg now "$NOW" '
-  (.tasks[] | select(.id == $id) | .status) = "done" |
-  (.tasks[] | select(.id == $id) | .completed_at) = $now |
-  (.tasks[] | select(.id == $id) | .file) = ("sdd/tasks/completed/TASK-<NNN>-<slug>.md")
-' "$INDEX" > "$INDEX.tmp" && mv "$INDEX.tmp" "$INDEX"
-
-# Fill in the Completion Note section of the moved task file (in completed/).
-
-# CRITICAL: Unstage everything first — NEVER commit unrelated changes
-git reset HEAD
-# Stage ONLY the SDD task state files — NEVER use "git add ." or "git add -A"
-git add "$INDEX" sdd/tasks/active/TASK-<NNN>-<slug>.md sdd/tasks/completed/TASK-<NNN>-<slug>.md
-# Verify ONLY task-related files are staged
-git diff --cached --name-only
-# If ANY unrelated files appear, run "git reset HEAD" and start over
+# Fill in the Completion Note section of the moved file (now in completed/).
+# Then commit ONLY the staged SDD state — never "git add ." / "git add -A".
+git diff --cached --name-only        # sanity-check: only index + task files
 git commit -m "sdd: complete TASK-<NNN> — <title>"
 ```
 

@@ -2,6 +2,14 @@
 .worktrees/
 .claude/worktrees/
 
+# Local agent / MCP configuration (machine-specific paths and hooks)
+.mcp.json
+.claude/settings.json
+.claude/settings.local.json
+.parrot/mcp-toolkits.yaml
+.parrot/tool-guards.json
+.parrot/wiki.local.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 __pycache__
