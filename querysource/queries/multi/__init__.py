@@ -252,13 +252,31 @@ class MultiQS(BaseQuery):
                     self._conditions.clear()
                 self._options = {}
 
-        # Preflight policy checks on resolved references before a known batch starts.
-        # Resolve parent store
-        repo = await self.get_definition_repository()
-        parent_store = repo.registry.resolve(self._tenant_selector)
+        # Cheap request-shape guardrail runs before any DB-backed preflight
+        # work: a request with too many sources must fail fast on a local
+        # length check, not after N sequential repo.get() round trips.
+        total_sources = (
+            len(self._queries or {})
+            + len(self._files or {})
+            + len(self._sources or [])
+        )
+        if total_sources > conf.MULTIQS_MAX_SOURCES_PER_REQUEST:
+            raise self.Error(
+                message=(
+                    "Too many MultiQS sources in a single request "
+                    f"({total_sources}). Maximum allowed is "
+                    f"{conf.MULTIQS_MAX_SOURCES_PER_REQUEST}."
+                ),
+            )
 
+        # Preflight policy checks on resolved references before a known batch
+        # starts. Only touch the definition repository (which opens a real DB
+        # connection) when there is at least one stored query to preflight —
+        # file-only/source-only pipelines (self._queries empty) must not pay
+        # for, or depend on, tenant registry availability.
         resolved_stores = {}
         if self._queries:
+            repo = await self.get_definition_repository()
             for name, query_cfg in list(self._queries.items()):
                 # Keep alias separate from stored slug.
                 child_slug = query_cfg.get("slug")
@@ -291,20 +309,6 @@ class MultiQS(BaseQuery):
                         message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
                         exception=ex
                     ) from ex
-
-        total_sources = (
-            len(self._queries or {})
-            + len(self._files or {})
-            + len(self._sources or [])
-        )
-        if total_sources > conf.MULTIQS_MAX_SOURCES_PER_REQUEST:
-            raise self.Error(
-                message=(
-                    "Too many MultiQS sources in a single request "
-                    f"({total_sources}). Maximum allowed is "
-                    f"{conf.MULTIQS_MAX_SOURCES_PER_REQUEST}."
-                ),
-            )
 
         if self._queries:
             for name, query in self._queries.items():
