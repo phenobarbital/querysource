@@ -16,6 +16,7 @@ from querysource.scheduler.jobs import (
     scheduled_query_job,
     scheduled_multiqs_job,
 )
+from querysource.tenants import TenantRegistry
 
 
 @pytest.fixture
@@ -67,6 +68,7 @@ def _make_sched_mocked():
     qs.logger = MagicMock()
     qs._timezone = "UTC"
     qs._notification_manager = MagicMock()
+    qs._registry = TenantRegistry()
     qs._scheduler = MagicMock()
     return qs
 
