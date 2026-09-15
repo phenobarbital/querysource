@@ -106,6 +106,7 @@ class TestDescribeRoutes:
     def test_vocabulary_route_registered(self):
         """GET /api/v1/queries/vocabulary must be registered."""
         from aiohttp import web
+
         from querysource.handlers.describe import QueryDescribe
 
         dh = QueryDescribe()
@@ -121,6 +122,7 @@ class TestDescribeRoutes:
     def test_columns_route_registered(self):
         """GET /api/v1/queries/{slug}/columns must be registered."""
         from aiohttp import web
+
         from querysource.handlers.describe import QueryDescribe
 
         dh = QueryDescribe()

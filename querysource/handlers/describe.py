@@ -1,12 +1,15 @@
 """Read-only describe endpoints for stored query slugs (FEAT-148)."""
 from __future__ import annotations
 
+import asyncio
 import re
 from math import ceil
+from typing import Literal
 
 from aiohttp import web
-from asyncdb.exceptions import NoDataFound
+from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 from datamodel.exceptions import ValidationError
+from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from ..auth.slug_visibility import (
@@ -20,9 +23,16 @@ from ..auth.slug_visibility import (
     legacy_store,
     resolve_principal,
 )
-from ..conf import QS_DESCRIBE_MAX_SCAN
-from ..exceptions import SlugNotFound
-from ..queries.describe import describe_slug
+from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT, QS_DESCRIBE_MAX_SCAN
+from ..exceptions import ParserError, SlugNotFound
+from ..queries.describe import (
+    RESERVED_PLACEHOLDERS,
+    describe_slug,
+    extract_placeholders,
+)
+from ..queries.qs import QS
+from ..types.validators import pg_constants, pg_udfs, udf_keywords
+from ..utils.vocabulary import build_vocabulary
 from ._pagination import (
     PaginatedResponse,
     PaginationParams,
@@ -34,19 +44,6 @@ from ._pagination import (
 )
 from .abstract import AbstractHandler
 
-import asyncio
-from typing import Literal, Optional
-
-from asyncdb.exceptions import DriverError, ProviderError
-from pydantic import BaseModel
-
-from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT
-from ..exceptions import ParserError
-from ..queries.describe import RESERVED_PLACEHOLDERS, extract_placeholders
-from ..queries.qs import QS
-from ..types.validators import pg_constants, pg_udfs, udf_keywords
-from ..utils.vocabulary import build_vocabulary
-
 SLUG_PATTERN = r"[A-Za-z0-9_.\-:]{1,255}"
 VOCABULARY_LINK = "/api/v1/queries/vocabulary"
 _PAGINATION_KEYS = frozenset({"page", "page_size", "sort", "search", "q", "fields"})
@@ -56,7 +53,7 @@ class ColumnInfo(BaseModel):
     """One output column; ``type`` is None when not introspectable."""
 
     name: str
-    type: Optional[str] = None
+    type: str | None = None
 
 
 class ColumnsResponse(BaseModel):
@@ -269,7 +266,7 @@ class QueryDescribe(AbstractHandler):
         finally:
             try:
                 await qs.close()
-            except Exception:  # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except  # noqa: BLE001, S110
                 pass
 
         if source != "prepare":

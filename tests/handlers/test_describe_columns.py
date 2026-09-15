@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import web
-from asyncdb.exceptions import DriverError, ProviderError
+from asyncdb.exceptions import DriverError
 
 from querysource.exceptions import ParserError, SlugNotFound
 from querysource.handlers.describe import QueryDescribe
@@ -74,9 +74,9 @@ async def test_columns_prepare_typed(handler, mock_request):
     )
 
     with patch("querysource.handlers.describe.QS", return_value=fake_qs), \
-         patch.object(QueryDescribe, "_principal", new_callable=AsyncMock) as mock_p, \
-         patch.object(QueryDescribe, "_store", new_callable=AsyncMock) as mock_s, \
-         patch.object(QueryDescribe, "_load_visible", new_callable=AsyncMock) as mock_lv, \
+         patch.object(QueryDescribe, "_principal", new_callable=AsyncMock), \
+         patch.object(QueryDescribe, "_store", new_callable=AsyncMock), \
+         patch.object(QueryDescribe, "_load_visible", new_callable=AsyncMock), \
          patch.object(QueryDescribe, "json_data", new_callable=AsyncMock, return_value={}), \
          patch.object(QueryDescribe, "query_parameters", return_value={}), \
          patch.object(QueryDescribe, "json_response") as mock_jr:
@@ -180,10 +180,9 @@ async def test_columns_slug_vanished_404(handler, mock_request):
          patch.object(QueryDescribe, "_store", new_callable=AsyncMock), \
          patch.object(QueryDescribe, "_load_visible", new_callable=AsyncMock), \
          patch.object(QueryDescribe, "json_data", new_callable=AsyncMock, return_value={}), \
-         patch.object(QueryDescribe, "query_parameters", return_value={}):
-
-        with pytest.raises(web.HTTPNotFound):
-            await handler.columns(mock_request)
+         patch.object(QueryDescribe, "query_parameters", return_value={}), \
+         pytest.raises(web.HTTPNotFound):
+        await handler.columns(mock_request)
 
 
 @pytest.mark.asyncio
@@ -238,9 +237,9 @@ async def test_columns_conditions_merge_query_over_body(handler, mock_request):
 
 @pytest.mark.asyncio
 async def test_columns_401_without_principal(handler, mock_request):
-    with patch.object(QueryDescribe, "_principal", side_effect=web.HTTPUnauthorized):
-        with pytest.raises(web.HTTPUnauthorized):
-            await handler.columns(mock_request)
+    with patch.object(QueryDescribe, "_principal", side_effect=web.HTTPUnauthorized), \
+         pytest.raises(web.HTTPUnauthorized):
+        await handler.columns(mock_request)
 
 
 @pytest.mark.asyncio

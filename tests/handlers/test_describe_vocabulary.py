@@ -21,9 +21,9 @@ def mock_request():
 
 @pytest.mark.asyncio
 async def test_vocabulary_requires_principal(handler, mock_request):
-    with patch.object(QueryDescribe, "_principal", side_effect=web.HTTPUnauthorized):
-        with pytest.raises(web.HTTPUnauthorized):
-            await handler.vocabulary(mock_request)
+    with patch.object(QueryDescribe, "_principal", side_effect=web.HTTPUnauthorized), \
+         pytest.raises(web.HTTPUnauthorized):
+        await handler.vocabulary(mock_request)
 
 
 @pytest.mark.asyncio
@@ -40,6 +40,19 @@ async def test_vocabulary_session_ok(handler, mock_request):
         assert "keywords" in resp_data
         assert "constants" in resp_data
         assert "pg_functions" in resp_data
+
+
+@pytest.mark.asyncio
+async def test_vocabulary_authz_ok(handler, mock_request):
+    """Sessionless authz (no session, QS_PBAC_ALLOW_SESSIONLESS_AUTHZ + stamped request) is allowed (spec §8 default)."""
+    mock_request.get.side_effect = lambda k, d=None: "test_backend" if k == "authz_backend" else d
+
+    with patch.object(QueryDescribe, "_get_user_session", new_callable=AsyncMock, return_value=None), \
+         patch("querysource.auth.slug_visibility.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ", True), \
+         patch.object(QueryDescribe, "json_response") as mock_jr:
+        await handler.vocabulary(mock_request)
+
+    mock_jr.assert_called_once()
 
 
 @pytest.mark.asyncio
