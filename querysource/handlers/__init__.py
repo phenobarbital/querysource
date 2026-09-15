@@ -10,6 +10,7 @@ from .executor import QueryExecutor
 from .variables import VariablesService
 from .log import LoggingService
 from .scheduler import SchedulerJobsView
+from .describe import QueryDescribe
 
 
 __all__ = (
@@ -20,4 +21,5 @@ __all__ = (
     'VariablesService',
     'LoggingService',
     'SchedulerJobsView',
+    'QueryDescribe',
 )
