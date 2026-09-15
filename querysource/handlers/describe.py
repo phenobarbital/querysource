@@ -22,6 +22,7 @@ from ..auth.slug_visibility import (
     filter_visible,
     legacy_store,
     resolve_principal,
+    tenant_store,
 )
 from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT, QS_DESCRIBE_MAX_SCAN
 from ..exceptions import ParserError, QueryException, SlugNotFound
@@ -79,8 +80,14 @@ class QueryDescribe(AbstractHandler):
         return principal
 
     async def _store(self, request: web.Request) -> DescribeStore:
-        """Legacy definitions store (tenant branch added by TASK-743)."""
-        return legacy_store()
+        """Legacy store, or the FEAT-147 tenant store when the route carries {tenant}."""
+        tenant_param = request.match_info.get("tenant")
+        if tenant_param is None:
+            return legacy_store()
+        store = await tenant_store(request, tenant_param)
+        if store is None:
+            raise web.HTTPNotFound()
+        return store
 
     async def _load_visible(
         self, request: web.Request, principal: Principal, store: DescribeStore, slug: str
@@ -91,33 +98,38 @@ class QueryDescribe(AbstractHandler):
         predicate = build_program_predicate(principal, store, param_index=2)
         if predicate.deny_all:
             raise web.HTTPNotFound()
-        
-        # Validate identifiers
-        _validate_bare_identifier(store.schema, "schema")
-        _validate_bare_identifier(store.table, "table")
-        
-        # Build exists_sql
-        exists_sql = f'SELECT 1 FROM "{store.schema}"."{store.table}" WHERE "query_slug" = $1'
+
+        # Build exists_sql with appropriate quoting
+        if store.has_program_slug:
+            # Legacy store: use bare identifier validation
+            _validate_bare_identifier(store.schema, "schema")
+            _validate_bare_identifier(store.table, "table")
+            exists_sql = f'SELECT 1 FROM "{store.schema}"."{store.table}" WHERE "query_slug" = $1'
+        else:
+            # Tenant store: quote identifiers
+            from querysource.tenants import quote_identifier
+            exists_sql = f'SELECT 1 FROM {quote_identifier(store.schema)}.{quote_identifier(store.table)} WHERE "query_slug" = $1'
+
         if predicate.sql:
             exists_sql += f" AND ({predicate.sql})"
-        
+
         # Acquire connection and check existence
         async with await request.app['qs_connection'].acquire() as conn:
             row = await conn.fetch_one(exists_sql, slug, *predicate.args)
             if row is None:
                 raise web.HTTPNotFound()
-            
+
             # Load the model
             try:
                 model = await store.loader(conn, slug)
             except (NoDataFound, ValidationError, SlugNotFound) as err:
                 self.logger.warning("Failed to load slug %r: %s", slug, err)
-                raise web.HTTPNotFound()
-            
+                raise web.HTTPNotFound() from None
+
             # Check access
             if not await can_access(request, principal, slug, "slug:describe", "slug:execute"):
                 raise web.HTTPNotFound()
-            
+
             return model
 
     async def describe_list(self, request: web.Request) -> web.Response:
@@ -144,12 +156,24 @@ class QueryDescribe(AbstractHandler):
         
         # Extract extra filters
         extra = {k: v for k, v in qp.items() if k not in _PAGINATION_KEYS}
-        
+
+        # Tenant stores: reject program_slug in sort/filter
+        if not store.has_program_slug:
+            if params.sort_field == "program_slug" or "program_slug" in extra:
+                return self.error(
+                    response={"message": "program_slug filtering/sorting not supported in tenant stores"},
+                    status=400
+                )
+
         # Build fields list
         fields = list(self.LIST_FIELDS)
         if params.fields:
             fields = ["query_slug", *[f for f in params.fields if f != "query_slug"]]
-        
+
+        # Tenant stores: project without program_slug, fill afterwards
+        if not store.has_program_slug:
+            fields = [f for f in fields if f != "program_slug"]
+
         # Build SQL components — the program pre-filter predicate.sql (if any)
         # must be ANDed into the WHERE clause; build_where_clause() never uses
         # bound placeholders itself (values are inlined, safely quoted), so
@@ -158,15 +182,33 @@ class QueryDescribe(AbstractHandler):
         try:
             where = compose_where(build_where_clause(params, extra), predicate.sql)
             order_by = build_order_by(params, nulls_last=True)
-            sql = build_scan_sql(store.schema, store.table, fields, where, order_by, QS_DESCRIBE_MAX_SCAN + 1)
+
+            # Tenant stores: quote schema/table; use raw SQL to handle special characters
+            if not store.has_program_slug:
+                from querysource.tenants import quote_identifier
+                select_list = ", ".join(f'"{c}"' for c in fields)
+                sql_parts = [f'SELECT {select_list} FROM {quote_identifier(store.schema)}.{quote_identifier(store.table)}']
+                if where:
+                    sql_parts.append(where)
+                if order_by:
+                    sql_parts.append(order_by)
+                sql_parts.append(f"LIMIT {QS_DESCRIBE_MAX_SCAN + 1}")
+                sql = "\n".join(sql_parts)
+            else:
+                sql = build_scan_sql(store.schema, store.table, fields, where, order_by, QS_DESCRIBE_MAX_SCAN + 1)
         except ValueError as err:
             return self.error(response={"message": f"Invalid filter/sort: {err}"}, status=400)
-        
+
         # Execute query
         async with await request.app['qs_connection'].acquire() as conn:
             rows = await conn.fetch_all(sql, *predicate.args)
             rows = [dict(r) for r in rows or []]
-        
+
+        # Tenant stores: post-fill program_slug
+        if not store.has_program_slug:
+            for row in rows:
+                row["program_slug"] = store.schema
+
         # Handle truncation
         original_count = len(rows)
         truncated = original_count > QS_DESCRIBE_MAX_SCAN
@@ -175,7 +217,7 @@ class QueryDescribe(AbstractHandler):
             self.logger.warning(
                 "describe_list truncated %d rows to %d", original_count, QS_DESCRIBE_MAX_SCAN
             )
-        
+
         # Filter visible slugs
         slugs = [r["query_slug"] for r in rows]
         allowed = await filter_visible(request, principal, slugs, "slug:list", "slug:execute")
@@ -243,7 +285,8 @@ class QueryDescribe(AbstractHandler):
         columns: list[dict] = []
         source = "unavailable"
         provider = None
-        qs = QS(slug=slug, conditions=conditions, request=request)
+        # Pass tenant to QS for tenant stores
+        qs = QS(slug=slug, conditions=conditions, request=request, tenant=store.tenant)
         try:
             # Bounded like the describe_columns() call below: an unreachable
             # datasource must degrade to columns_source="unavailable" within
@@ -263,8 +306,8 @@ class QueryDescribe(AbstractHandler):
                         source = "prepare"
                 except (ParserError, ProviderError, DriverError, asyncio.TimeoutError) as err:
                     warnings.append(f"prepare_failed: {type(err).__name__}")
-        except SlugNotFound:
-            raise web.HTTPNotFound()
+        except SlugNotFound as err:
+            raise web.HTTPNotFound() from err
         except (ParserError, ProviderError, DriverError, QueryException, asyncio.TimeoutError) as err:
             # QS.build_provider() wraps every provider-construction failure —
             # including asyncdb's own ProviderError/DriverError — into a

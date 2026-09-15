@@ -210,6 +210,15 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
         routes.append(r)
 
+        ### Tenant describe routes (FEAT-148 TASK-743): per-tenant read-only slug discovery.
+        # Registered after legacy routes, before FEAT-147 tenant execution routes (see AC18).
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
+        routes.append(r)
+
         ### Logging Service:
         lg = LoggingService()
         r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)

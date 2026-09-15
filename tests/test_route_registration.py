@@ -135,6 +135,84 @@ class TestDescribeRoutes:
         }
         assert ("GET", "/api/v1/queries/{slug}/columns") in routes
 
+    def test_tenant_describe_routes_registered(self):
+        """Tenant describe routes must be registered (FEAT-148 TASK-743)."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        # Register tenant describe routes
+        app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+        app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/{tenant}/queries/describe") in routes
+        assert ("GET", "/api/v1/{tenant}/queries/{slug}/describe") in routes
+        assert ("GET", "/api/v1/{tenant}/queries/{slug}/columns") in routes
+        assert ("HEAD", "/api/v1/{tenant}/queries/describe") in routes
+
+    async def test_legacy_slug_queries_precedence(self):
+        """/api/v1/queries/queries/describe still resolves to the legacy detail
+        route (slug='queries'), not the tenant list route (tenant='queries') —
+        AC18.
+
+        Both `/api/v1/queries/{slug}/describe` (legacy detail) and
+        `/api/v1/{tenant}/queries/describe` (tenant list) structurally match
+        this 5-segment URL. Verified empirically that aiohttp's UrlDispatcher
+        does NOT resolve this by registration order (it picked the legacy
+        pattern in manual tests regardless of which was added first) — so
+        this is a real resolution check via an actual HTTP round-trip, not a
+        registration-order assumption and not just a check that both
+        patterns exist.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        from aiohttp import web
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+
+        # Patch BEFORE registering routes: aiohttp's router stores the bound
+        # method object it receives at add_get() time, so patching the class
+        # attribute afterward would never be seen by an already-registered
+        # route. Accessing dh.describe while the class attribute is a
+        # MagicMock(wraps=<original bound method>) returns that same mock
+        # object (Mock doesn't implement the descriptor protocol, so no
+        # separate binding happens), which aiohttp then calls as
+        # ``await handler(request)`` — routing to the real implementation via
+        # `wraps` while still recording the call.
+        with patch.object(QueryDescribe, "_principal", new_callable=AsyncMock, side_effect=web.HTTPUnauthorized), \
+                patch.object(QueryDescribe, "describe", wraps=dh.describe) as mock_describe, \
+                patch.object(QueryDescribe, "describe_list", wraps=dh.describe_list) as mock_describe_list:
+            # Register in spec order: legacy routes first, then tenant routes —
+            # mirrors querysource/services.py's actual ordering.
+            app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+            app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+            app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+            app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+
+            server = TestServer(app)
+            client = TestClient(server)
+            await client.start_server()
+            try:
+                await client.get("/api/v1/queries/queries/describe")
+            finally:
+                await client.close()
+
+        # Resolved to the legacy detail handler (describe, slug='queries'),
+        # never the tenant list handler (describe_list, tenant='queries').
+        mock_describe.assert_called_once()
+        mock_describe_list.assert_not_called()
+
 
 class TestRouteRegistration:
     def test_services_imports_query_source(self):

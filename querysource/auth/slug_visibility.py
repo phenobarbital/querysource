@@ -396,3 +396,43 @@ async def describe_grants(request: web.Request, principal: Principal, slug: str)
         raw=await can_access(request, principal, slug, "slug:describe_raw"),
         admin=is_admin(principal),
     )
+
+
+async def tenant_store(request: web.Request, tenant: str) -> DescribeStore | None:
+    """DescribeStore for a registered FEAT-147 tenant; None when not available.
+
+    Tenant names are exact (case-sensitive, not trimmed). Program context is the schema name.
+    """
+    from querysource.tenant_errors import TenantError
+    from querysource.tenants import QueryIdentity
+
+    registry = request.app.get("qs_tenant_registry")
+    repository = request.app.get("qs_definition_repository")
+
+    if registry is None or repository is None:
+        return None
+
+    try:
+        # Resolve the tenant store using FEAT-147's registry. TenantRegistry.resolve()
+        # raises TenantError (error_code="tenant_not_available") for an unknown tenant —
+        # caught narrowly here so a genuine bug in this function surfaces instead of
+        # silently degrading to a 404.
+        store = registry.resolve(tenant=tenant)
+    except TenantError:
+        return None
+
+    # Loader wraps DefinitionRepository.get(QueryIdentity(store, slug)).runtime
+    async def tenant_loader(conn: Any, slug: str) -> Any:
+        """Load a tenant definition via repository."""
+        identity = QueryIdentity(store=store, slug=slug)
+        loaded = await repository.get(identity)
+        return loaded.runtime
+
+    # Build DescribeStore: tenant-contract stores have no program_slug column
+    return DescribeStore(
+        schema=store.schema,
+        table=store.table,
+        has_program_slug=False,
+        tenant=store.schema,  # Program context is the schema name (tenant)
+        loader=tenant_loader,
+    )
