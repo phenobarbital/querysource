@@ -20,13 +20,14 @@ process — multiple QS instances each report (and mutate) their own jobs.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 from navigator.views import BaseView
 
 if TYPE_CHECKING:
     from apscheduler.job import Job
+
     from querysource.scheduler import QSScheduler
 
 logger = logging.getLogger("QS.SchedulerJobsView")
@@ -64,7 +65,7 @@ class SchedulerJobsView(BaseView):
     instance answers only for (and mutates) its own jobstore.
     """
 
-    def _get_scheduler(self) -> Optional["QSScheduler"]:
+    def _get_scheduler(self) -> QSScheduler | None:
         """Retrieve the QSScheduler instance from the app state.
 
         Returns:
@@ -74,12 +75,8 @@ class SchedulerJobsView(BaseView):
         """
         return self.request.app.get("qs_scheduler")
 
-    def _serialize_job(self, job: "Job") -> dict:
-        """Serialize an APScheduler Job to a plain dict.
-
-        Only extracts ``slug`` from ``job.kwargs`` — never includes the raw
-        kwargs dict because it contains non-serialisable internal objects
-        such as ``notification_manager``.
+    def _serialize_job(self, job: Job) -> dict:
+        """Include canonical owner/tenant identity from validated job kwargs; preserve current response fields.
 
         Args:
             job: An APScheduler ``Job`` instance.
@@ -87,7 +84,7 @@ class SchedulerJobsView(BaseView):
         Returns:
             A dict with keys: ``id``, ``name``, ``kind``, ``slug``,
             ``next_run_time``, ``trigger``, ``coalesce``, ``max_instances``,
-            ``misfire_grace_time``, ``pending``.
+            ``misfire_grace_time``, ``pending``, and optionally ``owner``.
         """
         # APScheduler Job uses __slots__; some slots are only set after the
         # scheduler starts (e.g. next_run_time). Use getattr with a default
@@ -96,12 +93,12 @@ class SchedulerJobsView(BaseView):
         trigger_cls_name = type(job.trigger).__name__  # e.g. "IntervalTrigger"
         # Strip the "Trigger" suffix and lowercase to get "interval" / "cron"
         trigger_type = trigger_cls_name.lower()
-        if trigger_type.endswith("trigger"):
-            trigger_type = trigger_type[: -len("trigger")]
+        trigger_type = trigger_type.removesuffix("trigger")
 
-        slug: Optional[str] = (job.kwargs or {}).get("slug")
+        slug: str | None = (job.kwargs or {}).get("slug")
+        owner = (job.kwargs or {}).get("owner")
 
-        return {
+        result = {
             "id": job.id,
             "name": job.name,
             "kind": _kind_from_id(job.id),
@@ -116,6 +113,12 @@ class SchedulerJobsView(BaseView):
             "misfire_grace_time": getattr(job, "misfire_grace_time", None),
             "pending": bool(getattr(job, "pending", True)),
         }
+        
+        # Include canonical owner/tenant identity from validated job kwargs
+        if owner is not None:
+            result["owner"] = owner
+            
+        return result
 
     async def get(self) -> web.Response:
         """Handle GET requests for the scheduler jobs endpoint.
@@ -189,7 +192,7 @@ class SchedulerJobsView(BaseView):
     async def post(self) -> web.Response:
         """Register/sync a slug's scheduled job(s) into the live scheduler.
 
-        Body: ``{"slug": "<query_slug>"}``.
+        Body: ``{"slug": "<query_slug>", "tenant": "<tenant_selector>"}``.
 
         Reads the slug's current ``public.queries`` row and (re)registers its
         query/multi/cache jobs without a restart. If the slug no longer has a
@@ -219,9 +222,12 @@ class SchedulerJobsView(BaseView):
                 response={"error": "Body must include a non-empty 'slug' string."},
                 status=400,
             )
+            
+        # Extract tenant selector from body
+        tenant = body.get("tenant") if isinstance(body, dict) else None
 
         try:
-            result = await scheduler.register_slug(slug)
+            result = await scheduler.register_slug(slug, tenant=tenant)
         except Exception as exc:  # noqa: BLE001
             logger.error("Error registering slug '%s': %s", slug, exc)
             return self.json_response(
