@@ -28,9 +28,20 @@ from ._pagination import (
     build_count_sql,
     build_page_sql,
 )
+from ..repositories import DefinitionRepository
+from ..tenants import TenantRegistry
 
 class QueryManager(QueryView):
     _model: QueryModel = None
+
+    # Default projection for the list branch when the caller does
+    # not supply ``?fields=``. The single-slug / :meta / :insert
+    # branches ignore ``default_fields``.
+    default_fields = [
+        "query_slug", "description", "conditions", "is_cached",
+        "cache_refresh", "program_slug", "provider", "dwh",
+        "created_at", "created_by", "updated_at", "updated_by"
+    ]
 
     def post_init(self, *args, **kwargs):
         self._logger_name = 'QS.Manager'
@@ -68,6 +79,43 @@ class QueryManager(QueryView):
             values=values
         )
 
+    def resolve_store(self, registry: TenantRegistry) -> QueryStore:
+        """Resolve the store for this request using tenant selector parsing.
+
+        Args:
+            registry: Immutable tenant registry from QuerySource initialization
+
+        Returns:
+            The resolved QueryStore for this request.
+
+        Raises:
+            web.HTTPBadRequest: On invalid or conflicting tenant selectors.
+        """
+        from .tenant import resolve_request_store
+
+        # Extract payload from request body if present
+        payload = None
+        try:
+            payload = await self.json_data()
+        except Exception:
+            # No JSON body or parse error - ignore
+            pass
+
+        return resolve_request_store(self.request, registry, payload)
+
+    def _strip_selectors(self, qp: dict) -> dict:
+        """Remove tenant selector from query parameters before field/filter validation.
+
+        Args:
+            qp: Parsed query parameters
+
+        Returns:
+            Query parameters with tenant selector removed
+        """
+        qp = qp.copy()
+        qp.pop('tenant', None)
+        return qp
+
     async def get(self):
         """
         get.
@@ -96,17 +144,18 @@ class QueryManager(QueryView):
                 pass
         except KeyError:
             query_slug = None
+
+        # Resolve store once before any field/filter validation
+        registry = self.request.app['tenant_registry']
+        store = self.resolve_store(registry)
+
+        # Remove selectors before field/filter validation
+        qp = self._strip_selectors(qp)
+
         try:
-            # Default projection for the list branch when the caller does
-            # not supply ``?fields=``. The single-slug / :meta / :insert
-            # branches ignore ``default_fields``.
-            default_fields = [
-                "query_slug", "description", "conditions", "is_cached",
-                "cache_refresh", "program_slug", "provider", "dwh",
-                "created_at", "created_by", "updated_at", "updated_by"
-            ]
             db = self.request.app['qs_connection']
             if query_slug:
+                # Single-slug branch: get, :meta, or :insert
                 async with await db.acquire() as conn:
                     query = await QueryModel.get(query_slug=query_slug, _connection=conn)
                     if meta == 'insert':
@@ -127,7 +176,7 @@ class QueryManager(QueryView):
             # are not in the QueryModel allowlist.
             self.logger.debug('QP %s', qp)
             return await self._paginate_list(
-                qp, {"fields": default_fields}
+                qp, {"fields": default_fields}, store=store
             )
         except NoDataFound as err:
             headers = {
@@ -142,7 +191,7 @@ class QueryManager(QueryView):
                 exception=err
             )
 
-    async def _paginate_list(self, qp: dict, default_args: dict):
+    async def _paginate_list(self, qp: dict, default_args: dict, *, store: QueryStore | None = None):
         """Paginated list fetch for ``GET /api/v1/management/queries``.
 
         Implements the FEAT-090 spec § 3 Module 3. Parses pagination /
@@ -157,6 +206,8 @@ class QueryManager(QueryView):
             default_args: Default kwargs pre-built by ``get()`` — notably
                 ``default_args['fields']`` holds the projection list used
                 when the caller does not supply ``?fields=``.
+            store: Optional QueryStore for tenant-aware listing. If not
+                provided, uses the legacy default store.
 
         Returns:
             aiohttp response:
@@ -187,8 +238,13 @@ class QueryManager(QueryView):
             or list(QueryModel.columns(QueryModel).keys())
         )
 
-        schema = QueryModel.Meta.schema
-        table = QueryModel.Meta.name
+        # Use store-specific schema/table if provided, otherwise use legacy defaults
+        if store is None:
+            schema = QueryModel.Meta.schema
+            table = QueryModel.Meta.name
+        else:
+            schema = store.schema
+            table = store.table
 
         try:
             where = build_where_clause(params, extra_filters)

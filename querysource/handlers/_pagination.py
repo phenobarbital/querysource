@@ -49,11 +49,11 @@ FILTERABLE_COLUMNS: frozenset[str] = frozenset(_MODEL_COLUMNS.keys())
 
 # Scalar columns that the caller is allowed to sort on. jsonb / array columns
 # are deliberately excluded (see spec §7 "Known Risks / Gotchas").
+# Tenant fields reject program_slug; legacy stores keep it.
 SORTABLE_COLUMNS: frozenset[str] = frozenset(
     {
         "query_slug",
         "description",
-        "program_slug",
         "provider",
         "is_cached",
         "created_at",
@@ -62,10 +62,10 @@ SORTABLE_COLUMNS: frozenset[str] = frozenset(
 )
 
 # Columns matched by the ``search`` query-string param with ``ILIKE '%term%'``.
+# Tenant fields reject program_slug; legacy stores keep it.
 SEARCHABLE_COLUMNS: tuple[str, ...] = (
     "query_slug",
     "description",
-    "program_slug",
     "source",
 )
 
