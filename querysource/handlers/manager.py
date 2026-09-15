@@ -10,7 +10,6 @@ see :mod:`querysource.handlers._pagination` and the FEAT-090 spec.
 # for aiohttp
 from math import ceil
 
-from aiohttp.web import View
 from asyncdb.exceptions import NoDataFound
 from datamodel.exceptions import ValidationError
 from navconfig.logging import logging
@@ -118,6 +117,19 @@ class QueryManager(QueryView):
         qp = qp.copy()
         qp.pop('tenant', None)
         return qp
+
+    async def _sync_definition_jobs(self, identity: QueryIdentity) -> None:
+        """Internal hook for scheduler synchronization after definition mutations.
+        
+        Async no-op when no scheduler is active; live scheduler hookup lands with 
+        scheduler API task. Never misrepresents committed data as rolled back.
+        
+        Args:
+            identity: The mutated definition's immutable identity
+        """
+        # No-op when no scheduler is active
+        # This method will be implemented in the scheduler API task
+        return
 
     async def get(self):
         """
@@ -369,11 +381,7 @@ class QueryManager(QueryView):
             )
 
     async def patch(self):
-        """
-        patch.
-            summary: return the metadata from a query slug or, if we got post
-            realizes a partially atomic updated of the query.
-        """
+        """Resolve selected store; call repository patch; preserve statuses and strip routing metadata."""
         params = self.get_arguments()
         try:
             query_slug = params['slug']
@@ -392,6 +400,55 @@ class QueryManager(QueryView):
             return self.error(
                 response={"message": 'Missing Data for change Query Slug'},
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Validate slug agreement between path and body
+            if 'query_slug' in data and data['query_slug'] != query_slug:
+                return self.error(
+                    response={"message": 'Path and body slug must agree'},
+                    status=400
+                )
+            
+            # Call repository patch
+            try:
+                identity = QueryIdentity(store=store, slug=query_slug)
+                result = await repo.patch(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                await self._sync_definition_jobs(identity)
+                
+                return self.json_response(result)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                print('EXEPT ', err)
+                return self.error(
+                    response={"message": f'Unprocessable partial Updating: {query_slug}'},
+                    exception=err,
+                    status=422
+                )
+        
+        # Legacy fallback: tenant registry/repository not wired up
         parameters = {
             "query_slug": query_slug
         }
@@ -456,6 +513,65 @@ class QueryManager(QueryView):
                 exception=err,
                 headers=headers
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Call repository delete
+            try:
+                identity = QueryIdentity(store=store, slug=query_slug)
+                result = await repo.delete(identity)
+                
+                # Sync definition jobs if scheduler is active
+                await self._sync_definition_jobs(identity)
+                
+                msg = {
+                    "result": result
+                }
+                headers = {
+                    'X-STATUS': 'OK',
+                    'X-MESSAGE': f'Query Source {query_slug} was deleted'
+                }
+                return self.json_response(
+                    msg,
+                    headers=headers,
+                    status=202
+                )
+            except TenantError as err:
+                if err.error_code == "query_not_found":
+                    headers = {
+                        'X-STATUS': 'EMPTY',
+                        'X-MESSAGE': f'Query Source {query_slug} not Found'
+                    }
+                    return self.error(
+                        response={"message": f'Query Slug not found: {query_slug}:'},
+                        exception=err,
+                        status=404,
+                        headers=headers
+                    )
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                print('ERROR ', err)
+                return self.critical(
+                    exception=err,
+                    traceback=''
+                )
+        
         parameters = {
             "query_slug": query_slug
         }
@@ -538,6 +654,47 @@ class QueryManager(QueryView):
                 response={"message": 'Query Name (slug) is missing'},
                 headers=headers
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Call repository upsert
+            try:
+                identity = QueryIdentity(store=store, slug=data['query_slug'])
+                result, is_created = await repo.upsert(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                await self._sync_definition_jobs(identity)
+                
+                status = 201 if is_created else 202
+                return self.json_response(result, status=status)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                print('ERROR ', err)
+                return self.critical(
+                    response={"message": f"Error creating/updating an slug: {data}"},
+                    exception=err
+                )
+        
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
@@ -577,10 +734,7 @@ class QueryManager(QueryView):
             )
 
     async def post(self):
-        """
-        post.
-            summary: update (or create) a query slug
-        """
+        """Resolve selected store; call repository upsert; preserve statuses and strip routing metadata."""
         params = self.get_arguments()
         data = await self.json_data()
         slug = None
@@ -605,6 +759,55 @@ class QueryManager(QueryView):
                 response={"message": "Cannot Update row without JSON post data"},
                 status=406
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Validate slug agreement between path and body
+            if 'query_slug' in data and data['query_slug'] != slug['query_slug']:
+                return self.error(
+                    response={"message": 'Path and body slug must agree'},
+                    status=400
+                )
+            
+            # Call repository upsert
+            try:
+                identity = QueryIdentity(store=store, slug=slug['query_slug'])
+                result, is_created = await repo.upsert(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                await self._sync_definition_jobs(identity)
+                
+                status = 201 if is_created else 202
+                return self.json_response(result, status=status)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                print('ERROR ', err)
+                return self.critical(
+                    response={"message": f"Error creating/updating an slug: {data}"},
+                    exception=err
+                )
+        
+        # Legacy fallback: tenant registry/repository not wired up
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
@@ -621,11 +824,11 @@ class QueryManager(QueryView):
                         status=406
                     )
                 try:
-                    slug = await QueryModel.get(_connection=conn, **slug)
+                    slug_obj = await QueryModel.get(_connection=conn, **slug)
                     ## try to update slug:
                     for k, v in data.items():
-                        setattr(slug, k, v)
-                    result = await slug.update(_connection=conn)
+                        setattr(slug_obj, k, v)
+                    result = await slug_obj.update(_connection=conn)
                     return self.json_response(result, status=202)
                 except NoDataFound:
                     logging.warning(f"No Query slug was found: {slug}")
