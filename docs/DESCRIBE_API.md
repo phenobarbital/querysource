@@ -82,10 +82,10 @@ Retrieves detailed metadata for a specific query slug.
   "conditions": {},
   "cond_definition": {},
   "fields": [],
-  "filtering": [],
+  "filtering": {},
   "ordering": [],
   "grouping": [],
-  "h_filtering": [],
+  "h_filtering": false,
   "qry_options": {},
   "is_cached": false,
   "cache_timeout": null,
@@ -107,11 +107,11 @@ Retrieves detailed metadata for a specific query slug.
     "structural_placeholders": [],
     "effective_cond_definition": {},
     "capabilities": {
-      "fields": true,
-      "filtering": true,
-      "ordering": true,
-      "grouping": true,
-      "h_filtering": true,
+      "fields": [],
+      "filtering": {},
+      "ordering": [],
+      "grouping": [],
+      "h_filtering": false,
       "qry_options": {},
       "refresh_param": "refresh"
     },
@@ -156,26 +156,35 @@ Retrieves the effective relative-date keyword vocabulary, PG constants, and info
   "version": "1.0",
   "case_insensitive": true,
   "keywords": [
-    {"name": "TODAY", "example": "09/15/2026"},
-    {"name": "YESTERDAY", "example": "2026-09-14"},
-    {"name": "FDOM", "example": "2026-09-01"},
-    {"name": "LDOM", "example": "2026-09-30"},
-    {"name": "CURRENT_YEAR", "example": 2026},
-    {"name": "CURRENT_MONTH", "example": 9},
-    {"name": "LAST_YEAR", "example": 2025}
+    {"name": "TODAY", "category": "date", "returns": "date-string", "description": "Current date in the server timezone, formatted MM/DD/YYYY.", "example": "09/15/2026"},
+    {"name": "YESTERDAY", "category": "date", "returns": "date-string", "description": "Previous day, formatted YYYY-MM-DD.", "example": "2026-09-14"},
+    {"name": "FDOM", "category": "date", "returns": "date-string", "description": "First day of the current month, YYYY-MM-DD.", "example": "2026-09-01"},
+    {"name": "LDOM", "category": "date", "returns": "date-string", "description": "Last day of the current month, YYYY-MM-DD.", "example": "2026-09-30"},
+    {"name": "LAST_YEAR", "category": "date", "returns": "date-string", "description": "Same calendar day one year ago, YYYY-MM-DD.", "example": "2025-09-15"},
+    {"name": "CURRENT_YEAR", "category": "date", "returns": "integer", "description": "Current four-digit year.", "example": 2026},
+    {"name": "CURRENT_MONTH", "category": "date", "returns": "integer", "description": "Current month number (1-12).", "example": 9}
   ],
-  "constants": [
-    {"name": "CURRENT_DATE", "type": "date"}
-  ],
-  "pg_functions": [
-    {"name": "now", "type": "timestamp"}
-  ],
+  "constants": ["CURRENT_DATE", "CURRENT_TIMESTAMP"],
+  "pg_functions": ["now()"],
   "functions": [
-    {"name": "date_add", "invocable": false}
+    {
+      "name": "date_diff",
+      "args": [
+        {"name": "value", "default": null},
+        {"name": "diff", "default": 1},
+        {"name": "mode", "default": "days"},
+        {"name": "mask", "default": "%Y-%m-%d"},
+        {"name": "tz", "default": null}
+      ],
+      "description": "Calculate the difference between two dates.",
+      "invocable": false
+    }
   ],
-  "usage": "Relative-date keywords resolve on raw-query providers for untyped and date/datetime/timestamp conditions."
+  "usage": "Pass a keyword as a condition value, e.g. {\"firstdate\": \"FDOM\", \"lastdate\": \"TODAY\"}. Keywords are case-insensitive."
 }
 ```
+
+`functions` also includes `date_sum`, `days_ago`, `previous_month`, `fdow` and `ldow` (omitted above for brevity), all with `invocable: false` — none of these are callable as condition values; only the `keywords` above are.
 
 ## Configuration
 
