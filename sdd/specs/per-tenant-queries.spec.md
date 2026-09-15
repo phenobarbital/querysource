@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-147
 **Date**: 2026-09-15
 **Author**: Jesus Lara / Codex
-**Status**: review
+**Status**: approved
 **Target version**: 5.0.0 (proposed major-release target)
 
 **Input**: [per-tenant-queries.proposal.md](../proposals/per-tenant-queries.proposal.md)
