@@ -8,7 +8,7 @@ base_branch: dev
 **Feature ID**: FEAT-148
 **Date**: 2026-09-15
 **Author**: Jesús Lara / Claude (`/sdd-spec`)
-**Status**: draft
+**Status**: approved
 **Target version**: 4.6.0
 **Source**: `sdd/proposals/describe-queryslug.brainstorm.md` (Recommended Option A; all open questions resolved in commit `0e27ef2`)
 
