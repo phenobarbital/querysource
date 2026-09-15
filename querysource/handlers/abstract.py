@@ -1,20 +1,26 @@
+import copy
 import inspect
 from typing import Optional
+
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPException
 from navconfig import DEBUG
 from navconfig.logging import logging
 from navigator.views import BaseHandler
-from navigator_session import get_session, SessionData
+from navigator_session import SessionData, get_session
+
 # Config:
 from ..conf import QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
+from ..exceptions import QueryException
+
 # Queries:
 from ..queries.qs import QS
+
+# Tenants:
+from ..tenants import QueryIdentity
+
 # Output Formats:
 from ..types import mime_formats, mime_types
-from ..exceptions import (
-    QueryException
-)
 from ..utils.errors import build_error_payload
 from ..utils.events import enable_uvloop
 
@@ -448,6 +454,113 @@ class AbstractHandler(BaseHandler):
                 "PBAC denied: %s/%s action=%s policy=%s reason=%s",
                 resource_type,
                 resource_name,
+                action,
+                getattr(result, 'matched_policy', None),
+                getattr(result, 'reason', None),
+            )
+            raise web.HTTPNotFound()
+
+    async def _enforce_owned_slug(
+        self,
+        request: web.Request,
+        identity: QueryIdentity,
+        action: str,
+    ) -> None:
+        """Evaluate existing slug rules with a detached, initially empty decision cache.
+
+        Uses a shallow copy of the evaluator with cleared cache to ensure
+        per-tenant isolation while preserving the policy index and app-level
+        cache/TTL. Supports sessionless authorization when enabled.
+
+        Args:
+            request: The current aiohttp web request.
+            identity: The QueryIdentity to enforce ownership for.
+            action: The action string, e.g. ``"slug:execute"``.
+
+        Raises:
+            web.HTTPNotFound: When the evaluator denies access, or when
+                PBAC is enabled but the request has no user session.
+        """
+        evaluator = request.app.get("policy_evaluator")
+        if request.app.get("security") is None:
+            return  # PBAC disabled — fast-path no-op
+        if evaluator is None:
+            raise web.HTTPNotFound()
+
+        # Create a shallow copy with cleared cache for tenant isolation
+        detached = copy.copy(evaluator)
+        detached._cache = {}
+        detached._stats = dict(evaluator._stats)
+
+        # Extract session or use sessionless authz
+        session = await self._get_user_session(request)
+        authz_userinfo = None
+        if session is None:
+            if QS_PBAC_ALLOW_SESSIONLESS_AUTHZ:
+                try:
+                    from navigator_auth.conf import AUTHZ_BACKEND_KEY
+                except ImportError:
+                    AUTHZ_BACKEND_KEY = 'authz_backend'
+                authz_backend = request.get(AUTHZ_BACKEND_KEY)
+                if authz_backend:
+                    backend = str(authz_backend)
+                    authz_userinfo = {
+                        'username': f'authz:{backend}',
+                        'groups': ['authorized', backend],
+                        'roles': [],
+                    }
+                    self.logger.info(
+                        "PBAC sessionless authz (backend=%s): evaluating "
+                        "slug ownership for %s as group 'authorized'",
+                        backend,
+                        identity.slug,
+                    )
+            if authz_userinfo is None:
+                self.logger.info(
+                    "PBAC denied (no session): slug=%s action=%s",
+                    identity.slug,
+                    action,
+                )
+                raise web.HTTPNotFound()
+
+        # Build the evaluation context
+        from navigator_auth.abac.context import EvalContext
+        from navigator_auth.abac.policies.environment import Environment
+        from navigator_auth.conf import AUTH_SESSION_OBJECT
+
+        if authz_userinfo is not None:
+            userinfo = authz_userinfo
+            user = None
+        else:
+            userinfo = (
+                session.get(AUTH_SESSION_OBJECT, {})
+                if hasattr(session, 'get') else {}
+            )
+            if not isinstance(userinfo, dict):
+                userinfo = {}
+            user = userinfo if userinfo else None
+
+        ctx = EvalContext(
+            request=request,
+            user=user,
+            userinfo=userinfo,
+            session=session,
+        )
+
+        # Evaluate using the detached evaluator with the identity's slug
+        result = detached.check_access(
+            ctx=ctx,
+            resource_type="slug",
+            resource_name=identity.slug,
+            action=action,
+            env=Environment(),
+        )
+        if inspect.iscoroutine(result):
+            result = await result
+        if not result.allowed:
+            self.logger.info(
+                "PBAC denied: slug=%s action=%s policy=%s reason=%s",
+                identity.slug,
                 action,
                 getattr(result, 'matched_policy', None),
                 getattr(result, 'reason', None),

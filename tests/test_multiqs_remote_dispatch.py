@@ -1,9 +1,10 @@
 """Unit tests for MultiQS remote config resolution (TASK-696)."""
-import pytest
 from unittest.mock import patch
 
-from querysource.queries.multi.sources.executors import RemoteConfig
+import pytest
+
 from querysource.exceptions import DriverError
+from querysource.queries.multi.sources.executors import RemoteConfig
 
 
 class TestRemoteKeyParsing:
@@ -81,10 +82,29 @@ class TestMultiQSRemoteDispatch:
     @pytest.mark.asyncio
     async def test_remote_true_no_worker_no_config_raises(self):
         """remote=true with no worker and QWORKER_HOST=None raises DriverError."""
-        from querysource.queries.multi import MultiQS
         import querysource.queries.multi as multiqs_module
+        from querysource.queries.multi import MultiQS
 
         mqs = MultiQS(queries={"q": {"slug": "s", "remote": True}})
+
+        # TASK-727: MultiQS.query() now preflights each stored query
+        # against the definition repository before dispatch. Stub it out
+        # so this test still exercises the remote/worker validation in
+        # isolation, without touching a database.
+        class _FakeRegistry:
+            def resolve(self, tenant):
+                return None
+
+        class _FakeRepo:
+            registry = _FakeRegistry()
+
+            async def get(self, ident):
+                return None
+
+        async def _fake_get_definition_repository():
+            return _FakeRepo()
+
+        mqs.get_definition_repository = _fake_get_definition_repository
 
         with patch.object(multiqs_module, "QWORKER_HOST", None):
             with patch.object(multiqs_module, "QWORKER_WORKERS", []):

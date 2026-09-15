@@ -232,5 +232,104 @@ Real PostgreSQL/Redis tests must run with explicit test-service configuration. A
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15. Implemented directly
+("attempt 3") after the merged attempt turned out to be an unfilled stub.
+
+**Dispatch history**: attempt 1 (`mistral`, `mistral.devstral-2-123b`)
+completed in 9 turns and merged cleanly (`ba6d8bf`) per the engine's fidelity
+checks (file list matched, no unlisted/banned imports) — but its own
+summary admitted "Tests are not yet implemented and will fail until filled
+in." Both `tests/tenants/conftest.py` and `tests/tenants/test_integration.py`
+were the task blueprint's literal FILL IN template, `raise NotImplementedError`
+left verbatim in every function. AC-6's exact command would have errored on
+every test rather than skipping as the opt-in design requires. Per protocol
+this is treated as failed despite `outcome: merged` — a stub is not an
+implementation — and reimplemented for real in this worktree (commit
+`be2a773`; see that commit message for the full file-by-file breakdown of
+`conftest.py`'s `provision_tenant_services()` and the five real
+`test_integration.py` tests).
+
+**Checks run** (AC-5 — exact commands and results):
+- `source .venv/bin/activate && python -m pytest tests/tenants/test_integration.py -v`
+  — **5 skipped** (correct, designed outcome: `QS_TEST_POSTGRES_DSN`/
+  `QS_TEST_REDIS_URL` are not set in this sandbox — no network egress at
+  all). Directly confirmed (via a standalone run with `-s`) that
+  `test_scheduler_restart_and_worker_compatibility`'s mandatory-locally,
+  no-external-service `RemoteExecutor` unsupported-contract rejection
+  genuinely executes and passes (its warning is logged) BEFORE the rest
+  of that test skips.
+- `pytest tests/tenants -q` — 70 passed, 5 skipped (no regression to any
+  pre-existing tenant test).
+- `pytest tests/test_scheduler_core.py tests/test_scheduler_multi_routing.py
+  tests/scheduler/ tests/test_scheduler_integration.py
+  tests/test_scheduler_handler_integration.py tests/test_scheduler_jobs.py
+  tests/tenants tests/handlers/*(excl. test_airtable_oauth.py, pre-existing
+  missing aioresponses dep) tests/multi tests/test_abstract_multi.py
+  tests/test_local_executor.py tests/test_multi_destinations_subpackage.py
+  tests/test_multiqs_column_transforms.py
+  tests/test_multiqs_destination_dispatch.py
+  tests/test_multiqs_remote_dispatch.py
+  tests/test_multiqs_slug_sources_normalize.py
+  tests/test_multiqs_sources_integration.py tests/test_threadquery_executor.py
+  tests/test_remote_executor.py tests/integration/test_multiquery_output_errors.py
+  tests/unit/test_multiqs_output_raise.py tests/unit/test_handler_output_status.py
+  tests/unit/test_output_error.py tests/test_table_output_postgres.py
+  tests/integration/test_csv_stream_response.py -q` — **362 passed, 5
+  skipped, 9 failed**. All 9 failures confirmed pre-existing and unrelated
+  (each already individually documented and root-caused in TASK-727/728/
+  729/730/731's own completion notes: 5 are `test_remote_executor.py`'s
+  pre-existing `QClient` lazy-import patch-target mismatch; the other 4 —
+  `test_frozen_dataclass`, `test_guardrail_rejects_too_many_sources`,
+  `test_scheduler_not_imported_when_disabled`, `test_post_returns_405` —
+  are unrelated env/config/routing quirks).
+- Additional PBAC/concurrency sweep for AC-5's own "pagination/concurrency/
+  PBAC" mandate: `pytest tests/test_queryslug_concurrency.py
+  tests/auth/test_pbac_bootstrap.py tests/datasources/test_datasource_view_pbac.py
+  tests/integration/test_pbac_credentials.py tests/integration/test_pbac_enforcement.py
+  tests/integration/test_pbac_listing.py tests/services/test_querysource_setup_pbac.py -q`
+  — **41 passed, 4 xfailed, 2 failed**.
+  - **New finding, reported per AC-5 rather than fixed** (outside this
+    task's declared file scope — fixing it would require editing
+    `tests/conftest.py`, not `tests/tenants/conftest.py`, and is not
+    declared by this task): `tests/integration/test_pbac_enforcement.py::
+    TestPbacOff::test_pbac_off_baseline_no_pbac_check` and
+    `::test_pbac_off_no_session_needed` both fail with a raw
+    `asyncdb.exceptions.exceptions.DriverError: ... Temporary failure in
+    name resolution` — the `qs_app_pbac_off` fixture (`tests/conftest.py`)
+    never publishes `app["qs_tenant_registry"]`/`app["qs_definition_
+    repository"]`, and `QS.build_provider()` (TASK-721) unconditionally
+    calls `get_definition_repository()` — which always goes through the
+    global `QuerySource()` singleton's own `initialize_tenants()`, with no
+    app-level bypass — for ANY slug-based dispatch, tenant feature
+    configured or not. Verified this is not a NEW-this-task regression:
+    the identical fixture is byte-for-byte unchanged on `dev` (`git show
+    dev:tests/conftest.py`), and this sandbox has zero network egress for
+    ANY DB connection attempt (confirmed repeatedly across TASK-716
+    through TASK-731's own reviews) — the pre-FEAT-147 code path
+    (`QueryModel.get()` directly) would have hit the identical "no DB
+    reachable" wall in this same sandbox, just via a different error
+    message. This is exactly the class of finding AC-5 exists to surface
+    ("Record absent external services as unmet release gates, not
+    successful certification") rather than paper over with an
+    out-of-scope test-infrastructure edit. **Recommend a follow-up task**
+    to either mock `get_definition_repository()` in `qs_app_pbac_off`/
+    `qs_app_pbac_on` (matching the established pattern from TASK-723's
+    pagination-fixture fix) or give `Connection.get_definition_repository()`
+    an app-level bypass for tests that never wire up the tenant feature.
+
+**Spec deviations**: none. **Deployment gates unverified** (AC-1/AC-2/AC-3/
+AC-4, all opt-in and correctly skipped in this sandbox — genuinely unmet
+release gates, not certified by this run):
+- Real isolated PostgreSQL + Redis integration (`QS_TEST_POSTGRES_DSN` /
+  `QS_TEST_REDIS_URL`) — no network egress in this sandbox.
+- Full 100-schema / 10,000-definition catalog scale
+  (`QS_TEST_CATALOG_SCALE=1`, additionally opt-in on top of the above).
+- Real compatible qworker endpoint (`QS_TEST_WORKER_ENDPOINT`) — this
+  repository intentionally does not ship a worker implementation (see
+  TASK-728's contract doc), so this gate can only ever be certified against
+  an external deployment.
+- 100-concurrent-interleaved-operations, cross-schema SQL consumption, and
+  read-only/runtime-revoked grants (AC-2) are implemented as real code
+  paths in `test_postgres_redis_revision_and_concurrency` /
+  `test_cross_schema_callbacks_and_grants` but, like everything above,
+  unexercised without real services.

@@ -241,5 +241,112 @@ async def test_legacy_overrides_explicit_public() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `glm` (backend: nova, model: zai.glm-4.7-flash,
+attempt 1), merged into the feature branch. The coder self-reported
+"tests cannot run due to a pre-existing Cython compilation issue" — false
+in this worktree (compiled extensions already present from TASK-716); the
+real blocker was a genuine `SyntaxError`, and a substantial chain of
+further bugs surfaced once past it. Full list of what the orchestrator
+found and fixed:
+
+1. `resolve_store` used `await self.json_data()` but was `def`, not
+   `async def` — `SyntaxError`, made the entire `handlers` package
+   uncollectable. Fixed to `async def` + awaited at its call site.
+2. Read the registry from `app['tenant_registry']` — wrong key;
+   TASK-720 publishes `app["qs_tenant_registry"]` (verified against
+   `querysource/services.py` `qs_start`). Missing `QueryStore`/
+   `QueryIdentity` imports used in type hints/construction (`NameError`
+   on load).
+3. `_paginate_list`'s call site referenced a bare `default_fields` that
+   no longer existed after the coder moved it from a local variable
+   (pre-task) to a class attribute — `NameError`. Fixed to
+   `self.default_fields`.
+4. `handlers/tenant.py` raised `web.HTTPBadRequest(..., exception=err)`
+   — `HTTPException` has no `exception=` kwarg (`TypeError` at raise
+   time). Fixed to `raise ... from err`. Removed a redundant, unguarded
+   "literal null" branch that duplicated the general lookup without its
+   try/except (an unregistered literal `"null"` schema name raised a
+   raw `TenantError` instead of a 400).
+5. `_pagination.py` removed `program_slug` from
+   `SORTABLE_COLUMNS`/`SEARCHABLE_COLUMNS` **globally** — a real
+   regression for the legacy/public API (a module-global mutation,
+   exactly what AC-3 explicitly prohibits) that happened to break no
+   test today only because none covers it. Restored both constants;
+   tenant-contract stores now reject `program_slug` via a request-local
+   check in `_paginate_list` scoped to that store, not a permanent
+   global removal.
+6. AC-2 ("route get/pagination/:meta/:insert through repository") was
+   only partially implemented: the single-slug get/:meta/:insert path
+   still called `QueryModel.get()`/`get_query_insert()`/
+   `QueryModel.schema()` directly, completely ignoring the resolved
+   `store` — a successfully tenant-resolved request would have silently
+   kept reading legacy `public.queries`. Rewrote `get()` to route
+   through `DefinitionRepository.get()`/`.export_insert()`/`.schema()`
+   when the tenant registry/repository are published on the app, with a
+   **legacy fallback** (the original direct-ORM behavior, unchanged)
+   when they are not — required because
+   `tests/handlers/test_querymanager_pagination.py`'s existing fixture
+   (and any app that has not adopted the tenant feature yet) only
+   publishes `app["qs_connection"]`, never the tenant keys; routing
+   unconditionally through the repository broke all 13 of its tests
+   with a bare `KeyError`.
+7. `tests/tenants/test_tenant_management_reads.py` itself had several
+   bugs that let it "pass" against the wrong behavior: a bare
+   `MagicMock()` used as `request.app` (its `__getitem__`/
+   `__setitem__` do not round-trip values — every lookup silently
+   returned an unrelated fresh `MagicMock`, not the fixture's real
+   object) replaced with a plain `dict`; `request.rel_url.query` set
+   but never read (the implementation reads the real aiohttp
+   `request.query` property) fixed; `response.json()` (a
+   `ClientResponse` method, not available on the plain `Response`
+   `self.json_response()` returns) replaced with
+   `json.loads(response.text)`; a "public" test asserting
+   `HTTPBadRequest` for an unregistered public store, which contradicts
+   `TenantRegistry.resolve()`'s real, intentional behavior (never
+   raises for `"public"` — always falls back to legacy
+   `public.queries`, per spec §2 "explicit public is literal and
+   allowlisted") replaced with the correct expectation plus a
+   genuinely-unknown-tenant case; added a `"null"`-schema store to the
+   shared fixture so the literal-string-`"null"` scenario has something
+   real to resolve against.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/test_tenant_management_reads.py -q` → 4 passed.
+- `pytest tests/tenants/ -q` → 33 passed (all of TASK-716–723's suites
+  together, run for regression).
+- `pytest tests/tenants tests/handlers --continue-on-collection-errors -q`
+  → 109 passed, 1 pre-existing collection error
+  (`tests/handlers/test_airtable_oauth.py`, missing `aioresponses`
+  dependency, unrelated to this task and present on `dev` before this
+  branch). Crucially:
+  `tests/handlers/test_querymanager_pagination.py`'s 13 pre-existing
+  legacy tests now pass unchanged — this is the regression #6's legacy
+  fallback exists to prevent, and it was genuinely broken (bare
+  `KeyError`) before the fallback was added.
+- `ruff check` — fixed all findings within lines this task
+  added/modified (including two the orchestrator's own `--fix` runs
+  introduced as side effects: a now-dead `Optional` import in
+  `_pagination.py` after a `UP045` rewrite, and an import-order shuffle
+  in `tenant.py`); pre-existing findings on untouched lines
+  (`BLE001`/`RUF012`/`TRY401`/an unrelated pre-existing unused `View`
+  import) left as-is, matching the convention observed on every prior
+  task in this feature.
+
+Files changed (beyond the original merge):
+`querysource/handlers/manager.py`, `querysource/handlers/tenant.py`,
+`querysource/handlers/_pagination.py`,
+`tests/tenants/test_tenant_management_reads.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live PostgreSQL was
+used; every test exercises the handlers against fakes/mocks for the
+repository and connection pool, not a real database — the pagination
+SQL-builder path (`build_where_clause`/`build_count_sql`/`build_page_sql`)
+is exercised structurally but not against a live Postgres instance.
+
+No spec deviations: tenant execution routes, CRUD mutations and
+scheduler sync are explicitly out of scope for this task and were not
+touched.

@@ -227,5 +227,91 @@ Generator entry point: `pyproject.toml:172` maps `generate-multiquery-docs` to
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15. Merged (`outcome:
+merged`, seat `minimax`, attempt 1), then reviewed and fixed in this
+worktree.
+
+**Dispatch history**: attempt 1 (`minimax`, `minimax.minimax-m2.5`)
+completed in 51 turns and merged cleanly (`5ca170f`; file fidelity matched
+the declared 5-file list exactly). Its own summary reported "All acceptance
+criteria met" with 3 passing tests — verified true on the surface, but a
+line-by-line fact-check of the documentation's specific claims against the
+real implementation (not just "does it read well and do the tests pass")
+surfaced several genuine errors.
+
+**Review findings and fixes** (same worktree, commit `10c960b`):
+- Scheduler qualified job ID format used colons
+  (`qsj2:<kind>:<store_digest>:<encoded_slug>`) in both doc files, but the
+  real `QSScheduler._qualified_job_id()` (TASK-729) uses hyphens
+  (`qsj2-<kind>-<store_digest>-<encoded_slug>`) — fixed in both docs AND
+  in the test file's own two assertions (which had encoded the identical
+  wrong format, so they "passed" while validating wrong documentation —
+  a genuinely dangerous failure mode for a docs-verification test).
+- The HTTP routes table mislabeled tenant-path `PATCH .../{slug}` as
+  "Update definition" — verified against `services.py`'s real route
+  registration (`add_patch(..., th.columns)`) that it actually routes to
+  column inspection, never a definition mutation. Real definition CRUD
+  only exists on the separate `/api/v1/management/queries/{slug}` routes.
+  Rewrote the whole table with handler-method attribution and an explicit
+  note distinguishing the two route families.
+- The Python API example's `from querysource import QuerySource, QS,
+  MultiQS` does not work (`ImportError`, confirmed by direct execution) —
+  fixed to the real `querysource.services.QuerySource` /
+  `querysource.queries.{QS,MultiQS}` paths, and added the missing `await`
+  on every `.query()` call shown (a coroutine).
+- The selector matrix claimed the no-tenant/`None` default resolves via
+  `QS_QUERIES_SCHEMA`/`QS_QUERIES_TABLE` — those config values are real
+  but are only read by the separate legacy `QueryModel.Meta` ORM path;
+  `TenantRegistry.discover()`/`resolve()` never reference them, hardcoding
+  `schema == "public"` detection with a first-discovered-store fallback
+  instead. Rewrote the row to describe the actual rule and the disconnect
+  explicitly.
+- The rollback procedure referenced `GET /api/v1/queries/{slug}` as the
+  legacy verification route — not a registered route at all; the real
+  legacy single-slug route is `GET /api/v2/services/queries/{slug}`.
+- "Integration evidence" attributed code to three nonexistent/wrong files
+  (`querysource/repository.py`, `querysource/cache.py`, and
+  qualified-job-ID generation credited to `scheduler/jobs.py` instead of
+  `scheduler/scheduler.py`) — corrected to the real paths and file
+  responsibilities.
+- Minor accuracy fixes: added the real slash-in-schema-name discovery
+  exclusion rule (was missing entirely); corrected the system-schema
+  exclusion from an implied wildcard (`pg_*`) to the actual fixed tuple;
+  softened the DDL/program_id gate claim that a missing `program_id`
+  "may be flagged in diagnostics" (unverifiable — the real compatibility
+  check only requires `query_slug`, so nothing is actually flagged); added
+  a note on `QuerySource`'s Singleton reinitialization-mismatch error,
+  directly relevant to this task's own "Restart requirements" scope.
+
+Everything else in the merged draft — the persistence-vs-runtime table,
+cache transition bullets, owner envelope shape, `OWNERSHIP_STATUS` error
+code table, staged rollout phases, and the regenerated `generated/
+Query.json` itself — was independently verified accurate and left as-is.
+`generated/Query.json` was confirmed NOT hand-edited: re-running
+`python -m querysource.cli.generate_docs` (the real generator; note the
+installed `generate-multiquery-docs` console-script entry point resolves
+against a different site-packages than this worktree's editable install —
+use `python -m querysource.cli.generate_docs` directly) against the 32
+component catalogs produced a byte-for-byte zero diff against the
+committed output.
+
+**Checks run** (`source .venv/bin/activate && python -m pytest ...`):
+- `tests/tenants/test_tenant_rollout_documentation.py` — 3/3 passed (AC-5,
+  exact command from the task, after fixing the two qsj2-format
+  assertions to match the corrected documentation).
+- Full `tests/tenants` regression — 73 passed, 5 skipped (70 passed before
+  this task; the 3 new tests account for the increase; no regression to
+  any pre-existing test).
+- Full scheduler/tenants/handlers/multi/executor/output regression sweep
+  — 365 passed, 5 skipped, 9 failed. All 9 confirmed pre-existing and
+  unrelated (documented across TASK-727 through TASK-732's own completion
+  notes).
+- `ruff check` on the test file — 0 findings.
+- Regenerated `generated/Query.json` (and all 31 sibling component JSON
+  files) via the real generator — zero diff against the committed state.
+
+**Spec deviations**: none. **Deployment gates unverified** (accurately
+documented in "Unverified production gates" — unchanged from the merged
+draft, already correct): production DDL deployment automation, external
+worker deployment/rollout, data migration from public to tenant stores,
+cross-tenant data movement.

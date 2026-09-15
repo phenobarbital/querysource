@@ -3,38 +3,36 @@
 Base Class for all Query-objects in QuerySource.
 """
 import asyncio
-from abc import abstractmethod
-from typing import Any, Union, Optional
-from collections.abc import Callable
 import time
-from datetime import datetime, timezone
 import traceback
+import uuid
+from abc import abstractmethod
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from datetime import datetime, timezone
 from functools import partial
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from typing import Any
 
+from aiohttp import web
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
-from navigator_session import get_session
-from navigator_session import SessionData
-from aiohttp import web
 from navconfig.logging import logging
-from ..libs.encoders import DefaultEncoder
-from ..conf import (
-    SEMAPHORE_LIMIT,
-    QUERYSET_REDIS,
-    DEFAULT_QUERY_TIMEOUT,
-    DEFAULT_QUERY_FORMAT
-)
-from ..exceptions import (
-    QueryException,
-    CacheException,
-    DataNotFound
-)
-from .connections import Connection
-from ..events import LogEvent
-from ..utils.events import enable_uvloop
-from ..utils.cache_serialization import serialize_cache_payload
+from navigator_session import SessionData, get_session
 
+from ..cache_identity import result_cache_key
+from ..conf import (
+    DEFAULT_QUERY_FORMAT,
+    DEFAULT_QUERY_TIMEOUT,
+    QUERYSET_REDIS,
+    SEMAPHORE_LIMIT,
+)
+from ..events import LogEvent
+from ..exceptions import CacheException, DataNotFound, QueryException
+from ..libs.encoders import DefaultEncoder
+from ..ownership_logging import ownership_fields
+from ..utils.cache_serialization import serialize_cache_payload
+from ..utils.events import enable_uvloop
+from .connections import Connection
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -52,7 +50,9 @@ class AbstractQuery(Connection):
             slug: str = None,
             conditions: dict = None,
             request: web.Request = None,
-            loop: Optional[asyncio.AbstractEventLoop] = None,
+            loop: asyncio.AbstractEventLoop | None = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
         """
@@ -74,7 +74,7 @@ class AbstractQuery(Connection):
             except RuntimeError:
                 self._loop = None
         Connection.__init__(self, loop=self._loop, **kwargs)
-        self._result: Union[dict, list] = None
+        self._result: dict | list = None
         self._output_format: Any = None
         try:
             self._program = conditions.get('program', 'public')
@@ -89,8 +89,8 @@ class AbstractQuery(Connection):
         self._conditions = conditions or {}
         # web Request:
         self._request = request
-        self._generated: Union[int, datetime] = None
-        self._starttime: Union[int, datetime] = self.epoch_time()
+        self._generated: int | datetime = None
+        self._starttime: int | datetime = self.epoch_time()
         ## set the Output factory for Query:
         frm = kwargs.pop('output_format', DEFAULT_QUERY_FORMAT)
         self.output_format(frm)
@@ -100,6 +100,17 @@ class AbstractQuery(Connection):
         self._encoder = DefaultEncoder()
         ## default executor:
         self._executor = ThreadPoolExecutor(max_workers=2)
+        # Tenant selector (keyword-only, preserved from Python routing)
+        self._tenant_selector = tenant
+        # Definition identity and revision for result cache keys (set during load)
+        self._definition_identity: Any = None
+        self._definition_revision: str | None = None
+        # Unique per-query execution id: assigned once here so every
+        # timing/failure event and implicit output artifact this query
+        # object ever produces (HTTP, direct, child, scheduled, remote)
+        # correlates under the same id — never re-derived from a mutable
+        # request field (TASK-731).
+        self._execution_id: str = uuid.uuid4().hex
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         return self._loop if self._loop else asyncio.get_running_loop()
@@ -140,14 +151,14 @@ class AbstractQuery(Connection):
         return self._generated
 
     @abstractmethod
-    def query_model(self, data: Union[str, dict]) -> Any:
+    def query_model(self, data: str | dict) -> Any:
         pass
 
     @abstractmethod
     def get_result(
         self,
         query: object,
-        data: Optional[Union[list, dict]],
+        data: list | dict | None,
         duration: float,
         errors: list = None,
         state: str = None
@@ -205,14 +216,42 @@ class AbstractQuery(Connection):
             loop.close()
 
     #### Caching facilities
+    def result_cache_key(self, provider_checksum: str) -> str:
+        """Compose key from the loaded immutable definition and provider checksum.
+
+        Combines the loaded definition identity and revision with the provider
+        checksum to create a fully scoped cache key. This prevents cache hits
+        across different definitions or when a definition has been externally
+        modified.
+
+        Args:
+            provider_checksum: The provider-specific SQL checksum.
+
+        Returns:
+            The composed qs:r2: cache key.
+        """
+        return result_cache_key(
+            self._definition_identity, self._definition_revision, provider_checksum
+        )
+
     def save_cache(self, checksum, result, **kwargs):
         """_thread_func.
         Returns a future to be executed into a Thread Pool.
+
+        Initiates cache save in a thread. The checksum is used as-is if it's
+        already a composed key; otherwise wrap it with result_cache_key.
         """
+        # Use the checksum directly if it's already a composed key (starts with qs:r2:),
+        # otherwise compose it using the definition identity and revision
+        if isinstance(checksum, str) and checksum.startswith('qs:r2:'):
+            cache_key = checksum
+        else:
+            cache_key = self.result_cache_key(checksum)
+
         loop = asyncio.new_event_loop()
         func = partial(
             self.save_in_cache,
-            checksum,
+            cache_key,
             result,
             loop
         )
@@ -223,7 +262,7 @@ class AbstractQuery(Connection):
             # if a timeout is reached, we try again:
             try:
                 loop.run_until_complete(
-                    self.caching_data(checksum, result)
+                    self.caching_data(cache_key, result)
                 )
             except Exception as exc:
                 self._logger.exception(
@@ -244,39 +283,48 @@ class AbstractQuery(Connection):
 
     def cache_saved(
         self,
-        checksum: str,
+        cache_key: str,
         loop: asyncio.AbstractEventLoop,
         task: asyncio.Task,
         **kwargs
     ):
         """Notification when Query was saved in Cache.
+
+        Called when caching_data completes successfully. The cache_key is the
+        fully composed revision-scoped key.
         """
         try:
             if callable(self.post_cache):
                 self._thread_func(
-                    self.post_cache, checksum, loop, **kwargs
+                    self.post_cache, cache_key, loop, **kwargs
                 )
         except Exception as exc:
             self._logger.error(
                 f"Error running post_cache function: {exc}"
             )
         self._logger.notice(
-            f"QuerySource: Cached {checksum} at {time.strftime('%X')}"
+            f"QuerySource: Cached {cache_key} at {time.strftime('%X')}"
         )
 
     def save_in_cache(
         self,
-        checksum: str,
+        cache_key: str,
         result: Any,
         loop: asyncio.AbstractEventLoop
     ):
+        """Write the already composed key; capture identity before threading.
+
+        The cache_key is expected to be a fully composed revision-scoped key.
+        This method preserves serialization/TTL/thread mechanics while using
+        the composed key and immutable revision; no legacy-key fallback.
+        """
         asyncio.set_event_loop(loop)
         fut = loop.create_task(
-            self.caching_data(checksum, result)
+            self.caching_data(cache_key, result)
         )
         # done callback
         done_callback = partial(
-            self.cache_saved, checksum, loop
+            self.cache_saved, cache_key, loop
         )
         fut.add_done_callback(
             done_callback
@@ -295,10 +343,16 @@ class AbstractQuery(Connection):
 
     async def caching_data(
         self,
-        checksum: str,
+        cache_key: str,
         result: Any
         # loop: asyncio.AbstractEventLoop
     ):
+        """Use the same composed key for TTL writes, with no second wrapping.
+
+        The cache_key should be a fully composed revision-scoped key. This
+        preserves serialization/TTL/thread mechanics while using the composed
+        key and immutable revision; no legacy-key fallback.
+        """
         try:
             data = None
             loop = asyncio.get_running_loop()
@@ -342,16 +396,16 @@ class AbstractQuery(Connection):
                 self._logger.error(
                     f'Cache Encode Error: {err}'
                 )
-                return None
+                return
             async with await redis.connection() as conn:
                 # async with  as conn:
                 await conn.setex(
-                    checksum,
+                    cache_key,
                     data,
                     self._timeout
                 )
                 self._logger.debug(
-                    f"Successfully Cached: {checksum}"
+                    f"Successfully Cached: {cache_key}"
                 )
         except asyncio.TimeoutError as err:
             self._logger.error(
@@ -396,8 +450,22 @@ class AbstractQuery(Connection):
         )
 
     async def event_log(self, payload: dict, status: str = 'query', **kwargs):
+        """Emit a timing/failure event, always carrying ownership context.
+
+        Attaches ``execution_id`` and the executed definition's
+        ``ownership_fields`` (owner/schema/table/slug) to every event —
+        this is the single shared choke point HTTP, direct, and MultiQS
+        child execution all pass through (TASK-731 AC-2), so callers never
+        have to attach ownership themselves. Existing payload keys always
+        win (``setdefault``): a caller's own ``slug``/alias is preserved
+        unchanged.
+        """
+        enriched = dict(payload)
+        enriched.setdefault('execution_id', self._execution_id)
+        for key, value in ownership_fields(self._definition_identity).items():
+            enriched.setdefault(key, value)
         return await LogEvent(
-            payload=payload,
+            payload=enriched,
             status=status,
             **kwargs
         )

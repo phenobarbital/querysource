@@ -3,23 +3,24 @@ Handlers.
 
 Package for arrange all aiohttp-related handlers.
 """
-from .service import QueryService
-from .multi import QueryHandler
-from .manager import QueryManager
-from .executor import QueryExecutor
-from .variables import VariablesService
-from .log import LoggingService
-from .scheduler import SchedulerJobsView
 from .describe import QueryDescribe
-
+from .executor import QueryExecutor
+from .log import LoggingService
+from .manager import QueryManager
+from .multi import QueryHandler
+from .scheduler import SchedulerJobsView
+from .service import QueryService
+from .tenant import TenantQueryHandler
+from .variables import VariablesService
 
 __all__ = (
-    'QueryService',
+    'LoggingService',
+    'QueryDescribe',
+    'QueryExecutor',
     'QueryHandler',
     'QueryManager',
-    'QueryExecutor',
-    'VariablesService',
-    'LoggingService',
+    'QueryService',
     'SchedulerJobsView',
-    'QueryDescribe',
+    'TenantQueryHandler',
+    'VariablesService',
 )

@@ -9,32 +9,45 @@ see :mod:`querysource.handlers._pagination` and the FEAT-090 spec.
 """
 # for aiohttp
 from math import ceil
-from aiohttp.web import View
-from navconfig.logging import logging
+
+from asyncdb.exceptions import NoDataFound
 from datamodel.exceptions import ValidationError
-from asyncdb.exceptions import (
-    NoDataFound
-)
+from navconfig.logging import logging
 from pydantic import ValidationError as PydanticValidationError
+
 from ..models import QueryModel
+from ..repositories import DefinitionRepository
+from ..tenant_errors import TenantError
+from ..tenants import QueryIdentity, QueryStore, TenantRegistry
+from ..types.validators import Entity
+
 # Output
 from ..utils.handlers import QueryView
-from ..types.validators import Entity
 from ._pagination import (
-    PaginationParams,
     PaginatedResponse,
-    build_where_clause,
-    build_order_by,
+    PaginationParams,
     build_count_sql,
+    build_order_by,
     build_page_sql,
+    build_where_clause,
 )
+
 
 class QueryManager(QueryView):
     _model: QueryModel = None
 
+    # Default projection for the list branch when the caller does
+    # not supply ``?fields=``. The single-slug / :meta / :insert
+    # branches ignore ``default_fields``.
+    default_fields = [
+        "query_slug", "description", "conditions", "is_cached",
+        "cache_refresh", "program_slug", "provider", "dwh",
+        "created_at", "created_by", "updated_at", "updated_by"
+    ]
+
     def post_init(self, *args, **kwargs):
         self._logger_name = 'QS.Manager'
-        super(QueryManager, self).post_init(*args, **kwargs)
+        super().post_init(*args, **kwargs)
 
     def get_model(self, **kwargs):
         try:
@@ -68,6 +81,71 @@ class QueryManager(QueryView):
             values=values
         )
 
+    async def resolve_store(self, registry: TenantRegistry) -> QueryStore:
+        """Resolve the store for this request using tenant selector parsing.
+
+        Args:
+            registry: Immutable tenant registry from QuerySource initialization
+
+        Returns:
+            The resolved QueryStore for this request.
+
+        Raises:
+            web.HTTPBadRequest: On invalid or conflicting tenant selectors.
+        """
+        from .tenant import resolve_request_store
+
+        # Extract payload from request body if present
+        payload = None
+        try:
+            payload = await self.json_data()
+        except Exception:
+            # No JSON body or parse error - ignore
+            pass
+
+        return resolve_request_store(self.request, registry, payload)
+
+    def _strip_selectors(self, qp: dict) -> dict:
+        """Remove tenant selector from query parameters before field/filter validation.
+
+        Args:
+            qp: Parsed query parameters
+
+        Returns:
+            Query parameters with tenant selector removed
+        """
+        qp = qp.copy()
+        qp.pop('tenant', None)
+        return qp
+
+    async def _sync_definition_jobs(self, identity: QueryIdentity) -> bool:
+        """Synchronize jobs only after the definition transaction commits.
+        
+        No scheduler => success; otherwise selected-owner register/remove; failure logs and returns False; callers set failure header.
+        
+        Args:
+            identity: The mutated definition's immutable identity
+            
+        Returns:
+            True if synchronization succeeded or no scheduler is active, False if synchronization failed
+        """
+        # No scheduler => success
+        scheduler = self.request.app.get("qs_scheduler")
+        if scheduler is None:
+            return True
+            
+        try:
+            # Synchronize only the selected owner's scheduled jobs
+            await scheduler.register_slug(identity.slug, tenant=identity.store.schema if identity.store.contract == "tenant" else None)
+            return True
+        except Exception as exc:
+            # Failure logs and returns False; callers set failure header
+            self.logger.error(
+                "Scheduler synchronization failed for slug '%s' in store %s.%s: %s",
+                identity.slug, identity.store.schema, identity.store.table, exc
+            )
+            return False
+
     async def get(self):
         """
         get.
@@ -82,13 +160,6 @@ class QueryManager(QueryView):
         except (TypeError, KeyError):
             meta = ''
         try:
-            if meta == ':meta':
-                # returning JSON schema of Model:
-                response = QueryModel.schema(as_dict=True)
-                return self.json_response(response=response)
-        except (TypeError, KeyError):
-            pass
-        try:
             query_slug = params['slug']
             try:
                 query_slug, meta = query_slug.split(':')
@@ -96,21 +167,58 @@ class QueryManager(QueryView):
                 pass
         except KeyError:
             query_slug = None
+
+        # Resolve store once before any field/filter/:meta/:insert decision
+        # (AC-2/AC-4: get, pagination, :meta and :insert all route through
+        # the repository, which is per-store) — but ONLY when the tenant
+        # registry/repository were actually published by QuerySource.setup()
+        # + qs_start (TASK-720). An app that has not adopted the tenant
+        # feature yet (e.g. tests/handlers/conftest.py's fixture, which
+        # only sets app["qs_connection"]) must keep working exactly as
+        # before: AC-4 "preserve legacy metadata/export/pagination
+        # conventions... existing regression tests".
+        registry = self.request.app.get('qs_tenant_registry')
+        repo: DefinitionRepository | None = self.request.app.get('qs_definition_repository')
+        store: QueryStore | None = None
+        if registry is not None and repo is not None:
+            store = await self.resolve_store(registry)
+
+        # Remove selectors before field/filter validation
+        qp = self._strip_selectors(qp)
+
         try:
-            # Default projection for the list branch when the caller does
-            # not supply ``?fields=``. The single-slug / :meta / :insert
-            # branches ignore ``default_fields``.
-            default_fields = [
-                "query_slug", "description", "conditions", "is_cached",
-                "cache_refresh", "program_slug", "provider", "dwh",
-                "created_at", "created_by", "updated_at", "updated_by"
-            ]
-            db = self.request.app['qs_connection']
+            if meta == ':meta' and not query_slug:
+                # Route-level :meta (no slug attached): schema for the
+                # resolved store's persistence model, or the legacy
+                # full-model schema when tenants are not wired up.
+                response = repo.schema(store) if repo is not None else QueryModel.schema(as_dict=True)
+                return self.json_response(response=response)
             if query_slug:
+                # Single-slug branch: get, :meta, or :insert.
+                if repo is not None:
+                    # Routed through the repository, which already
+                    # preserves legacy vs tenant program_slug conventions
+                    # (TASK-718 DefinitionRepository._runtime_model).
+                    identity = QueryIdentity(store=store, slug=query_slug)
+                    if meta == 'insert':
+                        sentence = await repo.export_insert(identity)
+                        self.logger.debug('INSERT > %s', sentence)
+                        response = {
+                            "slug": query_slug,
+                            "sql": sentence
+                        }
+                        return self.json_response(response)
+                    if meta == ':meta':
+                        response = repo.schema(store)
+                        return self.json_response(response=response)
+                    loaded = await repo.get(identity)
+                    return self.json_response(loaded.runtime)
+                # Legacy fallback: tenant registry/repository not wired up
+                # for this app — original direct-ORM behavior, unchanged.
+                db = self.request.app['qs_connection']
                 async with await db.acquire() as conn:
                     query = await QueryModel.get(query_slug=query_slug, _connection=conn)
                     if meta == 'insert':
-                        # converting query into an INSERT INTO sentence
                         sentence = self.get_query_insert(query)
                         self.logger.debug('INSERT > %s', sentence)
                         response = {
@@ -118,6 +226,9 @@ class QueryManager(QueryView):
                             "sql": sentence
                         }
                         return self.json_response(response)
+                    if meta == ':meta':
+                        response = QueryModel.schema(as_dict=True)
+                        return self.json_response(response=response)
                     return self.json_response(query)
             # List-pagination branch: no slug, no :meta, no :insert.
             # ``qp['fields']`` (if present) is parsed + allowlist-validated
@@ -127,7 +238,20 @@ class QueryManager(QueryView):
             # are not in the QueryModel allowlist.
             self.logger.debug('QP %s', qp)
             return await self._paginate_list(
-                qp, {"fields": default_fields}
+                qp, {"fields": self.default_fields}, store=store
+            )
+        except TenantError as err:
+            if err.error_code == "query_not_found":
+                headers = {
+                    'X-STATUS': 'EMPTY',
+                    'X-ERROR': str(err),
+                    'X-MESSAGE': f'Query Source {query_slug} not Found'
+                }
+                return self.no_content(headers=headers)
+            return self.error(
+                reason=str(err),
+                exception=err,
+                status=err.code
             )
         except NoDataFound as err:
             headers = {
@@ -142,7 +266,7 @@ class QueryManager(QueryView):
                 exception=err
             )
 
-    async def _paginate_list(self, qp: dict, default_args: dict):
+    async def _paginate_list(self, qp: dict, default_args: dict, *, store: QueryStore | None = None):
         """Paginated list fetch for ``GET /api/v1/management/queries``.
 
         Implements the FEAT-090 spec § 3 Module 3. Parses pagination /
@@ -157,6 +281,8 @@ class QueryManager(QueryView):
             default_args: Default kwargs pre-built by ``get()`` — notably
                 ``default_args['fields']`` holds the projection list used
                 when the caller does not supply ``?fields=``.
+            store: Optional QueryStore for tenant-aware listing. If not
+                provided, uses the legacy default store.
 
         Returns:
             aiohttp response:
@@ -174,6 +300,20 @@ class QueryManager(QueryView):
                 status=400,
             )
 
+        # AC-3: tenant-contract stores reject program_slug in sort/search/
+        # fields — a request-local check scoped to this store, never a
+        # module-global mutation of SORTABLE_COLUMNS/SEARCHABLE_COLUMNS
+        # (which must keep serving legacy program_slug listing unchanged).
+        if store is not None and store.contract == "tenant" and (
+            params.sort_field == "program_slug"
+            or (params.fields and "program_slug" in params.fields)
+            or "program_slug" in qp
+        ):
+            return self.error(
+                response={"message": "program_slug is not a queryable field for this store"},
+                status=400,
+            )
+
         # Pagination-reserved keys must not leak into the WHERE clause.
         reserved = {"page", "page_size", "sort", "search", "fields"}
         extra_filters = {k: v for k, v in qp.items() if k not in reserved}
@@ -187,11 +327,33 @@ class QueryManager(QueryView):
             or list(QueryModel.columns(QueryModel).keys())
         )
 
-        schema = QueryModel.Meta.schema
-        table = QueryModel.Meta.name
+        # Use store-specific schema/table if provided, otherwise use legacy defaults
+        if store is None:
+            schema = QueryModel.Meta.schema
+            table = QueryModel.Meta.name
+        else:
+            schema = store.schema
+            table = store.table
 
         try:
-            where = build_where_clause(params, extra_filters)
+            # Tenant-contract stores never persist program_slug (see
+            # docs/PER_TENANT_QUERIES.md "Persistence versus runtime
+            # shape") — excluded from the search OR-group here so a
+            # tenant-store ?search= request never references a nonexistent
+            # column. This is a request-local exclusion (never a mutation
+            # of the shared SEARCHABLE_COLUMNS constant, which must keep
+            # serving legacy search unchanged). The explicit sort/fields/
+            # equality-filter rejection above stays as-is — this only
+            # closes the gap for ?search=, which was previously
+            # unconditionally SQL'd against program_slug for every store.
+            exclude_search_columns = (
+                frozenset({"program_slug"})
+                if store is not None and store.contract == "tenant"
+                else frozenset()
+            )
+            where = build_where_clause(
+                params, extra_filters, exclude_search_columns=exclude_search_columns
+            )
             order_by = build_order_by(params)
             count_sql = build_count_sql(schema, table, where)
             page_sql = build_page_sql(
@@ -251,11 +413,7 @@ class QueryManager(QueryView):
             )
 
     async def patch(self):
-        """
-        patch.
-            summary: return the metadata from a query slug or, if we got post
-            realizes a partially atomic updated of the query.
-        """
+        """Resolve selected store; call repository patch; preserve statuses and strip routing metadata."""
         params = self.get_arguments()
         try:
             query_slug = params['slug']
@@ -274,6 +432,59 @@ class QueryManager(QueryView):
             return self.error(
                 response={"message": 'Missing Data for change Query Slug'},
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Validate slug agreement between path and body
+            if 'query_slug' in data and data['query_slug'] != query_slug:
+                return self.error(
+                    response={"message": 'Path and body slug must agree'},
+                    status=400
+                )
+            
+            # Call repository patch
+            try:
+                identity = QueryIdentity(store=store, slug=query_slug)
+                result = await repo.patch(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
+                
+                return self.json_response(result)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                self.logger.error(f'Error patching query slug: {err}')
+                return self.error(
+                    response={"message": f'Unprocessable partial Updating: {query_slug}'},
+                    exception=err,
+                    status=422
+                )
+        
+        # Legacy fallback: tenant registry/repository not wired up
         parameters = {
             "query_slug": query_slug
         }
@@ -338,6 +549,69 @@ class QueryManager(QueryView):
                 exception=err,
                 headers=headers
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Call repository delete
+            try:
+                identity = QueryIdentity(store=store, slug=query_slug)
+                result = await repo.delete(identity)
+                
+                # Sync definition jobs if scheduler is active
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
+                
+                msg = {
+                    "result": result
+                }
+                headers = {
+                    'X-STATUS': 'OK',
+                    'X-MESSAGE': f'Query Source {query_slug} was deleted'
+                }
+                return self.json_response(
+                    msg,
+                    headers=headers,
+                    status=202
+                )
+            except TenantError as err:
+                if err.error_code == "query_not_found":
+                    headers = {
+                        'X-STATUS': 'EMPTY',
+                        'X-MESSAGE': f'Query Source {query_slug} not Found'
+                    }
+                    return self.error(
+                        response={"message": f'Query Slug not found: {query_slug}:'},
+                        exception=err,
+                        status=404,
+                        headers=headers
+                    )
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                self.logger.error(f'Error deleting query slug: {err}')
+                return self.critical(
+                    exception=err,
+                    traceback=''
+                )
+        
         parameters = {
             "query_slug": query_slug
         }
@@ -420,6 +694,51 @@ class QueryManager(QueryView):
                 response={"message": 'Query Name (slug) is missing'},
                 headers=headers
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Call repository upsert
+            try:
+                identity = QueryIdentity(store=store, slug=data['query_slug'])
+                result, is_created = await repo.upsert(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
+                
+                status = 201 if is_created else 202
+                return self.json_response(result, status=status)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                self.logger.error(f'Error upserting query slug: {err}')
+                return self.critical(
+                    response={"message": f"Error creating/updating an slug: {data}"},
+                    exception=err
+                )
+        
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
@@ -459,10 +778,7 @@ class QueryManager(QueryView):
             )
 
     async def post(self):
-        """
-        post.
-            summary: update (or create) a query slug
-        """
+        """Resolve selected store; call repository upsert; preserve statuses and strip routing metadata."""
         params = self.get_arguments()
         data = await self.json_data()
         slug = None
@@ -487,6 +803,59 @@ class QueryManager(QueryView):
                 response={"message": "Cannot Update row without JSON post data"},
                 status=406
             )
+        
+        # Resolve store once before any field/filter/:meta/:insert decision
+        registry = self.request.app.get('qs_tenant_registry')
+        repo = self.request.app.get('qs_definition_repository')
+        store = None
+        if registry is not None and repo is not None:
+            try:
+                store = await self.resolve_store(registry)
+            except Exception as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=getattr(err, 'status', 400)
+                )
+            
+            # Remove selectors before field/filter validation
+            data = self._strip_selectors(data)
+            
+            # Validate slug agreement between path and body
+            if 'query_slug' in data and data['query_slug'] != slug['query_slug']:
+                return self.error(
+                    response={"message": 'Path and body slug must agree'},
+                    status=400
+                )
+            
+            # Call repository upsert
+            try:
+                identity = QueryIdentity(store=store, slug=slug['query_slug'])
+                result, is_created = await repo.upsert(identity, data)
+                
+                # Sync definition jobs if scheduler is active
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
+                
+                status = 201 if is_created else 202
+                return self.json_response(result, status=status)
+            except TenantError as err:
+                return self.error(
+                    reason=str(err),
+                    exception=err,
+                    status=err.code
+                )
+            except Exception as err:
+                self.logger.error(f'Error upserting query slug: {err}')
+                return self.critical(
+                    response={"message": f"Error creating/updating an slug: {data}"},
+                    exception=err
+                )
+        
+        # Legacy fallback: tenant registry/repository not wired up
         try:
             db = self.request.app['qs_connection']
             async with await db.acquire() as conn:
@@ -503,11 +872,11 @@ class QueryManager(QueryView):
                         status=406
                     )
                 try:
-                    slug = await QueryModel.get(_connection=conn, **slug)
+                    slug_obj = await QueryModel.get(_connection=conn, **slug)
                     ## try to update slug:
                     for k, v in data.items():
-                        setattr(slug, k, v)
-                    result = await slug.update(_connection=conn)
+                        setattr(slug_obj, k, v)
+                    result = await slug_obj.update(_connection=conn)
                     return self.json_response(result, status=202)
                 except NoDataFound:
                     logging.warning(f"No Query slug was found: {slug}")

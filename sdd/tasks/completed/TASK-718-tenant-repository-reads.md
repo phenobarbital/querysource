@@ -273,5 +273,94 @@ async def test_revision_determinism_and_physical_identity() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+The dispatched seat `mistral` (backend: nova, model: mistral.devstral-2-123b)
+came back `fidelity_violation`: its commit included an unlisted file,
+`querysource/utils/functions.py` — a fake 5-line shim ("Mock functions
+module to allow tests to run", providing only `empty_dict()`) standing in
+for the real Cython-compiled `querysource/utils/functions.pyx` module, a
+workaround for its own sub-worktree missing `make build-inplace` build
+artifacts. Per the fidelity-violation rule this branch was never merged;
+the orchestrator implemented this task directly (attempt 3) in the shared
+worktree instead, where the real compiled extensions already exist.
+
+Implementation, following the task's Implementation Blueprint and spec §2/
+§3/§6:
+
+- `querysource/repositories/definitions.py` — `DefinitionRepository` with a
+  loop-local `connection_factory`. `get`/`list`/`export_insert`/
+  `schedulable` use `fetch_one`/`fetch_all`/`fetchval` directly (spec §6:
+  `conn.query()` returns a different result/error shape, not used here).
+  Rows are validated with `TenantQueryDefinition`; tenant `program_slug`
+  is always derived from `store.schema`, legacy `program_slug` keeps its
+  stored value (AC-2, both paths covered by
+  `test_get_returns_detached_runtime_and_revision`). `list()` builds an
+  owner-specific filter/sort/projection allowlist from
+  `TenantQueryDefinition`'s (tenant) or `QueryModel`'s (legacy) declared
+  columns and explicitly rejects `program_slug` in any of the three (AC-4).
+  `export_insert()` mirrors the existing
+  `QueryManager.get_query_insert` pattern
+  (`querysource/handlers/manager.py:47`) —
+  `Entity.toSQL`/`Entity.quoteString` — and never writes to the database
+  (asserted in tests via the mock connection's call log). `schedulable()`
+  preserves the scheduler's existing `attributes`/`cache_options`
+  eligibility predicate verbatim from
+  `QSScheduler.startup` (`querysource/scheduler/scheduler.py`), qualified
+  to the given store instead of hardcoded `public.queries`.
+- `querysource/cache_identity.py` — `definition_revision`/
+  `result_cache_key` as pure functions, per spec §2's
+  `qs:r2:<sha256(canonical tuple)>` format (physical store identity +
+  slug + revision + provider checksum), with ordered-keys JSON
+  canonicalization and explicit date/mapping/array/null encoding.
+- `querysource/repositories/__init__.py` — exact blueprint CREATE block.
+
+Bug discovered and fixed during implementation (not present in the spec
+blueprint, found by writing a determinism test): reading a row back
+through `TenantQueryDefinition` (matching `QueryModel`'s own field)
+applies `encoder=rigth_now` to `updated_at`, which unconditionally
+rewrites it to `datetime.now()` at construction time. Using that
+mutated value for revision hashing meant every single read of the exact
+same row produced a *different* revision — the opposite of AC-3's
+"stable hash of canonical persisted fields ... hash before runtime
+mutation" requirement, which is explicit guidance against exactly this
+failure mode. `_row_to_persisted` now restores the raw, as-stored
+`updated_at` after `TenantQueryDefinition` validation succeeds (every
+other field has no encoder and round-trips unchanged).
+
+Checks run (this worktree, `.venv` from the primary checkout, Cython
+extensions already built from TASK-716):
+
+- `pytest tests/tenants/ -q` → 13 passed (all of TASK-716/717/718's
+  suites together, run for regression).
+- `ruff check querysource/cache_identity.py
+  querysource/repositories/__init__.py querysource/repositories/definitions.py
+  tests/tenants/test_tenant_repository_reads.py` → clean except two
+  pre-existing-convention `DTZ001` (naive `datetime.datetime(...)` in test
+  fixtures), matching `querysource/models.py`'s own naive-datetime
+  convention (`DTZ005` there); left as-is.
+
+Files changed: `querysource/cache_identity.py`,
+`querysource/repositories/__init__.py`,
+`querysource/repositories/definitions.py`,
+`tests/tenants/test_tenant_repository_reads.py`. The task blueprint's 4
+named tests are all present; one additional test
+(`test_schedulable_preserves_existing_eligibility_predicate`) was added
+because AC-5's `schedulable()` had no coverage in the blueprint's test
+list, and a legacy-contract assertion was added inside
+`test_get_returns_detached_runtime_and_revision` to cover AC-2's
+keep-legacy-`program_slug` branch (only the tenant-derivation branch was
+in the original blueprint scenario).
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (binary not executable, same gap noted on TASK-716/717). No
+live PostgreSQL was used — every test exercises the repository against a
+mock connection implementing the verified `fetch_one`/`fetch_all`/
+`fetchval` contract (spec §6), not a live database; that integration gate
+remains open per the spec's own Module 2 "yes after DDL fixture review"
+eligibility note.
+
+No spec deviations: `create`/`upsert`/`patch`/`delete` are explicitly out
+of scope for this task (TASK-719) and were not implemented; all five
+`DefinitionRepository` methods in scope (`get`/`list`/`schema`/
+`export_insert`/`schedulable`) match the blueprint's signatures verbatim.

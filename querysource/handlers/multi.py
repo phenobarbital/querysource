@@ -1,24 +1,26 @@
 import time
 import traceback
+
 from aiohttp import web
 from pandas import DataFrame
-from ..outputs import DataOutput
+
+from ..auth import ResourceType
+from ..conf import CSV_DEFAULT_DELIMITER, CSV_DEFAULT_QUOTING
 from ..exceptions import (
-    ParserError,
     DataNotFound,
     DriverError,
+    OutputError,
+    ParserError,
     QueryException,
     SlugNotFound,
-    OutputError,
 )
-from .abstract import AbstractHandler
+from ..outputs import DataOutput
 from ..queries import MultiQS
 from ..queries.multi.operators import Filter, GroupBy
-from ..conf import (
-    CSV_DEFAULT_DELIMITER,
-    CSV_DEFAULT_QUOTING
-)
-from ..auth import ResourceType
+from ..tenant_errors import TenantError
+from ..tenants import QueryIdentity
+from .abstract import AbstractHandler
+
 
 class QueryHandler(AbstractHandler):
 
@@ -98,6 +100,91 @@ class QueryHandler(AbstractHandler):
             )
             raise web.HTTPNotFound() from exc
 
+    async def _preflight_multiquery_owned(
+        self,
+        request: web.Request,
+        slugs: list,
+        files: list,
+        has_raw_query: bool,
+    ) -> None:
+        """Check real resolved QueryIdentity objects before executing batches.
+
+        This preflight checks actual saved child slugs, not output aliases.
+        It resolves each slug to its QueryIdentity and enforces ownership
+        using a detached evaluator with cleared cache for tenant isolation.
+
+        Files and raw actions preserve existing behavior (no ownership check).
+
+        Args:
+            request: The current aiohttp web request.
+            slugs: List of slug/query names to check with slug:execute.
+            files: List of file keys (not checked - existing behavior).
+            has_raw_query: True if raw query present (not checked - existing behavior).
+
+        Raises:
+            web.HTTPNotFound: When any slug ownership check fails.
+        """
+        # Files and raw queries use existing behavior (no ownership check)
+        if not slugs:
+            return
+
+        # PBAC disabled check
+        if request.app.get("security") is None:
+            return
+
+        # Same source of truth execution uses: TenantQueryHandler.query()
+        # stashes the resolved (path-based) tenant selector on
+        # request['qs_tenant'] before delegating here — NOT the query
+        # string, which the tenant route never populates (the selector
+        # lives in the URL path). Reading request.query.get("tenant")
+        # here would silently preflight against the default/legacy store
+        # while MultiQS then executes with the real path tenant — an
+        # authz/execution mismatch.
+        tenant = request.get('qs_tenant')
+
+        # Get the registry from the app. Published as app["qs_tenant_registry"]
+        # by QuerySource.qs_start (TASK-720) — verified against
+        # querysource/services.py. A missing key means this app has not
+        # adopted the tenant feature at all (same "legacy, not wired up"
+        # case TASK-723/724 handle for the management handlers): skip this
+        # tenant-specific check and rely on the existing alias-based
+        # _preflight_multiquery PBAC check above, which still applies.
+        registry = request.app.get("qs_tenant_registry")
+        if registry is None:
+            return
+
+        # Once the tenant feature IS active for this app, a resolution
+        # failure must fail closed (AC-1 "fail-closed errors"), matching
+        # the sibling _preflight_multiquery's own
+        # "except Exception ... raise web.HTTPNotFound()" convention just
+        # above — never silently allow an unverifiable batch through.
+        try:
+            store = registry.resolve(tenant)
+        except web.HTTPNotFound:
+            raise
+        except Exception as exc:
+            self.logger.warning(
+                "MultiQuery ownership pre-flight error (fail-closed): %s", exc
+            )
+            raise web.HTTPNotFound() from exc
+
+        # Check each slug for ownership
+        for slug in slugs:
+            identity = QueryIdentity(store=store, slug=slug)
+            try:
+                await self._enforce_owned_slug(
+                    request,
+                    identity=identity,
+                    action="slug:execute",
+                )
+            except web.HTTPNotFound:
+                self.logger.info(
+                    "MultiQuery ownership denied: slug=%s tenant=%s",
+                    slug,
+                    tenant or "default",
+                )
+                raise
+
     async def columns(self, request: web.Request) -> web.StreamResponse:
         raise self.no_content(
             headers={
@@ -114,7 +201,6 @@ class QueryHandler(AbstractHandler):
         args = self.match_parameters(request)
         slug = args.get('slug', None)
         _format: str = 'json'
-        meta = args.get('meta', None)
         writer_options = {}
         try:
             slug, _format = slug.split(':')
@@ -217,7 +303,33 @@ class QueryHandler(AbstractHandler):
             files=list((_files or {}).keys()),
             has_raw_query=_has_raw,
         )
+        # Step 1b: Ownership preflight for tenant isolation.
+        # Real stored slugs — the alias keys of `_queries` (the output
+        # label each child result is keyed by) are NOT a stand-in for the
+        # actual saved definition being referenced (AC-1 "check actual
+        # saved child slugs, not output aliases"). A raw-SQL child (no
+        # `slug` key) has no stored definition to own-check at all —
+        # skipped here exactly like `_preflight_multiquery`'s own existing
+        # "files/raw actions preserve existing behavior" convention.
+        _owned_slugs = [
+            cfg["slug"]
+            for cfg in (_queries or {}).values()
+            if isinstance(cfg, dict) and cfg.get("slug")
+        ]
+        await self._preflight_multiquery_owned(
+            request,
+            slugs=_owned_slugs,
+            files=list((_files or {}).keys()),
+            has_raw_query=_has_raw,
+        )
         _user_session = request.get('user_session')  # memoized by _get_user_session above
+
+        # Owner-aware execution: TenantQueryHandler.query() stashes the
+        # resolved tenant selector on request['qs_tenant'] before
+        # delegating here (querysource/handlers/tenant.py); legacy v2/v3
+        # callers never set it, so tenant stays None (MultiQS's own
+        # default — AC-3, unchanged behavior for every non-tenant route).
+        _tenant = request.get('qs_tenant')
 
         ## Step 1b: Running all Queries and Files on QueryObject
         qs = MultiQS(
@@ -227,6 +339,7 @@ class QueryHandler(AbstractHandler):
             query=options,
             conditions=data,
             user_session=_user_session,
+            tenant=_tenant,
         )
         try:
             result, options = await qs.query()
@@ -308,6 +421,28 @@ class QueryHandler(AbstractHandler):
             header_detail = " ".join(str(oe).splitlines())
             err.headers['X-Output-Errors'] = f"{step}: {header_detail}"
             raise err
+        except TenantError as err:
+            # Placed BEFORE the broader (QueryException, DriverError) branch
+            # since TenantError IS a QueryException subclass — without this,
+            # every ownership error (query_not_found=404,
+            # tenant_store_unavailable=503, tenant_write_forbidden=403, ...)
+            # was silently collapsed to the generic code=402 below. Preserve
+            # the error's own stable machine code (spec §"New ownership
+            # errors": "use the current error envelope for new codes").
+            trace = traceback.format_exc()
+            _remote_queries_on_err = getattr(qs, '_remote_queries', [])
+            if _remote_queries_on_err:
+                self.logger.warning(
+                    "MultiQuery ownership error after remote queries %s: %s",
+                    _remote_queries_on_err,
+                    err,
+                )
+            raise self.Error(
+                message=str(err),
+                exception=err,
+                stacktrace=trace,
+                code=err.code
+            )
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()
             _remote_queries_on_err = getattr(qs, '_remote_queries', [])

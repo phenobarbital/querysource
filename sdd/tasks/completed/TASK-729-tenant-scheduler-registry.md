@@ -212,5 +212,106 @@ async def test_runtime_store_error_not_missing() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15. Implemented directly
+("attempt 3") after the dispatched native attempt was rejected.
+
+**Dispatch history**: the task was prepared as a native seat
+(`coder_prepare_native`) and run as a background `sdd-coder` agent
+(model `haiku`). It completed and committed real work (`ea73b95` +
+`cf6b9c3`), but `coder_merge` returned `outcome: fidelity_violation`
+because both commits also modified `sdd/tasks/index/per-tenant-queries.json`
+and moved the task file under `sdd/tasks/` — SDD-state bookkeeping that is
+the orchestrator's exclusive responsibility, never a task coder's, per its
+own mandate ("commits code only, never touches sdd/"). Per protocol this
+was never merged by hand.
+
+Reviewing that unmerged diff (read-only, for reference) surfaced two real
+bugs worth fixing rather than adopting outright:
+- `DefinitionRepository(self._registry)` was constructed with only one
+  positional argument — the real constructor requires a second, required
+  `connection_factory` argument (`querysource/repositories/definitions.py:
+  59-66`). This would raise `TypeError` immediately at `QSScheduler()`
+  construction time.
+- `self._registry = TenantRegistry()` was constructed fresh in `__init__`
+  and never discovered anywhere in the diff. `TenantRegistry.stores()` on
+  an undiscovered registry is always `()` (confirmed by reading
+  `querysource/tenants.py`), so `startup()`'s "enumerate every store" loop
+  would have silently iterated zero stores in any real deployment, never
+  loading a single scheduled job — a complete, silent functional failure
+  of this task's entire purpose.
+
+**Implementation** (fresh, in this worktree):
+- `querysource/scheduler/scheduler.py`: `startup()` now reads
+  `app["qs_tenant_registry"]` / `app["qs_definition_repository"]` —
+  published before scheduler startup by the app's `on_startup` ordering
+  (established by TASK-720, confirmed by the existing
+  `tests/tenants/test_tenant_bootstrap_lookup.py::
+  test_startup_order_before_scheduler`) — and enumerates every discovered
+  store via `repository.schedulable(store)`, replacing the old hardcoded
+  `public.queries` SELECT and the scheduler-owned `AsyncPool` entirely
+  (AC-1). `_qualified_job_id()` retains legacy ids for the registry's
+  configured default store (via the registry's own public `resolve()`,
+  never a private `_default_store` reach-in) and uses
+  `qsj2-<kind>-<store digest>-<url-safe-slug>` for every other store;
+  every registered job's kwargs now carries a validated
+  `TenantOwnerEnvelope`; `startup()` deduplicates identical slugs across
+  stores so a physical alias schedules once (AC-2). `register_slug`/
+  `_slug_job_ids`/`_fetch_slug_row` extended with `tenant`/`store`
+  parameters; `_register_query_row`/`_register_cache_row` now accept and
+  use the resolved store internally (AC-3). `_fetch_slug_row` distinguishes
+  a genuinely missing definition (`TenantError(error_code="query_not_found")`,
+  logged DEBUG) from a store/connection failure (any other exception,
+  logged WARNING) — a down store is never mistaken for a deleted
+  definition (AC-4).
+- A real bug was caught by this task's OWN new focused test
+  (`test_register_update_remove_only_owner`): the first draft of
+  `_slug_job_ids` returned BOTH the legacy ids AND the qualified ids for a
+  non-default store, so syncing a tenant-owned slug via `register_slug`
+  would ALSO remove the DEFAULT store's identically-named job as a side
+  effect — a direct violation of AC-3. Fixed to return only the ids that
+  actually belong to the resolved store.
+- `tests/tenants/test_tenant_scheduler_registry.py` (new, 4 tests):
+  multi-store startup with a non-"public" configured default, proving
+  legacy-id preservation, qsj2-qualification, and owner envelopes;
+  alias dedup across stores plus disjoint per-store job-id sets;
+  register/update/remove scoped to exactly one owner (the regression test
+  that caught the bug above); and `_fetch_slug_row`'s missing-vs-unavailable
+  log-level distinction.
+- `tests/test_scheduler_core.py`, `tests/test_scheduler_multi_routing.py`:
+  the pre-existing `QSScheduler.__new__(QSScheduler)` raw-construction test
+  helpers that reach `_register_query_row`/`_register_cache_row` now also
+  set `_registry = TenantRegistry()`, matching the same minimal-attribute
+  pattern they already use for `_notification_manager`/`_scheduler`.
+
+**Checks run** (`source .venv/bin/activate && python -m pytest ...`):
+- `tests/tenants/test_tenant_scheduler_registry.py` — 4/4 passed (AC-5,
+  exact command from the task).
+- Full pre-existing scheduler suite (`test_scheduler_core`,
+  `test_scheduler_multi_routing`, `tests/scheduler/`,
+  `test_scheduler_integration`, `test_scheduler_handler_integration`,
+  `test_scheduler_jobs`) — 67 passed, 2 pre-existing unrelated failures
+  (see below) after the two fixture fixes above.
+- Full tenants/handlers/multi/executor regression sweep — 334 passed, 4
+  failed.
+- `ruff check` on every touched file — cross-checked line-by-line against
+  commit `2b2d6db` (the state immediately before this task): 0 new
+  findings; every remaining finding (import-sort, pre-existing
+  `Optional`/`Union` style, broad-except in code this task did not touch)
+  traces to an untouched line or the file's own established broad-except
+  philosophy (5 pre-existing instances reduced to 3 net, by removing the
+  old raw-SQL/AsyncPool try/except blocks this task replaced).
+
+**Pre-existing failures confirmed unrelated** (verified against `2b2d6db`):
+`test_scheduler_not_imported_when_disabled` (this environment's
+`ENABLE_QS_SCHEDULER` resolves `True`, not the test's assumed default),
+`test_post_returns_405` (unrelated 400-vs-405 routing behavior),
+`test_frozen_dataclass` and `test_guardrail_rejects_too_many_sources`
+(both already documented as pre-existing in TASK-727/728's completion
+notes).
+
+**Spec deviations**: none. **Deployment gates unverified**: real
+multi-schema Postgres discovery and scheduled execution against actual
+tenant stores (sandbox has no network egress); the scheduler no longer
+owns a DB pool at all (removed — every read now goes through the shared,
+already-tested `DefinitionRepository`), so this is a net simplification
+rather than a new gate.

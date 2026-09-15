@@ -7,28 +7,28 @@ QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
 import hashlib
-from typing import Optional
+
 from aiohttp import web
-from datamodel.libs.mapping import ClassDict
-from datamodel.typedefs import AttrDict
 from asyncdb.exceptions import (
+    ConnectionTimeout,
+    DriverError,
     NoDataFound,
     ProviderError,
     StatementError,
-    DriverError,
-    ConnectionTimeout
 )
+from datamodel.libs.mapping import ClassDict
+from datamodel.typedefs import AttrDict
 
-from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
+from ..connections import QueryConnection
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
-    QueryException,
     QueryError,
-    SlugNotFound,
+    QueryException,
 )
-from ..connections import QueryConnection
+from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
+from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
 from .base import BaseQuery
 
@@ -45,13 +45,16 @@ class QS(BaseQuery):
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
-        super(QS, self).__init__(
+        super().__init__(
             slug,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
         if not conditions:
@@ -163,14 +166,24 @@ class QS(BaseQuery):
 
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f':: QS Slug: {self._query!s}')
-            try:
-                objquery = await self.connection.get_slug(
-                    self._query, program=self._program
-                )
-            except SlugNotFound:
-                raise
-            except Exception:
-                raise
+            # Resolve tenant store and create QueryIdentity. Retrieved via
+            # get_definition_repository() (TASK-720) so the registry used
+            # is the one initialized on QuerySource's singleton (real
+            # discovery), never an empty, never-discovered TenantRegistry.
+            from querysource.tenants import QueryIdentity
+            repo = await self.get_definition_repository()
+            store = repo.registry.resolve(self._tenant_selector)
+            identity = QueryIdentity(store=store, slug=self._query)
+            loaded_def = await repo.get(identity)
+            # Store definition identity and revision on the execution object
+            self._definition_identity = loaded_def.identity
+            self._definition_revision = loaded_def.revision
+            self._logger.debug(
+                f"Loaded definition: slug={self._query}, "
+                f"identity={loaded_def.identity}, revision={loaded_def.revision}"
+            )
+            # Use detached runtime model for provider construction
+            objquery = loaded_def.runtime
             ### getting the connection and the provider from Slug:
             try:
                 self._conn, self._provider = await self.connection.get_provider(
@@ -360,11 +373,13 @@ class QS(BaseQuery):
             return self._qs.accepts()
         return None
 
-    async def query(self, output_format: Optional[str] = None):
+    async def query(self, output_format: str | None = None):
         result = []
         error = None
         self._result = []
         exists = False
+        cache_key = None
+        checksum = None
         if not self._qs:
             await self.build_provider()
         refresh = self._qs.refresh()
@@ -382,9 +397,13 @@ class QS(BaseQuery):
             self._logger.debug('= Query Cache is Enabled =')
             checksum = self._qs.checksum()
             self._logger.debug(f"= Query Checksum is {checksum}")
+            # Compose the cache key using definition identity and revision
+            # (already set in build_provider for slug-based queries)
+            cache_key = self.result_cache_key(checksum)
+            self._logger.debug(f"= Composed Cache Key: {cache_key}")
             try:
                 exists = bool(
-                    await self.connection.in_cache(checksum)
+                    await self.connection.in_cache(cache_key)
                 )
                 self._logger.debug(f"= Detected on Cache? {exists}")
             except (ProviderError, DriverError, RuntimeError) as err:
@@ -401,7 +420,7 @@ class QS(BaseQuery):
         if self.is_cached is True and exists is True:
             # cache exists from this query
             try:
-                result = await self.connection.from_cache(checksum)
+                result = await self.connection.from_cache(cache_key)
             except asyncio.TimeoutError:
                 self._logger.warning(
                     'Querysource: Cache Miss due Timeout'
@@ -412,7 +431,7 @@ class QS(BaseQuery):
                 )
             if result:
                 self._logger.debug(
-                    f"Query {checksum} was cached!"
+                    f"Query {cache_key} was cached!"
                 )
                 try:
                     if is_parquet_payload(result):
@@ -451,11 +470,18 @@ class QS(BaseQuery):
                     f"Slug: {slug}, duration: {duration}s"
                 )
                 payload = {
+                    # ownership_fields() first: its own "slug" (the stored
+                    # definition's slug) must never override the alias
+                    # actually used for this event below.
+                    **ownership_fields(self._definition_identity),
                     "slug": slug,
                     "duration": duration,
                     "started": self._starttime,
-                    "ended": self._endtime
+                    "ended": self._endtime,
+                    "execution_id": self._execution_id,
                 }
+                if error:
+                    payload["error"] = str(error)
                 # send to influx event system:
                 try:
                     loop = asyncio.get_event_loop()
@@ -506,9 +532,9 @@ class QS(BaseQuery):
                 )
             self._result = result
             ## Saving into Cache:
-            if self.is_cached is True:
+            if self.is_cached is True and cache_key is not None:
                 try:
-                    self.save_cache(checksum, result)
+                    self.save_cache(cache_key, result)
                 except Exception:
                     pass
             ## returning data:

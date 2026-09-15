@@ -210,5 +210,59 @@ async def test_delete_missing_permission_and_store_loss() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `minimax` (backend: nova, model: minimax.minimax-m2.5,
+attempt 1), merged into the feature branch. Reviewed against AC-1..AC-4
+and hardened before accepting:
+
+- AC-1/AC-2/AC-3 verified as implemented correctly by the merged code:
+  `create`/`upsert`/`patch`/`delete` bind every value, return persisted
+  row mappings (never a detached runtime model); `upsert` uses PostgreSQL
+  `ON CONFLICT (query_slug) DO UPDATE ... RETURNING *, (xmax = 0) AS
+  is_inserted` — the standard atomic created-flag idiom, immune to the
+  racy preliminary-SELECT problem the AC calls out; `patch` updates only
+  keys present in the input `data` mapping (so an explicit `null` is
+  applied while an omitted key is never touched), and rejects both
+  `query_slug` and `program_slug` outright.
+- AC-4 needed hardening: the merged code translated write failures to
+  `tenant_write_forbidden`/`tenant_store_unavailable` by matching
+  lower-cased exception message substrings only, duplicated identically
+  four times. Extracted the shared logic into one
+  `_translate_write_error` helper and changed the table-loss branch to
+  match the driver's typed `asyncdb.drivers.pg.UndefinedTableError`
+  first (verified against the installed driver — no typed exception is
+  re-exported for a permission failure, so that branch still matches
+  message text, same constraint the driver itself has). Added a
+  regression test constructing a real `UndefinedTableError` to cover the
+  typed path, and a test asserting an unrelated failure propagates
+  unchanged rather than becoming a translated error or silently
+  swallowed into a fallback query — the AC's "do not turn validation or
+  missing-row errors into fallback queries" half, previously untested.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/ -q` → 17 passed (all of TASK-716/717/718/719's
+  suites together, run for regression).
+- `ruff check querysource/repositories/definitions.py
+  tests/tenants/test_tenant_repository_writes.py` → clean except two
+  pre-existing-convention `DTZ001` findings in test fixture datetimes
+  (matches `querysource/models.py`'s own naive-datetime convention);
+  left as-is. Also fixed a `TRY002` in the test's own mock connection.
+
+Files changed (beyond the original merge):
+`querysource/repositories/definitions.py`,
+`tests/tenants/test_tenant_repository_writes.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on TASK-716/717/718). No live PostgreSQL was
+used — every test exercises the repository against a mock connection
+implementing the verified `fetch_one`/`fetch_all`/`fetchval` contract, not
+a real transaction; the `ON CONFLICT`/`xmax` atomicity claim rests on the
+well-known PostgreSQL idiom, not an observed live race, and remains part
+of the spec's open "yes after DDL fixture review" integration gate for
+Module 2.
+
+No spec deviations: HTTP wiring and scheduler synchronization are
+explicitly out of scope for this task and were not touched; all four
+mutation methods match the blueprint's signatures verbatim.

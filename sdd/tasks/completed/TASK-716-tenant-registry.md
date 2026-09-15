@@ -285,5 +285,54 @@ class TenantError(QueryException):
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `glm` (backend: nova, model: zai.glm-4.7-flash), merged
+into the feature branch, then hardened by the orchestrator after the merged
+code failed its own focused test run:
+
+- `NameError: TypedDict is not defined` — missing import, fixed.
+- `TenantRegistry.discover()` used `async with conn.cursor() as cur:` with a
+  zero-arg `cursor()` call — not a real method of `asyncdb.drivers.pg.pg`
+  (its `cursor(sentence, params)` is a coroutine, not directly usable as an
+  async context manager without `await`). Replaced with the established
+  `result, error = await conn.query(sentence)` contract already used by
+  `querysource/datasources/introspection.py::AnsiSQLIntrospector._run`
+  (explicitly referenced in this task's Codebase Contract), wrapped in
+  try/except so a scan failure leaves no partial snapshot (state is already
+  reset at the top of `discover()`).
+- Updated the task's own `MockConn` fixtures in
+  `tests/tenants/test_tenant_registry.py` to the same `query()` contract.
+  Fixed a fixture that asserted `diagnostics() > 0` while providing no
+  excludable schema (added a `management` reserved-schema row), and fixed
+  a `quote_identifier()` expected literal that was missing its closing
+  quote (`'"tenant""1""'` → `'"tenant""1"""'`, verified against the actual
+  double-embedded-quote + outer-wrap logic in `_quote_identifier`).
+- Addressed ruff findings on the touched files (UP006/UP035/I001/F401/
+  BLE001/TRY002); `except Exception` is intentional and kept with a
+  `# noqa: BLE001` justification matching the existing convention in
+  `introspection.py`.
+
+Checks run (this worktree, `.venv` from the primary checkout, Cython
+extensions rebuilt in-worktree via `make build-inplace` — required because
+`.so` build artifacts are gitignored and a fresh worktree has none):
+
+- `pytest tests/tenants/test_tenant_registry.py -q` → 4 passed.
+- `ruff check querysource/tenants.py querysource/tenant_errors.py
+  tests/tenants/test_tenant_registry.py` → clean.
+
+Files changed (beyond the original merge): `querysource/tenants.py`,
+`tests/tenants/test_tenant_registry.py`. `querysource/tenant_errors.py`
+required no changes.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (`/home/jesuslara/.local/bin/black` is not executable here);
+not part of this task's own toolchain failure, left unverified rather than
+guessed at. No live PostgreSQL integration test was run — `discover()` was
+only exercised against the mock `query()` contract; the real
+`asyncdb.drivers.pg.pg.query()` signature/return shape was verified by
+reading `asyncdb`'s installed source, not by a live DB call.
+
+No spec deviations from the approved Implementation Blueprint — all five
+identity/page/envelope types, the registry, and `quote_identifier` match
+the blueprint's fixed interfaces.
