@@ -286,5 +286,75 @@ async def test_provider_mutation_cannot_change_revision() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `glm` (backend: nova, model: zai.glm-4.7-flash,
+attempt 2 after `codex-spark` hit the 1800s dispatch wall-clock cap on
+attempt 1), merged into the feature branch, then hardened by the
+orchestrator after a fidelity review found `build_provider()` wiring bugs
+the coder's own (passing) tests never caught:
+
+- `querysource/queries/qs.py`/`querysource/queries/obj.py`: both
+  `build_provider()` slug paths constructed a brand-new,
+  never-`discover()`-ed `TenantRegistry()` locally — `registry.resolve()`
+  would raise `TenantError("Tenant not found")` for any real tenant
+  selector. They also built a `QueryIdentity` lookalike via
+  `type('QueryIdentity', (), {...})()` instead of the real
+  `querysource.tenants.QueryIdentity` dataclass, and referenced
+  `self.connection.connection_factory`, an attribute that does not exist
+  on `QueryConnection` (`QueryObject` additionally has no
+  `self.connection` at all — only `QS` does). Replaced both call sites
+  with `await self.get_definition_repository()` — the method TASK-720
+  built for exactly this — plus the real `QueryIdentity`.
+  `get_definition_repository()` always resolves through the `QuerySource`
+  singleton internally regardless of which `Connection` subclass instance
+  calls it, so calling it directly on `self` is correct for both `QS`
+  (which also happens to carry its own `self.connection`) and
+  `QueryObject` (which does not).
+- `querysource/interfaces/queries.py`, `querysource/queries/base.py`,
+  `querysource/queries/multi/__init__.py`: reviewed, no fidelity issues
+  found — the keyword-only `tenant` parameter is added and forwarded
+  correctly through `AbstractQuery` → `BaseQuery` → `QS`/`QueryObject`/
+  `MultiQS`, `_tenant_selector` is stored, existing positional
+  arguments/defaults are unchanged.
+- `tests/tenants/test_tenant_execution_context.py`: rewrote all 4 tests.
+  The original suite passed (3/4 failed before the rewrite, in fact) by
+  constructing a bare `AbstractQuery(...)` directly — never valid, since
+  `querysource/queries/base.py` defines `output_format()` (called from
+  `AbstractQuery.__init__`) and `AbstractQuery` was never independently
+  constructible even before this task — and by calling
+  `TenantRegistry().resolve("tenant1")` against an empty, never-discovered
+  registry (always raised `TenantError`). `test_provider_mutation_cannot_
+  change_revision` previously just manually set
+  `qs._definition_identity`/`_definition_revision` by hand and asserted
+  they stuck — a vacuous test that never actually exercised
+  `build_provider()`, which is exactly why the three wiring bugs above
+  went undetected. It now drives the real `QS.build_provider()` slug path
+  against a fake repository/provider and asserts the values it produces.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/ -q` → 25 passed (all of
+  TASK-716–721's suites together, run for regression).
+- `ruff check` on `querysource/queries/qs.py`,
+  `querysource/queries/obj.py`,
+  `tests/tenants/test_tenant_execution_context.py` → no findings within
+  any line range this task added/modified (spot-checked against the exact
+  line numbers of every finding); pre-existing `RUF013`/`BLE001`/`TRY401`
+  findings on unrelated, untouched lines left as-is, matching the same
+  convention observed on every prior task in this feature.
+- Broader smoke import of all five modified modules succeeded.
+
+Files changed (beyond the original merge): `querysource/queries/qs.py`,
+`querysource/queries/obj.py`,
+`tests/tenants/test_tenant_execution_context.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live PostgreSQL was
+used; `build_provider()`'s slug path was exercised against a fake
+repository, not `DefinitionRepository` against a real database — that
+integration gate remains open per the spec's own "yes after DDL fixture
+review" note for the repository module.
+
+No spec deviations: cache I/O, child transport and HTTP routing are
+explicitly out of scope for this task and were not touched.
