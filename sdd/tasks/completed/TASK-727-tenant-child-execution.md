@@ -240,5 +240,94 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15.
+
+**Implementation**: dispatched to seat `gemini` (google-compat, gemini-3.5-flash)
+via `parrot-sdd-coder`, attempt 1, merged as commit `4d9dc1b` (outcome `merged`).
+Implemented all four blueprint steps: parent inheritance/explicit-null override
+resolution for stored child queries (`MultiQS.query()`), deep-copy of pipeline
+config before mutation, per-query preflight (`repo.get(QueryIdentity(...))`)
+before any thread starts, `store=` keyword threaded through
+`ThreadQuery`/`QueryExecutor`/`LocalExecutor`/`RemoteExecutor.execute()`, and
+explicit rejection of non-legacy remote stores in `RemoteExecutor` until
+versioned transport lands. New focused test file
+`tests/tenants/test_tenant_child_execution.py` (4 tests) passed as merged.
+
+**Review findings and fixes (orchestrator, same worktree, commit `4ba92b5`)**:
+running the merged change against the broader `tests/multi`/executor/tenant
+regression suite (not just the task's own focused file) surfaced two real
+bugs in the merged code, both fixed in this worktree before closing the task:
+
+1. The preflight step called `self.get_definition_repository()` (a real DB
+   round trip) and computed an unused `parent_store` *unconditionally* —
+   even for file-only/source-only pipelines with no stored queries — and it
+   ran *before* the existing `MULTIQS_MAX_SOURCES_PER_REQUEST` guardrail, so
+   an over-limit request paid for N sequential `repo.get()` calls before
+   being rejected. Fixed: scoped the repository fetch to `if self._queries:`
+   and moved the cheap guardrail check ahead of the preflight loop.
+2. Six pre-existing tests across `tests/test_threadquery_executor.py`,
+   `tests/test_multiqs_remote_dispatch.py`,
+   `tests/unit/test_multiqs_output_raise.py`, and
+   `tests/integration/test_multiquery_output_errors.py` broke because the
+   new preflight step now runs before `ThreadQuery` is even constructed —
+   these suites previously achieved full DB isolation solely by faking
+   `ThreadQuery`. Fixed each to also stub `get_definition_repository`
+   (matching the pattern already used in this task's own new test file) and
+   added `store=None` to existing `_FakeThread` stand-ins so they accept the
+   forwarded keyword. One assertion in `test_threadquery_executor.py` was
+   updated for the intended new `store=` keyword on
+   `executor.execute(...)` (AC-3).
+
+**Checks run** (`source .venv/bin/activate && python -m pytest ...`):
+- `tests/tenants/test_tenant_child_execution.py` — 4/4 passed (AC-5, exact
+  command from the task).
+- `tests/multi tests/test_abstract_multi.py tests/test_local_executor.py
+  tests/test_multi_destinations_subpackage.py
+  tests/test_multiqs_column_transforms.py
+  tests/test_multiqs_destination_dispatch.py
+  tests/test_multiqs_remote_dispatch.py
+  tests/test_multiqs_slug_sources_normalize.py
+  tests/test_multiqs_sources_integration.py
+  tests/test_scheduler_multi_routing.py tests/test_threadquery_executor.py
+  tests/handlers/test_multiquery_pbac_smoke.py
+  tests/handlers/test_queryexecutor_pbac_smoke.py
+  tests/integration/test_multiquery_output_errors.py
+  tests/unit/test_multiqs_output_raise.py tests/tenants` — 198 passed, 2
+  failed (both confirmed pre-existing, unrelated to this task — see below).
+- `tests/tenants tests/handlers` (excluding the pre-existing broken
+  `test_airtable_oauth.py` collection error, missing `aioresponses` dep) —
+  130 passed.
+- `ruff check` on every file touched by this task's fix (the 4 lines/blocks
+  actually edited) — 0 new findings; all pre-existing ruff findings in
+  `querysource/queries/multi/__init__.py` (F401, RUF013, I001 at line 203,
+  BLE001, RUF015, LOG015) fall outside the edited line ranges and were left
+  untouched.
+
+**Pre-existing failures confirmed unrelated** (verified via
+`git show 15e6bdc:<file>` — the commit immediately before TASK-727 merged —
+to confirm each already existed before this task):
+- `tests/test_local_executor.py::TestRemoteConfig::test_frozen_dataclass` —
+  asserts `RemoteConfig(...).timeout == 60`; this environment's
+  `QWORKER_TIMEOUT` env var resolves to `5`. Unrelated to any file this task
+  touches.
+- `tests/test_multiqs_sources_integration.py::test_guardrail_rejects_too_many_sources`
+  — expects `DriverError`, but the pre-existing `self.Error()` helper
+  (`querysource/interfaces/queries.py`) always constructs a plain
+  `QueryException` (superclass of `DriverError`), never `DriverError`. This
+  guardrail's `raise self.Error(...)` call predates TASK-727 verbatim
+  (confirmed identical in `15e6bdc`); only its position relative to the new
+  preflight code moved.
+- `tests/test_remote_executor.py` (5 tests) — patches
+  `querysource.queries.multi.sources.executors.QClient` as a module
+  attribute, but `QClient` has always been imported lazily inside
+  `RemoteExecutor.execute()` (confirmed identical in `15e6bdc`), so the
+  patch target never existed either before or after this task.
+
+**Spec deviations**: none. **Deployment gates unverified**: real qworker
+(`qw.client.QClient`) remote dispatch end-to-end, and real-Postgres
+discovery/preflight against an actual multi-schema deployment — both
+require infrastructure unavailable in this sandbox (no network egress).
+
+**Seat**: gemini · **Backend**: google-compat · **Model**: gemini-3.5-flash
+· **Attempts**: 1 · **Duration**: 476.5s · **Tokens**: 3,098,500 in /
+22,582 out.
