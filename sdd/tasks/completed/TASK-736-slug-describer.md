@@ -338,10 +338,39 @@ See the blueprint test file above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Claude Sonnet 5) — implemented directly after the
+parrot-sdd-coder dispatch failed at the infra level for this task (`SubWorktreeMergeError:
+git worktree add failed`, both attempts, zero code produced).
+**Date**: 2026-09-15
 **Notes**:
+- Created `querysource/queries/describe.py` with `RESERVED_PLACEHOLDERS`,
+  `CANONICAL_TYPES`, `CANONICAL_ALIASES`, `KEYWORD_TYPES`, `IMPLICIT_DEFAULTS`,
+  `RAW_FIELDS`, `ADMIN_FIELDS`, `DescribeVariable`, `DescribeGrants`,
+  `extract_placeholders`, `is_json_dialect`, `normalize_type`, `build_variables`,
+  `redact_payload` and `describe_slug`, exactly per blueprint.
+- Verified `QueryModel.columns(QueryModel)` keys at runtime match the Codebase
+  Contract's 30-column list before implementing.
+- `extract_placeholders` uses `string.Formatter().parse` + the `_KEY_GRAMMAR`
+  regex; verified manually that `{{escaped}}` produces no placeholder, `{a b}`
+  fails the grammar and is dropped, and `SELECT {` raises `ValueError` → `(None, msg)`.
+- Module-level imports are stdlib (`json`, `re`, `string`) + `typing` + `pydantic`
+  only; `QueryModel` is imported only under `TYPE_CHECKING` and, lazily, inside
+  `describe_slug`. Verified via `ast` that no provider/QS/DB import exists at
+  module level.
+- `pytest tests/unit/test_slug_describer.py -q` → 18 passed (extended past the
+  blueprint's minimum list with a few extra edge-case tests: unknown-type warning,
+  empty-input placeholders, JSON-dialect variables, malformed-placeholder error —
+  all still exercising only the documented behaviour).
+- `ruff check querysource/queries/describe.py tests/unit/test_slug_describer.py` →
+  clean after `ruff check --fix` modernized `Optional[X]`/`Union[X, Y]` type hints
+  to `X | None` / `X | Y` (safe under `from __future__ import annotations`); reran
+  the full test suite afterward to confirm no behavior change.
+- Only the 2 listed files created; no scope creep.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: sdd-worker (native, Claude Sonnet 5) · Backend: n/a (in-worktree fallback after
+2 failed nova-seat attempts each errored before producing any code: attempt 1 seat
+qwen/nova/qwen.qwen3-coder-480b-a35b-instruct, attempt 2 seat mistral/nova/mistral.devstral-2-123b —
+both `SubWorktreeMergeError: git worktree add failed`, duration ~0.03s each, no tokens
+consumed) · Attempts: 1 (this implementation) · Duration: n/a (interactive) · Tokens: n/a
