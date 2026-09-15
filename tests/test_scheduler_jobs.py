@@ -238,9 +238,9 @@ class TestJobImports:
     def test_importable(self):
         """All three jobs are importable from the scheduler package."""
         from querysource.scheduler.jobs import (
-            scheduled_query_job,
             cache_refresh_job,
             scheduled_multiqs_job,
+            scheduled_query_job,
         )
         assert callable(scheduled_query_job)
         assert callable(cache_refresh_job)

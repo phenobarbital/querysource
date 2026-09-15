@@ -4,9 +4,10 @@ from typing import Optional
 import pandas as pd
 from aiohttp import web
 
+from querysource.tenants import QueryStore
+
 from .base import ThreadSource
 from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
-from querysource.tenants import QueryStore
 
 
 class ThreadQuery(ThreadSource):

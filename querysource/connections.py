@@ -278,10 +278,10 @@ class QueryConnection(Connection, metaclass=Singleton):
                         continue
                     except ValidationError as ex:
                         self.logger.warning(
-                            (
+                            
                                 f"Datasource validation error: {ex} "
                                 f"Error: {ex.payload}"
-                            )
+                            
                         )
                         continue
         self._connected = True

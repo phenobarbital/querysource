@@ -1,6 +1,7 @@
 """Unit tests for querysource.scheduler.scheduler (QSScheduler Core)."""
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from querysource.tenants import TenantRegistry
 
@@ -164,8 +165,8 @@ class TestCacheRefreshFiltering:
 class TestQSSchedulerInit:
     def test_init_creates_notification_manager(self):
         """QSScheduler.__init__ creates a NotificationManager."""
-        from querysource.scheduler.scheduler import QSScheduler
         from querysource.scheduler.notifications import NotificationManager
+        from querysource.scheduler.scheduler import QSScheduler
         qs = QSScheduler()
         assert isinstance(qs._notification_manager, NotificationManager)
 

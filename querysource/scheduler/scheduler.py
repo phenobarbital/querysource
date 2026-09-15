@@ -22,25 +22,25 @@ from datetime import datetime, timedelta
 from typing import Optional, Union
 from urllib.parse import quote
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from aiohttp import web
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.memory import MemoryJobStore
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from aiohttp import web
 from navconfig.logging import logging
 
 from querysource.conf import (
-    QS_SCHEDULER_TIMEZONE,
-    QS_SCHEDULER_MAX_INSTANCES,
     QS_SCHEDULER_COALESCE,
+    QS_SCHEDULER_MAX_INSTANCES,
+    QS_SCHEDULER_TIMEZONE,
 )
 from querysource.repositories import DefinitionRepository
 from querysource.scheduler.jobs import (
-    scheduled_query_job,
     cache_refresh_job,
     scheduled_multiqs_job,
+    scheduled_query_job,
 )
 from querysource.scheduler.notifications import NotificationManager
 from querysource.tenant_errors import TenantError

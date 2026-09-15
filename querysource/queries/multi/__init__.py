@@ -203,6 +203,7 @@ class MultiQS(BaseQuery):
     async def query(self):
         """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
         import copy
+
         from querysource.tenants import QueryIdentity
 
         # Deep-copy pipeline config to avoid mutating input config

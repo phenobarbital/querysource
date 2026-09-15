@@ -14,11 +14,12 @@ from dataclasses import dataclass, field
 from aiohttp import web
 from navconfig.logging import logging
 
-from ...obj import QueryObject
-from ....exceptions import QueryException
-from ....conf import QWORKER_TIMEOUT, QWORKER_QUERY_TIMEOUT
 from querysource.ownership_logging import ownership_fields
 from querysource.tenants import QueryStore, TenantOwnerEnvelope
+
+from ....conf import QWORKER_QUERY_TIMEOUT, QWORKER_TIMEOUT
+from ....exceptions import QueryException
+from ...obj import QueryObject
 
 logger = logging.getLogger("QS.RemoteExecutor")
 

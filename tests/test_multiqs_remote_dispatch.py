@@ -1,9 +1,10 @@
 """Unit tests for MultiQS remote config resolution (TASK-696)."""
-import pytest
 from unittest.mock import patch
 
-from querysource.queries.multi.sources.executors import RemoteConfig
+import pytest
+
 from querysource.exceptions import DriverError
+from querysource.queries.multi.sources.executors import RemoteConfig
 
 
 class TestRemoteKeyParsing:
@@ -81,8 +82,8 @@ class TestMultiQSRemoteDispatch:
     @pytest.mark.asyncio
     async def test_remote_true_no_worker_no_config_raises(self):
         """remote=true with no worker and QWORKER_HOST=None raises DriverError."""
-        from querysource.queries.multi import MultiQS
         import querysource.queries.multi as multiqs_module
+        from querysource.queries.multi import MultiQS
 
         mqs = MultiQS(queries={"q": {"slug": "s", "remote": True}})
 

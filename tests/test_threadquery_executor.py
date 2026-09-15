@@ -1,14 +1,15 @@
 """Unit tests for ThreadQuery executor integration (TASK-695)."""
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from querysource.queries.multi.sources.query import ThreadQuery
+import pytest
+
 from querysource.queries.multi.sources.executors import (
     LocalExecutor,
-    RemoteExecutor,
     RemoteConfig,
+    RemoteExecutor,
 )
+from querysource.queries.multi.sources.query import ThreadQuery
 
 
 class TestThreadQueryExecutorSelection:

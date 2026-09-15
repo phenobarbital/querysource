@@ -1,24 +1,25 @@
-from typing import Any
-from influxdb_client import Point
-import requests
 import socket
+from typing import Any
+
+import requests
+from aiohttp import web
 from asyncdb import AsyncDB
 from asyncdb.exceptions.exceptions import DriverError
-from aiohttp import web
-from navigator_session import get_session
+from influxdb_client import Point
 from navigator.views import BaseHandler
+from navigator_session import get_session
+
 from ..conf import (
     ENVIRONMENT,
+    GEOLOC_API_KEY,
     INFLUX_HOST,
-    INFLUX_PORT,
-    INFLUX_USER,
-    INFLUX_PWD,
     INFLUX_LOGGING,
-    INFLUX_TOKEN,
     INFLUX_ORG,
-    GEOLOC_API_KEY
+    INFLUX_PORT,
+    INFLUX_PWD,
+    INFLUX_TOKEN,
+    INFLUX_USER,
 )
-
 
 EVENT_HOST = socket.gethostbyname(socket.gethostname())
 

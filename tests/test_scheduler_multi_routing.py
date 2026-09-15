@@ -8,14 +8,15 @@ work together correctly:
 
 Tests are hermetic — no live database, no real APScheduler startup.
 """
-import pytest
 from unittest.mock import MagicMock
 
-from querysource.scheduler.scheduler import QSScheduler
+import pytest
+
 from querysource.scheduler.jobs import (
-    scheduled_query_job,
     scheduled_multiqs_job,
+    scheduled_query_job,
 )
+from querysource.scheduler.scheduler import QSScheduler
 from querysource.tenants import TenantRegistry
 
 

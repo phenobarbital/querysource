@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("QSScheduler.Jobs")
 
 
-async def _revalidate_owner(query_obj: Any, owner: "TenantOwnerEnvelope", slug: str) -> None:
+async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: str) -> None:
     """Re-resolve the envelope's owner against the CURRENT registry before executing.
 
     The envelope was captured at scheduler startup / registration time; the

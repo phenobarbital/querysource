@@ -3,31 +3,28 @@ QueryResource.
 
 Handler to accessing querysource objects from API.
 """
-from typing import Optional
 import contextlib
 from datetime import datetime
+from typing import Optional
+
 # for aiohttp
 from aiohttp import web
-from asyncdb.exceptions import (
-    ProviderError,
-    ConnectionTimeout
-)  # QuerySource Query, Executor, etc
-# Output
-from ..outputs import DataOutput
-from ..types import graph_ouputs, mime_supported
+from asyncdb.exceptions import ConnectionTimeout, ProviderError  # QuerySource Query, Executor, etc
+
+from ..auth import ResourceType
+from ..conf import CSV_DEFAULT_DELIMITER, CSV_DEFAULT_QUOTING
 from ..exceptions import (
+    DriverError,
     ParserError,
     QueryException,
     SlugNotFound,
-    DriverError,
 )
-from ..conf import (
-    CSV_DEFAULT_DELIMITER,
-    CSV_DEFAULT_QUOTING
-)
-from ..auth import ResourceType
+
+# Output
+from ..outputs import DataOutput
 from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity
+from ..types import graph_ouputs, mime_supported
 from .abstract import AbstractHandler
 
 

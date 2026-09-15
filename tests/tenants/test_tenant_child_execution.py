@@ -1,16 +1,16 @@
 """Resolve nested owners and propagate them across local threads regression contracts."""
 import asyncio
-import pytest
-import pandas as pd
 from unittest import mock
-from aiohttp import web
+
+import pandas as pd
+import pytest
 
 from querysource.exceptions import DriverError
 from querysource.models import QueryModel
-from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
 from querysource.queries.multi import MultiQS
+from querysource.queries.multi.sources.executors import LocalExecutor, RemoteExecutor
 from querysource.queries.multi.sources.query import ThreadQuery
-from querysource.queries.multi.sources.executors import RemoteConfig, RemoteExecutor, LocalExecutor
+from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
 
 
 def _tenant_store(schema: str = "tenant1", contract: str = "tenant") -> QueryStore:

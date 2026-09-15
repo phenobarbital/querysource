@@ -3,8 +3,9 @@
 Verifies that _enforce_pbac is called before get_source on the slug check,
 and that the three PBAC checks run in the correct order.
 """
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from aiohttp import web
 
 from querysource.handlers.service import QueryService
