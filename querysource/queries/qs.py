@@ -7,28 +7,27 @@ QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
 import hashlib
-from typing import Optional
+
 from aiohttp import web
-from datamodel.libs.mapping import ClassDict
-from datamodel.typedefs import AttrDict
 from asyncdb.exceptions import (
+    ConnectionTimeout,
+    DriverError,
     NoDataFound,
     ProviderError,
     StatementError,
-    DriverError,
-    ConnectionTimeout
 )
+from datamodel.libs.mapping import ClassDict
+from datamodel.typedefs import AttrDict
 
-from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
+from ..connections import QueryConnection
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
-    QueryException,
     QueryError,
-    SlugNotFound,
+    QueryException,
 )
-from ..connections import QueryConnection
 from ..providers import BaseProvider
+from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
 from .base import BaseQuery
 
@@ -45,13 +44,16 @@ class QS(BaseQuery):
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
-        super(QS, self).__init__(
+        super().__init__(
             slug,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
         if not conditions:
@@ -163,14 +165,30 @@ class QS(BaseQuery):
 
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f':: QS Slug: {self._query!s}')
-            try:
-                objquery = await self.connection.get_slug(
-                    self._query, program=self._program
-                )
-            except SlugNotFound:
-                raise
-            except Exception:
-                raise
+            # Resolve tenant store and create QueryIdentity
+            from querysource.tenants import TenantRegistry
+            registry = TenantRegistry()
+            store = registry.resolve(self._tenant_selector)
+            identity = type('QueryIdentity', (), {
+                'store': store,
+                'slug': self._query
+            })()
+            # Load LoadedDefinition through repository
+            from querysource.repositories import DefinitionRepository
+            repo = DefinitionRepository(
+                registry=registry,
+                connection_factory=self.connection.connection_factory
+            )
+            loaded_def = await repo.get(identity)
+            # Store definition identity and revision on the execution object
+            self._definition_identity = loaded_def.identity
+            self._definition_revision = loaded_def.revision
+            self._logger.debug(
+                f"Loaded definition: slug={self._query}, "
+                f"identity={loaded_def.identity}, revision={loaded_def.revision}"
+            )
+            # Use detached runtime model for provider construction
+            objquery = loaded_def.runtime
             ### getting the connection and the provider from Slug:
             try:
                 self._conn, self._provider = await self.connection.get_provider(
@@ -360,7 +378,7 @@ class QS(BaseQuery):
             return self._qs.accepts()
         return None
 
-    async def query(self, output_format: Optional[str] = None):
+    async def query(self, output_format: str | None = None):
         result = []
         error = None
         self._result = []

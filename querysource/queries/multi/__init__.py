@@ -1,26 +1,27 @@
 import asyncio
 import logging
-from typing import Optional
-from aiohttp import web
-from ...exceptions import (
-    SlugNotFound,
-    QueryException,
-    DriverError,
-    DataNotFound,
-    ParserError,
-    OutputError
-)
 from importlib import import_module
+from typing import Optional
+
+from aiohttp import web
+
+from ... import conf
+from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
+from ...exceptions import (
+    DataNotFound,
+    DriverError,
+    OutputError,
+    ParserError,
+    QueryException,
+    SlugNotFound,
+)
 from ..base import BaseQuery
+from .operators.filter import Filter
+from .sources import FileSource, ThreadQuery
+from .sources.executors import RemoteConfig
 from .transformations import (
     GoogleMaps,
 )
-from ... import conf
-from .operators.filter import Filter
-from .sources import ThreadQuery, FileSource
-from .sources.executors import RemoteConfig
-from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
-
 
 # Best-effort data-vs-infra classification for MultiQuery Output/destination
 # failures (FEAT-146). Deliberately small and centralized so it can be
@@ -35,7 +36,7 @@ _INFRA_ERROR_TYPES = frozenset({
 })
 
 
-def classify_output_error(exc: BaseException) -> Optional[str]:
+def classify_output_error(exc: BaseException) -> str | None:
     """Classify a destination failure as ``"data"`` or ``"infra"``.
 
     Inspects the chained cause (``exc.__cause__``) when present, since
@@ -93,20 +94,23 @@ class MultiQS(BaseQuery):
     def __init__(
             self,
             slug: str = None,
-            queries: Optional[list] = None,
-            files: Optional[list] = None,
-            query: Optional[dict] = None,
+            queries: list | None = None,
+            files: list | None = None,
+            query: dict | None = None,
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
-            user_session: Optional[object] = None,
+            user_session: object | None = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
-        super(MultiQS, self).__init__(
+        super().__init__(
             slug=slug,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
         # creates the Result Queue:
@@ -132,10 +136,10 @@ class MultiQS(BaseQuery):
         if not (self.slug or self._queries or self._files or self._sources):
             # Check if both are effectively empty
             raise DriverError(
-                (
+                
                     'Invalid Options passed to MultiQuery. '
                     'Slug, Queries, Files and Sources are all empty.'
-                )
+                
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
         self._user_session = user_session
@@ -320,7 +324,7 @@ class MultiQS(BaseQuery):
                 )
                 tasks[name] = t
         if self._sources:
-            from .sources import SOURCE_REGISTRY  # noqa: PLC0415
+            from .sources import SOURCE_REGISTRY
             for entry in self._sources:
                 for source_type, config in entry.items():
                     cls = SOURCE_REGISTRY.get(source_type)
@@ -374,7 +378,7 @@ class MultiQS(BaseQuery):
                             )
                         if isinstance(t.exc, (QueryException, DriverError)):
                             raise self.Error(
-                                f"Query Error: {str(t.exc)}",
+                                f"Query Error: {t.exc!s}",
                                 exception=t.exc
                             )
                         else:
@@ -575,7 +579,9 @@ class MultiQS(BaseQuery):
             for step in _output:
                 for step_name, component in step.items():
                     try:
-                        from ...outputs.destinations import get_destination  # deferred to avoid circular import
+                        from ...outputs.destinations import (
+                            get_destination,  # deferred to avoid circular import
+                        )
                         destination_cls = get_destination(step_name)
                         obj = destination_cls(data=result, **component)
                         result = await obj.run()
