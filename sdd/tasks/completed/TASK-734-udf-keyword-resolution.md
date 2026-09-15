@@ -35,7 +35,7 @@ The same Cython module also gets Python-visible accessors for the effective `UDF
 - Add `_env_list()`, `udf_keywords()`, `pg_constants()`, `pg_udfs()` and `resolve_udf_conditions()` to `querysource/types/validators.pyx`.
 - Make the `UDF_LIST`, `PG_CONSTANTS` and `PG_UDF` initialisation use `_env_list` (comma-separated override).
 - Add `BaseProvider._udf_resolved_conditions()` in `querysource/providers/abstract.py`.
-- Replace `self._conditions` with `self._udf_resolved_conditions()` as the **second argument** of every `_rs.safe_format_map_validated(...)` call: 6 sites in 5 files.
+- Replace `self._conditions` with `self._udf_resolved_conditions()` as the **second argument** of every `_rs.safe_format_map_validated(...)` call: 7 sites in 6 files (contract correction: the original count of "6 sites in 5 files" missed `querysource/providers/documentdb.py:102`, which the AC's repo-wide grep also requires fixed — see Completion Note).
 - Rebuild the Cython extensions (`make build-inplace`).
 - Write `tests/unit/test_udf_keyword_resolution.py`, covering resolution rules, parity, no mutation and the env override.
 
@@ -58,6 +58,7 @@ The same Cython module also gets Python-visible accessors for the effective `UDF
 | `querysource/providers/sqlserver.py` | MODIFY | 1 call site |
 | `querysource/providers/cassandra.py` | MODIFY | 1 call site |
 | `querysource/providers/default.py` | MODIFY | 1 call site |
+| `querysource/providers/documentdb.py` | MODIFY | 1 call site (contract correction — see Scope) |
 | `tests/unit/test_udf_keyword_resolution.py` | CREATE | unit + parity tests |
 
 ---
@@ -347,10 +348,41 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Claude Sonnet 5)
+**Date**: 2026-09-15
 **Notes**:
+- Implemented exactly per blueprint: `_env_list`, `udf_keywords`, `pg_constants`, `pg_udfs`,
+  `resolve_udf_conditions` in `validators.pyx`; `BaseProvider._udf_resolved_conditions()` in
+  `abstract.py`; swapped the second argument of every `_rs.safe_format_map_validated(...)`
+  call site to `self._udf_resolved_conditions()`.
+- **Contract correction**: the Codebase Contract undercounted the call sites as "6 sites in
+  5 files". `querysource/providers/documentdb.py:102` has the identical
+  `safe_format_map_validated(sql, self._conditions, self._get_cond_definition())` pattern on
+  `dev` and is caught by the task's own repo-wide AC
+  (`grep -rn "safe_format_map_validated(sql, self._conditions" querysource/providers`
+  must return nothing). Fixed it too, following the identical minimal-diff pattern used at
+  the other 6 sites. Updated Scope/Files table above accordingly.
+- `make build-inplace` succeeded; extension rebuilt in-place in the worktree.
+- Wrote `tests/unit/test_udf_keyword_resolution.py` completing all 5 `# FILL IN` test bodies
+  from the blueprint (parity, hint predicate, no-mutation, accessor copies, env override).
+- All ACs verified:
+  - `make build-inplace` — succeeded.
+  - AC1 parity — `test_rust_cython_parity_all_keywords` covers every effective keyword ×
+    hint combination (including the untyped `CURRENT_YEAR`/`CURRENT_MONTH` quote-stripping
+    exception); all pass.
+  - AC2 — `pytest tests/unit/test_udf_keyword_resolution.py
+    tests/unit/test_provider_raw_query_validated.py tests/unit/test_qs_parsers_validated.py -q`
+    → 69 passed.
+  - AC3 — accessors + env override (comma-separated `UDF_LIST`/`PG_UDF`, verified in a
+    subprocess since the `cdef` globals are fixed at import time) all pass.
+  - `grep -rn "safe_format_map_validated(sql, self._conditions" querysource/providers` →
+    empty (clean).
+  - `ruff check` on all 7 modified provider files + the new test file: introduces **zero**
+    new lint violations (verified by diffing violation counts with/without this task's
+    changes via a scoped `git stash`); the new test file itself is fully clean after
+    `ruff check --fix`. Pre-existing lint debt in the provider files (49 violations on
+    `dev`, e.g. `UP007`/`UP008`/`RUF012`/`RUF013`/`BLE001`/`S110`/`TRY401`) is untouched —
+    fixing it is out of this task's scope.
+- No other files touched; no scope creep.
 
 **Deviations from spec**: none | describe if any

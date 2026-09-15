@@ -14,7 +14,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [],
@@ -22,8 +22,8 @@
       "parallelism_notes": "First task by brainstorm decision. Touches providers/abstract.py (shared with TASK-738) and types/validators.pyx (accessors consumed by TASK-739/741); requires make build-inplace.",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-734-udf-keyword-resolution.md"
+      "completed_at": "2026-09-15T11:54:08+00:00",
+      "file": "sdd/tasks/completed/TASK-734-udf-keyword-resolution.md"
     },
     {
       "id": "TASK-735",
