@@ -212,6 +212,69 @@ filterwarnings = [
 ]
 
 # ---------------------------------------------------------------------------
+# Formatting (black) and linting (ruff)
+# ---------------------------------------------------------------------------
+# black formats, ruff lints (no `ruff format`). Both use 120 columns, matching
+# tox.ini's [flake8]/[pep8] max-line-length. The sdd-coder engine runs
+# `ruff check --fix` + black on each task's files at merge time; `/sdd-done`
+# fixes the remaining findings in the files a feature touches.
+[tool.black]
+line-length = 120
+# Floor of requires-python (>=3.10.1) plus the venv's 3.11; formatting for
+# 3.10 is valid on every supported interpreter and keeps black's AST safety
+# check on when run from an older venv.
+target-version = ["py310", "py311"]
+extend-exclude = '''
+/(
+    \.claude/worktrees
+  | build
+  | generated
+  | rust
+)/
+'''
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["."]
+extend-exclude = [".claude/worktrees", "*.ipynb", "build", "generated", "rust"]
+
+[tool.ruff.lint]
+# Pinned explicitly: ruff >= 0.16 widened its implicit default rule set, so an
+# unconfigured repo's findings drifted with the tool version.
+select = [
+    "E4", "E7", "E9", "F",  # pycodestyle errors + pyflakes (real defects)
+    "B",      # flake8-bugbear
+    "ASYNC",  # blocking calls inside async def
+    "UP",     # pyupgrade (minus the annotation rewrites below)
+    "I",      # import sorting (black-compatible)
+    "PIE",    # no-op placeholders, duplicate enum values
+    "C4",     # comprehension misuse
+    "LOG",    # logging calls outside handlers / root logger
+    "DTZ",    # naive datetimes (scheduler, caches, tenants)
+]
+ignore = [
+    # python-datamodel 0.11 (datamodel.BaseModel) cannot evaluate PEP 604/585
+    # annotations at runtime: `a: int | None` raises "Expected type, got
+    # types.UnionType" and `Optional[tuple[int, ...]]` fails to parse. The
+    # auto-fixes for these would break models, so typing.Optional/List stay.
+    "UP006", "UP007", "UP035", "UP045",
+    # `timeout` parameters on async APIs are part of the public surface.
+    "ASYNC109",
+    # `dict(a=1)` vs `{"a": 1}` is taste, not a defect.
+    "C408",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["querysource"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401", "F403", "F405"]
+"tests/**/*.py" = ["F401", "F811", "F841", "B011", "B017", "ASYNC230", "ASYNC240"]
+"**/conftest.py" = ["F401", "F403"]
+"examples/**/*.py" = ["F401", "F841", "E402"]
+
+# ---------------------------------------------------------------------------
 # Maturin (Rust extension) — configured in rust/pyproject.toml.
 # Invoke via: maturin develop --release --manifest-path rust/Cargo.toml
 # (see `make build-rust`). Config lives in rust/pyproject.toml so maturin

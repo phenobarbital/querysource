@@ -45,6 +45,13 @@
       "default": null,
       "required": false,
       "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
+    },
+    {
+      "name": "tenant",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Tenant owner for this query. If omitted, inherits from parent or uses the configured default store. If explicitly ``null``, uses the legacy store. If a string, selects that exact tenant from the allowlist. Examples: ``null`` (legacy), ``client_a`` (explicit tenant)."
     }
   ],
   "json_schema": {
@@ -76,6 +83,10 @@
       "worker": {
         "type": "string",
         "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
+      },
+      "tenant": {
+        "type": "string",
+        "description": "Tenant owner for this query. If omitted, inherits from parent or uses the configured default store. If explicitly ``null``, uses the legacy store. If a string, selects that exact tenant from the allowlist. Examples: ``null`` (legacy), ``client_a`` (explicit tenant)."
       }
     },
     "oneOf": [
