@@ -16,8 +16,9 @@ base_branch: dev
 > Merged on 2026-09-15 with the parallel brainstorm `queryslug-describe`
 > (same day, same author), which contributed the typed-columns sub-resource,
 > the relative-date keyword vocabulary endpoint, the parameter typing
-> rules, the downstream ai-parrot consumers and the UDF-resolution hotfix
-> prerequisite. That file was removed; this document is the single source.
+> rules, the downstream ai-parrot consumers and the UDF typed-resolution fix.
+> That file was removed; this document is the single source. All open
+> questions were resolved with the author the same day.
 
 ---
 
@@ -64,7 +65,11 @@ The platform already has PBAC (`slug:execute`, policies under `policies/`), and 
 - **Parameter typing in `derived.variables`:** each variable carries a canonical lowercase `type` from the set the validator understands (`literal, integer, float, numeric, decimal, epoch, boolean, string, field, date, datetime, timestamp, uuid, array, json, numrange, int4range, int8range`; the DB stores hints such as `"STRING"` and the Rust validator is case-insensitive), the verbatim `raw_type`, a `source` (`cond_definition` | `conditions` | `placeholder`) and `accepts_keywords` (true for `date`/`datetime`/`timestamp` and untyped variables).
 - **Structural placeholders are never user variables.** The reserved set is the union of the parser tokens (`{schema}`, `{table}`, `{tablename}`, `{fields}`, `{filter}`, `{where_cond}`, `{and_cond}`, `{grouping}`, `{group_by}`, `{ordering}`, `{order_by}`, `{offset}`, `{_offset}`, `{limit}`, `{_limit}`, `{querylimit}`) and the provider `replacement` defaults (`providers/sql.py:37-45`: `firstdate`/`lastdate`/`filterdate` default to `current_date`, which makes them *defaulted* variables, not structural ones).
 - **Vocabulary reflects runtime configuration.** The endpoint lists the process's effective `UDF_LIST`, `PG_CONSTANTS` and `PG_UDF` (environment overrides included), enriched from a curated registry; a keyword accepted by the validator but missing from the registry is still listed, with `description: null`.
-- **Prerequisite hotfix (separate, on `main`):** keyword resolution is inconsistent for typed conditions. In `rust/src/validators.rs:296-298` a `date`/`datetime`/`timestamp` hint quotes the value verbatim (`'FDOM'`) before the UDF check at `:320-328` is reached, and the Rust generic branch returns the quoted keyword "for the Python layer to resolve" while only the Cython path (`querysource/types/validators.pyx:552-553`) calls `to_udf`. Because describe will *advertise* `accepts_keywords`, the hotfix must ship before or with this feature's release.
+- **UDF typed-resolution fix, first task of this feature (ships in `4.6.0`):** keyword resolution is inconsistent for typed conditions. In `rust/src/validators.rs:296-298` a `date`/`datetime`/`timestamp` hint quotes the value verbatim (`'FDOM'`) before the UDF check at `:320-328` is reached, and the Rust generic branch returns the quoted keyword "for the Python layer to resolve" while only the Cython path (`querysource/types/validators.pyx:552-553`) calls `to_udf`. Because describe will *advertise* `accepts_keywords`, the fix must land before the endpoints in the same branch: typed `date`/`datetime`/`timestamp` values that are a known UDF keyword resolve through `to_udf` on both the Rust and the Cython paths, with parity tests.
+- **Per-tenant variant included (FEAT-176):** `GET /api/v1/{tenant}/queries/describe`, `GET /api/v1/{tenant}/queries/{slug}/describe` and `GET /api/v1/{tenant}/queries/{slug}/columns` are served by the same handler, resolving `(schema, table)` from the tenant through FEAT-176's data-access layer, with the program pre-filter deriving its context from the tenant instead of `program_slug`.
+- **Admin visibility rule:** `userinfo.superuser` OR membership in one of `QS_DESCRIBE_ADMIN_GROUPS` (default `admin,superuser`). No new PBAC action for the admin-only fields.
+- **No session, no sessionless authz:** `401`, fail-closed, on list, detail and columns.
+- **Scan cap:** `QS_DESCRIBE_MAX_SCAN` (default `10000`); beyond it the first N rows in SQL order are processed and the response carries `X-Truncated: true` (never `400`).
 - **Handler:** a new dedicated read-only handler. `QueryManager` is **not modified** and stays the admin CRUD tool.
 - **Pre-filter (SQL, list and detail)** by the session's `userinfo["programs"]`:
   - `userinfo["superuser"] is True`: no program restriction.
@@ -304,6 +309,7 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 **`GET /api/v1/queries/{slug}/columns`** returns the output columns of one slug, typed when possible.
 
 - Same visibility rules as the detail endpoint (program pre-filter + `slug:describe OR slug:execute`; denial → 404).
+- Query-string conditions are accepted and merged exactly as `get_columns` does (`{**json_body, **query_params}`), validated through `cond_definition` by the Rust substitution.
 - **200 response:**
   ```json
   {"slug": "epson_field_activity",
@@ -313,7 +319,7 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
    "warnings": []}
   ```
   - `columns_source` is `prepare` (typed, from the prepared statement), `declared` (names from `attributes.columns`, types `null`) or `unavailable` (neither); each non-`prepare` value comes with an explanatory `warnings` entry.
-  - Optional query-string conditions may be passed (exactly like `HEAD /api/v2/services/queries/{slug}` today) so a caller can supply values for variables without defaults and make `prepare` possible (see Open Questions).
+  - Query-string conditions let a caller supply values for variables without defaults and make `prepare` possible.
 - The statement is prepared, never executed; no rows are read and the rendered SQL is not returned.
 
 **`GET /api/v1/queries/vocabulary`** returns the relative-date keyword vocabulary accepted as condition values.
@@ -333,11 +339,16 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
      {"name": "CURRENT_MONTH", "category": "date", "returns": "string", "description": "…", "example": "…"},
      {"name": "LAST_YEAR", "category": "date", "returns": "integer", "description": "…", "example": 2025}],
    "constants": ["CURRENT_DATE", "CURRENT_TIMESTAMP"],
-   "functions": [{"name": "date_diff", "args": [{"name": "value"}, {"name": "diff", "default": 1},
-                  {"name": "mode", "default": "days"}], "description": "…"}],
+   "functions": [{"name": "date_diff", "invocable": false,
+                  "args": [{"name": "value"}, {"name": "diff", "default": 1}, {"name": "mode", "default": "days"}],
+                  "description": "…"}],
    "usage": "Pass a keyword as the condition value, e.g. {\"firstdate\": \"FDOM\", \"lastdate\": \"TODAY\"}."}
   ```
   - `keywords` is exactly the process's effective `UDF_LIST` (environment override included).
+  - `functions` is informational in v1 (`date_diff`, `date_sum`, `days_ago`, `previous_month`, `fdow`, `ldow`): documented args, `invocable: false`, because HTTP condition values cannot call them yet.
+- Authenticated only; no PBAC action.
+
+**Per-tenant variants (FEAT-176):** `GET /api/v1/{tenant}/queries/describe`, `GET /api/v1/{tenant}/queries/{slug}/describe`, `GET /api/v1/{tenant}/queries/{slug}/columns` behave identically over the tenant's `(schema, table)`.
 
 ### Internal Behavior
 
@@ -362,10 +373,10 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
    - Fetch one row with pre-filter AND `query_slug = $n`. No row gives 404.
    - Check ABAC `slug:describe`, falling back to `slug:execute`. Denied gives 404.
    - Compute view grants with non-raising checks:
-     - `raw`: `slug:describe_raw`;
-     - `admin`: see Open Questions for the rule.
+     - `raw`: `slug:describe_raw` (and nothing else; `raw_query:execute` does not imply it);
+     - `admin`: `userinfo.superuser` OR a session group in `QS_DESCRIBE_ADMIN_GROUPS`.
    - The describer builds the payload, applies redaction and fills `redacted`.
-5. **PBAC disabled** (`app['security']` / `app['policy_evaluator']` absent): ABAC steps are no-ops, as with `_enforce_pbac`. The program pre-filter still applies whenever a session exists (see Open Questions for the no-session case).
+5. **PBAC disabled** (`app['security']` / `app['policy_evaluator']` absent): ABAC steps are no-ops, as with `_enforce_pbac`. The program pre-filter still applies whenever a session exists; with no session and no sessionless authz the request is denied with `401` before any DB access.
 6. **Describer:**
    - For brace-template parsers (SQL family: `SQLParser`, pgSQL, MS SQL, BigQuery, CQL, SOQL…), run `string.Formatter().parse(query_raw)` to collect field names.
    - Drop parser-reserved names (the structural set from Constraints: `fields`, `tablename`, `schema`, `table`, `filter`, `where_cond`, `and_cond`, `grouping`, `group_by`, `ordering`, `order_by`, `offset`, `_offset`, `limit`, `_limit`, `querylimit`); report them under `structural_placeholders`. A reserved name that is *also* in `cond_definition` (misconfigured slug) stays structural and emits a warning.
@@ -384,11 +395,11 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 - **Slug names:** the path parameter is validated against a safe slug pattern before any DB call. An invalid name gives 404, not 400, so existence is not leaked.
 - **Missing row data:** `query_raw` empty or `None` gives `variables: []`. JSON-type `query_raw` (Mongo/Elastic/Arango) gives `variables_supported: false`.
 - **Rows that fail model validation:** a `QueryModel` `ValidationError` on a legacy row is logged at warning and returned as 404 on detail. On the list only the projection is read, so it is unaffected.
-- **Program data:** duplicate or mixed-case `programs` in the session are deduplicated. Case-sensitivity follows the DB (open question).
+- **Program data:** `programs` in the session are normalised to lowercase slugs (`Program` objects → `.slug`, falling back to `.name` / `str()`) and deduplicated before binding; the comparison against `program_slug` is lowercase on both sides.
 - **ABAC failures:** evaluator exceptions **fail closed**: 404 on detail, and on the list the affected slugs are excluded with an error log. This deliberately differs from `DatasourceView._pbac_filter`, which fails open.
 - **`execute` fallback:** it is evaluated only on the denied remainder, which avoids double evaluation cost.
-- **Large pre-filtered sets:** superuser/authz principals can produce large scans. A configurable cap (for example `QS_DESCRIBE_MAX_SCAN`) with a warning log is proposed.
-- **FEAT-176 tenant rows (no `program_slug` column):** the program pre-filter must be pluggable, so the tenant variant can derive program context from the tenant instead.
+- **Large pre-filtered sets:** superuser/authz principals can produce large scans. `QS_DESCRIBE_MAX_SCAN` (default `10000`) bounds the projection fetch; beyond it the first N rows in SQL order are kept, `X-Truncated: true` is set and a warning is logged. The response is never a `400`.
+- **FEAT-176 tenant rows (no `program_slug` column):** the tenant routes derive program context from the tenant; the pre-filter predicate builder is pluggable so the same handler serves both shapes.
 - **Transport:** CORS/OPTIONS follow `QueryView`/`BaseView` conventions. HEAD on the list returns the headers only.
 - **Columns on non-SQL providers** (REST, Mongo, BigQuery without `prepare`): the default `describe_columns()` yields untyped names when the provider implements `columns()`, else the declared fallback. `is_raw` slugs follow the same path. MultiQuery (v3) slugs are out of scope for v1 (open question).
 - **Columns with unresolved variables:** `prepare` is skipped and the response carries `columns_source: "declared"|"unavailable"` with `warnings: ["prepare_skipped: unresolved placeholders [...]"]`.
@@ -408,7 +419,9 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 
 ### Modified Capabilities
 - `querysource-slug-list-pagination` (`sdd/specs/querysource-slug-list-pagination.spec.md`): reused, and possibly extended with a bound-parameter `ANY` predicate builder and `NULLS LAST` ordering, without changing `QueryManager` behaviour.
-- `pbac-support` (`sdd/specs/pbac-support.spec.md`): new actions `slug:describe` and `slug:describe_raw` (plus existing `slug:list`) added to `policies/defaults.yaml` grants.
+- `pbac-support` (`sdd/specs/pbac-support.spec.md`): new actions `slug:describe` and `slug:describe_raw` (plus existing `slug:list`) added to `policies/defaults.yaml` grants for admin/superuser only.
+- `malforming-queryslug-issue` / Rust validators (`rust/src/validators.rs`, `querysource/types/validators.pyx`): UDF keyword resolution extended to `date`/`datetime`/`timestamp`-typed conditions on both paths.
+- `per-tenant-queries` (FEAT-176, in proposal): consumed by the tenant describe/columns routes.
 
 ---
 
@@ -423,8 +436,9 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 | `querysource/queries/describe.py` | new | pure describer + redaction |
 | `querysource/handlers/_pagination.py` | extends | bound `ANY` predicate helper and/or `NULLS LAST` option (backward compatible) |
 | `querysource/handlers/abstract.py` | depends on / light refactor | possibly factor `EvalContext` construction out of `_enforce_pbac` for reuse (no behaviour change) |
-| `querysource/conf.py` | extends | optional `QS_DESCRIBE_MAX_SCAN` |
-| `policies/defaults.yaml` | modifies | grant `slug:describe`, `slug:describe_raw` to admin/superuser |
+| `querysource/conf.py` | extends | `QS_DESCRIBE_MAX_SCAN` (default 10000), `QS_DESCRIBE_ADMIN_GROUPS` (default `admin,superuser`) |
+| `policies/defaults.yaml` | modifies | grant `slug:describe`, `slug:describe_raw` to admin/superuser only; regular users rely on the `slug:execute` fallback |
+| `rust/src/validators.rs`, `querysource/types/validators.pyx` | modifies (first task) | UDF keyword resolution for `date`/`datetime`/`timestamp`-typed conditions on both paths, with parity tests |
 | `querysource/handlers/manager.py` (`QueryManager`) | none | explicitly untouched |
 | `querysource/providers/abstract.py` | extends | additive `describe_columns()` default (names only, from `columns()`) |
 | `querysource/providers/pg.py` | extends | `describe_columns()` keeps `attribute.type.name`; `columns()` unchanged |
@@ -432,7 +446,7 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 | `CHANGES.rst`, `querysource/version.py` | modifies | changelog; bump to `4.6.0` (new public endpoints → minor) |
 | `tests/handlers/`, `tests/test_route_registration.py`, `tests/policies/` | extends | new tests, incl. pg typed-columns test and vocabulary test under `UDF_LIST` override |
 | API consumers | new API | additive, no breaking changes |
-| Rust/Cython UDF typed resolution (`rust/src/validators.rs:296-328`, `querysource/types/validators.pyx:552-553`) | prerequisite (separate hotfix on `main`) | must land before the release that ships `accepts_keywords` |
+| FEAT-176 per-tenant queries (`sdd/proposals/` proposal, same day) | depends on | the tenant routes need its `(schema, table)` data-access layer; sequence FEAT-176's data-access tasks first |
 | ai-parrot FEAT-567 `QuerySourceToolkit.qs_describe` | depends on (downstream, other repo) | consumes detail + columns + vocabulary |
 | ai-parrot A2UI linked surfaces (next feature) | depends on (downstream) | parameter contract + vocabulary feed the data-source descriptor |
 | ai-parrot `QuerySlugSource.prefetch_schema` | depends on (later) | can replace the `querylimit=1` probe with `/columns` |
@@ -673,12 +687,13 @@ from navigator_auth.abac.policies.resources import ResourceType
   The handler, route registration and integration tests depend on both, and the policy YAML grants are a small independent task.
   Two more strands are independent of everything above until route registration: `describe_columns()` on `providers/abstract.py` + `providers/pg.py` (with its asyncpg test), and the vocabulary registry + endpoint.
 - **Cross-feature independence:**
-  - The **UDF typed-resolution hotfix** touches `rust/src/validators.rs` and `querysource/types/validators.pyx`, which this feature only reads; land it on `main` first and let sync-down bring it to `dev`.
+  - The **UDF typed-resolution fix** is the first task of this branch (`rust/src/validators.rs`, `querysource/types/validators.pyx`, parity tests); nothing else in flight touches those files.
+  - Including the **tenant routes now** turns FEAT-176 from a merge-conflict risk into a **hard dependency**: the tenant variants cannot be implemented until FEAT-176's `(schema, table)` data-access layer exists. Sequence: FEAT-176 data-access tasks first, then this feature's tenant routes as its last task; the non-tenant routes do not wait.
   - **FEAT-176 `per-tenant-queries`** (proposal in review, same day) touches `QueryModel`, `_pagination.py` allowlists (drops `program_slug` for tenant rows), `QueryManager` and route registration in `services.py`. Expect **merge conflicts in `services.py` and `_pagination.py`**, and a **semantic dependency**: tenant rows have no `program_slug`, so the pre-filter must be pluggable.
   - `pbac-support` and `querysource-slug-list-pagination` specs are complete; they are extended, not in flight.
   - No other pending tasks in `sdd/tasks/index/`.
 - **Recommended isolation:** `per-spec`
-- **Rationale:** the feature is medium-sized, around 7-8 tasks, and the independent strands are small. One worktree with sequential tasks avoids coordination overhead, and keeps the `_pagination.py` / `services.py` edits in one branch that can be rebased cleanly against FEAT-176.
+- **Rationale:** the feature is medium-sized, around 8-9 tasks (UDF fix, describer, visibility, handler + routes, columns hook, vocabulary, policies/config, tenant routes), and the independent strands are small. One worktree with sequential tasks avoids coordination overhead, and keeps the `_pagination.py` / `services.py` edits in one branch that can be rebased cleanly against FEAT-176.
 
 ---
 
@@ -697,17 +712,17 @@ from navigator_auth.abac.policies.resources import ResourceType
 - [x] Caching — *Owner: Jesús Lara*: no cache; always read from DB.
 - [x] Typed columns: inside describe, or never touching the datasource? — *Owner: Jesús Lara*: neither; a sibling sub-resource `GET /api/v1/queries/{slug}/columns` (prepared statement + declared fallback, never executes). Describe stays pure over `QueryModel`.
 - [x] Where the relative-date keyword vocabulary lives — *Owner: Jesús Lara*: its own endpoint `GET /api/v1/queries/vocabulary`, referenced from describe via `derived.links`.
-- [x] Inconsistent UDF resolution for `date`-typed conditions (Rust quotes before the UDF check; only Cython calls `to_udf`) — *Owner: Jesús Lara*: separate hotfix on `main`, prerequisite for this feature's release.
+- [x] Inconsistent UDF resolution for `date`-typed conditions (Rust quotes before the UDF check; only Cython calls `to_udf`) — *Owner: Jesús Lara*: initially "separate hotfix on `main`"; **revised the same day** to ship inside `4.6.0` as the first task of this feature (see below).
 - [x] Sampling rows (`querylimit=1`) to infer column types on providers without `prepare` — *Owner: Jesús Lara*: out of scope for v1.
-- [ ] PBAC for the new sub-resources: `/columns` under `slug:describe OR slug:execute` like detail (recommended), and `/vocabulary` under authentication only vs `slug:list`? — *Owner: Jesús Lara*
-- [ ] Should `/columns` accept query-string conditions (as `HEAD /api/v2/services/queries/{slug}` does) so callers can render variables without defaults and make `prepare` possible? Recommended: yes, same merge rules as `get_columns`. — *Owner: Jesús Lara*
-- [ ] Which `functions.pyx` helpers enter the curated `functions` block of the vocabulary in v1 (`date_diff`, `date_sum`, `days_ago`, `previous_month`, `fdow`/`ldow` are the obvious candidates)? — *Owner: Jesús Lara*
-- [ ] Does the UDF hotfix ship as `4.5.17` before `4.6.0`, or is it folded into the `4.6.0` release notes as a prerequisite item? — *Owner: Jesús Lara*
-- [ ] Does the program pre-filter also apply to the **detail** endpoint (slug outside the user's programs → 404 even if ABAC would allow)? Recommended: yes, for consistency with the list. — *Owner: Jesús Lara*
-- [ ] What defines "admin" for `dwh_info`/`cache_options`/`created_by`/`updated_by`: `userinfo.superuser`, a PBAC action (e.g. `slug:describe_internal`), or membership in an admin group? Recommended: superuser OR a dedicated `slug:describe_internal` action. — *Owner: Jesús Lara*
-- [ ] Behaviour when a request has **no session and no sessionless authz**, with `QS_PBAC_ENABLED=False` (auth middleware may be absent in some deployments): deny (401/404) or return unfiltered like `QueryManager`? Recommended: deny (fail-closed). — *Owner: Jesús Lara*
-- [ ] Should `query_raw` also be visible to callers holding `raw_query:execute` (they can already run arbitrary SQL), in addition to `slug:describe_raw`? — *Owner: Jesús Lara*
-- [ ] Cap for in-memory pagination scans (e.g. `QS_DESCRIBE_MAX_SCAN`, default 10 000) and behaviour when exceeded (truncate + warning header vs 400 asking for filters). — *Owner: Jesús Lara*
-- [ ] Program matching case-sensitivity and normalization of Token-backend `Program` objects to slugs. — *Owner: Jesús Lara*
-- [ ] Coordination with FEAT-176 (per-tenant queries): should a `/api/v1/{tenant}/queries/describe` variant be in scope now, or only keep the visibility/data-access layer tenant-ready? Recommended: tenant-ready only. — *Owner: Jesús Lara*
-- [ ] Should `policies/defaults.yaml` grant `slug:describe` to authenticated users broadly (baseline) or only to admins, relying on the `execute` fallback for regular users? — *Owner: Jesús Lara*
+- [x] PBAC for the new sub-resources — *Owner: Jesús Lara*: `/columns` under `slug:describe OR slug:execute` exactly like detail; `/vocabulary` requires authentication only (no slug resource, no PBAC action).
+- [x] Should `/columns` accept query-string conditions so callers can render variables without defaults and make `prepare` possible? — *Owner: Jesús Lara*: yes, same merge rules as `get_columns` (`{**json_body, **query_params}`), validated through `cond_definition` by the Rust substitution.
+- [x] Which `functions.pyx` helpers enter the curated `functions` block of the vocabulary in v1? — *Owner: Jesús Lara*: keywords plus a minimal, **informational** set (`date_diff`, `date_sum`, `days_ago`, `previous_month`, `fdow`, `ldow`) with documented args; each entry carries `invocable: false` until a way to call them as HTTP condition values exists (today only `masks`/`fnExecutor` in MultiQuery use them).
+- [x] Does the UDF typed-resolution fix ship as `4.5.17` before `4.6.0`, or inside `4.6.0`? — *Owner: Jesús Lara*: inside `4.6.0`, as the **first task** of this feature's branch (supersedes the earlier "separate hotfix on `main`" decision below).
+- [x] Does the program pre-filter also apply to the **detail** endpoint? — *Owner: Jesús Lara*: yes, same as the list; a slug outside the caller's programs is 404 even if ABAC would allow it. Superuser and sessionless authz stay unfiltered.
+- [x] What defines "admin" for `dwh_info`/`cache_options`/`created_by`/`updated_by`? — *Owner: Jesús Lara*: `userinfo.superuser` OR membership in an admin group (group names configurable, `QS_DESCRIBE_ADMIN_GROUPS`, default `admin,superuser`); no new PBAC action.
+- [x] Behaviour with **no session and no sessionless authz** (`QS_PBAC_ENABLED=False`, auth middleware absent) — *Owner: Jesús Lara*: deny, fail-closed: `401` on list, detail and columns. `QueryManager` remains the unauthenticated admin path.
+- [x] Should `query_raw` also be visible to callers holding `raw_query:execute`? — *Owner: Jesús Lara*: no; only `slug:describe_raw` reveals `query_raw`.
+- [x] Cap for in-memory pagination scans — *Owner: Jesús Lara*: `QS_DESCRIBE_MAX_SCAN`, default `10000`; when exceeded, process the first N rows in SQL order, set `X-Truncated: true`, log a warning. Never `400`.
+- [x] Program matching case-sensitivity and `Program` object normalization — *Owner: Jesús Lara*: normalise both sides to lowercase (`program_slug` is lowercase by convention); Token-backend `Program` objects map to `.slug`, falling back to `.name` / `str()`.
+- [x] Coordination with FEAT-176 (per-tenant queries) — *Owner: Jesús Lara*: include the tenant variant **now**: `GET /api/v1/{tenant}/queries/describe`, `/{tenant}/queries/{slug}/describe` and `/{tenant}/queries/{slug}/columns`, served by the same handler over the FEAT-176 `(schema, table)` data access, with the pre-filter deriving program context from the tenant. This makes FEAT-176's data-access layer a hard dependency (see Parallelism).
+- [x] `policies/defaults.yaml` grant for `slug:describe` — *Owner: Jesús Lara*: admins/superuser only; regular users describe exactly the slugs they may execute (the `execute` fallback). Program-level policies may widen it.
