@@ -251,5 +251,88 @@ async def test_notification_callback_arity_preserved() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15. Merged (`outcome:
+merged`, seat `qwen`, attempt 2 — attempt 1 with `glm` hit the 60-turn cap
+with no `final_output`), then reviewed and fixed in this worktree.
+
+**Dispatch history**: attempt 1 (`glm`, `zai.glm-4.7-flash`) failed —
+`max_turns=60` exceeded with no recovered result. Attempt 2 (`qwen`,
+`qwen.qwen3-coder-480b-a35b-instruct`) completed and merged cleanly (file
+fidelity matched the declared list exactly: `querysource/scheduler/jobs.py`,
+`querysource/handlers/scheduler.py`, `querysource/handlers/manager.py`,
+`tests/tenants/test_tenant_scheduler_api_jobs.py`).
+
+**Review findings and fixes** (same worktree, commit `967f372`): running the
+full multi/scheduler/handlers regression suite (not just the task's own
+focused file) and re-reading the diff against AC-1/AC-2 surfaced three real
+gaps in the merged code:
+
+1. `querysource/scheduler/jobs.py` — every one of the three job callables
+   shipped with a self-confessed stub comment ("In a real implementation,
+   we would validate the owner against the registry / For now, we'll just
+   pass it through"), directly contradicting AC-1's "Revalidate
+   deserialized envelope against registry, then execute selected owner"
+   and the codebase's "no TODOs/stubs" convention. Fixed by adding a
+   shared `_revalidate_owner()` helper: re-resolves the envelope's schema
+   against the CURRENT registry (via the constructed QS/MultiQS's own
+   `get_definition_repository()`) and compares
+   `database_namespace`/`table`/`contract` before executing — a registry
+   that has drifted since this job was registered (e.g. after a restart
+   with a changed allowlist) now fails the job and notifies, instead of
+   silently executing against a stale store.
+2. `querysource/handlers/scheduler.py` — `_kind_from_id()` was left
+   unchanged, matching only the legacy `<kind>_<slug>` prefix. TASK-729
+   registers every non-default-store job under the
+   `qsj2-<kind>-<digest>-<slug>` shape, so every tenant-owned job's
+   serialized `kind` field silently came back `"unknown"` — a genuine
+   cross-task AC-2 regression from TASK-729 landing after this task's
+   blueprint was authored. Fixed to also parse the qsj2 shape.
+3. `tests/tenants/test_tenant_scheduler_api_jobs.py` — two of the four
+   required tests were literal `assert True  # Placeholder` stubs, and a
+   third monkeypatched away the exact function (`_kind_from_id`) it
+   claimed to test. None of the four, as merged, actually exercised
+   AC-1/AC-2/AC-3/AC-4. Rewrote all four with real fixtures: envelope
+   roundtrip + revalidation-mismatch rejection for all three job
+   callables; real `_kind_from_id`/`_serialize_job` plus pause/resume/
+   delete acting on the exact job id (proving a same-slug different-owner
+   job is never touched); a committed-then-sync-failure-header round trip
+   through `QueryManager.patch()` (plus the success/no-scheduler cases for
+   contrast); and a real failing job proving `notify(job_id, slug,
+   error)`'s 3-arg shape is unchanged (AC-4).
+4. `tests/test_scheduler_jobs.py` — three pre-existing exact-call
+   assertions (`QS(slug=...)` / `MultiQS(slug=...)`) needed `tenant=None`
+   added: an intended, harmless consequence of AC-1 (the `tenant` kwarg's
+   default is already `None`, so runtime behavior is unchanged; only the
+   pre-existing mock assertion was now too strict for the new,
+   always-present keyword).
+
+**Checks run** (`source .venv/bin/activate && python -m pytest ...`):
+- `tests/tenants/test_tenant_scheduler_api_jobs.py` — 4/4 passed (AC-5,
+  exact command from the task, real assertions after the rewrite).
+- `tests/test_scheduler_jobs.py` — 11/11 passed after the 3 assertion
+  fixes.
+- Full scheduler/tenants/handlers/multi/executor regression sweep — 338
+  passed, 4 failed (all four confirmed pre-existing and unrelated,
+  documented in TASK-727/728/729's own completion notes: `test_frozen_
+  dataclass`, `test_guardrail_rejects_too_many_sources`, `test_scheduler_
+  not_imported_when_disabled`, `test_post_returns_405`).
+- `ruff check` on every touched file, cross-checked against the immediate
+  pre-task baseline (`161c8e8`): `handlers/scheduler.py` now passes
+  cleanly (0 findings, down from baseline's 6, via the merged diff's own
+  incidental type-hint cleanups plus the `_kind_from_id` fix);
+  `scheduler/jobs.py` down to 4 findings (from baseline's 9 — net
+  improvement from the rewrite's consistent `X | None` typing); `handlers/
+  manager.py`'s one genuinely new finding (a `BLE001` broad except inside
+  `_sync_definition_jobs`) matches this file's own dominant, pre-existing
+  18-instance broad-except-and-log convention exactly, and is required by
+  AC-3's own design (any scheduler-side failure, however it manifests,
+  must become a header — never propagate and look like a DB rollback); the
+  new test file is fully clean.
+
+**Spec deviations**: none. **Deployment gates unverified**: real
+multi-process scheduler synchronization under load, and the owner-
+revalidation path against an actual reconfigured/restarted registry
+(sandbox has no live Postgres); `notification_manager`'s pluggable
+Telegram/Slack/webhook callbacks (explicitly out of scope per this task's
+"NOT in scope: External message delivery and notification subscription
+redesign").
