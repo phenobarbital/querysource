@@ -274,3 +274,183 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
     assert queue.qsize() == 1
     res = await queue.get()
     assert res == {"alias1": "remote_data"}
+
+
+@pytest.mark.asyncio
+async def test_raw_query_child_skips_ownership_preflight_no_slug_required() -> None:
+    """A raw inline-SQL child (no 'slug' key) must dispatch normally.
+
+    Code review finding 8: the ownership preflight loop in MultiQS.query()
+    unconditionally raised DriverError for any child in ``self._queries``
+    missing a 'slug' key. But 'files and raw actions preserve existing
+    behavior (no ownership check)' is a first-class, still-documented case
+    (QueryHandler._preflight_multiquery's own ``has_raw_query`` parameter,
+    and QueryObject's own 'query' type — obj.py: `elif 'query' in query:`).
+    A raw child (dict with a 'query' key instead of 'slug') must be SKIPPED
+    from ownership resolution, not rejected — and must still dispatch via
+    ThreadQuery with store=None (no owned definition to attach).
+    """
+    store_tenant1 = _tenant_store("tenant1")
+    ident_q1 = QueryIdentity(store=store_tenant1, slug="q1")
+    loaded_q1 = LoadedDefinition(
+        identity=ident_q1,
+        runtime=QueryModel(query_slug="q1", program_slug="tenant1", provider="db"),
+        revision="rev1",
+    )
+
+    class FakeRegistry:
+        def resolve(self, tenant):
+            if tenant == "tenant1":
+                return store_tenant1
+            raise AssertionError(
+                "registry.resolve() must never be called for a raw child"
+            )
+
+    class FakeRepo:
+        registry = FakeRegistry()
+
+        async def get(self, ident):
+            if ident.slug == "q1" and ident.store == store_tenant1:
+                return loaded_q1
+            raise AssertionError(f"repo.get() must never be called for: {ident}")
+
+    multi_qs = MultiQS(
+        queries={
+            "alias1": {"slug": "q1", "tenant": "tenant1"},
+            "raw_alias": {"query": "SELECT 1", "driver": "pg"},
+        },
+        tenant=None,
+    )
+
+    async def fake_get_definition_repository():
+        return FakeRepo()
+
+    multi_qs.get_definition_repository = fake_get_definition_repository
+
+    created_threads = []
+
+    class FakeThreadQuery(ThreadQuery):
+        def __init__(self, name, query, request, queue, remote_config=None, store=None):
+            super().__init__(name, query, request, queue, remote_config=remote_config, store=store)
+            created_threads.append(self)
+
+    with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
+        with mock.patch.object(ThreadQuery, "start", lambda self: None), \
+             mock.patch.object(ThreadQuery, "join", lambda self, timeout=None: None), \
+             mock.patch.object(ThreadQuery, "is_alive", lambda self: False), \
+             mock.patch.object(ThreadQuery, "exc", create=True, new_callable=mock.PropertyMock(return_value=None)):
+            async def fake_get(*args, **kwargs):
+                return {"alias1": pd.DataFrame([{"col": 1}])}
+
+            with mock.patch.object(asyncio.Queue, "empty", side_effect=[False, True]), \
+                 mock.patch.object(asyncio.Queue, "get", fake_get):
+                await multi_qs.query()
+
+    assert len(created_threads) == 2
+    t_owned = next(t for t in created_threads if t._name == "alias1")
+    assert t_owned._store == store_tenant1
+    t_raw = next(t for t in created_threads if t._name == "raw_alias")
+    assert t_raw._store is None
+
+
+@pytest.mark.asyncio
+async def test_query_missing_slug_and_query_still_raises() -> None:
+    """A child with NEITHER 'slug' NOR 'query' is genuinely malformed.
+
+    Distinguishes finding 8's fix (skip raw 'query'-keyed children) from a
+    real regression: an entry with no routing information at all must still
+    fail fast with DriverError, matching pre-existing behavior.
+    """
+    multi_qs = MultiQS(
+        queries={"bad_alias": {"driver": "pg"}},
+        tenant=None,
+    )
+
+    class FakeRegistry:
+        def resolve(self, tenant):
+            return _tenant_store("public", "legacy")
+
+    class FakeRepo:
+        registry = FakeRegistry()
+
+    async def fake_get_definition_repository():
+        return FakeRepo()
+
+    multi_qs.get_definition_repository = fake_get_definition_repository
+
+    with pytest.raises(DriverError, match="missing a 'slug' key"):
+        await multi_qs.query()
+
+
+@pytest.mark.asyncio
+async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
+    """MultiQS(slug=..., tenant=...)'s own stored-pipeline lookup must use
+    the same tenant it was constructed with.
+
+    Code review finding 7: ``MultiQS.query()`` called
+    ``self.get_slug(slug=self.slug)`` without ``tenant=self._tenant_selector``,
+    so this top-level lookup always resolved against the default/legacy
+    store regardless of the tenant MultiQS was built for — a stored
+    pipeline saved under a tenant schema was never found (or a same-named
+    legacy pipeline executed instead).
+    """
+    store_tenant1 = _tenant_store("tenant1")
+    ident_dashboard = QueryIdentity(store=store_tenant1, slug="dashboard")
+    loaded_dashboard = LoadedDefinition(
+        identity=ident_dashboard,
+        runtime=QueryModel(query_slug="dashboard", program_slug="tenant1", provider="db"),
+        revision="rev1",
+    )
+
+    class FakeRegistry:
+        def resolve(self, tenant):
+            assert tenant == "tenant1", (
+                f"preflight must resolve against the SAME tenant the "
+                f"top-level slug was looked up under, got {tenant!r}"
+            )
+            return store_tenant1
+
+    class FakeRepo:
+        registry = FakeRegistry()
+
+        async def get(self, ident):
+            if ident.slug == "dashboard" and ident.store == store_tenant1:
+                return loaded_dashboard
+            raise Exception(f"Not found: {ident}")
+
+    multi_qs = MultiQS(slug="dashboard", tenant="tenant1")
+
+    async def fake_get_definition_repository():
+        return FakeRepo()
+
+    multi_qs.get_definition_repository = fake_get_definition_repository
+
+    # get_slug() itself is the compatibility layer under test (interfaces/
+    # connections.py) — stub it directly and assert it receives tenant=.
+    fake_query_obj = mock.MagicMock()
+    fake_query_obj.query_raw = None
+    get_slug_mock = mock.AsyncMock(return_value=fake_query_obj)
+    multi_qs.get_slug = get_slug_mock
+
+    created_threads = []
+
+    class FakeThreadQuery(ThreadQuery):
+        def __init__(self, name, query, request, queue, remote_config=None, store=None):
+            super().__init__(name, query, request, queue, remote_config=remote_config, store=store)
+            created_threads.append(self)
+
+    with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
+        with mock.patch.object(ThreadQuery, "start", lambda self: None), \
+             mock.patch.object(ThreadQuery, "join", lambda self, timeout=None: None), \
+             mock.patch.object(ThreadQuery, "is_alive", lambda self: False), \
+             mock.patch.object(ThreadQuery, "exc", create=True, new_callable=mock.PropertyMock(return_value=None)):
+            async def fake_get(*args, **kwargs):
+                return {"dashboard": pd.DataFrame([{"col": 1}])}
+
+            with mock.patch.object(asyncio.Queue, "empty", side_effect=[False, True]), \
+                 mock.patch.object(asyncio.Queue, "get", fake_get):
+                await multi_qs.query()
+
+    get_slug_mock.assert_awaited_once_with(slug="dashboard", tenant="tenant1")
+    assert len(created_threads) == 1
+    assert created_threads[0]._store == store_tenant1

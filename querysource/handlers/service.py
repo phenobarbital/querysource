@@ -26,6 +26,7 @@ from ..conf import (
     CSV_DEFAULT_QUOTING
 )
 from ..auth import ResourceType
+from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity
 from .abstract import AbstractHandler
 
@@ -315,6 +316,18 @@ class QueryService(AbstractHandler):
                         exception=err,
                         code=400
                     )
+                except TenantError as err:
+                    # Preserve the ownership error's own stable machine code
+                    # (invalid_tenant=400, tenant_not_available/query_not_found=404,
+                    # tenant_store_unavailable=503, tenant_write_forbidden=403,
+                    # tenant_worker_unsupported=502) — spec §"New ownership
+                    # errors" requires "use the current error envelope for
+                    # new codes", never a collapsed generic 500.
+                    raise self.Error(
+                        message=str(err),
+                        exception=err,
+                        code=err.code
+                    )
                 except ParserError as err:
                     raise self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -434,6 +447,14 @@ class QueryService(AbstractHandler):
                         'message': err.message
                     }
                     return self.error(response=response_obj, status=404)
+                except TenantError as err:
+                    # See the same comment in query() above — preserve the
+                    # error's own stable machine code, never collapse to 500.
+                    response_obj = {
+                        'status': 'error',
+                        'message': err.message
+                    }
+                    return self.error(response=response_obj, status=err.code)
                 except ParserError as err:
                     return self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -568,6 +589,14 @@ class QueryService(AbstractHandler):
                         'message': err.message
                     }
                     return self.error(response=response_obj, status=404)
+                except TenantError as err:
+                    # See the same comment in query() above — preserve the
+                    # error's own stable machine code, never collapse to 500.
+                    response_obj = {
+                        'status': 'error',
+                        'message': err.message
+                    }
+                    return self.error(response=response_obj, status=err.code)
                 except ParserError as err:
                     return self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -713,6 +742,14 @@ class QueryService(AbstractHandler):
 
         except SlugNotFound as err:
             return self.NotFound(message=f"{err!s}", exception=err)
+        except TenantError as err:
+            # See the same comment in query() above — preserve the error's
+            # own stable machine code, never collapse to 500.
+            return self.Error(
+                message=str(err),
+                exception=err,
+                code=err.code
+            )
         except ParserError as err:
             return self.Error(
                 message=f"Error parsing Query Slug {slug}",

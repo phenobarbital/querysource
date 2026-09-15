@@ -17,6 +17,7 @@ from ..exceptions import (
 from ..outputs import DataOutput
 from ..queries import MultiQS
 from ..queries.multi.operators import Filter, GroupBy
+from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity
 from .abstract import AbstractHandler
 
@@ -421,6 +422,28 @@ class QueryHandler(AbstractHandler):
             header_detail = " ".join(str(oe).splitlines())
             err.headers['X-Output-Errors'] = f"{step}: {header_detail}"
             raise err
+        except TenantError as err:
+            # Placed BEFORE the broader (QueryException, DriverError) branch
+            # since TenantError IS a QueryException subclass — without this,
+            # every ownership error (query_not_found=404,
+            # tenant_store_unavailable=503, tenant_write_forbidden=403, ...)
+            # was silently collapsed to the generic code=402 below. Preserve
+            # the error's own stable machine code (spec §"New ownership
+            # errors": "use the current error envelope for new codes").
+            trace = traceback.format_exc()
+            _remote_queries_on_err = getattr(qs, '_remote_queries', [])
+            if _remote_queries_on_err:
+                self.logger.warning(
+                    "MultiQuery ownership error after remote queries %s: %s",
+                    _remote_queries_on_err,
+                    err,
+                )
+            raise self.Error(
+                message=str(err),
+                exception=err,
+                stacktrace=trace,
+                code=err.code
+            )
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()
             _remote_queries_on_err = getattr(qs, '_remote_queries', [])

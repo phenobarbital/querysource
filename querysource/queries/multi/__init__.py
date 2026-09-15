@@ -16,6 +16,7 @@ from ...exceptions import (
     SlugNotFound,
 )
 from ...ownership_logging import ownership_fields
+from ...tenant_errors import TenantError
 from ..base import BaseQuery
 from .operators.filter import Filter
 from .sources import FileSource, ThreadQuery
@@ -212,7 +213,15 @@ class MultiQS(BaseQuery):
 
         tasks = {}
         if self.slug:
-            query = await self.get_slug(slug=self.slug)
+            # This top-level lookup resolves the MultiQS's OWN stored slug
+            # (the pipeline definition itself), so it must use the same
+            # tenant selector this MultiQS instance was constructed with —
+            # without `tenant=`, get_slug() always resolved against the
+            # default/legacy store regardless of the tenant this MultiQS
+            # was built for, so a stored pipeline saved under a tenant
+            # schema was never found (or worse, a same-named legacy
+            # pipeline executed instead).
+            query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -282,7 +291,20 @@ class MultiQS(BaseQuery):
                 # Keep alias separate from stored slug.
                 child_slug = query_cfg.get("slug")
                 if not child_slug:
-                    # No owner fallback/search if slug is missing.
+                    if "query" in query_cfg:
+                        # Raw inline query child (QueryObject's own 'query'
+                        # type — obj.py: `elif 'query' in query:`). There is
+                        # no stored definition to own-check here — files and
+                        # raw actions preserve existing behavior (no
+                        # ownership check), the same convention
+                        # _preflight_multiquery_owned already documents for
+                        # its own files/has_raw_query parameters. Rejecting
+                        # this unconditionally broke every still-documented
+                        # raw-SQL multi-query child (spec: `has_raw_query`
+                        # is a first-class, still-supported case).
+                        continue
+                    # Genuinely malformed: neither a stored slug nor a raw
+                    # inline query — existing fail-fast behavior preserved.
                     raise DriverError(
                         f"Query {name!r} is missing a 'slug' key."
                     )
@@ -365,7 +387,13 @@ class MultiQS(BaseQuery):
                     t = ThreadQuery(
                         name, query, self._request, self._queue,
                         remote_config=remote_config,
-                        store=resolved_stores[name],
+                        # .get(), not [name]: a raw inline query child (no
+                        # 'slug' key) is deliberately skipped from
+                        # resolved_stores above — it has no owned
+                        # definition to resolve a store for — so it must
+                        # dispatch with store=None (the existing, unowned
+                        # legacy dispatch path) instead of raising KeyError.
+                        store=resolved_stores.get(name),
                     )
                 except Exception as ex:
                     raise self.Error(
@@ -449,6 +477,23 @@ class MultiQS(BaseQuery):
                             raise DataNotFound(
                                 f"No Data was Found on Query {t.slug}"
                             )
+                        if isinstance(t.exc, TenantError):
+                            # Checked BEFORE the broader (QueryException,
+                            # DriverError) branch below — TenantError IS a
+                            # QueryException subclass, and self.Error() both
+                            # defaults code to 500 when not passed explicitly
+                            # AND returns a plain QueryException, discarding
+                            # the TenantError type identity the HTTP handler
+                            # layer (handlers/multi.py) needs to match its
+                            # own `except TenantError` branch. Re-raise a
+                            # fresh TenantError with the SAME error_code so
+                            # both the type and the stable machine code
+                            # (query_not_found=404, tenant_store_unavailable=
+                            # 503, ...) survive all the way to the response.
+                            raise TenantError(
+                                str(t.exc),
+                                error_code=t.exc.error_code,
+                            ) from t.exc
                         if isinstance(t.exc, (QueryException, DriverError)):
                             raise self.Error(
                                 f"Query Error: {t.exc!s}",
