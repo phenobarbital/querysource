@@ -1,4 +1,5 @@
 """FEAT-148 TASK-737 — slug visibility service."""
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from querysource.auth import slug_visibility as sv
@@ -39,11 +40,11 @@ def test_normalize_programs():
     obj2.slug = "test2"
     assert sv.normalize_programs([obj1, obj2]) == ("test1", "test2")
     
-    # Test objects with name attribute
-    obj1 = MagicMock()
-    obj1.name = "test1"
-    obj2 = MagicMock()
-    obj2.name = "test2"
+    # Test objects with name attribute only (SimpleNamespace has no auto-vivified
+    # 'slug' attribute, unlike a bare MagicMock() — required to actually exercise
+    # the getattr(item, 'name', None) fallback path).
+    obj1 = SimpleNamespace(name="test1")
+    obj2 = SimpleNamespace(name="test2")
     assert sv.normalize_programs([obj1, obj2]) == ("test1", "test2")
     
     # Test dicts with slug/name keys
@@ -196,7 +197,7 @@ async def test_filter_visible_fallback_only_on_remainder():
     
     evaluator.filter_resources.side_effect = filter_resources_side_effect
     
-    request = _request({'policy_evaluator': evaluator})
+    request = _request({'security': MagicMock(), 'policy_evaluator': evaluator})
     principal = sv.Principal(sv.PrincipalKind.PROGRAMS, {}, (), ('prog1',))
     
     result = await sv.filter_visible(
@@ -216,7 +217,7 @@ async def test_filter_visible_fail_closed_on_error():
     evaluator = MagicMock()
     evaluator.filter_resources.side_effect = Exception("Test error")
     
-    request = _request({'policy_evaluator': evaluator})
+    request = _request({'security': MagicMock(), 'policy_evaluator': evaluator})
     principal = sv.Principal(sv.PrincipalKind.PROGRAMS, {}, (), ('prog1',))
     
     result = await sv.filter_visible(
@@ -268,7 +269,7 @@ async def test_can_access_fallback_and_coroutine_result():
         return primary_result
     evaluator.check_access.return_value = async_primary_result()
     
-    request = _request({'policy_evaluator': evaluator})
+    request = _request({'security': MagicMock(), 'policy_evaluator': evaluator})
     principal = sv.Principal(sv.PrincipalKind.PROGRAMS, {}, (), ('prog1',))
     
     result = await sv.can_access(

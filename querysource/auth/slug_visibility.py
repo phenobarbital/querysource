@@ -78,6 +78,8 @@ def normalize_programs(raw: Any) -> tuple[str, ...]:
     
     result = []
     for item in items:
+        if item is None:
+            continue
         if hasattr(item, 'slug'):
             slug = item.slug
         elif hasattr(item, 'name'):
@@ -86,7 +88,7 @@ def normalize_programs(raw: Any) -> tuple[str, ...]:
             slug = item.get('slug') or item.get('name')
         else:
             slug = str(item)
-        
+
         if slug:
             result.append(slug.lower().strip())
     
@@ -211,10 +213,14 @@ def is_admin(principal: Principal) -> bool:
     """Superuser OR a session group in QS_DESCRIBE_ADMIN_GROUPS."""
     if principal.kind == PrincipalKind.SUPERUSER:
         return True
-    
-    admin_groups = set(QS_DESCRIBE_ADMIN_GROUPS)
-    principal_groups = set(principal.groups)
-    
+
+    # Defensive lower-casing: Principal.groups and QS_DESCRIBE_ADMIN_GROUPS are
+    # both already normalized to lowercase by their respective constructors
+    # (resolve_principal, TASK-735's config parsing), but this check does not
+    # rely on that discipline from every caller.
+    admin_groups = {str(g).lower() for g in QS_DESCRIBE_ADMIN_GROUPS}
+    principal_groups = {str(g).lower() for g in principal.groups}
+
     return bool(admin_groups & principal_groups)
 
 
