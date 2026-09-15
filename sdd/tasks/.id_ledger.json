@@ -1,6 +1,6 @@
 {
-  "next_task_id": 716,
+  "next_task_id": 734,
   "next_feature_id": 149,
-  "updated_at": "2026-09-15T02:12:24+00:00",
-  "updated_by": "describe-queryslug"
+  "updated_at": "2026-09-15T02:22:47+00:00",
+  "updated_by": "per-tenant-queries"
 }
