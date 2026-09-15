@@ -351,6 +351,11 @@ class QSScheduler:
                     "slug": slug,
                     "notification_manager": self._notification_manager,
                     "owner": owner_envelope,
+                    # The job's own real registered id — a non-default
+                    # store's job is registered under the qualified
+                    # "qsj2-..." id, not the legacy "multi_<slug>" shape a
+                    # notify() callback would otherwise have to guess.
+                    "job_id": job_id,
                 },
             )
             self.logger.info("Registered scheduled multi-query job: %s", job_id)
@@ -368,6 +373,9 @@ class QSScheduler:
                 "slug": slug,
                 "notification_manager": self._notification_manager,
                 "owner": owner_envelope,
+                # See the multi-query registration above — the job's own
+                # real registered id, not a guessed legacy shape.
+                "job_id": job_id,
             },
         )
         self.logger.info(f"Registered scheduled query job: {job_id}")
@@ -431,6 +439,9 @@ class QSScheduler:
                 "slug": slug,
                 "notification_manager": self._notification_manager,
                 "owner": owner_envelope,
+                # See the multi-query registration above — the job's own
+                # real registered id, not a guessed legacy shape.
+                "job_id": job_id,
             },
         )
         self.logger.info(f"Registered cache refresh job: {job_id}")

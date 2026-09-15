@@ -63,6 +63,7 @@ async def scheduled_query_job(
     notification_manager: NotificationManager | None = None,
     *,
     owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and execute QS with matching runtime/cache context.
@@ -72,6 +73,12 @@ async def scheduled_query_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id, threaded in by
+            QSScheduler at registration time. A non-default (tenant) store
+            registers its job under the qualified ``qsj2-...`` id, not the
+            legacy ``query_<slug>`` shape — falls back to that legacy guess
+            only when the caller (e.g. an older registration path) never
+            supplied it.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
@@ -87,10 +94,8 @@ async def scheduled_query_job(
             slug, ownership_fields(owner), exc,
         )
         if notification_manager:
-            # notify(job_id, slug, error) signature preserved unchanged
-            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
-                job_id=f"query_{slug}",
+                job_id=job_id or f"query_{slug}",
                 slug=slug,
                 error=exc
             )
@@ -101,6 +106,7 @@ async def scheduled_multiqs_job(
     notification_manager: NotificationManager | None = None,
     *,
     owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and preserve it through all pipeline children.
@@ -113,8 +119,8 @@ async def scheduled_multiqs_job(
     query in the pipeline, exactly as it would for a request-driven call).
 
     On any exception, calls
-    ``notification_manager.notify(job_id=f"multi_{slug}", slug=slug, error=exc)``
-    exactly once, then returns without re-raising (mirroring
+    ``notification_manager.notify(job_id=<real registered id>, slug=slug,
+    error=exc)`` exactly once, then returns without re-raising (mirroring
     ``scheduled_query_job`` APScheduler semantics).
 
     Reserved JSON sub-key: ``attributes.scheduler.output`` is
@@ -127,6 +133,9 @@ async def scheduled_multiqs_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id — see
+            ``scheduled_query_job``'s docstring for why this must not be
+            re-guessed as the legacy ``multi_<slug>`` shape.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
@@ -142,10 +151,8 @@ async def scheduled_multiqs_job(
             slug, ownership_fields(owner), exc,
         )
         if notification_manager:
-            # notify(job_id, slug, error) signature preserved unchanged
-            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
-                job_id=f"multi_{slug}",
+                job_id=job_id or f"multi_{slug}",
                 slug=slug,
                 error=exc
             )
@@ -156,6 +163,7 @@ async def cache_refresh_job(
     notification_manager: NotificationManager | None = None,
     *,
     owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
     **kwargs: Any
 ) -> None:
     """Refresh only this owner's current definition revision.
@@ -171,6 +179,9 @@ async def cache_refresh_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id — see
+            ``scheduled_query_job``'s docstring for why this must not be
+            re-guessed as the legacy ``cache_<slug>`` shape.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
@@ -186,10 +197,8 @@ async def cache_refresh_job(
             slug, ownership_fields(owner), exc,
         )
         if notification_manager:
-            # notify(job_id, slug, error) signature preserved unchanged
-            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
-                job_id=f"cache_{slug}",
+                job_id=job_id or f"cache_{slug}",
                 slug=slug,
                 error=exc
             )
