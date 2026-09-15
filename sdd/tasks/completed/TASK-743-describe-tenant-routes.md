@@ -243,10 +243,145 @@ See the blueprint test outline above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: parrot-sdd-coder native seat (haiku), consolidated and fixed by
+sdd-worker (Claude Sonnet 5).
+**Date**: 2026-09-16
 **Notes**:
+- Re-verified the FEAT-147 contract against the actual merged code (PR #600)
+  before accepting the dispatched implementation: `QueryStore(database_namespace,
+  schema, table, contract, columns)`, `QueryIdentity(store, slug)`,
+  `LoadedDefinition(identity, runtime, revision)`, `TenantRegistry.resolve(tenant=)`
+  raising `TenantError(error_code="tenant_not_available")` for an unknown tenant
+  (`querysource/tenant_errors.py`), and `quote_identifier()` all match the task's
+  "UNVERIFIED" contract exactly. Crucially, the app-key names the task flagged as
+  "not stated in FEAT-147's spec, FILL IN on merge" — `app["qs_tenant_registry"]`
+  and `app["qs_definition_repository"]` — were confirmed correct against
+  `querysource/handlers/tenant.py:157,163` and `querysource/services.py:494-495`,
+  not guessed.
+- `docs/DESCRIBE_API.md` was mistakenly flagged as an out-of-scope file by the
+  orchestrator's automated fidelity checker (`coder_merge` returned
+  `fidelity_violation`) — the task's own "Files to Create/Modify" table lists it
+  jointly with `CHANGES.rst` in one comma-separated table cell rather than a
+  separate row, which the checker's per-cell parser apparently doesn't split.
+  Verified this file was genuinely in scope (Scope §, line 40: "Add a tenant
+  bullet to `CHANGES.rst` and a section to `docs/DESCRIBE_API.md`") and confirmed
+  the diff touched exactly the 7 declared files before merging manually
+  (`git merge --no-ff`) rather than discarding the work.
+- **Two production bugs found and fixed:**
+  1. `describe_list()`'s tenant-mode `program_slug` rejection checked
+     `"program_slug" in params.sort`, but `PaginationParams` has no `.sort`
+     attribute (only `sort_field`/`sort_direction`) — every tenant list request
+     with any `sort=` parameter would crash with `AttributeError` instead of the
+     AC18-mandated `400`. Fixed to `params.sort_field == "program_slug"`.
+  2. **The task's own explicit acceptance criterion — "Tenant ABAC decisions
+     never read or write the app evaluator's cache" — was entirely unimplemented.**
+     `filter_visible()`/`can_access()`/`describe_grants()` always used the raw,
+     shared `request.app['policy_evaluator']` for both legacy and tenant stores;
+     FEAT-147's "detached evaluator" pattern (a shallow copy with a cleared
+     decision cache, `AbstractHandler._enforce_owned_slug`) was never wired in.
+     FEAT-147 doesn't expose this as a reusable helper (it's private inline logic
+     in `_enforce_owned_slug`), so replicated the exact pattern: `_evaluator_state()`
+     gained a `detached: bool = False` kwarg (returns `copy.copy(evaluator)` with
+     `_cache={}` and copied `_stats` when True); `filter_visible`/`can_access`/
+     `describe_grants` thread it through; `describe.py` passes
+     `detached=not store.has_program_slug` at all three call sites. Sanity-checked
+     by temporarily reverting the wiring and confirming the new tests fail.
+- **Narrowed a broad except**: `tenant_store()`'s `except Exception: return None`
+  around `registry.resolve()` would have silently swallowed a genuine bug (e.g. an
+  `AttributeError` from a coding mistake) into a misleading 404. Narrowed to
+  `except TenantError`, the only exception `TenantRegistry.resolve()` actually
+  raises for an unknown tenant.
+- **Test bugs found and fixed** in `tests/handlers/test_describe_tenant.py`:
+  `test_tenant_unknown_404` mocked `registry.resolve` to raise a bare `Exception`,
+  which the narrowed except above would no longer catch — updated to raise the
+  real `TenantError`. Two tests set a nonexistent `fake_qs_connection.fetch_one_result`
+  attribute (the real fixture attribute is `fetch_one_handler`), so the
+  exists-check always saw `None` and both tests silently never exercised their
+  claimed code path — fixed. `test_tenant_columns_passes_tenant_to_qs` used a bare
+  `AsyncMock()` for `QS`, making `get_source()` return an unawaited coroutine
+  (visible as a "coroutine was never awaited" warning) instead of a usable
+  provider — the request likely 500'd internally without the test ever checking
+  `resp.status`; replaced with a proper fake provider and status/body assertions.
+  `test_legacy_slug_queries_precedence` only checked that both route patterns
+  existed, never that the AC18-named ambiguous URL
+  (`/api/v1/queries/queries/describe`) actually resolves to the legacy handler —
+  replaced with a real HTTP round-trip asserting which handler runs. Along the
+  way, empirically verified (three standalone aiohttp scripts) that aiohttp's
+  `UrlDispatcher` does **not** resolve this ambiguity by registration order as
+  the task blueprint assumed — it already prefers the legacy pattern regardless
+  of which route is registered first — and corrected the test's docstring
+  instead of asserting an incorrect mechanism. `test_tenant_evaluator_isolated`
+  mocked `filter_visible` out entirely so it could never have observed real
+  isolation behavior; replaced with `test_tenant_evaluator_isolated_call_wiring`
+  (asserts `detached=True` is passed) and `test_tenant_evaluator_never_shares_app_cache`
+  (a fake evaluator whose `filter_resources()` writes into `self._cache`,
+  proving the app's own evaluator object is untouched after a tenant request).
+- `pytest tests/handlers tests/auth tests/unit tests/policies tests/test_route_registration.py -q`
+  (excluding the pre-existing, unrelated `test_airtable_oauth.py` collection
+  failure) → 370 passed, 1 xfailed, no regressions to TASK-734–742's tests.
+- `ruff check` on all 7 changed/created files: clean, and the 2 pre-existing
+  files (`querysource/services.py`, `tests/test_route_registration.py`) carry no
+  new violations vs the merged-FEAT-148 baseline (verified file-by-file).
+- **CORRECTION (after a second, independent adversarial code review of this
+  already-committed work): the "management route shadowing" limitation
+  originally recorded here was factually wrong.** I claimed a `GET
+  /api/v1/management/queries/describe` would be intercepted by the new tenant
+  describe route ahead of `QueryManager`'s `/api/v1/management/queries/{slug}`.
+  The reviewer verified empirically (standalone aiohttp `UrlDispatcher` script)
+  that the **opposite** is true, and I independently reproduced it: aiohttp
+  resolves `/api/v1/management/queries/describe` to `QueryManager`
+  (`slug='describe'`) regardless of which route is registered first — the same
+  "more literal segments win" behavior already noted above for the
+  `/api/v1/queries/queries/describe` AC18 case. There is no real shadowing risk
+  here in either direction. Removing the incorrect limitation; no code change
+  was ever needed for it.
+- **Second review found two more real issues, both addressed:**
+  1. **IMPORTANT**, confirmed by reading `querysource/repositories/definitions.py`:
+     `DefinitionRepository.get()` raises `TenantError(error_code="query_not_found")`
+     when its row lookup misses — and `_load_visible`'s loader `except` clause
+     did not include `TenantError`, so a slug deleted between the exists-check
+     (`fetch_one`) and the repository load (a real TOCTOU window, since they are
+     two separate DB round-trips) would escape as an unhandled 500 instead of
+     the same body-less 404 every other loader failure produces. Fixed by
+     importing `TenantError` and adding it to that except tuple; added
+     `test_tenant_detail_loader_toctou_query_not_found_gives_404` as a
+     regression guard (replacing the now-redundant `test_legacy_slug_queries_precedence`
+     in this file, whose coverage duplicated — much more rigorously — the
+     real HTTP-round-trip precedence test added to `tests/test_route_registration.py`).
+  2. **IMPORTANT, confirmed but not fixed (accepted trade-off, flagged for a
+     FEAT-147 follow-up):** `tenant_loader(conn, slug)` never uses the `conn`
+     parameter `_load_visible` already acquired from `request.app['qs_connection']`
+     — it calls `repository.get()`, which internally acquires its own connection
+     via `DefinitionRepository.connection_factory` (`self.connection.definition_connection`,
+     `querysource/connections.py`), confirmed to draw from the **same** pool
+     (`self._postgres.acquire()`) on the HTTP loop. Every tenant `describe()`/
+     `columns()` request therefore holds two pool connections concurrently for
+     the loader's duration, unlike the legacy path's `_legacy_loader`, which
+     correctly reuses the passed `conn`. This matches the task's own blueprint
+     verbatim ("Loader wraps `DefinitionRepository.get(QueryIdentity(store,
+     slug)).runtime`") — fixing it properly would mean reaching into
+     `DefinitionRepository`'s private row-fetch/model-building methods or
+     changing its public API, both explicitly out of this task's scope ("NOT in
+     scope: Any FEAT-147 implementation"). Left as-is; noted here for the PR
+     description and as a candidate FEAT-147 follow-up (e.g. an optional
+     `conn=` parameter on `DefinitionRepository.get()`).
+  3. **Nitpick, fixed:** `querysource/auth/slug_visibility.py` was missing its
+     trailing newline.
+- Exactly the 7 listed files touched (`querysource/auth/slug_visibility.py`,
+  `querysource/handlers/describe.py`, `querysource/services.py`, `CHANGES.rst`,
+  `docs/DESCRIBE_API.md`, `tests/handlers/test_describe_tenant.py`,
+  `tests/test_route_registration.py`).
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none. One accepted, documented trade-off (the tenant
+loader's extra pool connection, see above) rather than a deviation.
+
+Seat: haiku (native) · Backend: n/a · Attempts: 1 · Duration: ~11m (650s per the
+dispatch's own reported duration) · Tokens: n/a (native seat, not tracked by the
+roster) — plus two consolidation-phase fix passes by sdd-worker (native, Claude
+Sonnet 5, interactive, not tracked by the roster): the first implemented 1
+critical bug fix (AttributeError crash), 1 unimplemented acceptance criterion
+(evaluator detachment) from scratch, 1 narrowed exception handler, and 6 test
+bugs across 2 files; a second, independent adversarial review of that already-committed
+work then found and fixed 1 more real bug (uncaught TenantError on a TOCTOU
+path), corrected 1 factual error in this note, and confirmed 1 accepted
+trade-off (double pool connection) as out of scope to fix here.

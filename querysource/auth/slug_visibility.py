@@ -224,19 +224,36 @@ def is_admin(principal: Principal) -> bool:
     return bool(admin_groups & principal_groups)
 
 
-def _evaluator_state(request: web.Request) -> tuple[bool, Any]:
-    """Return (pbac_enabled, evaluator); logs an error when guardian is set without evaluator."""
+def _evaluator_state(request: web.Request, *, detached: bool = False) -> tuple[bool, Any]:
+    """Return (pbac_enabled, evaluator); logs an error when guardian is set without evaluator.
+
+    Args:
+        detached: When True and an evaluator is available, return a shallow
+            copy with a cleared decision cache instead of the shared app
+            evaluator — mirrors ``AbstractHandler._enforce_owned_slug``
+            (querysource/handlers/abstract.py), so tenant-store ABAC
+            decisions never read or write the app evaluator's cache (a
+            cached decision for one tenant's slug must never leak into
+            another tenant's identically-named slug).
+    """
     guardian = request.app.get('security')
     if guardian is None:
         return (False, None)
-    
+
     evaluator = request.app.get('policy_evaluator')
     if evaluator is None:
         logger.error(
             "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
         )
         return (True, None)
-    
+
+    if detached:
+        import copy
+        detached_evaluator = copy.copy(evaluator)
+        detached_evaluator._cache = {}
+        detached_evaluator._stats = dict(getattr(evaluator, "_stats", {}))
+        return (True, detached_evaluator)
+
     return (True, evaluator)
 
 
@@ -266,9 +283,14 @@ def _eval_context(request: web.Request, principal: Principal) -> Any:
 async def filter_visible(
     request: web.Request, principal: Principal, slugs: Iterable[str],
     primary_action: str, fallback_action: str | None = None,
+    *, detached: bool = False,
 ) -> list[str]:
-    """Order-preserving subset allowed by primary OR fallback; fail-closed; allow-all when PBAC disabled."""
-    pbac_enabled, evaluator = _evaluator_state(request)
+    """Order-preserving subset allowed by primary OR fallback; fail-closed; allow-all when PBAC disabled.
+
+    Args:
+        detached: Pass True for tenant-store callers — see :func:`_evaluator_state`.
+    """
+    pbac_enabled, evaluator = _evaluator_state(request, detached=detached)
     
     # PBAC disabled - allow all
     if not pbac_enabled:
@@ -331,9 +353,14 @@ async def filter_visible(
 async def can_access(
     request: web.Request, principal: Principal, slug: str,
     primary_action: str, fallback_action: str | None = None,
+    *, detached: bool = False,
 ) -> bool:
-    """Non-raising single-slug check; same semantics as filter_visible."""
-    pbac_enabled, evaluator = _evaluator_state(request)
+    """Non-raising single-slug check; same semantics as filter_visible.
+
+    Args:
+        detached: Pass True for tenant-store callers — see :func:`_evaluator_state`.
+    """
+    pbac_enabled, evaluator = _evaluator_state(request, detached=detached)
     
     # PBAC disabled - allow
     if not pbac_enabled:
@@ -390,9 +417,55 @@ async def can_access(
         return False
 
 
-async def describe_grants(request: web.Request, principal: Principal, slug: str) -> DescribeGrants:
-    """raw = slug:describe_raw (no fallback, raw_query:execute never implies it); admin = is_admin."""
+async def describe_grants(
+    request: web.Request, principal: Principal, slug: str, *, detached: bool = False,
+) -> DescribeGrants:
+    """raw = slug:describe_raw (no fallback, raw_query:execute never implies it); admin = is_admin.
+
+    Args:
+        detached: Pass True for tenant-store callers — see :func:`_evaluator_state`.
+    """
     return DescribeGrants(
-        raw=await can_access(request, principal, slug, "slug:describe_raw"),
+        raw=await can_access(request, principal, slug, "slug:describe_raw", detached=detached),
         admin=is_admin(principal),
+    )
+
+
+async def tenant_store(request: web.Request, tenant: str) -> DescribeStore | None:
+    """DescribeStore for a registered FEAT-147 tenant; None when not available.
+
+    Tenant names are exact (case-sensitive, not trimmed). Program context is the schema name.
+    """
+    from querysource.tenant_errors import TenantError
+    from querysource.tenants import QueryIdentity
+
+    registry = request.app.get("qs_tenant_registry")
+    repository = request.app.get("qs_definition_repository")
+
+    if registry is None or repository is None:
+        return None
+
+    try:
+        # Resolve the tenant store using FEAT-147's registry. TenantRegistry.resolve()
+        # raises TenantError (error_code="tenant_not_available") for an unknown tenant —
+        # caught narrowly here so a genuine bug in this function surfaces instead of
+        # silently degrading to a 404.
+        store = registry.resolve(tenant=tenant)
+    except TenantError:
+        return None
+
+    # Loader wraps DefinitionRepository.get(QueryIdentity(store, slug)).runtime
+    async def tenant_loader(conn: Any, slug: str) -> Any:
+        """Load a tenant definition via repository."""
+        identity = QueryIdentity(store=store, slug=slug)
+        loaded = await repository.get(identity)
+        return loaded.runtime
+
+    # Build DescribeStore: tenant-contract stores have no program_slug column
+    return DescribeStore(
+        schema=store.schema,
+        table=store.table,
+        has_program_slug=False,
+        tenant=store.schema,  # Program context is the schema name (tenant)
+        loader=tenant_loader,
     )

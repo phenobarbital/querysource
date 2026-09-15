@@ -9,6 +9,11 @@ New read-only endpoints for discovering stored query slugs without executing the
 (definition + typed variables), ``GET /api/v1/queries/{slug}/columns`` (prepared, never
 executed) and ``GET /api/v1/queries/vocabulary`` (relative-date keywords).
 
+Tenant-scoped endpoints (when FEAT-147 tenant registry is enabled):
+``GET /api/v1/{tenant}/queries/describe``, ``GET /api/v1/{tenant}/queries/{slug}/describe``,
+and ``GET /api/v1/{tenant}/queries/{slug}/columns`` serve per-tenant definitions via the tenant
+registry. Access control, redaction, and all pagination/filtering rules apply identically.
+
 - Access rules: Requires a principal (session or sessionless authz). List visibility requires ``slug:list`` or ``slug:execute``; detail and columns require ``slug:describe`` or ``slug:execute``. Denials return ``404`` to prevent enumeration.
 - Redaction: Sensitive fields (like ``query_raw``) are redacted unless the principal has ``slug:describe_raw``. Admin-only fields (like ``dwh_info``, ``cache_options``) are visible only to superusers or members of ``QS_DESCRIBE_ADMIN_GROUPS``.
 - Configuration: Configured via ``QS_DESCRIBE_MAX_SCAN`` (default 10000), ``QS_DESCRIBE_ADMIN_GROUPS`` (default admin,superuser), and ``QS_DESCRIBE_COLUMNS_TIMEOUT`` (default 5).
