@@ -174,7 +174,9 @@ class sqlProvider(BaseProvider):
             # Phase 2: untrusted user-supplied conditions (if any)
             if self._conditions:
                 try:
-                    sql = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
+                    sql = _rs.safe_format_map_validated(
+                        sql, self._udf_resolved_conditions(), self._get_cond_definition()
+                    )
                 except ValueError as err:
                     self._logger.warning(
                         "raw_query: validating substitution rejected conditions: %s", err
@@ -199,7 +201,9 @@ class sqlProvider(BaseProvider):
             sql = _rs.safe_format_map(query, self.replacement)
             if self._conditions:
                 try:
-                    sql = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
+                    sql = _rs.safe_format_map_validated(
+                        sql, self._udf_resolved_conditions(), self._get_cond_definition()
+                    )
                 except ValueError as err:
                     self._logger.warning(
                         "get_raw_query: validating substitution rejected conditions: %s", err

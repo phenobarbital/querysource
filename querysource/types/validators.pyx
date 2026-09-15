@@ -25,12 +25,21 @@ from numpy import int64, ndarray
 
 
 cdef list udf = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "LAST_YEAR", "FDOM", "LDOM"]
-cdef list UDF_LIST = os.environ.get('UDF_LIST', udf)
-cdef list PG_CONSTANTS = os.environ.get(
-    'PG_CONSTANTS',
-     ["CURRENT_DATE", "CURRENT_TIMESTAMP"]
-)
-cdef list PG_UDF = os.environ.get('PG_UDF', ["now()"])
+
+
+cdef list _env_list(str name, list default, bint upper = True):
+    """Parse a comma-separated env override; `default` copy when unset/blank."""
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return list(default)
+    return [
+        (s.strip().upper() if upper else s.strip())
+        for s in str(raw).split(',') if s.strip()
+    ]
+
+cdef list UDF_LIST = _env_list('UDF_LIST', udf)
+cdef list PG_CONSTANTS = _env_list('PG_CONSTANTS', ["CURRENT_DATE", "CURRENT_TIMESTAMP"])
+cdef list PG_UDF = _env_list('PG_UDF', ["now()"], False)
 
 cdef object eval_field = re.compile(r'^(?:(\@|!|#|~|\:|))(\w*)(?:(\||\&|\!|\~|\#)|)+$')
 
@@ -157,6 +166,42 @@ cdef bool_t is_pg_function(object value):
 
 cpdef bool_t is_pgconstant(object value):
     return value in PG_CONSTANTS
+
+
+cpdef list udf_keywords():
+    """Return a copy of the effective relative-date keyword list (UDF_LIST)."""
+    return list(UDF_LIST)
+
+cpdef list pg_constants():
+    """Return a copy of the effective PostgreSQL constant list."""
+    return list(PG_CONSTANTS)
+
+cpdef list pg_udfs():
+    """Return a copy of the effective PostgreSQL function allowlist (PG_UDF)."""
+    return list(PG_UDF)
+
+cdef tuple _KEYWORD_HINTS = ('date', 'datetime', 'timestamp')
+
+cpdef dict resolve_udf_conditions(dict conditions, dict cond_definition = None):
+    """Return a new dict with relative-date keyword values resolved via to_udf.
+
+    Resolves only str values whose stripped uppercase form is in UDF_LIST and whose
+    cond_definition hint is absent or date/datetime/timestamp (case-insensitive),
+    mirroring is_valid(). Never mutates ``conditions``; to_udf errors propagate.
+    """
+    cdef dict result = dict(conditions) if conditions else {}
+    cdef dict hints = cond_definition or {}
+    cdef str hint
+    for key, value in list(result.items()):
+        if not isinstance(value, str):
+            continue
+        if value.strip().upper() not in UDF_LIST:
+            continue
+        hint = hints.get(key)
+        if hint is not None and hint.lower() not in _KEYWORD_HINTS:
+            continue
+        result[key] = str(to_udf(value.strip()))
+    return result
 
 
 cpdef bool_t is_array(object value):

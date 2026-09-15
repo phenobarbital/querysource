@@ -145,6 +145,18 @@ class BaseProvider(ABC):
             cond_definition = getattr(definition, 'cond_definition', None)
         return cond_definition or {}
 
+    def _udf_resolved_conditions(self) -> dict:
+        """Conditions with relative-date keywords resolved for the Rust substitution.
+
+        Returns:
+            A new dict from ``resolve_udf_conditions(self._conditions, cond_definition)``;
+            ``self._conditions`` is never mutated.
+        """
+        from ..types.validators import resolve_udf_conditions
+        return resolve_udf_conditions(
+            dict(self._conditions or {}), self._get_cond_definition()
+        )
+
     def NotFound(self, message: str):
         """Raised when Data not Found.
         """
