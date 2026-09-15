@@ -186,6 +186,66 @@ Retrieves the effective relative-date keyword vocabulary, PG constants, and info
 
 `functions` also includes `date_sum`, `days_ago`, `previous_month`, `fdow` and `ldow` (omitted above for brevity), all with `invocable: false` — none of these are callable as condition values; only the `keywords` above are.
 
+## Tenant-Scoped Describe Endpoints (FEAT-147)
+
+When a FEAT-147 tenant registry is configured, the following endpoints serve per-tenant
+query definitions:
+
+- **`GET /api/v1/{tenant}/queries/describe`** — Paginated list of slugs in a tenant store.
+- **`GET /api/v1/{tenant}/queries/{slug}/describe`** — Detail for a slug in a tenant store.
+- **`GET /api/v1/{tenant}/queries/{slug}/columns`** — Typed columns for a slug in a tenant store.
+
+### Differences from Legacy Endpoints
+
+| Aspect | Legacy | Tenant |
+|--------|--------|--------|
+| Table source | Fixed `public.queries` | Resolved from tenant registry per-schema |
+| Program membership | Pre-filter: `program_slug IN (...)` | Pre-filter: deny if tenant not in principal's programs |
+| Sorting/filtering | `program_slug` is filterable | `program_slug` is not stored; sorting/filtering it returns `400` |
+| Schema identifier | Bare (no quotes) | Quoted via `quote_identifier()` for case-sensitivity |
+| Program context | Read from row | Derived as tenant name (schema) |
+
+### Access Control
+
+The same access rules (superuser, programs, authz, no_programs, none) and ABAC actions
+(list, detail, columns, raw, admin fields) apply identically. The only difference is
+the SQL pre-filter:
+
+- **Legacy:** `lower(program_slug) = ANY($1::text[])` for `programs` principals.
+- **Tenant:** Deny all (204/404) if tenant (schema name, lowercased for comparison) is not in principal's programs.
+
+Non-superuser/non-authz callers attempting to access a tenant not in their programs receive
+a body-less `404` (same as legacy slug-not-found).
+
+### Example: Tenant List
+
+```
+GET /api/v1/acme-corp/queries/describe?page=1&page_size=10
+```
+
+Response:
+```json
+{
+  "data": [
+    {
+      "query_slug": "revenue_by_month",
+      "provider": "redshift",
+      "description": "Monthly revenue breakdown",
+      "program_slug": "acme-corp",
+      "updated_at": "2026-09-15T12:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 10,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+Note: `program_slug` is always set to the tenant name (e.g., `acme-corp`).
+
 ## Configuration
 
 The Describe API behavior is controlled by the following configuration keys:

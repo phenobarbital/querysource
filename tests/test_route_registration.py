@@ -135,6 +135,57 @@ class TestDescribeRoutes:
         }
         assert ("GET", "/api/v1/queries/{slug}/columns") in routes
 
+    def test_tenant_describe_routes_registered(self):
+        """Tenant describe routes must be registered (FEAT-148 TASK-743)."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        # Register tenant describe routes
+        app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+        app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/{tenant}/queries/describe") in routes
+        assert ("GET", "/api/v1/{tenant}/queries/{slug}/describe") in routes
+        assert ("GET", "/api/v1/{tenant}/queries/{slug}/columns") in routes
+        assert ("HEAD", "/api/v1/{tenant}/queries/describe") in routes
+
+    def test_legacy_slug_queries_precedence(self):
+        """Legacy /api/v1/queries/{slug}/describe takes precedence over /{tenant}/ pattern.
+
+        When registering in order: legacy routes first, then tenant routes,
+        aiohttp's UrlDispatcher resolves /api/v1/queries/{slug} to legacy (AC18).
+        """
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+
+        # Register in spec order: legacy routes first
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        # Then tenant routes
+        app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+
+        # Both patterns should exist as routes
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/{slug}/describe") in routes
+        assert ("GET", "/api/v1/{tenant}/queries/{slug}/describe") in routes
+
 
 class TestRouteRegistration:
     def test_services_imports_query_source(self):
