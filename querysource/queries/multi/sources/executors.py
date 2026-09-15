@@ -16,6 +16,7 @@ from aiohttp import web
 from ...obj import QueryObject
 from ....exceptions import QueryException
 from ....conf import QWORKER_TIMEOUT, QWORKER_QUERY_TIMEOUT
+from querysource.tenants import QueryStore
 
 
 @dataclass(frozen=True)
@@ -55,22 +56,10 @@ class QueryExecutor(ABC):
         query: dict,
         queue: asyncio.Queue[dict],
         request: web.Request,
+        *,
+        store: QueryStore | None = None,
     ) -> None:
-        """Execute a query and put the result into the queue.
-
-        The method MUST put a dict ``{name: DataFrame}`` into the queue
-        before returning. Always returns None. Results are delivered by
-        putting a ``{name: result}`` dict into ``queue``.
-
-        Args:
-            name: The DataFrame key name for the result.
-            query: The query dict (slug-based or raw SQL).
-            queue: Shared asyncio queue where results are placed.
-            request: The current aiohttp web request for credential resolution.
-
-        Returns:
-            None — always. The queue is the output channel.
-        """
+        """Put {alias: DataFrame}; route metadata never becomes SQL conditions."""
 
 
 class LocalExecutor(QueryExecutor):
@@ -88,6 +77,8 @@ class LocalExecutor(QueryExecutor):
         query: dict,
         queue: asyncio.Queue[dict],
         request: web.Request,
+        *,
+        store: QueryStore | None = None,
     ) -> None:
         """Execute the query locally using QueryObject.
 
@@ -96,17 +87,21 @@ class LocalExecutor(QueryExecutor):
             query: Query dict containing ``slug`` or ``query`` key.
             queue: Shared asyncio queue for the result.
             request: aiohttp request for credential lookup.
+            store: Resolved QueryStore for the query.
 
         Returns:
             None — QueryObject places the result in the queue directly.
         """
         loop = asyncio.get_running_loop()
+        # LocalExecutor forwards resolved store into loop-local QueryObject
+        tenant_selector = store.schema if store else None
         query_obj = QueryObject(
             name,
             query,
             queue=queue,
             request=request,
             loop=loop,
+            tenant=tenant_selector,
         )
         await query_obj.build_provider()
         await query_obj.query()
@@ -157,6 +152,8 @@ class RemoteExecutor(QueryExecutor):
         query: dict,
         queue: asyncio.Queue[dict],
         request: web.Request,
+        *,
+        store: QueryStore | None = None,
     ) -> None:
         """Dispatch the query to a remote qworker and place the result in the queue.
 
@@ -168,6 +165,7 @@ class RemoteExecutor(QueryExecutor):
             queue: Shared asyncio queue for the result.
             request: aiohttp request (not sent to qworker; credentials are
                 resolved server-side by the qworker's own QuerySource install).
+            store: Resolved QueryStore for the query.
 
         Returns:
             None — the result is placed into the queue directly.
@@ -177,6 +175,13 @@ class RemoteExecutor(QueryExecutor):
                 connection fails, or the query times out.  qworker-side
                 errors (SlugNotFound, DriverError, etc.) propagate as-is.
         """
+        # Until versioned transport task lands, reject nonlegacy remote store explicitly.
+        if store is not None and store.contract != "legacy":
+            raise QueryException(
+                f"Remote query {name!r} rejected: non-legacy store contract {store.contract!r} "
+                "is not supported on remote executors until versioned transport lands."
+            )
+
         from qw.client import QClient  # lazy import — qworker is optional
 
         slug = query.get("slug")
