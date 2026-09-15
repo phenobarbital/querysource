@@ -36,12 +36,26 @@ logger = logging.getLogger("QS.SchedulerJobsView")
 def _kind_from_id(job_id: str) -> str:
     """Map job ID prefix to its kind.
 
+    Recognizes both the legacy shape (``"query_<slug>"``, owned by the
+    registry's configured default store) and the qsj2-qualified shape
+    (``"qsj2-<kind>-<store digest>-<slug>"``, TASK-729) used for every
+    other store — a non-default-store job must classify the same as a
+    default-store one (AC-2's serialized records carry tenant/store
+    identity, and an "unknown" kind for every tenant-owned job would
+    defeat that).
+
     Args:
-        job_id: APScheduler job ID, e.g. ``"query_foo"``.
+        job_id: APScheduler job ID, e.g. ``"query_foo"`` or
+            ``"qsj2-query-a1b2c3d4e5f6-foo"``.
 
     Returns:
         One of ``"query"``, ``"multi"``, ``"cache"``, ``"unknown"``.
     """
+    if job_id.startswith("qsj2-"):
+        parts = job_id.split("-", 2)
+        if len(parts) >= 2 and parts[1] in ("query", "multi", "cache"):
+            return parts[1]
+        return "unknown"
     if job_id.startswith("query_"):
         return "query"
     if job_id.startswith("multi_"):

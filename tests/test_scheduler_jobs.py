@@ -13,7 +13,9 @@ class TestScheduledQueryJob:
 
         await scheduled_query_job(slug="test_slug")
 
-        mock_qs_cls.assert_called_once_with(slug="test_slug")
+        # TASK-730: the tenant selector (from `owner`, None when omitted)
+        # is now always threaded into QS explicitly.
+        mock_qs_cls.assert_called_once_with(slug="test_slug", tenant=None)
         mock_instance.query.assert_awaited_once()
 
     @patch("querysource.queries.qs.QS")
@@ -69,7 +71,9 @@ class TestCacheRefreshJob:
 
         await cache_refresh_job(slug="cached_slug")
 
-        mock_qs_cls.assert_called_once_with(slug="cached_slug")
+        # TASK-730: the tenant selector (from `owner`, None when omitted)
+        # is now always threaded into QS explicitly.
+        mock_qs_cls.assert_called_once_with(slug="cached_slug", tenant=None)
         mock_instance.query.assert_awaited_once()
 
     @patch("querysource.queries.qs.QS")
@@ -115,7 +119,9 @@ class TestScheduledMultiQSJob:
             from querysource.scheduler.jobs import scheduled_multiqs_job
             await scheduled_multiqs_job(slug="test_slug")
 
-            mock_cls.assert_called_once_with(slug="test_slug")
+            # TASK-730: the tenant selector (from `owner`, None when
+            # omitted) is now always threaded into MultiQS explicitly.
+            mock_cls.assert_called_once_with(slug="test_slug", tenant=None)
             mock_instance.query.assert_awaited_once_with()
 
     async def test_notifies_on_exception(self):
