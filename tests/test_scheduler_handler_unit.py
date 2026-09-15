@@ -149,3 +149,84 @@ class TestSerializeJob:
         assert isinstance(out["trigger"], dict)
         assert "type" in out["trigger"]
         assert "repr" in out["trigger"]
+
+
+class TestPostTenantValidation:
+    """Unit tests for SchedulerJobsView.post()'s tenant selector validation.
+
+    Code review finding 13: the POST body's 'tenant' field was passed
+    straight to scheduler.register_slug() unvalidated — an empty string,
+    a list, or a number reached registry.resolve() unvalidated and only
+    failed deep inside it, with the resulting TenantError then collapsed
+    by a blanket `except Exception` into a generic 500 instead of the
+    documented 400 for a malformed selector (matching the established
+    resolve_request_store contract: non-empty string or omitted).
+    """
+
+    def _view(self, *, body: dict, scheduler) -> SchedulerJobsView:
+        """Return a SchedulerJobsView bypassing __init__, with a fake request."""
+        from unittest.mock import AsyncMock
+
+        view = SchedulerJobsView.__new__(SchedulerJobsView)
+        request = MagicMock()
+        request.json = AsyncMock(return_value=body)
+        request.app = {"qs_scheduler": scheduler}
+        view._request = request
+        return view
+
+    @pytest.mark.asyncio
+    async def test_empty_string_tenant_rejected_with_400(self) -> None:
+        """An explicit empty-string tenant is rejected before register_slug runs."""
+        from unittest.mock import AsyncMock
+
+        scheduler = MagicMock()
+        scheduler.register_slug = AsyncMock()
+        view = self._view(body={"slug": "foo", "tenant": ""}, scheduler=scheduler)
+
+        response = await view.post()
+        assert response.status == 400
+        scheduler.register_slug.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_non_string_tenant_rejected_with_400(self) -> None:
+        """A non-string tenant (e.g. a list) is rejected before register_slug runs."""
+        from unittest.mock import AsyncMock
+
+        scheduler = MagicMock()
+        scheduler.register_slug = AsyncMock()
+        view = self._view(body={"slug": "foo", "tenant": ["a", "b"]}, scheduler=scheduler)
+
+        response = await view.post()
+        assert response.status == 400
+        scheduler.register_slug.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_omitted_tenant_still_registers(self) -> None:
+        """No 'tenant' key at all is a valid, legal omission — not rejected."""
+        from unittest.mock import AsyncMock
+
+        scheduler = MagicMock()
+        scheduler.register_slug = AsyncMock(
+            return_value={"slug": "foo", "tenant": None, "registered": [], "removed": []}
+        )
+        view = self._view(body={"slug": "foo"}, scheduler=scheduler)
+
+        response = await view.post()
+        assert response.status == 200
+        scheduler.register_slug.assert_awaited_once_with("foo", tenant=None)
+
+    @pytest.mark.asyncio
+    async def test_tenant_error_maps_to_its_own_code_not_generic_500(self) -> None:
+        """A genuine TenantError (e.g. unknown tenant) preserves its own status code."""
+        from unittest.mock import AsyncMock
+
+        from querysource.tenant_errors import TenantError
+
+        scheduler = MagicMock()
+        scheduler.register_slug = AsyncMock(
+            side_effect=TenantError("Tenant not found: bogus", error_code="tenant_not_available")
+        )
+        view = self._view(body={"slug": "foo", "tenant": "bogus"}, scheduler=scheduler)
+
+        response = await view.post()
+        assert response.status == 404

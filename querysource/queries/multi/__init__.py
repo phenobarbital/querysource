@@ -1,26 +1,29 @@
 import asyncio
 import logging
-from typing import Optional
-from aiohttp import web
-from ...exceptions import (
-    SlugNotFound,
-    QueryException,
-    DriverError,
-    DataNotFound,
-    ParserError,
-    OutputError
-)
 from importlib import import_module
+from typing import Optional
+
+from aiohttp import web
+
+from ... import conf
+from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
+from ...exceptions import (
+    DataNotFound,
+    DriverError,
+    OutputError,
+    ParserError,
+    QueryException,
+    SlugNotFound,
+)
+from ...ownership_logging import ownership_fields
+from ...tenant_errors import TenantError
 from ..base import BaseQuery
+from .operators.filter import Filter
+from .sources import FileSource, ThreadQuery
+from .sources.executors import RemoteConfig
 from .transformations import (
     GoogleMaps,
 )
-from ... import conf
-from .operators.filter import Filter
-from .sources import ThreadQuery, FileSource
-from .sources.executors import RemoteConfig
-from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
-
 
 # Best-effort data-vs-infra classification for MultiQuery Output/destination
 # failures (FEAT-146). Deliberately small and centralized so it can be
@@ -35,7 +38,7 @@ _INFRA_ERROR_TYPES = frozenset({
 })
 
 
-def classify_output_error(exc: BaseException) -> Optional[str]:
+def classify_output_error(exc: BaseException) -> str | None:
     """Classify a destination failure as ``"data"`` or ``"infra"``.
 
     Inspects the chained cause (``exc.__cause__``) when present, since
@@ -93,20 +96,23 @@ class MultiQS(BaseQuery):
     def __init__(
             self,
             slug: str = None,
-            queries: Optional[list] = None,
-            files: Optional[list] = None,
-            query: Optional[dict] = None,
+            queries: list | None = None,
+            files: list | None = None,
+            query: dict | None = None,
             conditions: dict = None,
             request: web.Request = None,
             loop: asyncio.AbstractEventLoop = None,
-            user_session: Optional[object] = None,
+            user_session: object | None = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
-        super(MultiQS, self).__init__(
+        super().__init__(
             slug=slug,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
         # creates the Result Queue:
@@ -132,10 +138,10 @@ class MultiQS(BaseQuery):
         if not (self.slug or self._queries or self._files or self._sources):
             # Check if both are effectively empty
             raise DriverError(
-                (
+                
                     'Invalid Options passed to MultiQuery. '
                     'Slug, Queries, Files and Sources are all empty.'
-                )
+                
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
         self._user_session = user_session
@@ -195,12 +201,28 @@ class MultiQS(BaseQuery):
         return []
 
     async def query(self):
-        """
-        Executing Multiple Queries/Files
-        """
+        """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
+        import copy
+
+        from querysource.tenants import QueryIdentity
+
+        # Deep-copy pipeline config to avoid mutating input config
+        self._queries = copy.deepcopy(self._queries)
+        self._files = copy.deepcopy(self._files)
+        self._sources = copy.deepcopy(self._sources)
+        self._options = copy.deepcopy(self._options)
+
         tasks = {}
         if self.slug:
-            query = await self.get_slug(slug=self.slug)
+            # This top-level lookup resolves the MultiQS's OWN stored slug
+            # (the pipeline definition itself), so it must use the same
+            # tenant selector this MultiQS instance was constructed with —
+            # without `tenant=`, get_slug() always resolved against the
+            # default/legacy store regardless of the tenant this MultiQS
+            # was built for, so a stored pipeline saved under a tenant
+            # schema was never found (or worse, a same-named legacy
+            # pipeline executed instead).
+            query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -240,6 +262,10 @@ class MultiQS(BaseQuery):
                 if isinstance(self._conditions, dict):
                     self._conditions.clear()
                 self._options = {}
+
+        # Cheap request-shape guardrail runs before any DB-backed preflight
+        # work: a request with too many sources must fail fast on a local
+        # length check, not after N sequential repo.get() round trips.
         total_sources = (
             len(self._queries or {})
             + len(self._files or {})
@@ -254,6 +280,60 @@ class MultiQS(BaseQuery):
                 ),
             )
 
+        # Preflight policy checks on resolved references before a known batch
+        # starts. Only touch the definition repository (which opens a real DB
+        # connection) when there is at least one stored query to preflight —
+        # file-only/source-only pipelines (self._queries empty) must not pay
+        # for, or depend on, tenant registry availability.
+        resolved_stores = {}
+        if self._queries:
+            repo = await self.get_definition_repository()
+            for name, query_cfg in list(self._queries.items()):
+                # Keep alias separate from stored slug.
+                child_slug = query_cfg.get("slug")
+                if not child_slug:
+                    if "query" in query_cfg:
+                        # Raw inline query child (QueryObject's own 'query'
+                        # type — obj.py: `elif 'query' in query:`). There is
+                        # no stored definition to own-check here — files and
+                        # raw actions preserve existing behavior (no
+                        # ownership check), the same convention
+                        # _preflight_multiquery_owned already documents for
+                        # its own files/has_raw_query parameters. Rejecting
+                        # this unconditionally broke every still-documented
+                        # raw-SQL multi-query child (spec: `has_raw_query`
+                        # is a first-class, still-supported case).
+                        continue
+                    # Genuinely malformed: neither a stored slug nor a raw
+                    # inline query — existing fail-fast behavior preserved.
+                    raise DriverError(
+                        f"Query {name!r} is missing a 'slug' key."
+                    )
+
+                # Resolve child tenant selector:
+                # Apply parent inheritance and explicit tenant/null overrides to saved queries.
+                # "tenant" key in query_cfg can be:
+                # - explicit string (e.g. "tenant2")
+                # - explicit None (explicit-null override)
+                # - missing (inherits parent)
+                if "tenant" in query_cfg:
+                    child_tenant = query_cfg.get("tenant")
+                else:
+                    child_tenant = self._tenant_selector
+
+                child_store = repo.registry.resolve(child_tenant)
+                resolved_stores[name] = child_store
+
+                # Preflight policy check: verify the definition exists in the resolved store
+                try:
+                    ident = QueryIdentity(store=child_store, slug=child_slug)
+                    await repo.get(ident)
+                except Exception as ex:
+                    raise self.Error(
+                        message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
+                        exception=ex
+                    ) from ex
+
         if self._queries:
             for name, query in self._queries.items():
                 conditions = self._conditions.pop(name, {})
@@ -264,6 +344,8 @@ class MultiQS(BaseQuery):
                 # never reach QueryObject or any database driver.
                 is_remote = query.pop("remote", False)
                 worker_addr = query.pop("worker", None)
+                # Also pop tenant key so it doesn't reach QueryObject or database driver
+                query.pop("tenant", None)
                 remote_config = None
                 if is_remote:
                     if worker_addr:
@@ -306,6 +388,13 @@ class MultiQS(BaseQuery):
                     t = ThreadQuery(
                         name, query, self._request, self._queue,
                         remote_config=remote_config,
+                        # .get(), not [name]: a raw inline query child (no
+                        # 'slug' key) is deliberately skipped from
+                        # resolved_stores above — it has no owned
+                        # definition to resolve a store for — so it must
+                        # dispatch with store=None (the existing, unowned
+                        # legacy dispatch path) instead of raising KeyError.
+                        store=resolved_stores.get(name),
                     )
                 except Exception as ex:
                     raise self.Error(
@@ -320,7 +409,7 @@ class MultiQS(BaseQuery):
                 )
                 tasks[name] = t
         if self._sources:
-            from .sources import SOURCE_REGISTRY  # noqa: PLC0415
+            from .sources import SOURCE_REGISTRY
             for entry in self._sources:
                 for source_type, config in entry.items():
                     cls = SOURCE_REGISTRY.get(source_type)
@@ -358,6 +447,23 @@ class MultiQS(BaseQuery):
                         )
                     active.remove(t)
                     if t.exc:
+                        # Attach ownership to this child's failure event
+                        # (TASK-731 AC-2) before raising — resolved from the
+                        # preflighted store, never guessed from the output
+                        # alias `t.slug`. The original exception/status
+                        # handling below is preserved unchanged.
+                        task_name = next(
+                            (n for n, task in tasks.items() if task is t), None
+                        )
+                        child_store = resolved_stores.get(task_name)
+                        if child_store is not None:
+                            self._logger.warning(
+                                "MultiQS child query failed (%s): %s",
+                                ownership_fields(
+                                    QueryIdentity(store=child_store, slug=t.slug)
+                                ),
+                                t.exc,
+                            )
                         ## raise exception for this Query
                         if isinstance(t.exc, ParserError):
                             raise self.Error(
@@ -372,9 +478,26 @@ class MultiQS(BaseQuery):
                             raise DataNotFound(
                                 f"No Data was Found on Query {t.slug}"
                             )
+                        if isinstance(t.exc, TenantError):
+                            # Checked BEFORE the broader (QueryException,
+                            # DriverError) branch below — TenantError IS a
+                            # QueryException subclass, and self.Error() both
+                            # defaults code to 500 when not passed explicitly
+                            # AND returns a plain QueryException, discarding
+                            # the TenantError type identity the HTTP handler
+                            # layer (handlers/multi.py) needs to match its
+                            # own `except TenantError` branch. Re-raise a
+                            # fresh TenantError with the SAME error_code so
+                            # both the type and the stable machine code
+                            # (query_not_found=404, tenant_store_unavailable=
+                            # 503, ...) survive all the way to the response.
+                            raise TenantError(
+                                str(t.exc),
+                                error_code=t.exc.error_code,
+                            ) from t.exc
                         if isinstance(t.exc, (QueryException, DriverError)):
                             raise self.Error(
-                                f"Query Error: {str(t.exc)}",
+                                f"Query Error: {t.exc!s}",
                                 exception=t.exc
                             )
                         else:
@@ -575,7 +698,9 @@ class MultiQS(BaseQuery):
             for step in _output:
                 for step_name, component in step.items():
                     try:
-                        from ...outputs.destinations import get_destination  # deferred to avoid circular import
+                        from ...outputs.destinations import (
+                            get_destination,  # deferred to avoid circular import
+                        )
                         destination_cls = get_destination(step_name)
                         obj = destination_cls(data=result, **component)
                         result = await obj.run()

@@ -106,3 +106,21 @@ def test_loader_parses_all_files():
         assert len(policies) >= 1
     except Exception as exc:
         pytest.xfail(f"PolicyLoader not fully compatible yet: {exc}")
+
+
+def test_defaults_admin_policy_grants_describe_actions():
+    """FEAT-148: admin_full_access grants slug:describe and slug:describe_raw."""
+    import yaml
+    p = POLICY_DIR / "defaults.yaml"
+    if not p.exists():
+        pytest.skip("policies/defaults.yaml not present")
+    with open(p) as f:
+        data = yaml.safe_load(f)
+    pol = next(
+        (pol for pol in data.get("policies", []) if pol.get("name") == "admin_full_access"),
+        None,
+    )
+    assert pol is not None
+    actions = set(pol.get("actions", []))
+    assert "slug:describe" in actions
+    assert "slug:describe_raw" in actions

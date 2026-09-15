@@ -1,14 +1,15 @@
 """Unit tests for ThreadQuery executor integration (TASK-695)."""
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from querysource.queries.multi.sources.query import ThreadQuery
+import pytest
+
 from querysource.queries.multi.sources.executors import (
     LocalExecutor,
-    RemoteExecutor,
     RemoteConfig,
+    RemoteExecutor,
 )
+from querysource.queries.multi.sources.query import ThreadQuery
 
 
 class TestThreadQueryExecutorSelection:
@@ -65,7 +66,11 @@ class TestThreadQueryFetchDelegation:
         result = await tq.fetch()
 
         assert result is None
-        tq._executor.execute.assert_awaited_once_with("test", query, queue, request)
+        # TASK-727: fetch() now forwards the resolved store (None when
+        # unset) to executor.execute() as a keyword argument.
+        tq._executor.execute.assert_awaited_once_with(
+            "test", query, queue, request, store=None
+        )
 
     @pytest.mark.asyncio
     async def test_fetch_returns_none(self):

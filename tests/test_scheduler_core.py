@@ -1,6 +1,9 @@
 """Unit tests for querysource.scheduler.scheduler (QSScheduler Core)."""
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
+from querysource.tenants import TenantRegistry
 
 
 class TestTriggerParsing:
@@ -67,6 +70,7 @@ class TestLoadScheduledQueries:
         qs.logger = MagicMock()
         qs._timezone = "UTC"
         qs._notification_manager = MagicMock()
+        qs._registry = TenantRegistry()
         qs._scheduler = qs._create_scheduler()
         return qs
 
@@ -109,6 +113,7 @@ class TestCacheRefreshFiltering:
         qs.logger = MagicMock()
         qs._timezone = "UTC"
         qs._notification_manager = MagicMock()
+        qs._registry = TenantRegistry()
         qs._scheduler = qs._create_scheduler()
         return qs
 
@@ -160,8 +165,8 @@ class TestCacheRefreshFiltering:
 class TestQSSchedulerInit:
     def test_init_creates_notification_manager(self):
         """QSScheduler.__init__ creates a NotificationManager."""
-        from querysource.scheduler.scheduler import QSScheduler
         from querysource.scheduler.notifications import NotificationManager
+        from querysource.scheduler.scheduler import QSScheduler
         qs = QSScheduler()
         assert isinstance(qs._notification_manager, NotificationManager)
 
@@ -200,6 +205,7 @@ def sched():
     qs.logger = MagicMock()
     qs._timezone = "UTC"
     qs._notification_manager = MagicMock()
+    qs._registry = TenantRegistry()
     qs._scheduler = MagicMock()
     return qs
 
@@ -301,6 +307,7 @@ class TestLoadCacheRefreshJobsMultiSkip:
         sched.logger = MagicMock()
         sched._timezone = "UTC"
         sched._notification_manager = MagicMock()
+        sched._registry = TenantRegistry()
         sched._scheduler = sched._create_scheduler()
         count = sched._load_cache_refresh_jobs([_cache_row(provider="db")])
         assert sched._scheduler.get_job("cache_cached_slug") is not None

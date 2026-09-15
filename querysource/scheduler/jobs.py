@@ -9,39 +9,93 @@ Three async callable job types for APScheduler:
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any
 
 from navconfig.logging import logging
 
+from querysource.ownership_logging import ownership_fields
+from querysource.tenant_errors import TenantError
+
 if TYPE_CHECKING:
     from querysource.scheduler.notifications import NotificationManager
+    from querysource.tenants import TenantOwnerEnvelope
 
 logger = logging.getLogger("QSScheduler.Jobs")
 
 
+async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: str) -> None:
+    """Re-resolve the envelope's owner against the CURRENT registry before executing.
+
+    The envelope was captured at scheduler startup / registration time; the
+    registry/allowlist configuration can differ by the time the job actually
+    runs (e.g. after a restart with a changed allowlist) — so the stale
+    envelope alone is never trusted for execution (TASK-730 AC-1).
+
+    Args:
+        query_obj: A constructed QS/MultiQS instance (Connection subclass),
+            used only to reach ``get_definition_repository()``.
+        owner: The envelope captured when this job was (re)registered.
+        slug: The query slug, for error messages only.
+
+    Raises:
+        TenantError: If the owner's tenant is no longer available, or the
+            registry now resolves it to a materially different physical
+            store than the one this job was scheduled against.
+    """
+    repo = await query_obj.get_definition_repository()
+    current_store = repo.registry.resolve(owner.get("schema"))
+    if (
+        current_store.database_namespace != owner.get("database_namespace")
+        or current_store.table != owner.get("table")
+        or current_store.contract != owner.get("contract")
+    ):
+        raise TenantError(
+            f"Scheduled job owner envelope for slug {slug!r} no longer "
+            f"matches the current registry (schema={owner.get('schema')!r}); "
+            "registry/allowlist configuration must have changed since this "
+            "job was registered.",
+            error_code="tenant_not_available",
+        )
+
+
 async def scheduled_query_job(
     slug: str,
-    notification_manager: Optional["NotificationManager"] = None,
-    **kwargs
+    notification_manager: NotificationManager | None = None,
+    *,
+    owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
+    **kwargs: Any
 ) -> None:
-    """Execute a scheduled query by slug. Result is discarded.
+    """Revalidate owner and execute QS with matching runtime/cache context.
 
     Args:
         slug: The query slug to execute.
         notification_manager: Optional NotificationManager for error reporting.
+        owner: Optional TenantOwnerEnvelope for tenant ownership validation.
+            None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id, threaded in by
+            QSScheduler at registration time. A non-default (tenant) store
+            registers its job under the qualified ``qsj2-...`` id, not the
+            legacy ``query_<slug>`` shape — falls back to that legacy guess
+            only when the caller (e.g. an older registration path) never
+            supplied it.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
         from querysource.queries.qs import QS
-        qs = QS(slug=slug)
+        tenant = owner.get("schema") if owner is not None else None
+        qs = QS(slug=slug, tenant=tenant)
+        if owner is not None:
+            await _revalidate_owner(qs, owner, slug)
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Scheduled job failed for slug '%s': %s", slug, exc
+            "Scheduled job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
             notification_manager.notify(
-                job_id=f"query_{slug}",
+                job_id=job_id or f"query_{slug}",
                 slug=slug,
                 error=exc
             )
@@ -49,18 +103,24 @@ async def scheduled_query_job(
 
 async def scheduled_multiqs_job(
     slug: str,
-    notification_manager: Optional["NotificationManager"] = None,
-    **kwargs
+    notification_manager: NotificationManager | None = None,
+    *,
+    owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
+    **kwargs: Any
 ) -> None:
-    """Execute a scheduled multi-query by slug. Result is discarded.
+    """Revalidate owner and preserve it through all pipeline children.
 
     Lazy-imports MultiQS and instantiates it with slug only (no request,
     no user_session, no conditions). Awaits ``MultiQS(slug=slug).query()``
-    and discards the returned ``(result, options)`` tuple.
+    and discards the returned ``(result, options)`` tuple. The resolved
+    ``tenant`` is threaded straight into MultiQS's own ``_tenant_selector``
+    (TASK-727's parent-inheritance resolution then applies to every child
+    query in the pipeline, exactly as it would for a request-driven call).
 
     On any exception, calls
-    ``notification_manager.notify(job_id=f"multi_{slug}", slug=slug, error=exc)``
-    exactly once, then returns without re-raising (mirroring
+    ``notification_manager.notify(job_id=<real registered id>, slug=slug,
+    error=exc)`` exactly once, then returns without re-raising (mirroring
     ``scheduled_query_job`` APScheduler semantics).
 
     Reserved JSON sub-key: ``attributes.scheduler.output`` is
@@ -68,24 +128,31 @@ async def scheduled_multiqs_job(
     loader at startup (which logs a DEBUG line) but is not passed to
     this callable.
 
-    TODO: v2 may accept an optional conditions kwarg (parity with QS(slug, conditions=...))
-
     Args:
         slug: The multi-query slug to execute.
         notification_manager: Optional NotificationManager for error reporting.
+        owner: Optional TenantOwnerEnvelope for tenant ownership validation.
+            None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id — see
+            ``scheduled_query_job``'s docstring for why this must not be
+            re-guessed as the legacy ``multi_<slug>`` shape.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
         from querysource.queries import MultiQS
-        qs = MultiQS(slug=slug)
+        tenant = owner.get("schema") if owner is not None else None
+        qs = MultiQS(slug=slug, tenant=tenant)
+        if owner is not None:
+            await _revalidate_owner(qs, owner, slug)
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Scheduled multi-query job failed for slug '%s': %s", slug, exc
+            "Scheduled multi-query job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
             notification_manager.notify(
-                job_id=f"multi_{slug}",
+                job_id=job_id or f"multi_{slug}",
                 slug=slug,
                 error=exc
             )
@@ -93,30 +160,45 @@ async def scheduled_multiqs_job(
 
 async def cache_refresh_job(
     slug: str,
-    notification_manager: Optional["NotificationManager"] = None,
-    **kwargs
+    notification_manager: NotificationManager | None = None,
+    *,
+    owner: TenantOwnerEnvelope | None = None,
+    job_id: str | None = None,
+    **kwargs: Any
 ) -> None:
-    """Execute a query to refresh its cache.
+    """Refresh only this owner's current definition revision.
 
     Relies on the QS internal pipeline: when ``is_cached=True`` for the
     query slug, ``save_cache`` is called automatically by ``QS.query()``.
+    Revalidating the owner before executing (see ``_revalidate_owner``)
+    guarantees the refresh always targets the CURRENT definition revision
+    for this exact owner, never a stale/reassigned one.
 
     Args:
         slug: The query slug whose cache should be refreshed.
         notification_manager: Optional NotificationManager for error reporting.
+        owner: Optional TenantOwnerEnvelope for tenant ownership validation.
+            None preserves the pre-TASK-730 legacy/default behavior exactly.
+        job_id: The job's own real registered scheduler id — see
+            ``scheduled_query_job``'s docstring for why this must not be
+            re-guessed as the legacy ``cache_<slug>`` shape.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
         from querysource.queries.qs import QS
-        qs = QS(slug=slug)
+        tenant = owner.get("schema") if owner is not None else None
+        qs = QS(slug=slug, tenant=tenant)
+        if owner is not None:
+            await _revalidate_owner(qs, owner, slug)
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Cache refresh job failed for slug '%s': %s", slug, exc
+            "Cache refresh job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
             notification_manager.notify(
-                job_id=f"cache_{slug}",
+                job_id=job_id or f"cache_{slug}",
                 slug=slug,
                 error=exc
             )

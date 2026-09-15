@@ -24,13 +24,12 @@ See ``sdd/specs/querysource-slug-list-pagination.spec.md`` §3 Modules 1-2.
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from ..models import QueryModel
 from ..types.validators import Entity
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +48,11 @@ FILTERABLE_COLUMNS: frozenset[str] = frozenset(_MODEL_COLUMNS.keys())
 
 # Scalar columns that the caller is allowed to sort on. jsonb / array columns
 # are deliberately excluded (see spec §7 "Known Risks / Gotchas").
+# Legacy/default-store listing keeps program_slug (unchanged, per FEAT-147
+# AC-3/AC-4 "preserve legacy metadata/export/pagination conventions" — this
+# module-level constant must NOT be mutated per request). Tenant-contract
+# stores reject program_slug via a request-local check in
+# QueryManager._paginate_list (per-store policy), not by removing it here.
 SORTABLE_COLUMNS: frozenset[str] = frozenset(
     {
         "query_slug",
@@ -62,6 +66,8 @@ SORTABLE_COLUMNS: frozenset[str] = frozenset(
 )
 
 # Columns matched by the ``search`` query-string param with ``ILIKE '%term%'``.
+# See SORTABLE_COLUMNS docstring above: program_slug stays for legacy; tenant
+# stores reject it via a request-local check, not a module-global mutation.
 SEARCHABLE_COLUMNS: tuple[str, ...] = (
     "query_slug",
     "description",
@@ -88,8 +94,8 @@ class PaginationParams(BaseModel):
     page_size: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
     sort_field: str = Field(default=DEFAULT_SORT_FIELD)
     sort_direction: SortDirection = Field(default=DEFAULT_SORT_DIRECTION)
-    search: Optional[str] = Field(default=None, max_length=255)
-    fields: Optional[list[str]] = Field(default=None)
+    search: str | None = Field(default=None, max_length=255)
+    fields: list[str] | None = Field(default=None)
 
     @field_validator("sort_field")
     @classmethod
@@ -104,7 +110,7 @@ class PaginationParams(BaseModel):
 
     @field_validator("fields")
     @classmethod
-    def _validate_fields(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+    def _validate_fields(cls, v: list[str] | None) -> list[str] | None:
         """Reject any field not in :data:`FILTERABLE_COLUMNS`."""
         if v is None:
             return v
@@ -119,7 +125,7 @@ class PaginationParams(BaseModel):
         return (self.page - 1) * self.page_size
 
     @classmethod
-    def from_query_string(cls, qs: dict) -> "PaginationParams":
+    def from_query_string(cls, qs: dict) -> PaginationParams:
         """Parse a flat query-string dict into :class:`PaginationParams`.
 
         Understood keys:
@@ -154,7 +160,7 @@ class PaginationParams(BaseModel):
                 f"'page' and 'page_size' must be integers: {exc}"
             ) from exc
 
-        if "sort" in qs and qs["sort"]:
+        if qs.get("sort"):
             sort_value = str(qs["sort"]).strip()
             if ":" in sort_value:
                 field_part, _, dir_part = sort_value.partition(":")
@@ -251,6 +257,8 @@ def _coerce_value(col_name: str, value: Any) -> str:
 def build_where_clause(
     params: PaginationParams,
     extra_filters: dict,
+    *,
+    exclude_search_columns: frozenset[str] = frozenset(),
 ) -> str:
     """Return a SQL WHERE clause (including the leading ``WHERE``) or ``""``.
 
@@ -269,6 +277,14 @@ def build_where_clause(
         params: Pre-validated :class:`PaginationParams`.
         extra_filters: Additional filter kwargs (typically the leftover
             query-string params).
+        exclude_search_columns: Columns to drop from the search ``OR``
+            group for THIS call only — never a mutation of the shared,
+            module-level :data:`SEARCHABLE_COLUMNS` constant (which must
+            keep serving legacy listing unchanged). Used by tenant-contract
+            callers to drop ``program_slug`` (a column their table does not
+            persist — see docstring on :data:`SEARCHABLE_COLUMNS`) so a
+            tenant-store ``?search=`` request never references a
+            nonexistent column.
 
     Returns:
         The WHERE clause (possibly empty).
@@ -296,7 +312,7 @@ def build_where_clause(
         or_terms = [
             f"{_quote_ident(col)}::text ILIKE {like_literal}"
             for col in SEARCHABLE_COLUMNS
-            if col in FILTERABLE_COLUMNS
+            if col in FILTERABLE_COLUMNS and col not in exclude_search_columns
         ]
         if or_terms:
             predicates.append("(" + " OR ".join(or_terms) + ")")
@@ -306,7 +322,7 @@ def build_where_clause(
     return "WHERE " + " AND ".join(predicates)
 
 
-def build_order_by(params: PaginationParams) -> str:
+def build_order_by(params: PaginationParams, nulls_last: bool = False) -> str:
     """Return ``ORDER BY "<col>" <DIR>`` with a validated column name.
 
     Defence in depth: even though :class:`PaginationParams` already rejects
@@ -314,6 +330,10 @@ def build_order_by(params: PaginationParams) -> str:
 
     Args:
         params: Pre-validated :class:`PaginationParams`.
+        nulls_last: When ``True``, append ``NULLS LAST`` to the clause.
+            Defaults to ``False``, which keeps the output byte-identical to
+            before this parameter existed (:class:`QueryManager` depends on
+            this).
 
     Returns:
         The ``ORDER BY`` clause.
@@ -326,7 +346,8 @@ def build_order_by(params: PaginationParams) -> str:
             f"sort field not allowed: {params.sort_field!r}"
         )
     direction = "ASC" if params.sort_direction == "asc" else "DESC"
-    return f'ORDER BY "{params.sort_field}" {direction}'
+    clause = f'ORDER BY "{params.sort_field}" {direction}'
+    return f"{clause} NULLS LAST" if nulls_last else clause
 
 
 def build_count_sql(schema: str, table: str, where: str) -> str:
@@ -347,6 +368,65 @@ def build_count_sql(schema: str, table: str, where: str) -> str:
     if where:
         return f"{base} {where}"
     return base
+
+
+def compose_where(where: str, extra_clause: str) -> str:
+    """Combine a :func:`build_where_clause` result with an extra predicate.
+
+    Args:
+        where: ``""`` or a clause starting with ``"WHERE "``.
+        extra_clause: A trusted SQL predicate (may reference ``$n`` bound params) or ``""``.
+
+    Returns:
+        ``""``, ``"WHERE <extra>"``, ``where`` or ``"<where> AND (<extra>)"``.
+
+    Raises:
+        ValueError: If ``where`` is non-empty and does not start with ``"WHERE "``.
+    """
+    if where and not where.startswith("WHERE "):
+        raise ValueError(f"where must start with 'WHERE ', got {where!r}")
+    if not where and not extra_clause:
+        return ""
+    if not where:
+        return f"WHERE {extra_clause}"
+    if not extra_clause:
+        return where
+    return f"{where} AND ({extra_clause})"
+
+
+def build_scan_sql(
+    schema: str,
+    table: str,
+    fields: list[str],
+    where: str,
+    order_by: str,
+    limit: int,
+) -> str:
+    """Return an un-paged ``SELECT`` bounded by ``LIMIT`` (no OFFSET).
+
+    Used by the describe list, which paginates in memory after the ABAC filter.
+
+    Raises:
+        ValueError: On non-bare identifiers, empty/unknown ``fields`` or ``limit < 1``.
+    """
+    _validate_bare_identifier(schema, "schema")
+    _validate_bare_identifier(table, "table")
+    if not fields:
+        raise ValueError("fields must be a non-empty list")
+    unknown = [c for c in fields if c not in FILTERABLE_COLUMNS]
+    if unknown:
+        raise ValueError(f"unknown projection column(s): {unknown}")
+    if not isinstance(limit, int) or limit < 1:
+        raise ValueError(f"limit must be an int >= 1, got {limit!r}")
+
+    select_list = ", ".join(f'"{c}"' for c in fields)
+    parts = [f'SELECT {select_list} FROM "{schema}"."{table}"']
+    if where:
+        parts.append(where)
+    if order_by:
+        parts.append(order_by)
+    parts.append(f"LIMIT {limit}")
+    return " ".join(parts)
 
 
 def build_page_sql(

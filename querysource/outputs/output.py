@@ -1,35 +1,38 @@
 from typing import Union
+
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
-
+from asyncdb.exceptions import DriverError, NoDataFound, StatementError
+from datamodel.parsers.encoders import DefaultEncoder
 from navconfig import DEBUG
 from navconfig.logging import logging
-from datamodel.parsers.encoders import DefaultEncoder
-from asyncdb.exceptions import NoDataFound, StatementError, DriverError
-from ..interfaces.queries import AbstractQuery
+from pandas import DataFrame
+
 from ..exceptions import (
     DataNotFound,
     QueryException,
 )
+from ..interfaces.queries import AbstractQuery
+from ..ownership_logging import implicit_artifact_name
 from ..utils.errors import build_error_payload
 from .writers import (
-    jsonWriter,
+    BokehWriter,
     CSVWriter,
     ExcelWriter,
-    TXTWriter,
     HTMLWriter,
-    BokehWriter,
-    PlotlyWriter,
-    TSVWriter,
+    PDFWriter,
     PickleWriter,
-    TableWriter,
+    PlotlyWriter,
     # ProfileWriter,
     ReportWriter,
-    PDFWriter,
+    TableWriter,
+    TSVWriter,
+    TXTWriter,
     XMLWriter,
     # EDAWriter,
     # DescribeWriter,
     # ClusterWriter
+    jsonWriter,
 )
 
 WRITERS = {
@@ -64,7 +67,7 @@ class DataOutput:
     def __init__(
         self,
         request: web.Request,
-        query: Union[AbstractQuery, "DataFrame", list],
+        query: Union[AbstractQuery, DataFrame, list],
         ctype: str = 'json',
         slug: str = None,
         **kwargs
@@ -102,10 +105,24 @@ class DataOutput:
         ## encoder:
         self._json = DefaultEncoder()
         ### get name of the file:
+        explicit_filename = False
         try:
             self.filename = kwargs['filename'] or self.slug
+            explicit_filename = bool(kwargs['filename'])
         except KeyError:
             pass
+        # Implicit tenant artifact naming (TASK-731 AC-1/AC-3): only ever
+        # applied when the caller did NOT explicitly configure a filename —
+        # an explicit filename/S3 key/table identifier is never prefixed.
+        # Ownership comes from the executed definition on `query` itself
+        # (never a mutable URL field); a raw DataFrame/list `query` has no
+        # identity, so the filename is left unchanged.
+        if not explicit_filename and self.filename:
+            identity = getattr(query, '_definition_identity', None)
+            execution_id = getattr(query, '_execution_id', None)
+            self.filename = implicit_artifact_name(
+                identity, execution_id, self.filename
+            )
         try:
             self.download = kwargs['download']
         except KeyError:
