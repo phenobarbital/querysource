@@ -15,6 +15,7 @@ from ...exceptions import (
     QueryException,
     SlugNotFound,
 )
+from ...ownership_logging import ownership_fields
 from ..base import BaseQuery
 from .operators.filter import Filter
 from .sources import FileSource, ThreadQuery
@@ -417,6 +418,23 @@ class MultiQS(BaseQuery):
                         )
                     active.remove(t)
                     if t.exc:
+                        # Attach ownership to this child's failure event
+                        # (TASK-731 AC-2) before raising — resolved from the
+                        # preflighted store, never guessed from the output
+                        # alias `t.slug`. The original exception/status
+                        # handling below is preserved unchanged.
+                        task_name = next(
+                            (n for n, task in tasks.items() if task is t), None
+                        )
+                        child_store = resolved_stores.get(task_name)
+                        if child_store is not None:
+                            self._logger.warning(
+                                "MultiQS child query failed (%s): %s",
+                                ownership_fields(
+                                    QueryIdentity(store=child_store, slug=t.slug)
+                                ),
+                                t.exc,
+                            )
                         ## raise exception for this Query
                         if isinstance(t.exc, ParserError):
                             raise self.Error(

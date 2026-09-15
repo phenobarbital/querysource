@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from navconfig.logging import logging
 
+from querysource.ownership_logging import ownership_fields
 from querysource.tenant_errors import TenantError
 
 if TYPE_CHECKING:
@@ -82,9 +83,12 @@ async def scheduled_query_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Scheduled job failed for slug '%s': %s", slug, exc
+            "Scheduled job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
+            # notify(job_id, slug, error) signature preserved unchanged
+            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
                 job_id=f"query_{slug}",
                 slug=slug,
@@ -134,9 +138,12 @@ async def scheduled_multiqs_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Scheduled multi-query job failed for slug '%s': %s", slug, exc
+            "Scheduled multi-query job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
+            # notify(job_id, slug, error) signature preserved unchanged
+            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
                 job_id=f"multi_{slug}",
                 slug=slug,
@@ -175,9 +182,12 @@ async def cache_refresh_job(
         await qs.query()
     except Exception as exc:
         logger.warning(
-            "Cache refresh job failed for slug '%s': %s", slug, exc
+            "Cache refresh job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
         )
         if notification_manager:
+            # notify(job_id, slug, error) signature preserved unchanged
+            # (TASK-731 AC-4) — ownership only enriches the log line above.
             notification_manager.notify(
                 job_id=f"cache_{slug}",
                 slug=slug,

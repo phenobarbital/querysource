@@ -11,6 +11,7 @@ from ..exceptions import (
     DataNotFound,
     QueryException,
 )
+from ..ownership_logging import implicit_artifact_name
 from ..utils.errors import build_error_payload
 from .writers import (
     jsonWriter,
@@ -102,10 +103,24 @@ class DataOutput:
         ## encoder:
         self._json = DefaultEncoder()
         ### get name of the file:
+        explicit_filename = False
         try:
             self.filename = kwargs['filename'] or self.slug
+            explicit_filename = bool(kwargs['filename'])
         except KeyError:
             pass
+        # Implicit tenant artifact naming (TASK-731 AC-1/AC-3): only ever
+        # applied when the caller did NOT explicitly configure a filename —
+        # an explicit filename/S3 key/table identifier is never prefixed.
+        # Ownership comes from the executed definition on `query` itself
+        # (never a mutable URL field); a raw DataFrame/list `query` has no
+        # identity, so the filename is left unchanged.
+        if not explicit_filename and self.filename:
+            identity = getattr(query, '_definition_identity', None)
+            execution_id = getattr(query, '_execution_id', None)
+            self.filename = implicit_artifact_name(
+                identity, execution_id, self.filename
+            )
         try:
             self.download = kwargs['download']
         except KeyError:

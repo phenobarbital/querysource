@@ -5,6 +5,7 @@ Base Class for all Query-objects in QuerySource.
 import asyncio
 import time
 import traceback
+import uuid
 from abc import abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -28,6 +29,7 @@ from ..conf import (
 from ..events import LogEvent
 from ..exceptions import CacheException, DataNotFound, QueryException
 from ..libs.encoders import DefaultEncoder
+from ..ownership_logging import ownership_fields
 from ..utils.cache_serialization import serialize_cache_payload
 from ..utils.events import enable_uvloop
 from .connections import Connection
@@ -103,6 +105,12 @@ class AbstractQuery(Connection):
         # Definition identity and revision for result cache keys (set during load)
         self._definition_identity: Any = None
         self._definition_revision: str | None = None
+        # Unique per-query execution id: assigned once here so every
+        # timing/failure event and implicit output artifact this query
+        # object ever produces (HTTP, direct, child, scheduled, remote)
+        # correlates under the same id — never re-derived from a mutable
+        # request field (TASK-731).
+        self._execution_id: str = uuid.uuid4().hex
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         return self._loop if self._loop else asyncio.get_running_loop()
@@ -442,8 +450,22 @@ class AbstractQuery(Connection):
         )
 
     async def event_log(self, payload: dict, status: str = 'query', **kwargs):
+        """Emit a timing/failure event, always carrying ownership context.
+
+        Attaches ``execution_id`` and the executed definition's
+        ``ownership_fields`` (owner/schema/table/slug) to every event —
+        this is the single shared choke point HTTP, direct, and MultiQS
+        child execution all pass through (TASK-731 AC-2), so callers never
+        have to attach ownership themselves. Existing payload keys always
+        win (``setdefault``): a caller's own ``slug``/alias is preserved
+        unchanged.
+        """
+        enriched = dict(payload)
+        enriched.setdefault('execution_id', self._execution_id)
+        for key, value in ownership_fields(self._definition_identity).items():
+            enriched.setdefault(key, value)
         return await LogEvent(
-            payload=payload,
+            payload=enriched,
             status=status,
             **kwargs
         )

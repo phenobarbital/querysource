@@ -26,6 +26,7 @@ from ..exceptions import (
     QueryError,
     QueryException,
 )
+from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
 from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
@@ -469,11 +470,18 @@ class QS(BaseQuery):
                     f"Slug: {slug}, duration: {duration}s"
                 )
                 payload = {
+                    # ownership_fields() first: its own "slug" (the stored
+                    # definition's slug) must never override the alias
+                    # actually used for this event below.
+                    **ownership_fields(self._definition_identity),
                     "slug": slug,
                     "duration": duration,
                     "started": self._starttime,
-                    "ended": self._endtime
+                    "ended": self._endtime,
+                    "execution_id": self._execution_id,
                 }
+                if error:
+                    payload["error"] = str(error)
                 # send to influx event system:
                 try:
                     loop = asyncio.get_event_loop()

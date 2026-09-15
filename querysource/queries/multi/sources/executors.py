@@ -12,11 +12,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from aiohttp import web
+from navconfig.logging import logging
 
 from ...obj import QueryObject
 from ....exceptions import QueryException
 from ....conf import QWORKER_TIMEOUT, QWORKER_QUERY_TIMEOUT
+from querysource.ownership_logging import ownership_fields
 from querysource.tenants import QueryStore, TenantOwnerEnvelope
+
+logger = logging.getLogger("QS.RemoteExecutor")
 
 
 @dataclass(frozen=True)
@@ -196,6 +200,10 @@ class RemoteExecutor(QueryExecutor):
                 handler or to local execution.
         """
         if store is not None and store.contract not in ("legacy", "tenant"):
+            logger.warning(
+                "Remote query %r rejected: unsupported store contract (%s)",
+                name, ownership_fields(store),
+            )
             raise QueryException(
                 f"Remote query {name!r} rejected: unsupported store contract "
                 f"{store.contract!r}."
@@ -246,11 +254,19 @@ class RemoteExecutor(QueryExecutor):
             )
             await queue.put({name: result})
         except asyncio.TimeoutError as exc:
+            logger.warning(
+                "Remote query %r timed out on %s:%s (%s)",
+                name, self._host, self._port, ownership_fields(owner or store),
+            )
             raise QueryException(
                 f"Remote query {name!r} timed out after {QWORKER_QUERY_TIMEOUT}s "
                 f"on {self._host}:{self._port}"
             ) from exc
         except (ConnectionError, OSError) as exc:
+            logger.warning(
+                "Remote query %r failed on %s:%s (%s): %s",
+                name, self._host, self._port, ownership_fields(owner or store), exc,
+            )
             raise QueryException(
                 f"Remote query {name!r} failed on {self._host}:{self._port}: {exc}"
             ) from exc
