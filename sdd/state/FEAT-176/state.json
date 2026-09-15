@@ -3,7 +3,7 @@
   "feat_id": "FEAT-176",
   "feature_slug": "per-tenant-queries",
   "started_at": "2026-09-15T01:01:49Z",
-  "updated_at": "2026-09-15T01:46:07.498063+00:00",
+  "updated_at": "2026-09-15T01:46:41.646900+00:00",
   "source": {
     "kind": "inline",
     "jira_key": null,
@@ -12,7 +12,7 @@
     "summary_oneline": "Schema-per-tenant query discovery, storage and APIs with public-query backward compatibility"
   },
   "mode": "auto",
-  "phase": "proposal_drafted",
+  "phase": "committed",
   "phases": {
     "source": {
       "status": "completed"
@@ -68,9 +68,10 @@
     "output": {
       "status": "completed",
       "proposal_path": "sdd/proposals/per-tenant-queries.proposal.md",
-      "commit_sha": null,
+      "commit_sha": "8172c4e0e774bf5732abc9868f82041a96e4196b",
       "next_command_recommended": "sdd-spec",
-      "next_command_rationale": "The user approved the impact synthesis and settled the main contracts. Produce the specification with explicit technical verification tasks for ORM schema selection, deployed DDL, worker propagation and route collisions; preserve the bounded-research confidence."
+      "next_command_rationale": "The user approved the impact synthesis and settled the main contracts. Produce the specification with explicit technical verification tasks for ORM schema selection, deployed DDL, worker propagation and route collisions; preserve the bounded-research confidence.",
+      "completed_at": "2026-09-15T01:46:41.646900+00:00"
     }
   },
   "budget": {
@@ -89,8 +90,8 @@
   },
   "errors": [],
   "resume_hint": {
-    "next_phase": "committed",
-    "next_action": "Validate and commit only the proposal and FEAT-176 state files."
+    "next_phase": "complete",
+    "next_action": "Proposal workflow complete. Recommended next command: /sdd-spec FEAT-176."
   },
   "detected_mode": "enrichment"
 }
