@@ -1,24 +1,25 @@
 import time
 import traceback
+
 from aiohttp import web
 from pandas import DataFrame
-from ..outputs import DataOutput
+
+from ..auth import ResourceType
+from ..conf import CSV_DEFAULT_DELIMITER, CSV_DEFAULT_QUOTING
 from ..exceptions import (
-    ParserError,
     DataNotFound,
     DriverError,
+    OutputError,
+    ParserError,
     QueryException,
     SlugNotFound,
-    OutputError,
 )
-from .abstract import AbstractHandler
+from ..outputs import DataOutput
 from ..queries import MultiQS
 from ..queries.multi.operators import Filter, GroupBy
-from ..conf import (
-    CSV_DEFAULT_DELIMITER,
-    CSV_DEFAULT_QUOTING
-)
-from ..auth import ResourceType
+from ..tenants import QueryIdentity
+
+from .abstract import AbstractHandler
 
 class QueryHandler(AbstractHandler):
 
@@ -97,6 +98,76 @@ class QueryHandler(AbstractHandler):
                 "MultiQuery PBAC pre-flight error (fail-closed): %s", exc
             )
             raise web.HTTPNotFound() from exc
+
+    async def _preflight_multiquery_owned(
+        self,
+        request: web.Request,
+        slugs: list,
+        files: list,
+        has_raw_query: bool,
+    ) -> None:
+        """Check real resolved QueryIdentity objects before executing batches.
+
+        This preflight checks actual saved child slugs, not output aliases.
+        It resolves each slug to its QueryIdentity and enforces ownership
+        using a detached evaluator with cleared cache for tenant isolation.
+
+        Files and raw actions preserve existing behavior (no ownership check).
+
+        Args:
+            request: The current aiohttp web request.
+            slugs: List of slug/query names to check with slug:execute.
+            files: List of file keys (not checked - existing behavior).
+            has_raw_query: True if raw query present (not checked - existing behavior).
+
+        Raises:
+            web.HTTPNotFound: When any slug ownership check fails.
+        """
+        # Files and raw queries use existing behavior (no ownership check)
+        if not slugs:
+            return
+
+        # PBAC disabled check
+        if request.app.get("security") is None:
+            return
+
+        # Get the tenant from request or use default
+        tenant = request.query.get("tenant")
+
+        # Get the registry from the app
+        registry = request.app.get("tenant_registry")
+        if registry is None:
+            # Fallback: try to get from services
+            try:
+                from querysource.services import QuerySource
+                qs = QuerySource()
+                registry = qs.registry
+            except Exception:
+                # No registry available - skip ownership check
+                return
+
+        try:
+            store = registry.resolve(tenant)
+        except Exception:
+            # Tenant resolution failed - skip ownership check
+            return
+
+        # Check each slug for ownership
+        for slug in slugs:
+            identity = QueryIdentity(store=store, slug=slug)
+            try:
+                await self._enforce_owned_slug(
+                    request,
+                    identity=identity,
+                    action="slug:execute",
+                )
+            except web.HTTPNotFound:
+                self.logger.info(
+                    "MultiQuery ownership denied: slug=%s tenant=%s",
+                    slug,
+                    tenant or "default",
+                )
+                raise
 
     async def columns(self, request: web.Request) -> web.StreamResponse:
         raise self.no_content(
@@ -212,6 +283,13 @@ class QueryHandler(AbstractHandler):
             not _queries and not _files and not slug
         )
         await self._preflight_multiquery(
+            request,
+            slugs=list((_queries or {}).keys()),
+            files=list((_files or {}).keys()),
+            has_raw_query=_has_raw,
+        )
+        # Step 1b: Ownership preflight for tenant isolation
+        await self._preflight_multiquery_owned(
             request,
             slugs=list((_queries or {}).keys()),
             files=list((_files or {}).keys()),
