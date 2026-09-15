@@ -18,8 +18,8 @@ from ..outputs import DataOutput
 from ..queries import MultiQS
 from ..queries.multi.operators import Filter, GroupBy
 from ..tenants import QueryIdentity
-
 from .abstract import AbstractHandler
+
 
 class QueryHandler(AbstractHandler):
 
@@ -134,23 +134,31 @@ class QueryHandler(AbstractHandler):
         # Get the tenant from request or use default
         tenant = request.query.get("tenant")
 
-        # Get the registry from the app
-        registry = request.app.get("tenant_registry")
+        # Get the registry from the app. Published as app["qs_tenant_registry"]
+        # by QuerySource.qs_start (TASK-720) — verified against
+        # querysource/services.py. A missing key means this app has not
+        # adopted the tenant feature at all (same "legacy, not wired up"
+        # case TASK-723/724 handle for the management handlers): skip this
+        # tenant-specific check and rely on the existing alias-based
+        # _preflight_multiquery PBAC check above, which still applies.
+        registry = request.app.get("qs_tenant_registry")
         if registry is None:
-            # Fallback: try to get from services
-            try:
-                from querysource.services import QuerySource
-                qs = QuerySource()
-                registry = qs.registry
-            except Exception:
-                # No registry available - skip ownership check
-                return
+            return
 
+        # Once the tenant feature IS active for this app, a resolution
+        # failure must fail closed (AC-1 "fail-closed errors"), matching
+        # the sibling _preflight_multiquery's own
+        # "except Exception ... raise web.HTTPNotFound()" convention just
+        # above — never silently allow an unverifiable batch through.
         try:
             store = registry.resolve(tenant)
-        except Exception:
-            # Tenant resolution failed - skip ownership check
-            return
+        except web.HTTPNotFound:
+            raise
+        except Exception as exc:
+            self.logger.warning(
+                "MultiQuery ownership pre-flight error (fail-closed): %s", exc
+            )
+            raise web.HTTPNotFound() from exc
 
         # Check each slug for ownership
         for slug in slugs:

@@ -1,359 +1,276 @@
 """Preserve policy semantics with isolated tenant decisions regression contracts."""
-import copy
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiohttp import web
 
-from querysource.tenants import QueryIdentity, QueryStore
+from querysource.handlers.abstract import AbstractHandler
+from querysource.handlers.multi import QueryHandler
+from querysource.tenants import QueryIdentity, QueryStore, TenantRegistry
 
 
-def _make_mock_request(app=None, session=None, authz_backend=None):
-    """Create a mock request with optional session and authz backend."""
-    request = MagicMock(spec=web.Request)
-    request.app = app or {}
-    request.query = {}
+class _FakeRequest:
+    """Minimal, real-dict-backed stand-in for aiohttp.web.Request's
+    per-request storage — avoids the MagicMock __getitem__/__setitem__
+    round-trip gotcha found during TASK-723 (a bare MagicMock's magic
+    methods do not persist values across calls).
+    """
 
-    # Mock session storage
-    session_store = {'user_session': session} if session is not None else {}
-    request.__getitem__ = lambda self, key: session_store.get(key)
-    request.__setitem__ = lambda self, key, value: session_store.__setitem__(key, value)
+    def __init__(self, app: dict, storage: dict | None = None):
+        self.app = app
+        self.query = {}
+        self._storage = storage or {}
+        # Attributes read directly by navigator_auth.abac.context.EvalContext
+        # (not aiohttp Request internals this test needs to exercise).
+        self.remote = "127.0.0.1"
+        self.method = "GET"
+        self.headers = {}
+        self.path_qs = "/api/v1/management/queries/test_slug"
+        self.path = "/api/v1/management/queries/test_slug"
+        self.rel_url = self.path_qs
 
-    # Mock authz backend
-    if authz_backend is not None:
-        try:
-            from navigator_auth.conf import AUTHZ_BACKEND_KEY
-            request.get = lambda key: authz_backend if key == AUTHZ_BACKEND_KEY else None
-        except ImportError:
-            request.get = lambda key: authz_backend if key == 'authz_backend' else None
-    else:
-        request.get = lambda key: None
+    def get(self, key, default=None):
+        return self._storage.get(key, default)
 
-    return request
+    def __getitem__(self, key):
+        return self._storage[key]
 
-
-def _make_mock_evaluator():
-    """Create a mock policy evaluator with cache and stats."""
-    evaluator = MagicMock()
-    evaluator._cache = {}
-    evaluator._stats = {}
-    evaluator.check_access = MagicMock()
-    return evaluator
+    def __setitem__(self, key, value):
+        self._storage[key] = value
 
 
-def _make_mock_session(userinfo=None):
-    """Create a mock session with optional userinfo."""
-    session = MagicMock()
-    if userinfo:
-        session.get = lambda key: userinfo if key == 'user' else None
-    else:
-        session.get = lambda key: None
-    return session
-
-
-class DummyHandler:
-    """Minimal handler for testing _enforce_owned_slug.
-
-    This mimics the key parts of AbstractHandler needed for testing
-    without importing the full handler hierarchy.
+class _Harness:
+    """Binds the real AbstractHandler._enforce_owned_slug/_get_user_session
+    to a lightweight instance, without needing the full BaseHandler/aiohttp
+    View construction chain (which this narrow unit test does not need).
     """
 
     def __init__(self):
-        self.debug = True
         self.logger = MagicMock()
-        self._json = MagicMock()
-        self._json.dumps = lambda x: '{}'
 
-    async def _get_user_session(self, request):
-        """Extract user session from request (mirrors AbstractHandler)."""
-        cached = request.get('user_session')
-        if cached is not None:
-            return cached
-        # For testing, we just return what's stored
-        return request.__getitem__('user_session')
-
-    async def _enforce_owned_slug(self, request, identity, action):
-        """Testable implementation of _enforce_owned_slug."""
-        # Import here to avoid circular imports at module load time
-        from querysource.conf import QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
-
-        evaluator = request.app.get("policy_evaluator")
-        if request.app.get("security") is None:
-            return  # PBAC disabled — fast-path no-op
-        if evaluator is None:
-            raise web.HTTPNotFound()
-
-        # Create a shallow copy with cleared cache for tenant isolation
-        detached = copy.copy(evaluator)
-        detached._cache = {}
-        detached._stats = dict(evaluator._stats)
-
-        # Extract session or use sessionless authz
-        session = await self._get_user_session(request)
-        authz_userinfo = None
-        if session is None:
-            if QS_PBAC_ALLOW_SESSIONLESS_AUTHZ:
-                try:
-                    from navigator_auth.conf import AUTHZ_BACKEND_KEY
-                except ImportError:
-                    AUTHZ_BACKEND_KEY = 'authz_backend'
-                authz_backend = request.get(AUTHZ_BACKEND_KEY)
-                if authz_backend:
-                    backend = str(authz_backend)
-                    authz_userinfo = {
-                        'username': f'authz:{backend}',
-                        'groups': ['authorized', backend],
-                        'roles': [],
-                    }
-                    self.logger.info(
-                        "PBAC sessionless authz (backend=%s): evaluating "
-                        "slug ownership for %s as group 'authorized'",
-                        backend,
-                        identity.slug,
-                    )
-            if authz_userinfo is None:
-                self.logger.info(
-                    "PBAC denied (no session): slug=%s action=%s",
-                    identity.slug,
-                    action,
-                )
-                raise web.HTTPNotFound()
-
-        # Build the evaluation context
-        import inspect
-        from navigator_auth.abac.context import EvalContext
-        from navigator_auth.abac.policies.environment import Environment
-        from navigator_auth.conf import AUTH_SESSION_OBJECT
-
-        if authz_userinfo is not None:
-            userinfo = authz_userinfo
-            user = None
-        else:
-            userinfo = (
-                session.get(AUTH_SESSION_OBJECT, {})
-                if hasattr(session, 'get') else {}
-            )
-            if not isinstance(userinfo, dict):
-                userinfo = {}
-            user = userinfo if userinfo else None
-
-        ctx = EvalContext(
-            request=request,
-            user=user,
-            userinfo=userinfo,
-            session=session,
-        )
-
-        # Evaluate using the detached evaluator with the identity's slug
-        result = detached.check_access(
-            ctx=ctx,
-            resource_type="slug",
-            resource_name=identity.slug,
-            action=action,
-            env=Environment(),
-        )
-        if inspect.iscoroutine(result):
-            result = await result
-        if not result.allowed:
-            self.logger.info(
-                "PBAC denied: slug=%s action=%s policy=%s reason=%s",
-                identity.slug,
-                action,
-                getattr(result, 'matched_policy', None),
-                getattr(result, 'reason', None),
-            )
-            raise web.HTTPNotFound()
+    # The exact same function objects as AbstractHandler's — not a
+    # reimplementation. Calling self._enforce_owned_slug(...) below
+    # invokes the real production code.
+    _enforce_owned_slug = AbstractHandler._enforce_owned_slug
+    _get_user_session = AbstractHandler._get_user_session
 
 
-@pytest.mark.asyncio
-async def test_pbac_disabled_has_no_membership_requirement() -> None:
-    """pbac disabled has no membership requirement.
+def _make_evaluator(check_access=None):
+    evaluator = MagicMock()
+    evaluator._cache = {"pre-existing": "decision"}
+    evaluator._stats = {"hits": 1}
+    evaluator.check_access = check_access or MagicMock()
+    return evaluator
 
-    When PBAC is disabled (no 'security' in app), _enforce_owned_slug
-    should return early without raising any membership requirement.
-    """
-    handler = DummyHandler()
-    request = _make_mock_request(app={})  # No security key
 
-    store = QueryStore(
+def _tenant_store(schema: str = "tenant1") -> QueryStore:
+    return QueryStore(
         database_namespace="localhost:5432/querysource",
-        schema="tenant1",
+        schema=schema,
         table="queries",
         contract="tenant",
         columns=frozenset({"query_slug"}),
     )
-    identity = QueryIdentity(store=store, slug="test_slug")
 
-    # Should return without raising when PBAC is disabled
+
+@pytest.mark.asyncio
+async def test_pbac_disabled_has_no_membership_requirement() -> None:
+    """pbac disabled has no membership requirement."""
+    handler = _Harness()
+    request = _FakeRequest(app={})  # no "security" key -> PBAC disabled
+    identity = QueryIdentity(store=_tenant_store(), slug="test_slug")
+
+    # Must return (not raise) when PBAC is disabled — no new membership
+    # requirement is introduced (AC-1).
     await handler._enforce_owned_slug(request, identity, "slug:execute")
 
 
 @pytest.mark.asyncio
 async def test_copy_keeps_app_cache_and_policy_immutable() -> None:
-    """copy keeps app cache and policy immutable.
+    """copy keeps app cache and policy immutable."""
+    handler = _Harness()
 
-    Creating a detached evaluator should not modify the original
-    evaluator's cache or stats. The app evaluator should remain
-    unchanged after _enforce_owned_slug runs.
-    """
-    handler = DummyHandler()
-
-    # Create mock evaluator with some cache/stats
-    original_evaluator = _make_mock_evaluator()
-    original_evaluator._cache = {"key1": "value1"}
-    original_evaluator._stats = {"stat1": 1}
-
-    app = {
-        "security": MagicMock(),  # PBAC enabled
-        "policy_evaluator": original_evaluator,
-    }
-    request = _make_mock_request(app=app, session=_make_mock_session())
-
-    store = QueryStore(
-        database_namespace="localhost:5432/querysource",
-        schema="tenant1",
-        table="queries",
-        contract="tenant",
-        columns=frozenset({"query_slug"}),
-    )
-    identity = QueryIdentity(store=store, slug="test_slug")
-
-    # Mock check_access to return allowed result
     mock_result = MagicMock()
     mock_result.allowed = True
-    original_evaluator.check_access = MagicMock(return_value=mock_result)
+    evaluator = _make_evaluator(check_access=MagicMock(return_value=mock_result))
 
-    # Run enforcement
-    try:
-        await handler._enforce_owned_slug(request, identity, "slug:execute")
-    except Exception:
-        pass  # May raise, we just care about the copy behavior
+    app = {"security": MagicMock(), "policy_evaluator": evaluator}
+    # A pre-cached, non-None session short-circuits _get_user_session's
+    # navigator_session.get_session() call entirely (it returns the
+    # cached value directly — see abstract.py:311-313).
+    request = _FakeRequest(app=app, storage={"user_session": MagicMock(get=lambda k, d=None: {})})
+    identity = QueryIdentity(store=_tenant_store(), slug="test_slug")
 
-    # Verify original evaluator's cache and stats are unchanged
-    assert original_evaluator._cache == {"key1": "value1"}, "Original cache should be unchanged"
-    assert original_evaluator._stats == {"stat1": 1}, "Original stats should be unchanged"
+    await handler._enforce_owned_slug(request, identity, "slug:execute")
+
+    # AC-2: the app's evaluator cache/stats must be untouched — only the
+    # shallow-copied detached evaluator's cache was cleared.
+    assert evaluator._cache == {"pre-existing": "decision"}
+    assert evaluator._stats == {"hits": 1}
+    # check_access was actually invoked on the (cleared) detached copy —
+    # verifying the real production code path ran, not a stub.
+    assert evaluator.check_access.called
+    call_kwargs = evaluator.check_access.call_args.kwargs
+    assert call_kwargs["resource_type"] == "slug"
+    assert call_kwargs["resource_name"] == "test_slug"
+    assert call_kwargs["action"] == "slug:execute"
 
 
 @pytest.mark.asyncio
 async def test_same_slug_different_owner_no_decision_reuse() -> None:
-    """same slug different owner no decision reuse.
+    """same slug different owner no decision reuse."""
+    handler = _Harness()
 
-    Two different tenants with the same slug should not share
-    cached decisions. Each call should use a fresh detached
-    evaluator with cleared cache.
-    """
-    handler = DummyHandler()
-
-    # Create mock evaluator
-    evaluator = _make_mock_evaluator()
-    evaluator.check_access = MagicMock()
-
-    app = {
-        "security": MagicMock(),
-        "policy_evaluator": evaluator,
-    }
-
-    store1 = QueryStore(
-        database_namespace="localhost:5432/querysource",
-        schema="tenant1",
-        table="queries",
-        contract="tenant",
-        columns=frozenset({"query_slug"}),
-    )
-    store2 = QueryStore(
-        database_namespace="localhost:5432/querysource",
-        schema="tenant2",
-        table="queries",
-        contract="tenant",
-        columns=frozenset({"query_slug"}),
-    )
-
-    identity1 = QueryIdentity(store=store1, slug="shared_slug")
-    identity2 = QueryIdentity(store=store2, slug="shared_slug")
-
-    session = _make_mock_session()
-
-    # First call for tenant1
-    request1 = _make_mock_request(app=app, session=session)
     mock_result = MagicMock()
     mock_result.allowed = True
-    evaluator.check_access = MagicMock(return_value=mock_result)
+    evaluator = _make_evaluator(check_access=MagicMock(return_value=mock_result))
+    app = {"security": MagicMock(), "policy_evaluator": evaluator}
+    session = MagicMock(get=lambda k, d=None: {})
 
-    try:
-        await handler._enforce_owned_slug(request1, identity1, "slug:execute")
-    except Exception:
-        pass
+    identity1 = QueryIdentity(store=_tenant_store("tenant1"), slug="shared_slug")
+    identity2 = QueryIdentity(store=_tenant_store("tenant2"), slug="shared_slug")
 
-    # Verify check_access was called with tenant1's identity
-    call_args = evaluator.check_access.call_args
-    assert call_args is not None
-    assert call_args.kwargs.get('resource_name') == "shared_slug"
-
-    # Reset mock for second call
+    request1 = _FakeRequest(app=app, storage={"user_session": session})
+    await handler._enforce_owned_slug(request1, identity1, "slug:execute")
+    assert evaluator.check_access.called
+    # Each call must clear the *detached* copy's cache independently —
+    # verified by asserting check_access was reached with a fresh cache
+    # both times, using a second, distinct request/identity.
     evaluator.check_access.reset_mock()
 
-    # Second call for tenant2 with same slug
-    request2 = _make_mock_request(app=app, session=session)
-    try:
-        await handler._enforce_owned_slug(request2, identity2, "slug:execute")
-    except Exception:
-        pass
-
-    # Verify check_access was called again (not cached)
-    assert evaluator.check_access.called, "check_access should be called for second tenant"
+    request2 = _FakeRequest(app=app, storage={"user_session": session})
+    await handler._enforce_owned_slug(request2, identity2, "slug:execute")
+    assert evaluator.check_access.called
+    second_call_kwargs = evaluator.check_access.call_args.kwargs
+    assert second_call_kwargs["resource_name"] == "shared_slug"
+    # The app-level evaluator's own cache was never populated by either
+    # call — only the (per-call, discarded) detached copy's cache was
+    # ever touched, so tenant1's and tenant2's identical-slug decisions
+    # never share cached state.
+    assert evaluator._cache == {"pre-existing": "decision"}
 
 
 @pytest.mark.asyncio
-async def test_sessionless_authz_async_result_and_denied_child() -> None:
-    """sessionless authz async result and denied child.
+async def test_sessionless_authz_async_result_and_denied_child(monkeypatch) -> None:
+    """sessionless authz async result and denied child."""
+    handler = _Harness()
 
-    When QS_PBAC_ALLOW_SESSIONLESS_AUTHZ is enabled and the request
-    has an authz backend stamp, the request should be evaluated under
-    a synthetic identity. Also tests that coroutine results are
-    properly awaited.
-    """
-    handler = DummyHandler()
-
-    # Create mock evaluator
-    evaluator = _make_mock_evaluator()
-
-    # Mock check_access to return a coroutine that resolves to denied
-    async def async_denied(*args, **kwargs):
+    async def async_denied(**kwargs):
         result = MagicMock()
         result.allowed = False
         result.matched_policy = "test_policy"
         result.reason = "denied"
         return result
 
-    evaluator.check_access = AsyncMock(side_effect=async_denied)
+    evaluator = _make_evaluator(check_access=AsyncMock(side_effect=async_denied))
+    app = {"security": MagicMock(), "policy_evaluator": evaluator}
+    # No session cached (explicit None, not merely absent — see
+    # _FakeRequest.get contract) and an authz backend stamp present,
+    # exercising the sessionless-authz branch.
+    request = _FakeRequest(
+        app=app,
+        storage={"user_session": None, "authz_backend": "ip_allowed"},
+    )
+    identity = QueryIdentity(store=_tenant_store(), slug="denied_slug")
 
+    monkeypatch.setattr(
+        "querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ",
+        True,
+    )
+    with pytest.raises(web.HTTPNotFound):
+        await handler._enforce_owned_slug(request, identity, "slug:execute")
+
+    # The coroutine result from check_access was awaited (AC-2 "retain
+    # coroutine-result handling") and its denial correctly raised.
+    assert evaluator.check_access.called
+    call_kwargs = evaluator.check_access.call_args.kwargs
+    assert call_kwargs["resource_name"] == "denied_slug"
+
+
+class _MultiHarness:
+    """Binds the real QueryHandler._preflight_multiquery_owned plus the
+    AbstractHandler methods it calls (_enforce_owned_slug,
+    _get_user_session) to a lightweight instance — same rationale as
+    _Harness above.
+    """
+
+    def __init__(self):
+        self.logger = MagicMock()
+
+    _preflight_multiquery_owned = QueryHandler._preflight_multiquery_owned
+    _enforce_owned_slug = AbstractHandler._enforce_owned_slug
+    _get_user_session = AbstractHandler._get_user_session
+
+
+def _discovered_registry(schema: str = "tenant1") -> TenantRegistry:
+    """A TenantRegistry already populated (bypassing discover()/a live DB —
+    same pattern as tests/tenants/test_tenant_execution_context.py).
+    """
+    registry = TenantRegistry()
+    store = _tenant_store(schema)
+    registry._stores = (store,)
+    registry._default_store = store
+    return registry
+
+
+@pytest.mark.asyncio
+async def test_multiquery_preflight_skips_when_registry_absent() -> None:
+    """AC-4 legacy fallback: no app["qs_tenant_registry"] published ->
+    this tenant-specific check is a no-op (matches the TASK-723/724
+    "not wired up" convention), never a KeyError or a false denial.
+    """
+    handler = _MultiHarness()
+    app = {"security": MagicMock()}  # PBAC on, tenant feature not wired
+    request = _FakeRequest(app=app)
+    await handler._preflight_multiquery_owned(
+        request, slugs=["some_slug"], files=[], has_raw_query=False
+    )  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_multiquery_preflight_fails_closed_on_resolution_error() -> None:
+    """AC-1 "fail-closed errors": once qs_tenant_registry IS published,
+    a resolution failure must deny (404), never silently allow the batch.
+    """
+    handler = _MultiHarness()
+
+    class _BoomRegistry:
+        def resolve(self, tenant):
+            raise RuntimeError("registry corrupted")
+
+    app = {"security": MagicMock(), "qs_tenant_registry": _BoomRegistry()}
+    request = _FakeRequest(app=app)
+    with pytest.raises(web.HTTPNotFound):
+        await handler._preflight_multiquery_owned(
+            request, slugs=["some_slug"], files=[], has_raw_query=False
+        )
+
+
+@pytest.mark.asyncio
+async def test_multiquery_preflight_checks_real_identity_not_alias() -> None:
+    """AC-4: each slug is checked as a real, resolved QueryIdentity
+    (store + slug) via _enforce_owned_slug — not the bare alias string
+    Guardian.filter_resources would otherwise check.
+    """
+    handler = _MultiHarness()
+
+    mock_result = MagicMock()
+    mock_result.allowed = True
+    evaluator = _make_evaluator(check_access=MagicMock(return_value=mock_result))
+    registry = _discovered_registry()
     app = {
         "security": MagicMock(),
         "policy_evaluator": evaluator,
+        "qs_tenant_registry": registry,
     }
+    session = MagicMock(get=lambda k, d=None: {})
+    request = _FakeRequest(app=app, storage={"user_session": session})
 
-    # Request with authz backend but no session
-    request = _make_mock_request(app=app, session=None, authz_backend="ip_allowed")
+    await handler._preflight_multiquery_owned(
+        request, slugs=["real_child_slug"], files=[], has_raw_query=False
+    )
 
-    # Patch QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
-    with patch('querysource.handlers.abstract.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ', True):
-        store = QueryStore(
-            database_namespace="localhost:5432/querysource",
-            schema="tenant1",
-            table="queries",
-            contract="tenant",
-            columns=frozenset({"query_slug"}),
-        )
-        identity = QueryIdentity(store=store, slug="test_slug")
-
-        # Should raise HTTPNotFound due to denied access
-        with pytest.raises(web.HTTPNotFound):
-            await handler._enforce_owned_slug(request, identity, "slug:execute")
-
-    # Verify the synthetic identity was used (groups should include 'authorized')
-    call_args = evaluator.check_access.call_args
-    assert call_args is not None
-    ctx = call_args.kwargs.get('ctx')
-    assert ctx is not None
-    userinfo = ctx.userinfo
-    assert 'authorized' in userinfo.get('groups', []), "Should use synthetic identity with 'authorized' group"
+    assert evaluator.check_access.called
+    call_kwargs = evaluator.check_access.call_args.kwargs
+    # Resolved against the registry's actual store, not a bare alias.
+    assert call_kwargs["resource_name"] == "real_child_slug"
