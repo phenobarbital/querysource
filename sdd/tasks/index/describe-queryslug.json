@@ -129,7 +129,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -141,8 +141,8 @@
       "parallelism_notes": "Integrates helpers, describer and visibility; edits services.py, handlers/__init__.py and tests/handlers/conftest.py.",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-740-describe-handler-list-detail.md"
+      "completed_at": "2026-09-15T13:21:49+00:00",
+      "file": "sdd/tasks/completed/TASK-740-describe-handler-list-detail.md"
     },
     {
       "id": "TASK-741",
