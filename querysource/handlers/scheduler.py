@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 from aiohttp import web
 from navigator.views import BaseView
 
+from querysource.tenant_errors import TenantError
+
 if TYPE_CHECKING:
     from apscheduler.job import Job
 
@@ -237,11 +239,33 @@ class SchedulerJobsView(BaseView):
                 status=400,
             )
             
-        # Extract tenant selector from body
+        # Extract tenant selector from body. Matches
+        # resolve_request_store's established selector-validation contract
+        # (querysource/handlers/tenant.py): an omitted/None selector means
+        # "use the configured default"; anything present must be a
+        # non-empty string. Without this check a malformed selector (e.g.
+        # "", a list, or a number) reached registry.resolve() unvalidated
+        # and only failed deep inside it with a confusing TenantError that
+        # the blanket `except Exception` below then collapsed to a generic
+        # 500 — never the documented 400 for a malformed selector.
         tenant = body.get("tenant") if isinstance(body, dict) else None
+        if tenant is not None and (not isinstance(tenant, str) or tenant == ""):
+            return self.json_response(
+                response={"error": "'tenant' must be a non-empty string or omitted."},
+                status=400,
+            )
 
         try:
             result = await scheduler.register_slug(slug, tenant=tenant)
+        except TenantError as exc:
+            # Preserve the ownership error's own stable machine code
+            # (tenant_not_available=404, tenant_store_unavailable=503, ...)
+            # instead of collapsing every ownership failure to 500.
+            logger.warning("Ownership error registering slug '%s': %s", slug, exc)
+            return self.json_response(
+                response={"error": str(exc)},
+                status=exc.code,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error registering slug '%s': %s", slug, exc)
             return self.json_response(
