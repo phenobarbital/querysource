@@ -1,16 +1,21 @@
 """Add selector parsing and tenant-aware management reads regression contracts."""
 
-import pytest
+import json
+from unittest.mock import MagicMock
 
+import pytest
 from aiohttp import web
+
 from querysource.handlers.tenant import resolve_request_store
-from querysource.tenants import TenantRegistry, QueryStore
+from querysource.tenants import QueryStore, TenantRegistry
 
 
 def _mock_registry() -> TenantRegistry:
-    """Create a mock registry with a tenant store."""
+    """Create a mock registry with a tenant store plus a store literally
+    named "null" (schema="null") — a legal, quoted schema name, distinct
+    from JSON/Python None, used to verify the literal-string-"null" case.
+    """
     registry = TenantRegistry()
-    # Add a tenant store
     store = QueryStore(
         database_namespace="localhost:5432/querysource",
         schema="tenant1",
@@ -18,7 +23,14 @@ def _mock_registry() -> TenantRegistry:
         contract="tenant",
         columns=frozenset({"query_slug", "description"}),
     )
-    registry._stores = (store,)
+    null_store = QueryStore(
+        database_namespace="localhost:5432/querysource",
+        schema="null",
+        table="queries",
+        contract="legacy",
+        columns=frozenset({"query_slug", "description", "program_slug"}),
+    )
+    registry._stores = (store, null_store)
     registry._default_store = store
     return registry
 
@@ -31,10 +43,11 @@ def _mock_request(
     json_data: dict | None = None,
 ) -> web.Request:
     """Create a mock aiohttp request for testing."""
-    from unittest.mock import MagicMock
-
     request = MagicMock(spec=web.Request)
     request.method = method
+    # resolve_request_store reads request.query (the real aiohttp
+    # Request property backing the query string), not request.rel_url.
+    request.query = query or {}
     request.rel_url = MagicMock()
     request.rel_url.query = query or {}
     request.match_info = match_info or {}
@@ -126,15 +139,63 @@ async def test_selector_missing_null_duplicates_conflicts() -> None:
     assert "Invalid tenant selector" in str(exc_info.value.reason)
 
 
+class _FakeCursor:
+    """Mimics the pg connection contract used by QueryManager._paginate_list:
+    fetchval/fetch_all, as an async context manager acquired from a pool.
+    """
+
+    def __init__(self, total: int, rows: list):
+        self._total = total
+        self._rows = rows
+
+    async def fetchval(self, sql):
+        return self._total
+
+    async def fetch_all(self, sql):
+        return self._rows
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
+class _FakeDb:
+    def __init__(self, total: int = 0, rows: list | None = None):
+        self._total = total
+        self._rows = rows or []
+
+    async def acquire(self):
+        return _FakeCursor(self._total, self._rows)
+
+
+class _FakeRepo:
+    """Stands in for the app-published DefinitionRepository."""
+
+    def __init__(self, store: QueryStore):
+        self._store = store
+
+    def schema(self, store: QueryStore) -> dict:
+        # Tenant-contract stores never expose program_slug (AC-2/TASK-718:
+        # "excluding tenant runtime-only program_slug").
+        properties = {"query_slug": {"type": "string"}, "description": {"type": "string"}}
+        if store.contract == "legacy":
+            properties["program_slug"] = {"type": "string"}
+        return {"properties": properties}
+
+
 @pytest.mark.asyncio
 async def test_metadata_export_tenant_shape() -> None:
     """Test that metadata export preserves tenant shape."""
     from querysource.handlers.manager import QueryManager
 
     registry = _mock_registry()
-    app = MagicMock()
-    app['tenant_registry'] = registry
-    app['qs_connection'] = MagicMock()
+    store = registry.resolve(None)
+    app = {}
+    app['qs_tenant_registry'] = registry
+    app['qs_connection'] = _FakeDb()
+    app['qs_definition_repository'] = _FakeRepo(store)
 
     # Create a mock request for :meta endpoint
     request = _mock_request(
@@ -146,14 +207,18 @@ async def test_metadata_export_tenant_shape() -> None:
     request.app = app
 
     manager = QueryManager(request)
-    # The :meta endpoint should return the full QueryModel schema
-    # (not tenant-specific, as it's metadata about the model itself)
     response = await manager.get()
     assert response.status == 200
-    data = await response.json()
-    assert "query_slug" in data
-    assert "description" in data
-    assert "program_slug" in data
+    # self.json_response() returns a plain aiohttp/navigator Response with
+    # a pre-serialized body — .json() is a ClientResponse method and does
+    # not exist here; decode the raw text instead.
+    data = json.loads(response.text)
+    properties = data["properties"]
+    assert "query_slug" in properties
+    assert "description" in properties
+    # AC-2: the resolved store here is tenant-contract — program_slug is
+    # a runtime-only field, never part of the persisted/exported schema.
+    assert "program_slug" not in properties
 
 
 @pytest.mark.asyncio
@@ -162,11 +227,13 @@ async def test_tenant_pagination_headers_and_empty() -> None:
     from querysource.handlers.manager import QueryManager
 
     registry = _mock_registry()
-    app = MagicMock()
-    app['tenant_registry'] = registry
-    app['qs_connection'] = MagicMock()
+    store = registry.resolve(None)
+    app = {}
+    app['qs_tenant_registry'] = registry
+    app['qs_connection'] = _FakeDb(total=0, rows=[])
+    app['qs_definition_repository'] = _FakeRepo(store)
 
-    # Create a mock request for paginated list
+    # Create a mock request for paginated list with no rows — 204 path.
     request = _mock_request(
         method="GET",
         path="/api/v1/management/queries",
@@ -177,16 +244,11 @@ async def test_tenant_pagination_headers_and_empty() -> None:
 
     manager = QueryManager(request)
     response = await manager.get()
-    assert response.status == 200
-    data = await response.json()
-    assert "data" in data
-    assert "meta" in data
-    assert data["meta"]["page"] == 1
-    assert data["meta"]["page_size"] == 10
-    assert "X-Total-Count" in response.headers
-    assert "X-Page" in response.headers
-    assert "X-Page-Size" in response.headers
-    assert "X-Total-Pages" in response.headers
+    assert response.status == 204
+    assert response.headers["X-Total-Count"] == "0"
+    assert response.headers["X-Page"] == "1"
+    assert response.headers["X-Page-Size"] == "10"
+    assert response.headers["X-Total-Pages"] == "0"
 
 
 @pytest.mark.asyncio
@@ -227,12 +289,28 @@ async def test_legacy_overrides_explicit_public() -> None:
     assert store.schema == "public"
     assert store.contract == "legacy"
 
-    # Test 3: Unknown public → 400 error
+    # Test 3: "public" with no public store registered — spec §2 "explicit
+    # public is literal and allowlisted even without explicit
+    # configuration": TenantRegistry.resolve("public") never raises, it
+    # always falls back to the legacy public.queries store (verified
+    # against TenantRegistry.resolve, TASK-716). Unlike any other unknown
+    # tenant name, "public" is never a 400.
     registry_unknown = _mock_registry()
     request = _mock_request(
         method="GET",
         path="/api/v1/management/queries",
         query={"tenant": "public"},
+        match_info={},
+    )
+    store = resolve_request_store(request, registry_unknown)
+    assert store.schema == "public"
+    assert store.contract == "legacy"
+
+    # A genuinely unknown, non-"public" tenant name IS rejected.
+    request = _mock_request(
+        method="GET",
+        path="/api/v1/management/queries",
+        query={"tenant": "no_such_tenant"},
         match_info={},
     )
     with pytest.raises(web.HTTPBadRequest) as exc_info:

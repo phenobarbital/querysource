@@ -9,27 +9,30 @@ see :mod:`querysource.handlers._pagination` and the FEAT-090 spec.
 """
 # for aiohttp
 from math import ceil
+
 from aiohttp.web import View
-from navconfig.logging import logging
+from asyncdb.exceptions import NoDataFound
 from datamodel.exceptions import ValidationError
-from asyncdb.exceptions import (
-    NoDataFound
-)
+from navconfig.logging import logging
 from pydantic import ValidationError as PydanticValidationError
+
 from ..models import QueryModel
+from ..repositories import DefinitionRepository
+from ..tenant_errors import TenantError
+from ..tenants import QueryIdentity, QueryStore, TenantRegistry
+from ..types.validators import Entity
+
 # Output
 from ..utils.handlers import QueryView
-from ..types.validators import Entity
 from ._pagination import (
-    PaginationParams,
     PaginatedResponse,
-    build_where_clause,
-    build_order_by,
+    PaginationParams,
     build_count_sql,
+    build_order_by,
     build_page_sql,
+    build_where_clause,
 )
-from ..repositories import DefinitionRepository
-from ..tenants import TenantRegistry
+
 
 class QueryManager(QueryView):
     _model: QueryModel = None
@@ -45,7 +48,7 @@ class QueryManager(QueryView):
 
     def post_init(self, *args, **kwargs):
         self._logger_name = 'QS.Manager'
-        super(QueryManager, self).post_init(*args, **kwargs)
+        super().post_init(*args, **kwargs)
 
     def get_model(self, **kwargs):
         try:
@@ -79,7 +82,7 @@ class QueryManager(QueryView):
             values=values
         )
 
-    def resolve_store(self, registry: TenantRegistry) -> QueryStore:
+    async def resolve_store(self, registry: TenantRegistry) -> QueryStore:
         """Resolve the store for this request using tenant selector parsing.
 
         Args:
@@ -130,13 +133,6 @@ class QueryManager(QueryView):
         except (TypeError, KeyError):
             meta = ''
         try:
-            if meta == ':meta':
-                # returning JSON schema of Model:
-                response = QueryModel.schema(as_dict=True)
-                return self.json_response(response=response)
-        except (TypeError, KeyError):
-            pass
-        try:
             query_slug = params['slug']
             try:
                 query_slug, meta = query_slug.split(':')
@@ -145,21 +141,57 @@ class QueryManager(QueryView):
         except KeyError:
             query_slug = None
 
-        # Resolve store once before any field/filter validation
-        registry = self.request.app['tenant_registry']
-        store = self.resolve_store(registry)
+        # Resolve store once before any field/filter/:meta/:insert decision
+        # (AC-2/AC-4: get, pagination, :meta and :insert all route through
+        # the repository, which is per-store) — but ONLY when the tenant
+        # registry/repository were actually published by QuerySource.setup()
+        # + qs_start (TASK-720). An app that has not adopted the tenant
+        # feature yet (e.g. tests/handlers/conftest.py's fixture, which
+        # only sets app["qs_connection"]) must keep working exactly as
+        # before: AC-4 "preserve legacy metadata/export/pagination
+        # conventions... existing regression tests".
+        registry = self.request.app.get('qs_tenant_registry')
+        repo: DefinitionRepository | None = self.request.app.get('qs_definition_repository')
+        store: QueryStore | None = None
+        if registry is not None and repo is not None:
+            store = await self.resolve_store(registry)
 
         # Remove selectors before field/filter validation
         qp = self._strip_selectors(qp)
 
         try:
-            db = self.request.app['qs_connection']
+            if meta == ':meta' and not query_slug:
+                # Route-level :meta (no slug attached): schema for the
+                # resolved store's persistence model, or the legacy
+                # full-model schema when tenants are not wired up.
+                response = repo.schema(store) if repo is not None else QueryModel.schema(as_dict=True)
+                return self.json_response(response=response)
             if query_slug:
-                # Single-slug branch: get, :meta, or :insert
+                # Single-slug branch: get, :meta, or :insert.
+                if repo is not None:
+                    # Routed through the repository, which already
+                    # preserves legacy vs tenant program_slug conventions
+                    # (TASK-718 DefinitionRepository._runtime_model).
+                    identity = QueryIdentity(store=store, slug=query_slug)
+                    if meta == 'insert':
+                        sentence = await repo.export_insert(identity)
+                        self.logger.debug('INSERT > %s', sentence)
+                        response = {
+                            "slug": query_slug,
+                            "sql": sentence
+                        }
+                        return self.json_response(response)
+                    if meta == ':meta':
+                        response = repo.schema(store)
+                        return self.json_response(response=response)
+                    loaded = await repo.get(identity)
+                    return self.json_response(loaded.runtime)
+                # Legacy fallback: tenant registry/repository not wired up
+                # for this app — original direct-ORM behavior, unchanged.
+                db = self.request.app['qs_connection']
                 async with await db.acquire() as conn:
                     query = await QueryModel.get(query_slug=query_slug, _connection=conn)
                     if meta == 'insert':
-                        # converting query into an INSERT INTO sentence
                         sentence = self.get_query_insert(query)
                         self.logger.debug('INSERT > %s', sentence)
                         response = {
@@ -167,6 +199,9 @@ class QueryManager(QueryView):
                             "sql": sentence
                         }
                         return self.json_response(response)
+                    if meta == ':meta':
+                        response = QueryModel.schema(as_dict=True)
+                        return self.json_response(response=response)
                     return self.json_response(query)
             # List-pagination branch: no slug, no :meta, no :insert.
             # ``qp['fields']`` (if present) is parsed + allowlist-validated
@@ -176,7 +211,20 @@ class QueryManager(QueryView):
             # are not in the QueryModel allowlist.
             self.logger.debug('QP %s', qp)
             return await self._paginate_list(
-                qp, {"fields": default_fields}, store=store
+                qp, {"fields": self.default_fields}, store=store
+            )
+        except TenantError as err:
+            if err.error_code == "query_not_found":
+                headers = {
+                    'X-STATUS': 'EMPTY',
+                    'X-ERROR': str(err),
+                    'X-MESSAGE': f'Query Source {query_slug} not Found'
+                }
+                return self.no_content(headers=headers)
+            return self.error(
+                reason=str(err),
+                exception=err,
+                status=err.code
             )
         except NoDataFound as err:
             headers = {
@@ -222,6 +270,20 @@ class QueryManager(QueryView):
         except (ValueError, PydanticValidationError) as err:
             return self.error(
                 response={"message": f"Invalid pagination params: {err}"},
+                status=400,
+            )
+
+        # AC-3: tenant-contract stores reject program_slug in sort/search/
+        # fields — a request-local check scoped to this store, never a
+        # module-global mutation of SORTABLE_COLUMNS/SEARCHABLE_COLUMNS
+        # (which must keep serving legacy program_slug listing unchanged).
+        if store is not None and store.contract == "tenant" and (
+            params.sort_field == "program_slug"
+            or (params.fields and "program_slug" in params.fields)
+            or "program_slug" in qp
+        ):
+            return self.error(
+                response={"message": "program_slug is not a queryable field for this store"},
                 status=400,
             )
 

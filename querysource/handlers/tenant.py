@@ -5,7 +5,8 @@ One selector parser prevents GET and write handlers from disagreeing about owner
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from aiohttp import web
 
@@ -58,9 +59,8 @@ def resolve_request_store(
         query_tenant = request.query["tenant"]
 
     # JSON body parameter (for write handlers)
-    if payload is not None and isinstance(payload, Mapping):
-        if "tenant" in payload:
-            body_tenant = payload["tenant"]
+    if payload is not None and isinstance(payload, Mapping) and "tenant" in payload:
+        body_tenant = payload["tenant"]
 
     # Validate and resolve selectors
     # Count non-None selectors
@@ -89,20 +89,20 @@ def resolve_request_store(
         # No selector → configured default store
         return registry.resolve(tenant=None)
 
-    # Single selector present
+    # Single selector present. Literal URL string 'null' is treated as an
+    # ordinary schema name here, never converted to Python/JSON None — the
+    # lookup below already does exactly that by never special-casing the
+    # string "null"; it is rejected with the same 400 as any other
+    # unregistered name if no store is actually named "null".
     selector = next(iter(present_selectors.values()))
-
-    # Literal URL string 'null' is a schema name, not JSON null
-    if selector == "null":
-        # Treat as explicit schema name 'null'
-        return registry.resolve(tenant="null")
 
     # Explicit nonempty tenant → exact registered schema
     try:
         return registry.resolve(tenant=selector)
     except Exception as err:
-        # registry.resolve raises TenantError for unknown/disallowed owners
+        # registry.resolve raises TenantError for unknown/disallowed owners.
+        # web.HTTPBadRequest (an HTTPException) has no exception= kwarg;
+        # use `raise ... from err` for proper exception chaining instead.
         raise web.HTTPBadRequest(
             reason=f"Invalid tenant selector: {selector}",
-            exception=err,
-        )
+        ) from err

@@ -24,13 +24,12 @@ See ``sdd/specs/querysource-slug-list-pagination.spec.md`` §3 Modules 1-2.
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from ..models import QueryModel
 from ..types.validators import Entity
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +48,16 @@ FILTERABLE_COLUMNS: frozenset[str] = frozenset(_MODEL_COLUMNS.keys())
 
 # Scalar columns that the caller is allowed to sort on. jsonb / array columns
 # are deliberately excluded (see spec §7 "Known Risks / Gotchas").
-# Tenant fields reject program_slug; legacy stores keep it.
+# Legacy/default-store listing keeps program_slug (unchanged, per FEAT-147
+# AC-3/AC-4 "preserve legacy metadata/export/pagination conventions" — this
+# module-level constant must NOT be mutated per request). Tenant-contract
+# stores reject program_slug via a request-local check in
+# QueryManager._paginate_list (per-store policy), not by removing it here.
 SORTABLE_COLUMNS: frozenset[str] = frozenset(
     {
         "query_slug",
         "description",
+        "program_slug",
         "provider",
         "is_cached",
         "created_at",
@@ -62,10 +66,12 @@ SORTABLE_COLUMNS: frozenset[str] = frozenset(
 )
 
 # Columns matched by the ``search`` query-string param with ``ILIKE '%term%'``.
-# Tenant fields reject program_slug; legacy stores keep it.
+# See SORTABLE_COLUMNS docstring above: program_slug stays for legacy; tenant
+# stores reject it via a request-local check, not a module-global mutation.
 SEARCHABLE_COLUMNS: tuple[str, ...] = (
     "query_slug",
     "description",
+    "program_slug",
     "source",
 )
 
@@ -88,8 +94,8 @@ class PaginationParams(BaseModel):
     page_size: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
     sort_field: str = Field(default=DEFAULT_SORT_FIELD)
     sort_direction: SortDirection = Field(default=DEFAULT_SORT_DIRECTION)
-    search: Optional[str] = Field(default=None, max_length=255)
-    fields: Optional[list[str]] = Field(default=None)
+    search: str | None = Field(default=None, max_length=255)
+    fields: list[str] | None = Field(default=None)
 
     @field_validator("sort_field")
     @classmethod
@@ -104,7 +110,7 @@ class PaginationParams(BaseModel):
 
     @field_validator("fields")
     @classmethod
-    def _validate_fields(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+    def _validate_fields(cls, v: list[str] | None) -> list[str] | None:
         """Reject any field not in :data:`FILTERABLE_COLUMNS`."""
         if v is None:
             return v
@@ -119,7 +125,7 @@ class PaginationParams(BaseModel):
         return (self.page - 1) * self.page_size
 
     @classmethod
-    def from_query_string(cls, qs: dict) -> "PaginationParams":
+    def from_query_string(cls, qs: dict) -> PaginationParams:
         """Parse a flat query-string dict into :class:`PaginationParams`.
 
         Understood keys:
@@ -154,7 +160,7 @@ class PaginationParams(BaseModel):
                 f"'page' and 'page_size' must be integers: {exc}"
             ) from exc
 
-        if "sort" in qs and qs["sort"]:
+        if qs.get("sort"):
             sort_value = str(qs["sort"]).strip()
             if ":" in sort_value:
                 field_part, _, dir_part = sort_value.partition(":")
