@@ -165,20 +165,14 @@ class QS(BaseQuery):
 
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f':: QS Slug: {self._query!s}')
-            # Resolve tenant store and create QueryIdentity
-            from querysource.tenants import TenantRegistry
-            registry = TenantRegistry()
-            store = registry.resolve(self._tenant_selector)
-            identity = type('QueryIdentity', (), {
-                'store': store,
-                'slug': self._query
-            })()
-            # Load LoadedDefinition through repository
-            from querysource.repositories import DefinitionRepository
-            repo = DefinitionRepository(
-                registry=registry,
-                connection_factory=self.connection.connection_factory
-            )
+            # Resolve tenant store and create QueryIdentity. Retrieved via
+            # get_definition_repository() (TASK-720) so the registry used
+            # is the one initialized on QuerySource's singleton (real
+            # discovery), never an empty, never-discovered TenantRegistry.
+            from querysource.tenants import QueryIdentity
+            repo = await self.get_definition_repository()
+            store = repo.registry.resolve(self._tenant_selector)
+            identity = QueryIdentity(store=store, slug=self._query)
             loaded_def = await repo.get(identity)
             # Store definition identity and revision on the execution object
             self._definition_identity = loaded_def.identity
