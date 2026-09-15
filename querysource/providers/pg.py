@@ -54,3 +54,30 @@ class pgProvider(sqlProvider):
                     f"Invalid Query or Column for query: {self._query}"
                 ) from ex
         return self._columns
+
+    async def describe_columns(self) -> list[dict]:
+        """Prepare (never execute) the query and return typed columns.
+
+        Returns:
+            ``[{'name': a.name, 'type': a.type.name}]`` from the prepared statement,
+            or ``[]`` when there is no rendered query.
+
+        Raises:
+            ParserError: When the statement cannot be described (same as :meth:`columns`).
+        """
+        if not self._query:
+            return []
+        try:
+            async with await self._connection.connection() as conn:
+                stmt, _ = await conn.prepare(self._query)
+                return [
+                    {
+                        "name": a.name,
+                        "type": getattr(getattr(a, "type", None), "name", None)
+                    }
+                    for a in stmt.get_attributes()
+                ]
+        except AttributeError as ex:
+            raise ParserError(
+                f"Invalid Query or Column for query: {self._query}"
+            ) from ex

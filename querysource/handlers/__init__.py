@@ -3,6 +3,7 @@ Handlers.
 
 Package for arrange all aiohttp-related handlers.
 """
+from .describe import QueryDescribe
 from .executor import QueryExecutor
 from .log import LoggingService
 from .manager import QueryManager
@@ -14,6 +15,7 @@ from .variables import VariablesService
 
 __all__ = (
     'LoggingService',
+    'QueryDescribe',
     'QueryExecutor',
     'QueryHandler',
     'QueryManager',

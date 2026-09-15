@@ -145,6 +145,18 @@ class BaseProvider(ABC):
             cond_definition = getattr(definition, 'cond_definition', None)
         return cond_definition or {}
 
+    def _udf_resolved_conditions(self) -> dict:
+        """Conditions with relative-date keywords resolved for the Rust substitution.
+
+        Returns:
+            A new dict from ``resolve_udf_conditions(self._conditions, cond_definition)``;
+            ``self._conditions`` is never mutated.
+        """
+        from ..types.validators import resolve_udf_conditions
+        return resolve_udf_conditions(
+            dict(self._conditions or {}), self._get_cond_definition()
+        )
+
     def NotFound(self, message: str):
         """Raised when Data not Found.
         """
@@ -193,6 +205,31 @@ class BaseProvider(ABC):
         if self._qs:
             self._columns = await self._qs.columns()
         return self._columns
+
+    async def describe_columns(self) -> list[dict]:
+        """Return output columns as ``[{'name': str, 'type': Optional[str]}]``.
+
+        Default: untyped names derived from :meth:`columns`. Never executes the query.
+        Returns ``[]`` when column discovery is unsupported or yields nothing.
+        """
+        try:
+            cols = await self.columns()
+        except (AttributeError, NotImplementedError):
+            return []
+        if not cols:
+            return []
+        result = []
+        for item in cols:
+            if isinstance(item, str):
+                result.append({"name": item, "type": None})
+            elif isinstance(item, dict):
+                result.append({
+                    "name": str(item.get("name", "")),
+                    "type": item.get("type")
+                })
+            else:
+                result.append({"name": str(item), "type": None})
+        return result
 
     async def dry_run(self):
         """Running Build Query and return the Query to be executed (without execution).

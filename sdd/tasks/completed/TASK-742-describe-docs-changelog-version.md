@@ -202,10 +202,50 @@ No automated tests. Verify with `git diff --stat` that only the 3 listed files c
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: parrot-sdd-coder (seat gemini, google-compat/gemini-3.5-flash),
+consolidated and content-fixed by sdd-worker (Claude Sonnet 5).
+**Date**: 2026-09-15
 **Notes**:
+- The dispatched coder added the `CHANGES.rst` "Describe API" section, created
+  `docs/DESCRIBE_API.md`, and bumped `querysource/version.py` to `4.6.0`
+  (`querysource/_version.py` untouched).
+- **Content bug found and fixed in `CHANGES.rst`**: the coder's edit corrupted
+  the file beyond the sanctioned insertion — it silently deleted ~23 lines of
+  unrelated, pre-existing content (the "New response headers" / "Unchanged"
+  paragraphs of the FEAT-090 section and the entire `2.8.0 (2022-09-29)` /
+  `2.7.7 (2022-08-02)` historical release sections), and mangled two other
+  unrelated paragraphs by embedding a literal `\n` mid-sentence and literal
+  `\"` instead of real quote characters. Rebuilt the file from the pre-task
+  revision (`git show <pre-task-sha>:CHANGES.rst`) plus the new section
+  inserted in the one sanctioned place (right after the `Unreleased`
+  underline); the final diff against the pre-task revision is now a clean
+  14-line pure insertion with zero deletions and zero corruption.
+- **Content bugs found and fixed in `docs/DESCRIBE_API.md`**: several JSON
+  examples used shapes that don't match the real, running code —
+  `derived.capabilities` showed `fields`/`filtering`/`ordering`/`grouping`/
+  `qry_options` as booleans (`true`) when the real `describe_slug()`
+  (TASK-736) always emits `fields`/`ordering`/`grouping` as lists and
+  `filtering`/`qry_options` as dicts; the top-level `filtering`/`h_filtering`
+  fields showed `[]` when the `QueryModel` field types (and hence the real
+  payload) are `{}`/`false`; and the `/vocabulary` example showed `constants`
+  and `pg_functions` as lists of `{"name", "type"}` objects and a
+  non-existent `date_add` function, when `build_vocabulary()` (TASK-739)
+  actually returns `constants`/`pg_functions` as plain string lists and the
+  real `functions` registry has `date_diff`/`date_sum`/`days_ago`/
+  `previous_month`/`fdow`/`ldow` with `args`/`description`/`invocable`.
+  Verified every fix by running `build_vocabulary(udf_keywords(), ...)` and
+  reading `describe.py`'s actual `capabilities` dict, then re-validated all 4
+  JSON code blocks in the doc parse as valid JSON.
+- `python -c "from querysource.version import __version__; print(__version__)"`
+  → `4.6.0` (AC22).
+- No tenant routes mentioned in either file (`grep -i tenant` on both is
+  empty) — correctly deferred to TASK-743.
+- Exactly the 3 listed files touched (verified via `git diff --stat` against
+  the pre-task revision); no code changes.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: gemini · Backend: google-compat · Model: gemini-3.5-flash · Attempts: 1 ·
+Duration: 40.2s · Tokens: in=319,751 out=4,159 — plus a consolidation-phase content
+fix pass by sdd-worker (native, Claude Sonnet 5, interactive, not tracked by the
+roster) for the CHANGES.rst corruption and the DESCRIBE_API.md shape inaccuracies.

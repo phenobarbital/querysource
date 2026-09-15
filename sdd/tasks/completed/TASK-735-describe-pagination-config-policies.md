@@ -291,10 +291,36 @@ See the blueprint test blocks above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Claude Sonnet 5) — implemented directly after the
+parrot-sdd-coder dispatch failed at the infra level for this task (`SubWorktreeMergeError:
+git worktree add failed`, both attempts, zero code produced).
+**Date**: 2026-09-15
 **Notes**:
+- Implemented per blueprint: `build_order_by(params, nulls_last=False)` — default output
+  byte-identical (AC19), `NULLS LAST` appended only when requested. `compose_where` — the
+  4 cases plus `ValueError` on a non-empty `where` not starting with `"WHERE "`.
+  `build_scan_sql` — validates schema/table via `_validate_bare_identifier`, requires
+  non-empty `fields` all in `FILTERABLE_COLUMNS`, `limit >= 1`, no `OFFSET`.
+- `querysource/conf.py`: added `QS_DESCRIBE_MAX_SCAN` (int, default 10000),
+  `QS_DESCRIBE_ADMIN_GROUPS` (list[str], default `['admin', 'superuser']`),
+  `QS_DESCRIBE_COLUMNS_TIMEOUT` (float, default 5.0) — all verified importable with the
+  documented defaults.
+- `policies/defaults.yaml`: appended `slug:describe` and `slug:describe_raw` to
+  `admin_full_access.actions`.
+- `pytest tests/handlers/test_pagination_describe_helpers.py
+  tests/handlers/test_querymanager_pagination.py tests/policies -q` → 62 passed, 1 xfailed
+  (pre-existing xfail, unrelated to this task).
+- `ruff check querysource/handlers/_pagination.py querysource/conf.py
+  tests/handlers/test_pagination_describe_helpers.py tests/policies/test_default_policies_load.py`:
+  the new test file is fully clean; the 3 modified pre-existing files carry the same 13
+  violations as on `dev` before this task (verified by diffing counts with a scoped
+  `git stash`) — this task's diff introduces zero new lint issues.
+- Only the 5 listed files touched; no scope creep.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: sdd-worker (native, Claude Sonnet 5) · Backend: n/a (in-worktree fallback after
+2 failed nova-seat attempts each errored before producing any code: attempt 1 seat
+glm/nova/zai.glm-4.7-flash, attempt 2 seat qwen/nova/qwen.qwen3-coder-480b-a35b-instruct —
+both `SubWorktreeMergeError: git worktree add failed`, duration ~0.03s each, no tokens
+consumed) · Attempts: 1 (this implementation) · Duration: n/a (interactive) · Tokens: n/a
