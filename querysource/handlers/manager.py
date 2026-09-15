@@ -441,7 +441,7 @@ class QueryManager(QueryView):
                     status=err.code
                 )
             except Exception as err:
-                print('EXEPT ', err)
+                self.logger.error(f'Error patching query slug: {err}')
                 return self.error(
                     response={"message": f'Unprocessable partial Updating: {query_slug}'},
                     exception=err,
@@ -566,7 +566,7 @@ class QueryManager(QueryView):
                     status=err.code
                 )
             except Exception as err:
-                print('ERROR ', err)
+                self.logger.error(f'Error deleting query slug: {err}')
                 return self.critical(
                     exception=err,
                     traceback=''
@@ -689,7 +689,7 @@ class QueryManager(QueryView):
                     status=err.code
                 )
             except Exception as err:
-                print('ERROR ', err)
+                self.logger.error(f'Error upserting query slug: {err}')
                 return self.critical(
                     response={"message": f"Error creating/updating an slug: {data}"},
                     exception=err
@@ -801,7 +801,7 @@ class QueryManager(QueryView):
                     status=err.code
                 )
             except Exception as err:
-                print('ERROR ', err)
+                self.logger.error(f'Error upserting query slug: {err}')
                 return self.critical(
                     response={"message": f"Error creating/updating an slug: {data}"},
                     exception=err
