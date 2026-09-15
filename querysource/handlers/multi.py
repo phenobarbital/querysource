@@ -305,6 +305,13 @@ class QueryHandler(AbstractHandler):
         )
         _user_session = request.get('user_session')  # memoized by _get_user_session above
 
+        # Owner-aware execution: TenantQueryHandler.query() stashes the
+        # resolved tenant selector on request['qs_tenant'] before
+        # delegating here (querysource/handlers/tenant.py); legacy v2/v3
+        # callers never set it, so tenant stays None (MultiQS's own
+        # default — AC-3, unchanged behavior for every non-tenant route).
+        _tenant = request.get('qs_tenant')
+
         ## Step 1b: Running all Queries and Files on QueryObject
         qs = MultiQS(
             slug=slug,
@@ -313,6 +320,7 @@ class QueryHandler(AbstractHandler):
             query=options,
             conditions=data,
             user_session=_user_session,
+            tenant=_tenant,
         )
         try:
             result, options = await qs.query()

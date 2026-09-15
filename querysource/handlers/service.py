@@ -264,7 +264,14 @@ class QueryService(AbstractHandler):
             f'Slug: {slug}, format: {queryformat}, conditions: {conditions}'
         )
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution: TenantQueryHandler.query() stashes the
+            # resolved tenant selector on request['qs_tenant'] before
+            # delegating here (querysource/handlers/tenant.py); legacy v2/v3
+            # callers never set it, so tenant stays None (QS's own default,
+            # AC-3 "existing legacy tenant conditions must not redirect
+            # storage" — behavior is unchanged for every non-tenant route).
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -381,7 +388,9 @@ class QueryService(AbstractHandler):
             f'Slug: {slug}, format: json, conditions: {conditions}'
         )
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -513,7 +522,9 @@ class QueryService(AbstractHandler):
         conditions = {**options, **params}
         self.logger.debug(f'Slug: {slug}, format: {queryformat}, conditions: {conditions}')
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -628,7 +639,9 @@ class QueryService(AbstractHandler):
         conditions = {**options, **params}
         self.logger.debug(f'Test Slug: {slug}, format: {queryformat}, conditions: {conditions}')
         try:
-            query = await self.get_source(request, slug, conditions, driver=args)
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            query = await self.get_source(request, slug, conditions, driver=args, tenant=tenant)
             result, error = await query.dry_run()
             if error:
                 works = False

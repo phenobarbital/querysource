@@ -343,6 +343,43 @@ class QuerySource(metaclass=Singleton):
             "*", "/api/v2/variables/{program}/{variable}", _redirect_variables
         )
 
+        ### Tenant execution/inspection routes (FEAT-147).
+        # Registered last, after every fixed-literal route above (management,
+        # datasources, qs/variables, v2/v3 multi-query, component docs,
+        # Airtable OAuth) — aiohttp's UrlDispatcher resolves routes in
+        # registration order, so /api/v1/{tenant}/... never shadows a
+        # reserved literal first segment like "management"/"datasources"/
+        # "qs" (AC-4 "legacy routes take precedence" /
+        # "reserve management tenant routing... against raw routes").
+        from .handlers import TenantQueryHandler
+        th = TenantQueryHandler()
+        r = self.app.router.add_get("/api/v1/{tenant}/queries/", th.list)
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries/", th.query)
+        routes.append(r)
+        r = self.app.router.add_get("/api/v1/{tenant}/queries", th.list)
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries", th.query)
+        routes.append(r)
+        r = self.app.router.add_get(
+            "/api/v1/{tenant}/queries/{slug}", th.query, allow_head=False
+        )
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries/{slug}", th.query)
+        routes.append(r)
+        r = self.app.router.add_head("/api/v1/{tenant}/queries/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_patch("/api/v1/{tenant}/queries/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_get(
+            "/api/v1/{tenant}/queries/{slug}/test", th.test_slug
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            "/api/v1/{tenant}/queries/{slug}/test", th.test_slug
+        )
+        routes.append(r)
+
         ### Startup Event for QuerySource:
         self.app.on_startup.append(
             self.qs_start
