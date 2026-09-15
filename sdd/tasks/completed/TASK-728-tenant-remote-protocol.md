@@ -210,5 +210,100 @@ async def test_timeout_cleanup_and_queue_alias() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+**Author/date**: sdd-worker (orchestrator), 2026-09-15. Implemented directly
+("attempt 3") — both dispatched attempts failed to merge.
+
+**Dispatch history**:
+- Attempt 1 (seat `codex-spark`, `gpt-5.3-codex-spark`): `DispatchExecutionError`
+  — exceeded the 1800s wall-clock cap.
+- Attempt 2 (seat `glm`, `zai.glm-4.7-flash`): completed and committed
+  (`cb1001b`) but the engine flagged `outcome: fidelity_violation` because
+  it wrote `sdd/contracts/qworker-query-handler.md` — even though that file
+  is one of this task's own three declared MODIFY targets, any write under
+  `sdd/` trips the fidelity check. Per protocol this was never merged by
+  hand. Reviewing that unmerged diff (read-only) also surfaced two real
+  correctness bugs worth avoiding rather than adopting: (1) it added a
+  brand-new `execute_tenant()` method that nothing in the codebase ever
+  calls — `ThreadQuery.fetch()` only ever calls `executor.execute(...)`, so
+  AC-1's versioned dispatch would never actually fire; (2) it deleted
+  TASK-727's interim "reject non-legacy remote store" guard from
+  `execute()` without replacing it with real routing, which would have let
+  a tenant-owned remote query silently execute through the legacy handler
+  with no owner envelope at all — the exact failure this feature exists to
+  prevent.
+
+**Implementation** (fresh, in this worktree):
+- `querysource/queries/multi/sources/executors.py`: `RemoteExecutor.execute()`
+  itself now branches on `store.contract` (not a separate unused method).
+  `"tenant"` → `querysource.remote.tenant_query_handler_v1` with a validated
+  `TenantOwnerEnvelope` (`version=1`, `database_namespace`, `schema`,
+  `table`, `contract`), passed as `owner=` to `QClient.run()`. `None`/
+  `"legacy"` → unchanged `querysource.remote.query_handler` path. Any other
+  contract value raises `QueryException` before any dispatch. Routing-key
+  stripping (slug/remote/worker) preserved unchanged for both handlers;
+  lazy `qw.client.QClient` import and the existing timeout/connection-error
+  wrapping and `finally`-block client cleanup all preserved as-is — no
+  fallback between handlers or to local execution in any failure path.
+- `sdd/contracts/qworker-query-handler.md`: added a new "Versioned Tenant
+  Handler — tenant_query_handler_v1" section: required signature, the
+  `TenantOwnerEnvelope` field table, worker-side owner-validation
+  requirements (reject unsupported version / unrecognized owner tuple
+  explicitly, never a silent default-schema execution), an error-contract
+  table extending the legacy one, legacy coexistence, and an explicit
+  deployment gate stating `querysource/remote.py` is intentionally not
+  created by this task/repo.
+- `tests/tenants/test_tenant_remote_protocol.py` (new, 4 tests): exact
+  callable + owner-envelope assertion; routing-key stripping for both a
+  saved (slug-based, legacy store) and a raw (tenant store) child query;
+  explicit-error-no-fallback when the fake worker doesn't recognize the
+  versioned handler (asserts exactly one dispatch attempt, nothing queued);
+  timeout raises `QueryException` and still closes the client, plus a
+  healthy call proving the queue result is keyed by the alias (`name`), not
+  the stored slug.
+- `tests/tenants/test_tenant_child_execution.py`: updated
+  `test_thread_loop_owner_and_single_queue_put`, which asserted TASK-727's
+  now-superseded "reject non-legacy store" message — this task's whole
+  purpose is replacing that interim guard with real dispatch. Removed the
+  obsolete assertion (full tenant-dispatch coverage now lives in the new
+  test file) and dropped the `QueryException` import that edit left unused.
+
+**Checks run** (`source .venv/bin/activate && python -m pytest ...`):
+- `tests/tenants/test_tenant_remote_protocol.py` — 4/4 passed (AC-5, exact
+  command from the task).
+- `tests/tenants/test_tenant_child_execution.py` — 4/4 passed (no
+  regression from TASK-727).
+- Full sweep: `tests/multi tests/test_abstract_multi.py
+  tests/test_local_executor.py tests/test_multi_destinations_subpackage.py
+  tests/test_multiqs_column_transforms.py
+  tests/test_multiqs_destination_dispatch.py
+  tests/test_multiqs_remote_dispatch.py
+  tests/test_multiqs_slug_sources_normalize.py
+  tests/test_multiqs_sources_integration.py
+  tests/test_scheduler_multi_routing.py tests/test_threadquery_executor.py
+  tests/handlers/* (excluding test_airtable_oauth.py — pre-existing missing
+  aioresponses dep) tests/integration/test_multiquery_output_errors.py
+  tests/unit/test_multiqs_output_raise.py tests/tenants` — 265 passed, 2
+  failed. Both failures confirmed pre-existing and unrelated (unchanged
+  from the TASK-727 completion note): `tests/test_local_executor.py::
+  test_frozen_dataclass` (env `QWORKER_TIMEOUT=5`) and
+  `tests/test_multiqs_sources_integration.py::
+  test_guardrail_rejects_too_many_sources` (pre-existing `self.Error()`
+  always raises `QueryException`, never `DriverError`).
+- `ruff check` on every touched file — 0 new findings; remaining findings
+  in `querysource/queries/multi/sources/executors.py` (I001 at the
+  pre-existing top import block; RET501/PLR1711 inside the untouched
+  `LocalExecutor.execute()`) and in `test_tenant_child_execution.py`
+  (I001/F401×2/TRY002×2/SIM117) verified byte-for-byte identical to the
+  baseline at commit `4d9dc1b` (TASK-727's original merge) — none
+  attributable to this task's edits.
+
+**Spec deviations**: none. **Deployment gates unverified**: the actual
+external qworker implementation of `tenant_query_handler_v1` (this repo
+intentionally does not implement it — see the contract's Deployment Gate
+section); real network dispatch against a live worker (sandbox has no
+network egress, only a faked `QClient` in tests).
+
+**Seats**: codex-spark (attempt 1, failed — wall-clock cap, usage unknown)
+· glm (attempt 2, `zai.glm-4.7-flash`, 528.0s, 1,818,585 in / 9,807 out,
+fidelity_violation — not merged) · orchestrator (attempt 3, this
+implementation, merged directly).
