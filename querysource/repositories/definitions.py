@@ -1,8 +1,7 @@
 """Saved-definition persistence: sole storage boundary for tenant/legacy rows.
 
 Every saved-definition SQL read goes through :class:`DefinitionRepository`.
-Mutation (create/upsert/patch/delete) is out of scope for this module — see
-TASK-719.
+Mutation (create/upsert/patch/delete) is implemented in TASK-719.
 
 Note: this module intentionally does NOT use ``from __future__ import
 annotations`` nor ``X | None``/``list[X]`` union syntax. See
@@ -256,3 +255,252 @@ class DefinitionRepository:
         async with await self.connection_factory() as conn:
             rows = await conn.fetch_all(sql)
         return tuple(dict(row) for row in (rows or []))
+
+    # -- mutation methods ----------------------------------------------------------
+
+    async def create(self, store: QueryStore, data: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Validate and insert persisted fields, retaining database constraints.
+
+        Raises TenantError(tenant_write_forbidden) on permission failure.
+        Raises TenantError(tenant_store_unavailable) if the store table is missing.
+        """
+        # Validate input data with TenantQueryDefinition (rejects program_slug)
+        validated = TenantQueryDefinition(**data)
+        persisted = validated.to_dict()
+
+        # Remove None values to let database defaults apply
+        persisted = {k: v for k, v in persisted.items() if v is not None}
+
+        table = self._qualified_table(store)
+        columns = list(persisted.keys())
+        placeholders = [f"${i + 1}" for i in range(len(columns))]
+        values = list(persisted.values())
+
+        sql = f"INSERT INTO {table} ({', '.join(quote_identifier(c) for c in columns)}) VALUES ({', '.join(placeholders)}) RETURNING *"
+
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, *values)
+        except Exception as e:
+            # Check for permission/table errors
+            error_msg = str(e).lower()
+            if "permission denied" in error_msg or "must be owner" in error_msg:
+                raise TenantError(
+                    f"Write permission denied for store {store.schema}",
+                    error_code="tenant_write_forbidden",
+                )
+            if "relation" in error_msg and "does not exist" in error_msg:
+                raise TenantError(
+                    f"Store table not available: {store.schema}.{store.table}",
+                    error_code="tenant_store_unavailable",
+                )
+            raise
+
+        if row is None:
+            raise TenantError(
+                "Failed to create query definition",
+                error_code="tenant_store_unavailable",
+            )
+
+        persisted_result, _ = self._row_to_persisted(dict(row), store)
+        return persisted_result
+
+    async def upsert(
+        self, identity: QueryIdentity, data: Mapping[str, Any]
+    ) -> tuple[Mapping[str, Any], bool]:
+        """Atomically upsert and return persisted row with created flag.
+
+        Uses PostgreSQL ON CONFLICT for atomicity. The created flag accurately
+        reflects whether a new row was inserted (True) or an existing row was
+        updated (False).
+
+        Raises TenantError(tenant_write_forbidden) on permission failure.
+        Raises TenantError(tenant_store_unavailable) if the store table is missing.
+        """
+        store = identity.store
+
+        # Validate input data with TenantQueryDefinition (rejects program_slug)
+        validated = TenantQueryDefinition(**data)
+        persisted = validated.to_dict()
+
+        # Remove None values to let database defaults apply
+        persisted = {k: v for k, v in persisted.items() if v is not None}
+
+        table = self._qualified_table(store)
+        columns = list(persisted.keys())
+        placeholders = [f"${i + 1}" for i in range(len(columns))]
+        values = list(persisted.values())
+
+        # Build ON CONFLICT DO UPDATE using query_slug as the primary key
+        update_clauses = []
+        for col in columns:
+            if col != "query_slug":
+                update_clauses.append(f"{quote_identifier(col)} = EXCLUDED.{quote_identifier(col)}")
+
+        # Add updated_at timestamp for the update case
+        update_clauses.append(f"{quote_identifier('updated_at')} = now()")
+
+        sql = f"""
+            INSERT INTO {table} ({', '.join(quote_identifier(c) for c in columns)})
+            VALUES ({', '.join(placeholders)})
+            ON CONFLICT (query_slug) DO UPDATE SET {', '.join(update_clauses)}
+            RETURNING *, (xmax = 0) AS is_inserted
+        """
+
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, *values)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "permission denied" in error_msg or "must be owner" in error_msg:
+                raise TenantError(
+                    f"Write permission denied for store {store.schema}",
+                    error_code="tenant_write_forbidden",
+                )
+            if "relation" in error_msg and "does not exist" in error_msg:
+                raise TenantError(
+                    f"Store table not available: {store.schema}.{store.table}",
+                    error_code="tenant_store_unavailable",
+                )
+            raise
+
+        if row is None:
+            raise TenantError(
+                "Failed to upsert query definition",
+                error_code="tenant_store_unavailable",
+            )
+
+        # PostgreSQL returns (xmax = 0) as True for inserted, False for updated
+        is_created = bool(row.get("is_inserted", False))
+
+        # Remove the is_inserted pseudo-column before validation
+        row_data = dict(row)
+        row_data.pop("is_inserted", None)
+
+        persisted_result, _ = self._row_to_persisted(row_data, store)
+        return persisted_result, is_created
+
+    async def patch(
+        self, identity: QueryIdentity, data: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Update supplied mutable fields only; owner and slug cannot change.
+
+        Null values in data are applied explicitly (different from omitted fields).
+        Rejects any attempt to change query_slug or add program_slug.
+
+        Raises TenantError(tenant_write_forbidden) on permission failure.
+        Raises TenantError(tenant_store_unavailable) if the store table is missing.
+        Raises TenantError(query_not_found) if the row doesn't exist.
+        """
+        store = identity.store
+
+        # Reject attempts to change the identity
+        if "query_slug" in data and data["query_slug"] != identity.slug:
+            raise TenantError(
+                "Cannot change query_slug via PATCH",
+                error_code="invalid_tenant",
+            )
+
+        # Reject program_slug (never allowed for tenants)
+        if "program_slug" in data:
+            raise TenantError(
+                "program_slug cannot be modified",
+                error_code="invalid_tenant",
+            )
+
+        # Build the SET clause with only the provided fields
+        set_clauses = []
+        values = []
+        for key, value in data.items():
+            # Skip query_slug (identity) and program_slug (forbidden)
+            if key in ("query_slug", "program_slug"):
+                continue
+            set_clauses.append(f"{quote_identifier(key)} = ${len(values) + 1}")
+            values.append(value)
+
+        if not set_clauses:
+            # Nothing to update - just return the current row
+            row = await self._fetch_row(store, identity.slug)
+            if row is None:
+                raise TenantError(
+                    f"Query not found: {identity.slug!r}",
+                    error_code="query_not_found",
+                )
+            persisted_result, _ = self._row_to_persisted(dict(row), store)
+            return persisted_result
+
+        # Add updated_at timestamp
+        set_clauses.append(f"{quote_identifier('updated_at')} = now()")
+
+        table = self._qualified_table(store)
+        sql = f"""
+            UPDATE {table}
+            SET {', '.join(set_clauses)}
+            WHERE query_slug = ${len(values) + 1}
+            RETURNING *
+        """
+        values.append(identity.slug)
+
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, *values)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "permission denied" in error_msg or "must be owner" in error_msg:
+                raise TenantError(
+                    f"Write permission denied for store {store.schema}",
+                    error_code="tenant_write_forbidden",
+                )
+            if "relation" in error_msg and "does not exist" in error_msg:
+                raise TenantError(
+                    f"Store table not available: {store.schema}.{store.table}",
+                    error_code="tenant_store_unavailable",
+                )
+            raise
+
+        if row is None:
+            raise TenantError(
+                f"Query not found: {identity.slug!r}",
+                error_code="query_not_found",
+            )
+
+        persisted_result, _ = self._row_to_persisted(dict(row), store)
+        return persisted_result
+
+    async def delete(self, identity: QueryIdentity) -> bool:
+        """Delete exactly this owner's row; report missing without fallback.
+
+        Returns True if the row was deleted, raises TenantError(query_not_found)
+        if the row doesn't exist.
+
+        Raises TenantError(tenant_write_forbidden) on permission failure.
+        Raises TenantError(tenant_store_unavailable) if the store table is missing.
+        """
+        store = identity.store
+        table = self._qualified_table(store)
+        sql = f"DELETE FROM {table} WHERE query_slug = $1 RETURNING query_slug"
+
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, identity.slug)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "permission denied" in error_msg or "must be owner" in error_msg:
+                raise TenantError(
+                    f"Write permission denied for store {store.schema}",
+                    error_code="tenant_write_forbidden",
+                )
+            if "relation" in error_msg and "does not exist" in error_msg:
+                raise TenantError(
+                    f"Store table not available: {store.schema}.{store.table}",
+                    error_code="tenant_store_unavailable",
+                )
+            raise
+
+        if row is None:
+            raise TenantError(
+                f"Query not found: {identity.slug!r}",
+                error_code="query_not_found",
+            )
+
+        return True
