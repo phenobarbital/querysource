@@ -13,6 +13,12 @@ base_branch: dev
 **Status**: exploration
 **Recommended Option**: A
 
+> Merged on 2026-09-15 with the parallel brainstorm `queryslug-describe`
+> (same day, same author), which contributed the typed-columns sub-resource,
+> the relative-date keyword vocabulary endpoint, the parameter typing
+> rules, the downstream ai-parrot consumers and the UDF-resolution hotfix
+> prerequisite. That file was removed; this document is the single source.
+
 ---
 
 ## Problem Statement
@@ -31,6 +37,15 @@ Neither is a safe, consumer-oriented discovery API. Two groups are affected:
 - **Frontend and dashboard developers** building query pickers and parameter forms.
 - **Integrators and agents** that need to know which variables and conditions a slug accepts before executing it.
 
+Three concrete consumers are waiting on this contract (all in `ai-parrot`):
+- **FEAT-567 `QuerySourceToolkit.qs_describe`** (replaces `QSourceTool`, which today can only *execute* `query_slug` + `conditions` and has no way to discover a slug's parameters or output columns).
+- **A2UI "linked surfaces"**: an agent emits a widget/dashboard that carries a *data-source descriptor* (`slug` + `conditions` + declared parameters) instead of the data; the Navigator Svelte 5 renderer re-fetches through `POST /api/v2/services/queries/{slug}` with the viewer's JWT and renders a filter bar from the parameter contract.
+- **`DatasetManager.QuerySlugSource.prefetch_schema()`**, which today executes the slug with `querylimit=1` only to learn column names and dtypes.
+
+Two further gaps surfaced while researching them:
+- **Column types are discarded.** `providers/pg.py:44-56` already prepares the statement and reads `stmt.get_attributes()`, but keeps only `a.name`; the `.type` is available for free.
+- **The relative-date keyword vocabulary is not discoverable.** `TODAY`, `YESTERDAY`, `FDOM`, `LDOM`, `CURRENT_YEAR`, `CURRENT_MONTH`, `LAST_YEAR` are accepted as condition *values* (`rust/src/validators.rs:20-35`, env-overridable mirror in `querysource/types/validators.pyx:27-33`), and ~50 date helpers live in `querysource/utils/functions.pyx` without docstrings. An LLM or a filter bar has nothing to read the vocabulary from.
+
 The platform already has PBAC (`slug:execute`, policies under `policies/`), and slugs are logically owned by programs (`program_slug`). A describe API should respect both:
 - a **pre-filter** by the user's programs, pushed into SQL;
 - an **ABAC post-filter**, evaluated per slug.
@@ -43,7 +58,13 @@ The platform already has PBAC (`slug:execute`, policies under `policies/`), and 
   - They do not collide with the existing POST-only `/api/v1/queries/{test,run,schema}`.
   - The detail route has one more path segment than those routes, so no match is ambiguous.
   - A slug literally named `describe` resolves to `/api/v1/queries/describe/describe`, which only the detail route matches.
-  - The `{slug}/describe` shape leaves room for future sibling sub-resources such as `/api/v1/queries/{slug}/columns`.
+  - The `{slug}/describe` shape leaves room for sibling sub-resources; this feature adds one: `GET /api/v1/queries/{slug}/columns`.
+  - `GET /api/v1/queries/vocabulary` exposes the relative-date keyword vocabulary. It is one path segment shorter than the detail route, so a slug named `vocabulary` still resolves to `/api/v1/queries/vocabulary/describe`.
+- **Typed columns live in the sibling sub-resource, not in describe (user decision, 2026-09-15).** `GET /api/v1/queries/{slug}/columns` is the **only** route in this feature that opens a connection to the slug's datasource: it prepares the statement (`conn.prepare`, no execution) where the provider supports it and falls back to the slug's declared `attributes.columns`. It never executes the query and never samples rows (`querylimit=1` sampling is out of scope).
+- **Parameter typing in `derived.variables`:** each variable carries a canonical lowercase `type` from the set the validator understands (`literal, integer, float, numeric, decimal, epoch, boolean, string, field, date, datetime, timestamp, uuid, array, json, numrange, int4range, int8range`; the DB stores hints such as `"STRING"` and the Rust validator is case-insensitive), the verbatim `raw_type`, a `source` (`cond_definition` | `conditions` | `placeholder`) and `accepts_keywords` (true for `date`/`datetime`/`timestamp` and untyped variables).
+- **Structural placeholders are never user variables.** The reserved set is the union of the parser tokens (`{schema}`, `{table}`, `{tablename}`, `{fields}`, `{filter}`, `{where_cond}`, `{and_cond}`, `{grouping}`, `{group_by}`, `{ordering}`, `{order_by}`, `{offset}`, `{_offset}`, `{limit}`, `{_limit}`, `{querylimit}`) and the provider `replacement` defaults (`providers/sql.py:37-45`: `firstdate`/`lastdate`/`filterdate` default to `current_date`, which makes them *defaulted* variables, not structural ones).
+- **Vocabulary reflects runtime configuration.** The endpoint lists the process's effective `UDF_LIST`, `PG_CONSTANTS` and `PG_UDF` (environment overrides included), enriched from a curated registry; a keyword accepted by the validator but missing from the registry is still listed, with `description: null`.
+- **Prerequisite hotfix (separate, on `main`):** keyword resolution is inconsistent for typed conditions. In `rust/src/validators.rs:296-298` a `date`/`datetime`/`timestamp` hint quotes the value verbatim (`'FDOM'`) before the UDF check at `:320-328` is reached, and the Rust generic branch returns the quoted keyword "for the Python layer to resolve" while only the Cython path (`querysource/types/validators.pyx:552-553`) calls `to_udf`. Because describe will *advertise* `accepts_keywords`, the hotfix must ship before or with this feature's release.
 - **Handler:** a new dedicated read-only handler. `QueryManager` is **not modified** and stays the admin CRUD tool.
 - **Pre-filter (SQL, list and detail)** by the session's `userinfo["programs"]`:
   - `userinfo["superuser"] is True`: no program restriction.
@@ -67,7 +88,8 @@ The platform already has PBAC (`slug:execute`, policies under `policies/`), and 
   - `dwh_info`, `cache_options`, `created_by` and `updated_by` are hidden from non-admins.
   - The response carries `"redacted": [<field names>]` so clients know what was withheld.
 - **No caching:** definitions are read from Postgres on each request, as `get_query_slug` does today. No Redis layer.
-- **No execution:** describing a slug must never run it or connect to its source datasource. It only touches the definitions table.
+- **No execution:** describing a slug (list and detail) must never run it or connect to its source datasource. It only touches the definitions table. The `/{slug}/columns` sub-resource is the sole, explicit exception: it may *prepare* the statement on the datasource, but never executes it.
+- **Never leak `query_raw` by accident:** the columns sub-resource returns column metadata only; the rendered statement stays server-side.
 - **Configurable table:** use `QS_QUERIES_SCHEMA` / `QS_QUERIES_TABLE`, via `QueryModel.Meta`. Never hardcode `public.queries` (the scheduler's mistake at `scheduler/scheduler.py:523-542`).
 - **Safety:** no string-built SQL from user input. The program list goes in as a **bound parameter** (`program_slug = ANY($1)`). Column names come only from the `_pagination` allowlists.
 - **Conventions:** async-only, `self.logger`, Google docstrings, type hints, and `pytest` + `pytest-asyncio` tests under `tests/handlers/`.
@@ -96,6 +118,10 @@ This adds three small, separately testable pieces:
 3. **A read-only handler** (`querysource/handlers/describe.py`, class `QueryDescribe`) is registered in `QuerySource.setup()` next to the `QueryExecutor` routes:
    - **List:** validate `PaginationParams` → pre-filter `WHERE` (programs + search + equality filters) → fetch the lightweight projection (`query_slug, provider, description, program_slug, updated_at`) for **all** matching rows in SQL order → ABAC filter preserving order → slice the page → `PaginatedResponse` plus the `X-*` headers.
    - **Detail:** same pre-filter predicate + `query_slug = $n` → `QueryModel` → ABAC describe check (404) → optional raw/admin checks → describer → JSON.
+   - **Columns:** same pre-filter + ABAC check as detail → `QS(slug=slug, conditions=<defaults>, request=request)` → `build_provider()` → `await provider.describe_columns()` under a short timeout → on failure fall back to `attributes.columns` → JSON with `columns_source`.
+   - **Vocabulary:** authenticated; composes the effective `UDF_LIST` / `PG_CONSTANTS` / `PG_UDF` with the curated registry → JSON.
+4. **An additive provider hook** `BaseProvider.describe_columns() -> list[dict]` (`providers/abstract.py`), defaulting to `[{"name": n, "type": None} for n in await self.columns()]`, overridden on `pgProvider` to keep `attribute.type.name` from the prepared statement. `columns()` itself is untouched, so `HEAD`/`PATCH /api/v2/services/queries/{slug}` keep their payloads.
+5. **A curated vocabulary registry** (`querysource/utils/vocabulary.py`): explicit entries (`name`, `category`, `returns`, `description`, `example`, `args`) over `UDF_LIST` / `PG_CONSTANTS` / `PG_UDF` and a hand-picked subset of `utils/functions.pyx`. It is the single source the ai-parrot prompt and the frontend filter bar are generated from.
 
 ✅ **Pros:**
 - Matches every decision taken in discovery exactly. `QueryManager` stays untouched and admin behaviour does not regress.
@@ -112,6 +138,8 @@ This adds three small, separately testable pieces:
 - In-memory pagination scales with the *pre-filtered* slug count. A superuser, or the sessionless `authorized` identity, scans the whole table projection. That is fine at thousands of rows; it needs a guard at hundreds of thousands (see Open Questions).
 - The existing `_pagination.build_where_clause` only builds literal-quoted equality/ILIKE predicates. A bound `ANY($1)` program predicate needs a small companion builder, or an extension of it.
 - Placeholder extraction is heuristic for non-SQL parsers, whose `query_raw` is JSON (Mongo, Elastic, ArangoDB…). It must be explicitly marked unsupported there instead of guessed.
+- `prepare` needs a syntactically complete statement: slugs with variables that have no default cannot be prepared and fall back to declared columns (`columns_source: "declared"` or `"unavailable"`) with a warning.
+- The vocabulary registry is curated by hand (no docstrings to introspect) and must be kept in sync when `functions.pyx` gains helpers.
 
 📊 **Effort:** Medium
 
@@ -125,8 +153,16 @@ This adds three small, separately testable pieces:
 | `asyncdb` (`Model`, pg pool via `app['qs_connection']`) | read definitions with bound params | same path as `QueryManager` |
 | `pydantic` v2 | `PaginationParams`, `PaginatedResponse`, describe response model | already used in `_pagination.py` |
 | stdlib `string.Formatter` | placeholder extraction from `query_raw` | no new dependency |
+| `asyncpg` (via asyncdb) | `stmt.get_attributes()` → `attr.type.name` for typed columns | already the pg driver |
 
 🔗 **Existing Code to Reuse:**
+- `querysource/handlers/service.py:359-439` `QueryService.get_columns`: the build-provider → `columns()` → fallback-to-`attributes.columns` sequence the columns sub-resource mirrors (and its `SlugNotFound` → 404 handling).
+- `querysource/providers/pg.py:44-56` `pgProvider.columns`: the prepared-statement discovery to extend with types in `describe_columns()`.
+- `querysource/providers/abstract.py:128-146` `get_definition()` / `_get_cond_definition()`; `:190` `columns()` (raises `NotImplementedError` by default).
+- `querysource/providers/sql.py:37-62` `replacement` defaults and `_PARSER_PLACEHOLDERS`.
+- `rust/src/safe_dict.rs:116-120` placeholder key grammar (`[A-Za-z0-9_.]`), to keep extraction consistent with substitution.
+- `rust/src/validators.rs:20-35` `UDF_LIST` / `PG_CONSTANTS`; `querysource/types/validators.pyx:27-33` env-overridable mirror; `rust/src/validators.rs:280-305` the case-insensitive `cond_definition` type dispatch.
+- `querysource/utils/functions.pyx` date helpers documented by the vocabulary (`today:94`, `previous_month:111`, `fdom:133`, `fdow:147`, `ldow:150`, `last_year:162`, `ldom:183`, `yesterday:217`, `days_ago:264`, `date_diff:454`, `date_sum:503`).
 - `querysource/handlers/_pagination.py`:
   - `PaginationParams.from_query_string`, `build_where_clause`, `build_order_by`, `PaginatedResponse`, `PaginationMeta`;
   - the allowlists `SORTABLE_COLUMNS`, `SEARCHABLE_COLUMNS`, `FILTERABLE_COLUMNS`.
@@ -251,13 +287,57 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
   - **cache and DWH summary:** `is_cached`, `cache_timeout`, `cache_refresh`, `dwh`, `dwh_driver`, plus `dwh_info`, `dwh_scheduler` and `cache_options` for admins only;
   - **audit:** `created_at`, `updated_at`, plus `created_by` and `updated_by` for admins only;
   - **`derived`:**
-    - `variables`: a list of `{name, required, default}` extracted from `query_raw`, or `null` with `variables_supported: false` for non-template parsers;
+    - `variables`: a list of `{name, type, raw_type, default, required, source, accepts_keywords}` extracted from `query_raw` and `cond_definition`, or `null` with `variables_supported: false` for non-template parsers. Example:
+      ```json
+      {"name": "firstdate", "type": "date", "raw_type": "date", "default": "current_date",
+       "required": false, "source": "cond_definition", "accepts_keywords": true}
+      ```
+    - `structural_placeholders`: the reserved names found in `query_raw` (e.g. `["and_cond", "fields", "querylimit"]`), listed so clients know they are not inputs;
     - `effective_cond_definition`;
-    - `capabilities`: normalized `fields`/`filtering`/`ordering`/`grouping` "what you may request" block;
+    - `capabilities`: normalized `fields`/`filtering`/`ordering`/`grouping` "what you may request" block, plus `refresh_param: "refresh"` (the condition that bypasses the result cache, `providers/abstract.py:78-82`);
+    - `links`: `{"columns": "/api/v1/queries/{slug}/columns", "vocabulary": "/api/v1/queries/vocabulary"}`;
   - **`redacted`:** the list of field names withheld from this caller.
 - **Other responses:**
   - `404` when the slug does not exist, is outside the caller's programs, or ABAC denies describe/execute. The three cases are indistinguishable.
   - Describing never executes the query and never opens a connection to the slug's datasource.
+
+**`GET /api/v1/queries/{slug}/columns`** returns the output columns of one slug, typed when possible.
+
+- Same visibility rules as the detail endpoint (program pre-filter + `slug:describe OR slug:execute`; denial → 404).
+- **200 response:**
+  ```json
+  {"slug": "epson_field_activity",
+   "columns": [{"name": "visit_date", "type": "date"}, {"name": "store_id", "type": "integer"},
+               {"name": "visits", "type": "integer"}],
+   "columns_source": "prepare",
+   "warnings": []}
+  ```
+  - `columns_source` is `prepare` (typed, from the prepared statement), `declared` (names from `attributes.columns`, types `null`) or `unavailable` (neither); each non-`prepare` value comes with an explanatory `warnings` entry.
+  - Optional query-string conditions may be passed (exactly like `HEAD /api/v2/services/queries/{slug}` today) so a caller can supply values for variables without defaults and make `prepare` possible (see Open Questions).
+- The statement is prepared, never executed; no rows are read and the rendered SQL is not returned.
+
+**`GET /api/v1/queries/vocabulary`** returns the relative-date keyword vocabulary accepted as condition values.
+
+- Authenticated; no slug resource involved (PBAC action: see Open Questions).
+- **200 response:**
+  ```json
+  {"version": "1.0", "case_insensitive": true,
+   "keywords": [
+     {"name": "TODAY", "category": "date", "returns": "date",
+      "description": "Current date in the server timezone (UTC by default).", "example": "2026-09-15"},
+     {"name": "FDOM", "category": "date", "returns": "date",
+      "description": "First day of the current month.", "example": "2026-09-01"},
+     {"name": "LDOM", "category": "date", "returns": "date", "description": "…", "example": "2026-09-30"},
+     {"name": "YESTERDAY", "category": "date", "returns": "date", "description": "…", "example": "2026-09-14"},
+     {"name": "CURRENT_YEAR", "category": "date", "returns": "integer", "description": "…", "example": 2026},
+     {"name": "CURRENT_MONTH", "category": "date", "returns": "string", "description": "…", "example": "…"},
+     {"name": "LAST_YEAR", "category": "date", "returns": "integer", "description": "…", "example": 2025}],
+   "constants": ["CURRENT_DATE", "CURRENT_TIMESTAMP"],
+   "functions": [{"name": "date_diff", "args": [{"name": "value"}, {"name": "diff", "default": 1},
+                  {"name": "mode", "default": "days"}], "description": "…"}],
+   "usage": "Pass a keyword as the condition value, e.g. {\"firstdate\": \"FDOM\", \"lastdate\": \"TODAY\"}."}
+  ```
+  - `keywords` is exactly the process's effective `UDF_LIST` (environment override included).
 
 ### Internal Behavior
 
@@ -288,10 +368,16 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 5. **PBAC disabled** (`app['security']` / `app['policy_evaluator']` absent): ABAC steps are no-ops, as with `_enforce_pbac`. The program pre-filter still applies whenever a session exists (see Open Questions for the no-session case).
 6. **Describer:**
    - For brace-template parsers (SQL family: `SQLParser`, pgSQL, MS SQL, BigQuery, CQL, SOQL…), run `string.Formatter().parse(query_raw)` to collect field names.
-   - Drop parser-reserved names: `fields`, `tablename`, `schema`, `table`, `filter`, `where_cond`, `and_cond`, `grouping`, `offset`, `limit`.
-   - Mark each name `required` unless it appears in `conditions` (then `default=<value>`).
+   - Drop parser-reserved names (the structural set from Constraints: `fields`, `tablename`, `schema`, `table`, `filter`, `where_cond`, `and_cond`, `grouping`, `group_by`, `ordering`, `order_by`, `offset`, `_offset`, `limit`, `_limit`, `querylimit`); report them under `structural_placeholders`. A reserved name that is *also* in `cond_definition` (misconfigured slug) stays structural and emits a warning.
+   - Mark each name `required` unless it has a default in `conditions` **or** an implicit provider default (`replacement`: `firstdate`/`lastdate`/`filterdate` → `current_date`); record `default` and `source`.
+   - Set `type` from `cond_definition` normalised to the canonical lowercase set, `raw_type` verbatim, `null` when absent; `accepts_keywords` for `date`/`datetime`/`timestamp`/untyped.
    - Malformed braces (`ValueError`) give `variables: null` plus a `variables_error` note, never a 500.
    - `effective_cond_definition` mirrors `AbstractParser._col_definition_sync` merge order (conditions-level, then definition-level).
+7. **Columns flow:**
+   - Same pre-filter + ABAC check as detail; instantiate `QS(slug=slug, conditions=<query-string conditions or {}>, request=request)` and `await build_provider()` (`SlugNotFound` → 404, `ParserError` → 406).
+   - `await provider.describe_columns()` under a short timeout (e.g. 5 s). On `ParserError` / `DriverError` / timeout, fall back to `definition.attributes.columns`; record `columns_source` and a warning. A datasource that is down still yields `200` with `columns_source: "unavailable"` so the contract stays useful to agents.
+8. **Vocabulary flow:**
+   - Read the effective `UDF_LIST`, `PG_CONSTANTS`, `PG_UDF` from `querysource.types.validators` (env overrides included) and join them with the curated registry in `querysource/utils/vocabulary.py`; serialise. No I/O.
 
 ### Edge Cases & Error Handling
 
@@ -304,6 +390,10 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 - **Large pre-filtered sets:** superuser/authz principals can produce large scans. A configurable cap (for example `QS_DESCRIBE_MAX_SCAN`) with a warning log is proposed.
 - **FEAT-176 tenant rows (no `program_slug` column):** the program pre-filter must be pluggable, so the tenant variant can derive program context from the tenant instead.
 - **Transport:** CORS/OPTIONS follow `QueryView`/`BaseView` conventions. HEAD on the list returns the headers only.
+- **Columns on non-SQL providers** (REST, Mongo, BigQuery without `prepare`): the default `describe_columns()` yields untyped names when the provider implements `columns()`, else the declared fallback. `is_raw` slugs follow the same path. MultiQuery (v3) slugs are out of scope for v1 (open question).
+- **Columns with unresolved variables:** `prepare` is skipped and the response carries `columns_source: "declared"|"unavailable"` with `warnings: ["prepare_skipped: unresolved placeholders [...]"]`.
+- **Vocabulary under `UDF_LIST` override:** the list reflects the override; unknown keywords appear with `description: null`.
+- **`previous_year()`** (`functions.pyx:107`) returns a `datetime` despite its `cpdef int` signature; it is excluded from the curated `functions` block until fixed.
 
 ---
 
@@ -313,6 +403,8 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 - `query-describe-api`: read-only REST endpoints `GET /api/v1/queries/describe` (list) and `GET /api/v1/queries/{slug}/describe` (detail).
 - `slug-visibility`: principal resolution, the program pre-filter predicate, and the ABAC batch/single slug checks (`list|execute`, `describe|execute`, `describe_raw`), all fail-closed.
 - `slug-describer`: pure transformation `QueryModel` → describe payload (variables, effective cond_definition, capabilities, redaction).
+- `slug-columns`: `GET /api/v1/queries/{slug}/columns`, typed output columns via an additive `BaseProvider.describe_columns()` hook (prepared statement on pg, declared fallback elsewhere).
+- `date-keyword-vocabulary`: `GET /api/v1/queries/vocabulary` and the curated registry `querysource/utils/vocabulary.py` over `UDF_LIST` / `PG_CONSTANTS` / `functions.pyx`.
 
 ### Modified Capabilities
 - `querysource-slug-list-pagination` (`sdd/specs/querysource-slug-list-pagination.spec.md`): reused, and possibly extended with a bound-parameter `ANY` predicate builder and `NULLS LAST` ordering, without changing `QueryManager` behaviour.
@@ -334,8 +426,16 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 | `querysource/conf.py` | extends | optional `QS_DESCRIBE_MAX_SCAN` |
 | `policies/defaults.yaml` | modifies | grant `slug:describe`, `slug:describe_raw` to admin/superuser |
 | `querysource/handlers/manager.py` (`QueryManager`) | none | explicitly untouched |
-| `tests/handlers/`, `tests/test_route_registration.py`, `tests/policies/` | extends | new tests |
+| `querysource/providers/abstract.py` | extends | additive `describe_columns()` default (names only, from `columns()`) |
+| `querysource/providers/pg.py` | extends | `describe_columns()` keeps `attribute.type.name`; `columns()` unchanged |
+| `querysource/utils/vocabulary.py` | new | curated keyword/function registry |
+| `CHANGES.rst`, `querysource/version.py` | modifies | changelog; bump to `4.6.0` (new public endpoints → minor) |
+| `tests/handlers/`, `tests/test_route_registration.py`, `tests/policies/` | extends | new tests, incl. pg typed-columns test and vocabulary test under `UDF_LIST` override |
 | API consumers | new API | additive, no breaking changes |
+| Rust/Cython UDF typed resolution (`rust/src/validators.rs:296-328`, `querysource/types/validators.pyx:552-553`) | prerequisite (separate hotfix on `main`) | must land before the release that ships `accepts_keywords` |
+| ai-parrot FEAT-567 `QuerySourceToolkit.qs_describe` | depends on (downstream, other repo) | consumes detail + columns + vocabulary |
+| ai-parrot A2UI linked surfaces (next feature) | depends on (downstream) | parameter contract + vocabulary feed the data-source descriptor |
+| ai-parrot `QuerySlugSource.prefetch_schema` | depends on (later) | can replace the `querylimit=1` probe with `/columns` |
 
 ---
 
@@ -348,6 +448,12 @@ Seed a built-in, non-editable slug, for example `qs.describe`, whose `query_raw`
 SELECT query_slug, provider, description, program_slug, updated_at
 FROM public.queries
 ORDER BY updated_at DESC NULLS LAST
+```
+
+```text
+# Source: user-provided (conversation, 2026-09-15) — how the Navigator frontend calls a slug today
+POST /api/v2/services/queries/{query_slug}
+payload: {"lastdate": "2026-08-15", "firstdate": "2026-08-09"}
 ```
 
 ### Verified Codebase References
@@ -440,6 +546,33 @@ async def get_query_slug(self, slug, evt=None, max_retries=3) -> BaseModel:  # L
     # QueryModel.get(query_slug=slug, _connection=conn); NoDataFound/ValidationError -> SlugNotFound
 async def get_slug(self, slug, program=None, evt=None):          # L492
 
+# From querysource/queries/qs.py:43
+class QS(...):
+    def __init__(self, slug: str = '', conditions: dict = None,
+                 request: web.Request = None, loop=None, **kwargs): ...  # L43
+    async def columns(self): ...                          # L126 — delegates to self._qs.columns()
+    async def build_provider(self): ...                   # L134 — resolves QueryModel + provider
+    def get_source(self): return self._qs                 # L123
+
+# From querysource/providers/abstract.py
+class BaseProvider:
+    def get_definition(self) -> Union[QueryModel, dict]: ...   # L128
+    def _get_cond_definition(self) -> dict: ...                # L133 — normalises None → {}
+    async def columns(self): ...                               # L190 — raises NotImplementedError
+    def refresh(self): return self._refresh                    # L220 — 'refresh' popped from conditions at L78-82
+
+# From querysource/providers/pg.py:44
+class pgProvider(...):
+    async def columns(self):
+        async with await self._connection.connection() as conn:
+            stmt, _ = await conn.prepare(self._query)          # L50
+            self._columns = [a.name for a in stmt.get_attributes()]   # L51 — .type discarded
+
+# From querysource/handlers/service.py
+class QueryService(AbstractHandler):
+    async def get_columns(self, request): ...             # L359 — HEAD, X-Columns header, fallback attributes.columns at L406-409
+    async def columns(self, request): ...                 # L444 — PATCH, bare list JSON
+
 # From querysource/parsers/abstract.pyx
 cdef class AbstractParser:                                        # L28
     cdef void define_conditions(self, object conditions):         # L96
@@ -500,6 +633,13 @@ from navigator_auth.abac.policies.resources import ResourceType
 - `QueryManager` routes: `/api/v1/management/queries/{slug}` and `/api/v1/management/queries{meta:\:?.*}` (`services.py:181-188`).
 - PBAC actions in use: `slug:execute`, `slug:read` (components), `raw_query:execute`, `datasource:use|list|read`, `driver:use|list`. `slug:list` granted in `policies/defaults.yaml:20` but unused in code.
 - Test fixtures: `tests/handlers/conftest.py` (`FakeConn`, `FakeQSConnection`, `test_client`, `seeded_query_slugs`); PBAC unit-test style in `tests/handlers/test_abstract_pbac_helpers.py`; route assertions in `tests/test_route_registration.py`.
+- `UDF_LIST` → `["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "LAST_YEAR", "FDOM", "LDOM"]` (`rust/src/validators.rs:21-35`; env-overridable mirror `querysource/types/validators.pyx:27-33`); `PG_CONSTANTS` → `["CURRENT_DATE", "CURRENT_TIMESTAMP"]`; `PG_UDF` → `["now()"]`.
+- `replacement` → `{"fields": "*", "filterdate": "current_date", "firstdate": "current_date", "lastdate": "current_date", "where_cond": "", "and_cond": "", "filter": ""}` (`querysource/providers/sql.py:37-45`); `_PARSER_PLACEHOLDERS` → `where_cond, and_cond, filter, fields, group_by, grouping, order_by, ordering, querylimit, _limit, _offset, schema, table` (`sql.py:48-62`).
+- Placeholder key grammar → non-empty, no `{`, chars in `[A-Za-z0-9_.]` (`rust/src/safe_dict.rs:116-120`).
+- `cond_definition` type dispatch (case-insensitive) → `literal | int | integer | float | numeric | decimal | epoch | boolean | string | varchar | field | date | datetime | timestamp | uuid | array | json` (`rust/src/validators.rs:280-305`); `numrange` / `int4range` / `int8range` in `rust/src/pgsql_parser.rs:371-393`.
+- Keyword set accepted as a `date_diff` / `date_sum` input value → `current_date | now | today | yesterday | tomorrow | fdom | ldom | fdcw` (`querysource/utils/functions.pyx:475, 535`).
+- Result-cache key → `sha256(rendered_query)` (`providers/abstract.py:229`, `utils/functions.pyx:39-40`); `?refresh=1` bypasses it.
+- Ledger → next feature id `FEAT-147`, next task id `TASK-716` (`sdd/tasks/.id_ledger.json`); version `4.5.16` (`querysource/version.py:9`).
 
 ### Does NOT Exist (Anti-Hallucination)
 - ~~`GET /api/v1/queries/describe` / `/api/v1/queries/{slug}/describe`~~: no route (no GET routes exist under `/api/v1/queries` at all); no `describe` handler anywhere. `outputs/writers/describe.py` `DescribeWriter` is commented out and unrelated. `queries/multi/_introspect.py` `describe_class` is for components.
@@ -513,6 +653,14 @@ from navigator_auth.abac.policies.resources import ResourceType
 - ~~`NULLS LAST` in `build_order_by`~~: not emitted.
 - ~~Guardian sessionless support matching QS `authorized` identity~~: `Guardian.filter_resources` requires `is_authenticated`.
 - ~~A "system slug" exposing the queries table~~: none. `troc.queries` is referenced nowhere.
+- ~~`{today}` / `{today-7}` / `{fdom}` placeholder expressions~~: the Rust substitution replaces simple identifiers only; date keywords are resolved as condition **values**, never as placeholder names or arithmetic.
+- ~~`QS.get_definition()`~~: only `BaseProvider.get_definition()` exists (`providers/abstract.py:128`); reach it via `qs.get_source().get_definition()`.
+- ~~`BaseProvider.describe_columns()`~~: does not exist yet (this feature adds it).
+- ~~Docstrings on `utils/functions.pyx` date helpers~~: `today`, `fdom`, `ldom`, `previous_month`, … have none; the vocabulary cannot be introspected and must be a curated registry.
+- ~~`:describe` / `:meta` suffix on `/api/v2/services/queries/{slug}`~~: the `:` suffix there is the output format (`slug:csv`); `:meta` exists only on `/api/v1/management/queries`.
+- ~~`QueryHandler.columns` (v3) returning data~~: `handlers/multi.py:101-107` always answers 204 "No Columns available".
+- ~~`aiohttp_swagger` / generated OpenAPI~~: absent; documentation is docstring YAML (`service.py:444-469`) or Google-style (`components.py`).
+- ~~`slug:read` granted in `policies/defaults.yaml`~~: only `slug:execute` and `slug:list` are granted today (`slug:read` is used by `handlers/components.py:41-46` only).
 
 ---
 
@@ -523,12 +671,14 @@ from navigator_auth.abac.policies.resources import ResourceType
   - `slug-visibility`: auth plus a `_pagination` helper.
 
   The handler, route registration and integration tests depend on both, and the policy YAML grants are a small independent task.
+  Two more strands are independent of everything above until route registration: `describe_columns()` on `providers/abstract.py` + `providers/pg.py` (with its asyncpg test), and the vocabulary registry + endpoint.
 - **Cross-feature independence:**
+  - The **UDF typed-resolution hotfix** touches `rust/src/validators.rs` and `querysource/types/validators.pyx`, which this feature only reads; land it on `main` first and let sync-down bring it to `dev`.
   - **FEAT-176 `per-tenant-queries`** (proposal in review, same day) touches `QueryModel`, `_pagination.py` allowlists (drops `program_slug` for tenant rows), `QueryManager` and route registration in `services.py`. Expect **merge conflicts in `services.py` and `_pagination.py`**, and a **semantic dependency**: tenant rows have no `program_slug`, so the pre-filter must be pluggable.
   - `pbac-support` and `querysource-slug-list-pagination` specs are complete; they are extended, not in flight.
   - No other pending tasks in `sdd/tasks/index/`.
 - **Recommended isolation:** `per-spec`
-- **Rationale:** the feature is medium-sized, around 5-6 tasks, and the independent strands are small. One worktree with sequential tasks avoids coordination overhead, and keeps the `_pagination.py` / `services.py` edits in one branch that can be rebased cleanly against FEAT-176.
+- **Rationale:** the feature is medium-sized, around 7-8 tasks, and the independent strands are small. One worktree with sequential tasks avoids coordination overhead, and keeps the `_pagination.py` / `services.py` edits in one branch that can be rebased cleanly against FEAT-176.
 
 ---
 
@@ -545,6 +695,14 @@ from navigator_auth.abac.policies.resources import ResourceType
 - [x] Does execute imply visibility? — *Owner: Jesús Lara*: yes, list = `slug:list OR slug:execute`, detail = `slug:describe OR slug:execute`.
 - [x] List parameters — *Owner: Jesús Lara*: page/page_size/sort/search + equality filters (provider, program_slug) reusing `_pagination`.
 - [x] Caching — *Owner: Jesús Lara*: no cache; always read from DB.
+- [x] Typed columns: inside describe, or never touching the datasource? — *Owner: Jesús Lara*: neither; a sibling sub-resource `GET /api/v1/queries/{slug}/columns` (prepared statement + declared fallback, never executes). Describe stays pure over `QueryModel`.
+- [x] Where the relative-date keyword vocabulary lives — *Owner: Jesús Lara*: its own endpoint `GET /api/v1/queries/vocabulary`, referenced from describe via `derived.links`.
+- [x] Inconsistent UDF resolution for `date`-typed conditions (Rust quotes before the UDF check; only Cython calls `to_udf`) — *Owner: Jesús Lara*: separate hotfix on `main`, prerequisite for this feature's release.
+- [x] Sampling rows (`querylimit=1`) to infer column types on providers without `prepare` — *Owner: Jesús Lara*: out of scope for v1.
+- [ ] PBAC for the new sub-resources: `/columns` under `slug:describe OR slug:execute` like detail (recommended), and `/vocabulary` under authentication only vs `slug:list`? — *Owner: Jesús Lara*
+- [ ] Should `/columns` accept query-string conditions (as `HEAD /api/v2/services/queries/{slug}` does) so callers can render variables without defaults and make `prepare` possible? Recommended: yes, same merge rules as `get_columns`. — *Owner: Jesús Lara*
+- [ ] Which `functions.pyx` helpers enter the curated `functions` block of the vocabulary in v1 (`date_diff`, `date_sum`, `days_ago`, `previous_month`, `fdow`/`ldow` are the obvious candidates)? — *Owner: Jesús Lara*
+- [ ] Does the UDF hotfix ship as `4.5.17` before `4.6.0`, or is it folded into the `4.6.0` release notes as a prerequisite item? — *Owner: Jesús Lara*
 - [ ] Does the program pre-filter also apply to the **detail** endpoint (slug outside the user's programs → 404 even if ABAC would allow)? Recommended: yes, for consistency with the list. — *Owner: Jesús Lara*
 - [ ] What defines "admin" for `dwh_info`/`cache_options`/`created_by`/`updated_by`: `userinfo.superuser`, a PBAC action (e.g. `slug:describe_internal`), or membership in an admin group? Recommended: superuser OR a dedicated `slug:describe_internal` action. — *Owner: Jesús Lara*
 - [ ] Behaviour when a request has **no session and no sessionless authz**, with `QS_PBAC_ENABLED=False` (auth middleware may be absent in some deployments): deny (401/404) or return unfiltered like `QueryManager`? Recommended: deny (fail-closed). — *Owner: Jesús Lara*
