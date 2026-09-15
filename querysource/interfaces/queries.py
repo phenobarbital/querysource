@@ -18,6 +18,7 @@ from asyncdb.exceptions import ProviderError
 from navconfig.logging import logging
 from navigator_session import SessionData, get_session
 
+from ..cache_identity import result_cache_key
 from ..conf import (
     DEFAULT_QUERY_FORMAT,
     DEFAULT_QUERY_TIMEOUT,
@@ -99,6 +100,9 @@ class AbstractQuery(Connection):
         self._executor = ThreadPoolExecutor(max_workers=2)
         # Tenant selector (keyword-only, preserved from Python routing)
         self._tenant_selector = tenant
+        # Definition identity and revision for result cache keys (set during load)
+        self._definition_identity: Any = None
+        self._definition_revision: str | None = None
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         return self._loop if self._loop else asyncio.get_running_loop()
@@ -204,14 +208,42 @@ class AbstractQuery(Connection):
             loop.close()
 
     #### Caching facilities
+    def result_cache_key(self, provider_checksum: str) -> str:
+        """Compose key from the loaded immutable definition and provider checksum.
+
+        Combines the loaded definition identity and revision with the provider
+        checksum to create a fully scoped cache key. This prevents cache hits
+        across different definitions or when a definition has been externally
+        modified.
+
+        Args:
+            provider_checksum: The provider-specific SQL checksum.
+
+        Returns:
+            The composed qs:r2: cache key.
+        """
+        return result_cache_key(
+            self._definition_identity, self._definition_revision, provider_checksum
+        )
+
     def save_cache(self, checksum, result, **kwargs):
         """_thread_func.
         Returns a future to be executed into a Thread Pool.
+
+        Initiates cache save in a thread. The checksum is used as-is if it's
+        already a composed key; otherwise wrap it with result_cache_key.
         """
+        # Use the checksum directly if it's already a composed key (starts with qs:r2:),
+        # otherwise compose it using the definition identity and revision
+        if isinstance(checksum, str) and checksum.startswith('qs:r2:'):
+            cache_key = checksum
+        else:
+            cache_key = self.result_cache_key(checksum)
+
         loop = asyncio.new_event_loop()
         func = partial(
             self.save_in_cache,
-            checksum,
+            cache_key,
             result,
             loop
         )
@@ -222,7 +254,7 @@ class AbstractQuery(Connection):
             # if a timeout is reached, we try again:
             try:
                 loop.run_until_complete(
-                    self.caching_data(checksum, result)
+                    self.caching_data(cache_key, result)
                 )
             except Exception as exc:
                 self._logger.exception(
@@ -243,39 +275,48 @@ class AbstractQuery(Connection):
 
     def cache_saved(
         self,
-        checksum: str,
+        cache_key: str,
         loop: asyncio.AbstractEventLoop,
         task: asyncio.Task,
         **kwargs
     ):
         """Notification when Query was saved in Cache.
+
+        Called when caching_data completes successfully. The cache_key is the
+        fully composed revision-scoped key.
         """
         try:
             if callable(self.post_cache):
                 self._thread_func(
-                    self.post_cache, checksum, loop, **kwargs
+                    self.post_cache, cache_key, loop, **kwargs
                 )
         except Exception as exc:
             self._logger.error(
                 f"Error running post_cache function: {exc}"
             )
         self._logger.notice(
-            f"QuerySource: Cached {checksum} at {time.strftime('%X')}"
+            f"QuerySource: Cached {cache_key} at {time.strftime('%X')}"
         )
 
     def save_in_cache(
         self,
-        checksum: str,
+        cache_key: str,
         result: Any,
         loop: asyncio.AbstractEventLoop
     ):
+        """Write the already composed key; capture identity before threading.
+
+        The cache_key is expected to be a fully composed revision-scoped key.
+        This method preserves serialization/TTL/thread mechanics while using
+        the composed key and immutable revision; no legacy-key fallback.
+        """
         asyncio.set_event_loop(loop)
         fut = loop.create_task(
-            self.caching_data(checksum, result)
+            self.caching_data(cache_key, result)
         )
         # done callback
         done_callback = partial(
-            self.cache_saved, checksum, loop
+            self.cache_saved, cache_key, loop
         )
         fut.add_done_callback(
             done_callback
@@ -294,10 +335,16 @@ class AbstractQuery(Connection):
 
     async def caching_data(
         self,
-        checksum: str,
+        cache_key: str,
         result: Any
         # loop: asyncio.AbstractEventLoop
     ):
+        """Use the same composed key for TTL writes, with no second wrapping.
+
+        The cache_key should be a fully composed revision-scoped key. This
+        preserves serialization/TTL/thread mechanics while using the composed
+        key and immutable revision; no legacy-key fallback.
+        """
         try:
             data = None
             loop = asyncio.get_running_loop()
@@ -345,12 +392,12 @@ class AbstractQuery(Connection):
             async with await redis.connection() as conn:
                 # async with  as conn:
                 await conn.setex(
-                    checksum,
+                    cache_key,
                     data,
                     self._timeout
                 )
                 self._logger.debug(
-                    f"Successfully Cached: {checksum}"
+                    f"Successfully Cached: {cache_key}"
                 )
         except asyncio.TimeoutError as err:
             self._logger.error(
