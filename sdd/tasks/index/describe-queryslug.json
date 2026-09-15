@@ -202,7 +202,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -212,8 +212,8 @@
       "parallelism_notes": "Last task. Externally blocked on FEAT-147 (per-tenant-queries) M1/M2/M4 being merged to dev; its FEAT-147 contract is spec-derived and must be re-verified. May be split to a follow-up per spec §8.",
       "assigned_to": null,
       "started_at": "2026-09-15T22:37:19+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-743-describe-tenant-routes.md",
+      "completed_at": "2026-09-15T23:14:20+00:00",
+      "file": "sdd/tasks/completed/TASK-743-describe-tenant-routes.md",
       "external_depends_on": [
         "FEAT-147:M1",
         "FEAT-147:M2",
