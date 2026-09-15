@@ -131,8 +131,15 @@ class QueryHandler(AbstractHandler):
         if request.app.get("security") is None:
             return
 
-        # Get the tenant from request or use default
-        tenant = request.query.get("tenant")
+        # Same source of truth execution uses: TenantQueryHandler.query()
+        # stashes the resolved (path-based) tenant selector on
+        # request['qs_tenant'] before delegating here — NOT the query
+        # string, which the tenant route never populates (the selector
+        # lives in the URL path). Reading request.query.get("tenant")
+        # here would silently preflight against the default/legacy store
+        # while MultiQS then executes with the real path tenant — an
+        # authz/execution mismatch.
+        tenant = request.get('qs_tenant')
 
         # Get the registry from the app. Published as app["qs_tenant_registry"]
         # by QuerySource.qs_start (TASK-720) — verified against
@@ -296,10 +303,22 @@ class QueryHandler(AbstractHandler):
             files=list((_files or {}).keys()),
             has_raw_query=_has_raw,
         )
-        # Step 1b: Ownership preflight for tenant isolation
+        # Step 1b: Ownership preflight for tenant isolation.
+        # Real stored slugs — the alias keys of `_queries` (the output
+        # label each child result is keyed by) are NOT a stand-in for the
+        # actual saved definition being referenced (AC-1 "check actual
+        # saved child slugs, not output aliases"). A raw-SQL child (no
+        # `slug` key) has no stored definition to own-check at all —
+        # skipped here exactly like `_preflight_multiquery`'s own existing
+        # "files/raw actions preserve existing behavior" convention.
+        _owned_slugs = [
+            cfg["slug"]
+            for cfg in (_queries or {}).values()
+            if isinstance(cfg, dict) and cfg.get("slug")
+        ]
         await self._preflight_multiquery_owned(
             request,
-            slugs=list((_queries or {}).keys()),
+            slugs=_owned_slugs,
             files=list((_files or {}).keys()),
             has_raw_query=_has_raw,
         )
