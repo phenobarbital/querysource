@@ -121,7 +121,7 @@ legacy ID format:
 For tenant stores, jobs use the qualified ID format:
 
 ```
-qsj2:<kind>:<store_digest>:<encoded_slug>
+qsj2-<kind>-<store_digest>-<encoded_slug>
 ```
 
 Where:

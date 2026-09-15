@@ -108,7 +108,7 @@ def test_release_gates_and_rollback_documented() -> None:
     assert "program_id" in content, "DDL gate must be documented"
     assert "Cold start" in content or "cold start" in content.lower()
     assert "qs:r2:" in content, "Cache key format must be documented"
-    assert "qsj2:" in content, "Scheduler job IDs must be documented"
+    assert "qsj2-" in content, "Scheduler job IDs must be documented"
     assert "tenant_worker_unsupported" in content, "Worker error codes must be documented"
 
     # Verify unverified gates are explicitly listed
@@ -124,6 +124,6 @@ def test_release_gates_and_rollback_documented() -> None:
         scheduler_content = f.read()
 
     assert "## Tenant ownership" in scheduler_content
-    assert "qsj2:" in scheduler_content
+    assert "qsj2-" in scheduler_content
     assert "owner envelope" in scheduler_content.lower()
     assert "X-QS-Scheduler-Sync" in scheduler_content

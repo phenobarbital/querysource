@@ -65,46 +65,59 @@ may enforce stricter validation.
 ### Python interface
 
 ```python
-from querysource import QuerySource, QS, MultiQS
+from querysource.services import QuerySource
+from querysource.queries import QS, MultiQS
 
 # Initialize with tenant allowlist (None = all discovered stores)
 qs = QuerySource(tenant_allowlist=["client_a", "client_b"])
 
-# Execute with explicit tenant
-result = QS(slug="my_report", tenant="client_a").query()
+# Execute with explicit tenant (all of QS()/MultiQS().query() are coroutines
+# — always await them from inside an async function).
+result, error = await QS(slug="my_report", tenant="client_a").query()
 
 # Execute with explicit public (bypasses allowlist for legacy store)
-result = QS(slug="my_report", tenant="public").query()
+result, error = await QS(slug="my_report", tenant="public").query()
 
 # Execute with no tenant (uses configured default: public.queries)
-result = QS(slug="my_report").query()
+result, error = await QS(slug="my_report").query()
 
 # Child definitions inherit parent tenant
 multi = MultiQS(slug="dashboard", tenant="client_a")
-# Children automatically use client_a unless explicitly overridden
+await multi.query()
+# Children automatically use client_a unless explicitly overridden with an
+# explicit ``tenant`` key (or ``tenant: null`` for the legacy store) on
+# that individual child entry — see the Query component catalog.
 ```
 
 ### HTTP API routes
 
-| Route | Contract |
-|-------|----------|
-| `GET /api/v1/{tenant}/queries/` | Tenant definitions listing |
-| `POST /api/v1/{tenant}/queries/` | Inline multi execution |
-| `GET /api/v1/{tenant}/queries/{slug}` | Stored single/multi execution |
-| `POST /api/v1/{tenant}/queries/{slug}` | Execute stored query |
-| `HEAD /api/v1/{tenant}/queries/{slug}` | Column inspection |
-| `PATCH /api/v1/{tenant}/queries/{slug}` | Update definition |
-| `GET /api/v1/{tenant}/queries/{slug}/test` | Dry-run execution |
-| `GET /api/v1/management/queries?tenant={tenant}` | Management listing |
-| `POST /api/v1/management/queries` with `{"tenant": "..."}` | Management write |
+`TenantQueryHandler` (`querysource/handlers/tenant.py`) registers execution
+and inspection routes only — it never mutates a stored definition. Defining
+(creating/patching/deleting) a stored query is always a **management** route
+(`QueryManager`, `querysource/handlers/manager.py`), never the tenant path
+below.
+
+| Route | Handler method | Contract |
+|-------|-----------------|----------|
+| `GET /api/v1/{tenant}/queries/` (and without the trailing slash) | `list` | Tenant definitions listing (paginated) |
+| `POST /api/v1/{tenant}/queries/` (and without the trailing slash) | `query` | Inline multi-query execution (no stored slug in the body) |
+| `GET /api/v1/{tenant}/queries/{slug}` | `query` | Stored single/multi execution |
+| `POST /api/v1/{tenant}/queries/{slug}` | `query` | Execute stored query with a body (conditions) |
+| `HEAD /api/v1/{tenant}/queries/{slug}` | `columns` (`get_columns`) | Column inspection headers only |
+| `PATCH /api/v1/{tenant}/queries/{slug}` | `columns` | Column inspection body (**not** a definition update — see note above) |
+| `GET /api/v1/{tenant}/queries/{slug}/test` and `POST .../test` | `test_slug` | Dry-run: validate without executing the underlying data query |
+| `GET /api/v1/management/queries/{slug}?tenant={tenant}` | `QueryManager.get` | Management read for the selected owner |
+| `POST /api/v1/management/queries/{slug}` with `{"tenant": "..."}` in the body | `QueryManager.post` | Create/upsert a definition for the selected owner |
+| `PATCH /api/v1/management/queries/{slug}` with `{"tenant": "..."}` in the body | `QueryManager.patch` | Update mutable fields of the selected owner's definition |
+| `DELETE /api/v1/management/queries/{slug}?tenant={tenant}` | `QueryManager.delete` | Delete the selected owner's definition |
 
 ### Selector matrix
 
 | Input | Resolution |
 |-------|------------|
-| No tenant / `None` | Configured `QS_QUERIES_SCHEMA.QS_QUERIES_TABLE` (default: `public.queries`) |
+| No tenant / `None` | The registry's discovered default store: the `public`-schema store if one was discovered, else the first discovered store, else the hardcoded `public.queries` fallback (`TenantRegistry.resolve`) — **not** `QS_QUERIES_SCHEMA`/`QS_QUERIES_TABLE`, which only govern the separate legacy `QueryModel`-based path used when the tenant feature is not configured at all |
 | Explicit nonempty tenant | Exact registered schema, fixed table `queries` |
-| Explicit `public` | Literal `public.queries`, independently from configured default |
+| Explicit `public` | Literal `public.queries`, independently from the discovered default |
 | Child definition without `tenant` | Inherit parent's resolved store |
 | Child definition with `tenant: null` | Explicit configured legacy store |
 
@@ -118,7 +131,7 @@ multi = MultiQS(slug="dashboard", tenant="client_a")
 
 ```python
 # Force use of legacy public store, bypassing tenant allowlist
-result = QS(slug="legacy_report", tenant="public").query()
+result, error = await QS(slug="legacy_report", tenant="public").query()
 
 # HTTP equivalent
 # GET /api/v1/public/queries/legacy_report
@@ -133,10 +146,11 @@ On QuerySource initialization:
 1. Open metadata connection to the main PostgreSQL database
 2. Query `information_schema.tables` and `information_schema.columns` for tables
    named `queries` with a `query_slug` column
-3. Exclude `information_schema`, `pg_catalog`, `pg_*` schemas
-4. Exclude `management` schema (reserved for legacy routes)
-5. Validate complete column contract for tenant compatibility
-6. Publish immutable registry snapshot
+3. Exclude the system schemas `information_schema`, `pg_catalog`, `pg_toast`, `pg_temp`
+4. Exclude the reserved `management` schema (reserved for legacy routes)
+5. Exclude any schema whose name contains a `/`
+6. Validate complete column contract for tenant compatibility
+7. Publish immutable registry snapshot
 
 ### Allowlist behavior
 
@@ -168,7 +182,12 @@ The registry includes diagnostics for:
 ### Restart requirements
 
 The registry is **immutable**. To change the allowlist or refresh discovery:
-restart the QuerySource instance.
+restart the QuerySource instance (a fresh process — `QuerySource` uses a
+Singleton metaclass, and calling `QuerySource(tenant_allowlist=...)` again
+within the same process with a *different* allowlist than the one already
+initialized raises an "Incompatible QuerySource reinitialization" error
+rather than silently reconfiguring; calling it again with the identical
+allowlist is a no-op and returns the existing instance).
 
 ## Deployment, verification and rollback
 
@@ -182,9 +201,13 @@ restart the QuerySource instance.
 
 ### DDL/program_id gate
 
-The `program_id` column is a provisional gate. It defaults to `1` and can be
-used for future routing or policy decisions. Existing tenant stores without
-this column are accepted but may be flagged in diagnostics.
+The `program_id` column is a provisional gate reserved for future routing or
+policy decisions; `TenantQueryDefinition`/`QueryModel` both default it to
+`1`. Discovery's own compatibility check (`TenantRegistry._is_compatible_store`)
+only strictly requires a `query_slug` column — `program_id` is **not**
+currently validated or required for a store to be discovered as tenant-
+compatible, so an existing tenant table created without it is still
+accepted as-is (no diagnostic entry is raised for its absence).
 
 ### Cache transition
 
@@ -200,7 +223,7 @@ The scheduler uses qualified job IDs:
 | Store | Job ID format |
 |-------|---------------|
 | Legacy (public) | `query_<slug>`, `multi_<slug>`, `cache_<slug>` |
-| Tenant | `qsj2:<kind>:<store_digest>:<encoded_slug>` |
+| Tenant | `qsj2-<kind>-<store_digest>-<encoded_slug>` |
 
 Every job carries canonical schema/table/contract and tenant selection.
 Scheduler sync failures are reported in response header `X-QS-Scheduler-Sync: failed`.
@@ -256,13 +279,28 @@ These remain deployment gates that operators must verify independently.
 1. Remove tenant from allowlist: `QuerySource(tenant_allowlist=[...])`
 2. Restart QuerySource to refresh registry
 3. Clear tenant cache keys: `DEL qs:r2:*` for tenant namespace
-4. Verify legacy routes still work: `GET /api/v1/queries/{slug}`
+4. Verify legacy routes still work: `GET /api/v2/services/queries/{slug}`
 5. Monitor scheduler for `tenant_not_available` errors
 
 ## Integration evidence
 
-- Tenant registry discovery: Implemented in `querysource/tenants.py`
-- Repository boundary: Separate storage/runtime shapes in `querysource/repository.py`
-- HTTP routes: Tenant handlers in `querysource/handlers/tenant.py`
-- Scheduler integration: Qualified job IDs in `querysource/scheduler/jobs.py`
-- Cache keys: Owner-scoped in `querysource/cache.py`
+- Tenant registry discovery: `querysource/tenants.py` (`TenantRegistry.discover`/`resolve`)
+- Repository boundary: separate persisted/runtime shapes in
+  `querysource/repositories/definitions.py` (`DefinitionRepository`),
+  built on `querysource/tenant_models.py` (`TenantQueryDefinition`)
+- HTTP routes: tenant handlers in `querysource/handlers/tenant.py`
+  (`TenantQueryHandler`); definition CRUD in `querysource/handlers/manager.py`
+  (`QueryManager`)
+- Scheduler integration: qualified job IDs generated in
+  `querysource/scheduler/scheduler.py` (`QSScheduler._qualified_job_id`);
+  owner envelope threaded through the job callables in
+  `querysource/scheduler/jobs.py`
+- Cache keys: owner-scoped revision keys in `querysource/cache_identity.py`
+  (`definition_revision`/`result_cache_key`)
+- Focused regression evidence: `tests/tenants/` (per-task unit/integration
+  suites, TASK-716 through TASK-732) — see TASK-732's own completion note
+  for exact commands and pass/skip/fail counts; `tests/tenants/
+  test_integration.py` is the real, opt-in PostgreSQL/Redis suite and is
+  correctly SKIPPED in any environment without
+  `QS_TEST_POSTGRES_DSN`/`QS_TEST_REDIS_URL` configured (see "Unverified
+  production gates" below).
