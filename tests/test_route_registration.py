@@ -1,6 +1,7 @@
 """Tests for route registration (TASK-666)."""
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestDescribeRoutes:
@@ -246,6 +247,7 @@ class TestRoutesRegisteredInApp:
     def test_components_get_route_registered(self):
         """GET /api/v3/qs/components must be registered by setup_routes."""
         from aiohttp import web
+
         from querysource.handlers.components import ComponentHandler
 
         ch = ComponentHandler()
@@ -262,6 +264,7 @@ class TestRoutesRegisteredInApp:
     def test_validate_post_route_registered(self):
         """POST /api/v3/qs/validate must be registered."""
         from aiohttp import web
+
         from querysource.handlers.components import ComponentHandler
 
         ch = ComponentHandler()
@@ -278,6 +281,7 @@ class TestRoutesRegisteredInApp:
     def test_list_components_handler_bound_to_get_route(self):
         """list_components handler is the one registered for GET /api/v3/qs/components."""
         from aiohttp import web
+
         from querysource.handlers.components import ComponentHandler
 
         ch = ComponentHandler()
@@ -296,6 +300,7 @@ class TestRoutesRegisteredInApp:
     def test_validate_pipeline_handler_bound_to_post_route(self):
         """validate_pipeline handler is the one registered for POST /api/v3/qs/validate."""
         from aiohttp import web
+
         from querysource.handlers.components import ComponentHandler
 
         ch = ComponentHandler()
