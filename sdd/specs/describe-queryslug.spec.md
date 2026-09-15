@@ -144,7 +144,7 @@ The recommended option (A) adds a dedicated read-only handler, a slug-visibility
 **Tenant variants**
 
 - The same three slug routes live under `/api/v1/{tenant}/queries/...` and behave identically.
-- They resolve the tenant's `QueryStore` (schema, table, loader) through FEAT-176.
+- They resolve the tenant's `DescribeStore` (schema, table, loader) through FEAT-176.
 - Instead of the `program_slug` predicate, the tenant pre-filter requires the caller's normalized programs to contain the lowercase tenant name. Superuser and sessionless authz are unfiltered.
 
 **Principal & pre-filter rules** (from the brainstorm, binding)
@@ -195,7 +195,7 @@ aiohttp router (QuerySource.setup, services.py)
           resolve_principal│        │            │             │ build_vocabulary()
           + store/predicate▼        │            │             ▼
    querysource/auth/slug_visibility.py           │      querysource/utils/vocabulary.py
-     Principal / QueryStore / ProgramPredicate   │             │
+     Principal / DescribeStore / ProgramPredicate   │             │
      filter_visible() / can_access()             │             ▼
           │ PolicyEvaluator (app['policy_evaluator'])   types/validators.pyx
           │                                      │      udf_keywords()/pg_constants()/pg_udfs()/to_udf
@@ -208,7 +208,7 @@ aiohttp router (QuerySource.setup, services.py)
           ▼
    app['qs_connection'].acquire() → conn.fetch_all(sql, *args) / conn.fetch_one(sql, *args)
           │                                     ▲
-          └── QueryStore.loader (legacy: QueryModel.get; tenant: FEAT-176) ┘
+          └── DescribeStore.loader (legacy: QueryModel.get; tenant: FEAT-176) ┘
 
    columns route:  QS(slug, conditions, request).build_provider()
                      → provider.describe_columns()   (BaseProvider default / pgProvider override)
@@ -300,7 +300,7 @@ class Principal:
     session: Any = None                            # navigator_session SessionData or None
 
 @dataclass(frozen=True)
-class QueryStore:
+class DescribeStore:
     schema: str
     table: str
     has_program_slug: bool = True
@@ -519,7 +519,7 @@ querysource.types.validators.udf_keywords() / pg_constants() / pg_udfs() -> list
     - `PROGRAMS` with `store.has_program_slug` → `lower("program_slug") = ANY(${param_index}::text[])`, args `(sorted(set(programs) | {"default"}),)`.
     - `PROGRAMS` with a tenant store → `deny_all = store.tenant.lower() not in programs`, else an empty predicate.
   - `is_admin`: `principal.kind is SUPERUSER`, or `set(g.lower() for g in groups) & set(QS_DESCRIBE_ADMIN_GROUPS)`.
-  - `legacy_store()` returns `QueryStore(schema=QueryModel.Meta.schema, table=QueryModel.Meta.name, has_program_slug=True, loader=<QueryModel.get wrapper>)`. `QueryModel.Meta` is never mutated.
+  - `legacy_store()` returns `DescribeStore(schema=QueryModel.Meta.schema, table=QueryModel.Meta.name, has_program_slug=True, loader=<QueryModel.get wrapper>)`. `QueryModel.Meta` is never mutated.
 - **Interface Skeleton**:
   ```python
   # querysource/auth/slug_visibility.py  (new)
@@ -535,10 +535,10 @@ querysource.types.validators.udf_keywords() / pg_constants() / pg_udfs() -> list
       request[AUTHZ_BACKEND_KEY] is set (same rule as handlers/abstract.py:357-390).
       """
 
-  def legacy_store() -> QueryStore:
+  def legacy_store() -> DescribeStore:
       """Store over QueryModel.Meta.schema/.name (models.py:101-107) with QueryModel.get loader."""
 
-  def build_program_predicate(principal: Principal, store: QueryStore, param_index: int = 1) -> ProgramPredicate:
+  def build_program_predicate(principal: Principal, store: DescribeStore, param_index: int = 1) -> ProgramPredicate:
       """SQL fragment + bound args implementing the program pre-filter table in spec §2."""
 
   def is_admin(principal: Principal) -> bool:
@@ -739,11 +739,11 @@ querysource.types.validators.udf_keywords() / pg_constants() / pg_udfs() -> list
       async def _principal(self, request: web.Request) -> Principal:
           """_get_user_session (abstract.py:289) + resolve_principal; raises web.HTTPUnauthorized for NONE."""
 
-      async def _store(self, request: web.Request) -> QueryStore:
+      async def _store(self, request: web.Request) -> DescribeStore:
           """legacy_store() for legacy routes; tenant store (Module 8) when match_info has 'tenant'."""
 
       async def _load_visible(
-          self, request: web.Request, principal: Principal, store: QueryStore, slug: str
+          self, request: web.Request, principal: Principal, store: DescribeStore, slug: str
       ) -> QueryModel:
           """Detail/columns steps 2-6; raises web.HTTPNotFound on any visibility failure."""
 
@@ -768,27 +768,39 @@ querysource.types.validators.udf_keywords() / pg_constants() / pg_udfs() -> list
   - `querysource/services.py` (routes)
   - `tests/handlers/test_describe_tenant.py` (new)
 - **Responsibility**: Serve the three slug routes over a tenant's `(schema, table)`, with tenant-derived program context.
-- **Depends on**: Module 7, and **FEAT-176's tenant registry / data-access layer (does not exist yet)**
-- **Contract this module requires from FEAT-176** (to be matched to FEAT-176's spec when it exists; unverified):
-  - resolve a tenant name to a canonical `(schema, table)`, or "unknown tenant";
-  - load a tenant `QueryModel`-compatible definition by `(conn, slug)`;
-  - build a `QS` for a tenant-owned slug, for `/columns`.
+- **Depends on**: Module 7, and **FEAT-147 (`sdd/specs/per-tenant-queries.spec.md`, approved) Modules 1, 2 and 4**. The brainstorm and v0.1 of this spec called it "FEAT-176", its proposal id.
+- **Contract consumed from FEAT-147.** These are spec-level interfaces, not yet in code; the task re-verifies them against the merged implementation before starting.
+  - `querysource.tenants.TenantRegistry.resolve(tenant: str | None) -> QueryStore`. An unknown, disallowed or incompatible tenant fails with FEAT-147's `tenant_not_available` (404).
+  - `querysource.tenants.QueryStore`: frozen, with `database_namespace`, `schema`, `table`, `contract: Literal['legacy','tenant']`, `columns`.
+  - `querysource.tenants.QueryIdentity(store, slug)` and `quote_identifier(value) -> str`.
+  - `querysource.repositories.definitions.DefinitionRepository.get(identity) -> LoadedDefinition`, whose `.runtime` is a detached `QueryModel` with `program_slug = store.schema`.
+  - `querysource.handlers.tenant.resolve_request_store(request, registry, payload=None) -> QueryStore` (selector validation, 400 on invalid).
+  - `QS(..., tenant=<name>)`, the keyword-only `tenant` on `AbstractQuery`, for `/columns`.
+  - `AbstractHandler._enforce_owned_slug(request, identity, action)`. Its detached-evaluator adapter (a shallow evaluator copy with a fresh `_cache`) must also be used for this module's tenant `can_access`/`filter_visible` calls, so cached decisions never cross owners.
 - **Rules**:
-  - An unknown or unregistered tenant gives `404`, the same as a hidden slug.
-  - Tenant rows have no `program_slug`, so `QueryStore(has_program_slug=False, tenant=<name>)`.
-  - Tenant routes are registered **after** all legacy routes. The `{tenant}` pattern is `{tenant:[a-z][a-z0-9_]*}`.
-  - Reserved first-segment names (`queries`, `management`, `qs`, `datasources`, `datasource`, `audit_log`) are rejected by FEAT-176's reserved-name policy. This module adds a test asserting `/api/v1/queries/queries/describe` routes to the legacy detail handler.
+  - **Naming.** FEAT-147 owns the name `QueryStore`, so this feature's store wrapper is `DescribeStore` (renamed in v0.2).
+    - The tenant wrapper is built as `DescribeStore(schema=qs.schema, table=qs.table, has_program_slug=False, tenant=qs.schema, loader=<repository.get(...).runtime>)`.
+    - `qs` above is the resolved FEAT-147 `QueryStore`; the wrapper keeps a reference to it for identity and quoting.
+  - **Tenant names** are exact and case-sensitive, never trimmed or lowercased, and may contain hyphens or spaces (FEAT-147 §2). Therefore:
+    - there is **no** `{tenant:[a-z]...}` route regex; selector validation is FEAT-147's `resolve_request_store`;
+    - tenant identifiers are quoted with `querysource.tenants.quote_identifier`, **not** `_pagination._validate_bare_identifier`, which rejects hyphens.
+  - **Program membership** compares `store.schema.lower()` against the normalized (lowercase) programs. The lowercasing applies only to this comparison, never to store selection.
+  - **Unknown tenant.** An unknown, unregistered or incompatible tenant gives `404`, indistinguishable from a hidden slug; the FEAT-147 error code is not echoed. An invalid selector gives FEAT-147's `400 invalid_tenant`.
+  - **List projection.** Tenant rows have no `program_slug` column. The projection omits it, and each row gets `program_slug = store.schema` (the runtime-derived value) after the query. Tenant sort and filter on `program_slug` return `400`, as FEAT-147 does.
+  - **Route order.** Register the three tenant routes **after** all legacy routes and **before** FEAT-147's `GET/POST /api/v1/{tenant}/queries/{slug}`. That way `/api/v1/{tenant}/queries/describe` is not captured as a slug named `describe`.
+    - FEAT-147 already reserves `management` and tests literal `queries`/`test`/`qs` precedence.
+    - This module adds a test asserting `/api/v1/queries/queries/describe` still reaches the legacy detail handler.
 - **Interface Skeleton**:
   ```python
   # querysource/auth/slug_visibility.py
-  async def tenant_store(request: web.Request, tenant: str) -> Optional[QueryStore]:
-      """QueryStore(has_program_slug=False, tenant=tenant.lower(), schema/table/loader from FEAT-176);
-      None when the tenant is not registered. (unverified — FEAT-176 contract)"""
+  async def tenant_store(request: web.Request, tenant: str) -> Optional[DescribeStore]:
+      """DescribeStore for a registered FEAT-147 tenant (has_program_slug=False, tenant=exact name);
+      None when TenantRegistry.resolve fails with tenant_not_available. (FEAT-147 contract — verify on merge)"""
 
-  # querysource/services.py
-  add_get('/api/v1/{tenant:[a-z][a-z0-9_]*}/queries/describe', dh.describe_list, allow_head=True)
-  add_get('/api/v1/{tenant:[a-z][a-z0-9_]*}/queries/{slug}/describe', dh.describe)
-  add_get('/api/v1/{tenant:[a-z][a-z0-9_]*}/queries/{slug}/columns', dh.columns)
+  # querysource/services.py  (after legacy describe routes; before FEAT-147 /{tenant}/queries/{slug})
+  add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+  add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+  add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
   ```
 
 ### Module 9: Documentation, changelog, version
@@ -902,7 +914,9 @@ def mock_evaluator():
 This feature is complete when **all** of the following are true.
 
 **Validators and providers**
-- [ ] **AC1 (M1).** For every keyword in the effective `UDF_LIST` and each hint in {none, `date`, `datetime`, `timestamp`} in any letter case, the raw-query (Rust) rendering equals the Cython `is_valid` rendering. Verified by `pytest tests/unit/test_udf_keyword_resolution.py`, after `make build-inplace`.
+- [ ] **AC1 (M1).** For every keyword in the effective `UDF_LIST` and each hint in {none, `date`, `datetime`, `timestamp`} in any letter case, the raw-query (Rust) rendering equals the Cython `is_valid` rendering.
+  - **One documented, SQL-equivalent exception:** untyped `CURRENT_YEAR`/`CURRENT_MONTH` render unquoted on Rust (`2026`) and quoted on Cython (`'2026'`). Measured 2026-09-15; the test compares these after stripping one level of single quotes.
+  - Verified by `pytest tests/unit/test_udf_keyword_resolution.py`, after `make build-inplace`.
 - [ ] **AC2 (M1).** Existing FEAT-103 injection tests pass unchanged: `pytest tests/unit/test_provider_raw_query_validated.py tests/unit/test_qs_parsers_validated.py`.
 - [ ] **AC3 (M1).** `udf_keywords()`, `pg_constants()` and `pg_udfs()` are importable from `querysource.types.validators`. A comma-separated `UDF_LIST` environment override is honoured; today it would be a `str` assigned to a `cdef list`.
 
@@ -1229,7 +1243,7 @@ def filter_resources(self, ctx: EvalContext, resource_type: ResourceType, resour
 - **EvalContext.** Mirror `_enforce_pbac` (abstract.py:317-449) for `EvalContext` construction, lazy navigator-auth imports and the coroutine guard. Do **not** modify `_enforce_pbac`.
 - **List filtering.** Use the listing pattern of `DatasourceView._pbac_filter` (`datasources/handlers/datasource.py:190`), with the opposite failure policy: **fail closed**.
 - **Redaction.** Use the pattern of `_redact_datasource` (`datasource.py:48`), but omit fields and report them in `redacted`.
-- **Store addressing.** `QueryModel.Meta` is never mutated; the concurrency regression is covered by `tests/test_queryslug_concurrency.py`. Always address the table through `QueryStore(schema, table)` and quoted identifiers validated by `_validate_bare_identifier`.
+- **Store addressing.** `QueryModel.Meta` is never mutated; the concurrency regression is covered by `tests/test_queryslug_concurrency.py`. Always address the table through `DescribeStore(schema, table)` and quoted identifiers validated by `_validate_bare_identifier`.
 - **Placeholder grammar.** Keep extraction consistent with the Rust substitution grammar (`safe_dict.rs:116-120`).
 - **Logging and conventions.** Use `self.logger` / `logging.getLogger(__name__)`, Google docstrings, strict type hints and Pydantic v2 models.
 - **Cython rebuild.** After editing `types/validators.pyx`, run `make build-inplace` before tests. Rust needs no rebuild.
@@ -1358,3 +1372,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-15 | Jesús Lara / Claude | Initial draft from `describe-queryslug.brainstorm.md` (Option A, all brainstorm questions resolved); codebase contract re-verified; UDF divergence reproduced at runtime |
+| 0.2 | 2026-09-15 | Claude (`/sdd-task`) | Aligned with approved FEAT-147 (per-tenant-queries, formerly FEAT-176). Renamed this feature's `QueryStore` to `DescribeStore` to avoid clashing with `querysource.tenants.QueryStore`. Rebased Module 8 on FEAT-147 interfaces: case-sensitive tenants, `quote_identifier`, `DefinitionRepository.get`, detached-evaluator adapter, route order. AC1 now documents the untyped integer-keyword quoting difference. |
