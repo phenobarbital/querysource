@@ -57,9 +57,22 @@ def resolve_request_store(
     if "tenant" in request.match_info:
         url_tenant = request.match_info["tenant"]
 
-    # Query string parameter (e.g., ?tenant=client_a)
+    # Query string parameter (e.g., ?tenant=client_a). request.query is a
+    # MultiDictProxy — request.query["tenant"] silently returns only the
+    # FIRST value when the key repeats (?tenant=a&tenant=b), which would
+    # let a conflicting duplicate slip through unnoticed. Spec: "Multiple
+    # query-string values are accepted only when equal" — so every value
+    # must be read via .getall() and compared, not just the first.
     if "tenant" in request.query:
-        query_tenant = request.query["tenant"]
+        query_tenant_values = request.query.getall("tenant")
+        if len(set(query_tenant_values)) > 1:
+            raise web.HTTPBadRequest(
+                reason=(
+                    "Multiple conflicting tenant selectors in query string: "
+                    f"{query_tenant_values}"
+                )
+            )
+        query_tenant = query_tenant_values[0]
 
     # JSON body parameter (for write handlers)
     if payload is not None and isinstance(payload, Mapping) and "tenant" in payload:

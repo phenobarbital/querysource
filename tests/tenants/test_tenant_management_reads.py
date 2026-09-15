@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from aiohttp import web
+from multidict import MultiDict
 
 from querysource.handlers.tenant import resolve_request_store
 from querysource.tenants import QueryStore, TenantRegistry
@@ -47,7 +48,11 @@ def _mock_request(
     request.method = method
     # resolve_request_store reads request.query (the real aiohttp
     # Request property backing the query string), not request.rel_url.
-    request.query = query or {}
+    # Real request.query is a MultiDictProxy (supports both `["tenant"]`
+    # and `.getall("tenant")`) — wrap the plain dict the same way so
+    # production code exercising .getall() (finding 12: multi-value query
+    # string handling) behaves identically to a real request here.
+    request.query = MultiDict(query or {})
     request.rel_url = MagicMock()
     request.rel_url.query = query or {}
     request.match_info = match_info or {}
@@ -376,3 +381,50 @@ async def test_tenant_store_search_never_sql_references_program_slug() -> None:
     assert captured.sql_statements, "expected at least one SQL statement to run"
     for sql in captured.sql_statements:
         assert "program_slug" not in sql
+
+
+@pytest.mark.asyncio
+async def test_duplicate_query_string_tenant_values_rejected_when_conflicting() -> None:
+    """?tenant=a&tenant=b (conflicting duplicates) must be rejected (400).
+
+    Code review finding 12: resolve_request_store read
+    request.query["tenant"] — a MultiDictProxy subscript, which silently
+    returns only the FIRST value when the key repeats in the query string.
+    A second, conflicting ?tenant= value slipped through unnoticed instead
+    of being rejected, contradicting the spec's "Multiple query-string
+    values are accepted only when equal".
+    """
+    registry = _mock_registry()
+
+    request = _mock_request(
+        method="GET",
+        path="/api/v1/management/queries",
+        query={},
+        match_info={},
+    )
+    request.query = MultiDict([("tenant", "tenant1"), ("tenant", "no_such_tenant")])
+
+    with pytest.raises(web.HTTPBadRequest) as exc_info:
+        resolve_request_store(request, registry)
+    assert "conflicting" in str(exc_info.value.reason).lower()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_query_string_tenant_values_accepted_when_equal() -> None:
+    """?tenant=a&tenant=a (equal duplicates) must resolve normally.
+
+    Spec: "Multiple query-string values are accepted only when equal" —
+    the conflict check must compare values, not just reject any repeat.
+    """
+    registry = _mock_registry()
+
+    request = _mock_request(
+        method="GET",
+        path="/api/v1/management/queries",
+        query={},
+        match_info={},
+    )
+    request.query = MultiDict([("tenant", "tenant1"), ("tenant", "tenant1")])
+
+    store = resolve_request_store(request, registry)
+    assert store.schema == "tenant1"
