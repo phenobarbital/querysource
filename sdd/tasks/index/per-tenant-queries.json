@@ -1,0 +1,369 @@
+{
+  "feature": "per-tenant-queries",
+  "feature_id": "FEAT-147",
+  "spec": "sdd/specs/per-tenant-queries.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-09-15T02:30:01.846285+00:00",
+  "completed_at": null,
+  "tasks": [
+    {
+      "id": "TASK-716",
+      "slug": "tenant-registry",
+      "title": "Implement immutable store identities and catalog discovery",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-716-tenant-registry.md"
+    },
+    {
+      "id": "TASK-717",
+      "slug": "tenant-definition-model",
+      "title": "Define tenant persistence validation and runtime compatibility",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-716"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-717-tenant-definition-model.md"
+    },
+    {
+      "id": "TASK-718",
+      "slug": "tenant-repository-reads",
+      "title": "Implement repository reads, listing, metadata and revision identity",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-717"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-718-tenant-repository-reads.md"
+    },
+    {
+      "id": "TASK-719",
+      "slug": "tenant-repository-writes",
+      "title": "Implement atomic definition mutations",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-718"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-719-tenant-repository-writes.md"
+    },
+    {
+      "id": "TASK-720",
+      "slug": "tenant-bootstrap-lookup",
+      "title": "Wire startup, direct usage and compatible slug lookup",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-719"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-720-tenant-bootstrap-lookup.md"
+    },
+    {
+      "id": "TASK-721",
+      "slug": "tenant-execution-context",
+      "title": "Carry immutable ownership through query construction",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-720"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-721-tenant-execution-context.md"
+    },
+    {
+      "id": "TASK-722",
+      "slug": "tenant-result-cache",
+      "title": "Apply revision-scoped keys to every result cache boundary",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-721"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-722-tenant-result-cache.md"
+    },
+    {
+      "id": "TASK-723",
+      "slug": "tenant-management-reads",
+      "title": "Add selector parsing and tenant-aware management reads",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-722"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-723-tenant-management-reads.md"
+    },
+    {
+      "id": "TASK-724",
+      "slug": "tenant-management-writes",
+      "title": "Route management mutations through selected-owner repository",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-723"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-724-tenant-management-writes.md"
+    },
+    {
+      "id": "TASK-725",
+      "slug": "tenant-policy-preflight",
+      "title": "Preserve policy semantics with isolated tenant decisions",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-724"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-725-tenant-policy-preflight.md"
+    },
+    {
+      "id": "TASK-726",
+      "slug": "tenant-http-routes",
+      "title": "Expose unified tenant execution and inspection routes",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-725"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-726-tenant-http-routes.md"
+    },
+    {
+      "id": "TASK-727",
+      "slug": "tenant-child-execution",
+      "title": "Resolve nested owners and propagate them across local threads",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-726"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-727-tenant-child-execution.md"
+    },
+    {
+      "id": "TASK-728",
+      "slug": "tenant-remote-protocol",
+      "title": "Dispatch tenant work through a versioned worker contract",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-727"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-728-tenant-remote-protocol.md"
+    },
+    {
+      "id": "TASK-729",
+      "slug": "tenant-scheduler-registry",
+      "title": "Load and identify scheduled definitions per physical store",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-728"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-729-tenant-scheduler-registry.md"
+    },
+    {
+      "id": "TASK-730",
+      "slug": "tenant-scheduler-api-jobs",
+      "title": "Propagate job ownership and synchronize committed CRUD",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-729"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-730-tenant-scheduler-api-jobs.md"
+    },
+    {
+      "id": "TASK-731",
+      "slug": "tenant-observability-outputs",
+      "title": "Add ownership diagnostics and isolate implicit artifacts",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-730"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-731-tenant-observability-outputs.md"
+    },
+    {
+      "id": "TASK-732",
+      "slug": "tenant-integration-verification",
+      "title": "Verify PostgreSQL, Redis, HTTP and worker ownership end to end",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-731"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-732-tenant-integration-verification.md"
+    },
+    {
+      "id": "TASK-733",
+      "slug": "tenant-rollout-documentation",
+      "title": "Document provisioning, API compatibility and staged rollout",
+      "feature_id": "FEAT-147",
+      "feature": "per-tenant-queries",
+      "spec": "sdd/specs/per-tenant-queries.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-732"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-733-tenant-rollout-documentation.md"
+    }
+  ]
+}
