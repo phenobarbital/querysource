@@ -1,19 +1,15 @@
 import asyncio
-from typing import Union, Optional
+
 from aiohttp import web
-from asyncdb.exceptions import (
-    NoDataFound,
-    StatementError,
-    ConnectionTimeout
+from asyncdb.exceptions import ConnectionTimeout, NoDataFound, StatementError
+
+from ..exceptions import (
+    DataNotFound,
+    DriverError,
+    EmptySentence,
+    QueryException,
 )
 from ..providers import BaseProvider  # renamed to Providers.
-from ..exceptions import (
-    SlugNotFound,
-    QueryException,
-    DriverError,
-    DataNotFound,
-    EmptySentence
-)
 from .base import BaseQuery
 
 
@@ -26,18 +22,21 @@ class QueryObject(BaseQuery):
     def __init__(
             self,
             name: str,
-            query: Optional[Union[list, dict]],
+            query: list | dict | None,
             conditions: dict = None,
             request: web.Request = None,
             queue: asyncio.Queue = None,
             loop: asyncio.AbstractEventLoop = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
-        super(QueryObject, self).__init__(
+        super().__init__(
             slug=None,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
         ## Base provider (if slug)
@@ -89,15 +88,24 @@ class QueryObject(BaseQuery):
             self._logger.debug(
                 f'Starting Slug-based Query: {self._query!s}'
             )
-            try:
-                objquery = await self.get_slug(
-                    self._query,
-                    evt=self._loop
-                )
-            except (SlugNotFound):
-                raise
-            except Exception:
-                raise
+            # Resolve tenant store and create QueryIdentity. Retrieved via
+            # get_definition_repository() (TASK-720) so the registry used
+            # is the one initialized on QuerySource's singleton (real
+            # discovery), never an empty, never-discovered TenantRegistry.
+            from querysource.tenants import QueryIdentity
+            repo = await self.get_definition_repository()
+            store = repo.registry.resolve(self._tenant_selector)
+            identity = QueryIdentity(store=store, slug=self._query)
+            loaded_def = await repo.get(identity)
+            # Store definition identity and revision on the execution object
+            self._definition_identity = loaded_def.identity
+            self._definition_revision = loaded_def.revision
+            self._logger.debug(
+                f"Loaded definition: slug={self._query}, "
+                f"identity={loaded_def.identity}, revision={loaded_def.revision}"
+            )
+            # Use detached runtime model for provider construction
+            objquery = loaded_def.runtime
             ### getting the connection and the provider from Slug:
             try:
                 conn, provider = await self.get_provider(

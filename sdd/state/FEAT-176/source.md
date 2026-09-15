@@ -1,0 +1,8 @@
+---
+kind: inline
+jira_key: null
+fetched_at: 2026-09-15T01:01:49Z
+summary_oneline: Schema-per-tenant query discovery, storage and APIs with public-query backward compatibility
+---
+
+$sdd-proposal per-tenant-queries -- Currently Querysource only reads queries from "public.queries" table at main postgres, but we are looking for a new version of querysource where queries will live per-tenant, where tenant means an isolated postgres schema per-client, a new querysource routine will search (using information schema) for all schemas in postgres with "queries" table and if that "queries" table have a column "query_slug", with an optional "allowlist" filter for loading only "allowed" tenants provided during `QuerySource` initialization, {tenant}.queries will be a copy of public.queries but without "program_slug" columns because we are already are in an particular schema. when QS loads in server-mode, all tenants will be scanned for "queries" table, a register an internal record with all supported tenants, I know this new feature will be affect across all internal functionalities in Querysource, but this will be a major release but preserving backward compatibility, that means: current APIs /api/v2/services/queries and /api/v3/queries will be for "public" queries, demanding a new URL for per-tenant queries (/api/v1/{tenant}/queries/), the same will happen to query-slug CRUD operations, where if user pass a "tenant" attribute, queries will be listed, edited or inserted into the "queries" tenant table, if tenant is absent or null, will use "public.queries". we need to do a complete research around what parts of code are touching for this new "per-tenant" queries funcionality.

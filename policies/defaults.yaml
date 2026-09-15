@@ -24,6 +24,8 @@ policies:
       - "driver:use"
       - "driver:list"
       - "raw_query:execute"
+      - "slug:describe"
+      - "slug:describe_raw"
     subjects:
       groups:
         - superuser

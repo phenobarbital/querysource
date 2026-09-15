@@ -1,0 +1,428 @@
+"""FEAT-148 TASK-743 — per-tenant describe routes (FEAT-147 stores)."""
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest_asyncio
+from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
+
+from querysource.auth.slug_visibility import Principal, PrincipalKind
+from querysource.handlers.describe import QueryDescribe
+from querysource.models import QueryModel
+from querysource.tenant_errors import TenantError
+from querysource.tenants import QueryIdentity, QueryStore
+
+
+@pytest_asyncio.fixture
+async def test_client(fake_qs_connection):
+    """aiohttp TestClient with QueryDescribe tenant routes."""
+    app = web.Application()
+    app["qs_connection"] = fake_qs_connection
+
+    # Mock registry and repository on the app
+    registry = MagicMock()
+    repository = MagicMock()
+    app["qs_tenant_registry"] = registry
+    app["qs_definition_repository"] = repository
+
+    dh = QueryDescribe()
+    app.router.add_get("/api/v1/{tenant}/queries/describe", dh.describe_list, allow_head=True)
+    app.router.add_get("/api/v1/{tenant}/queries/{slug}/describe", dh.describe)
+    app.router.add_get("/api/v1/{tenant}/queries/{slug}/columns", dh.columns)
+
+    # Also add legacy routes to test precedence
+    app.router.add_get("/api/v1/queries/describe", dh.describe_list, allow_head=True)
+    app.router.add_get("/api/v1/queries/{slug}/describe", dh.describe)
+
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+def _patch_principal(principal: Principal):
+    """Bypass session/resolve_principal plumbing: pin QueryDescribe._principal."""
+    return patch.object(QueryDescribe, "_principal", new_callable=AsyncMock, return_value=principal)
+
+
+async def test_tenant_unknown_404(test_client, fake_qs_connection):
+    """Unknown tenant -> registry.resolve raises -> 404."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    # Mock registry to raise on unknown tenant
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.side_effect = TenantError("tenant not found", error_code="tenant_not_available")
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/unknown_tenant/queries/describe")
+
+    assert resp.status == 404
+    assert fake_qs_connection.calls == []
+
+
+async def test_tenant_list_with_superuser(test_client, fake_qs_connection):
+    """Superuser accessing tenant list -> returns rows with post-filled program_slug."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    # Mock store resolution
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme_schema",
+        table="acme_queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    # Mock rows (without program_slug for tenant stores)
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+        {"query_slug": "q2", "provider": "bigquery", "description": "Query 2", "updated_at": "2026-01-02"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.filter_visible", new_callable=AsyncMock, return_value=["q1", "q2"]):
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    assert resp.status == 200
+    data = await resp.json()
+    # Verify program_slug was post-filled as the schema name
+    assert data["data"][0]["program_slug"] == "acme_schema"
+    assert data["data"][1]["program_slug"] == "acme_schema"
+
+
+async def test_tenant_membership_prefilter_deny(test_client, fake_qs_connection):
+    """PROGRAMS principal without tenant in programs -> deny-all -> 204."""
+    principal = Principal(kind=PrincipalKind.PROGRAMS, programs=("other_tenant",))
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme_schema",
+        table="acme_queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    # Tenant not in principal.programs -> deny-all -> 204
+    assert resp.status == 204
+    assert resp.headers["X-Total-Count"] == "0"
+    assert fake_qs_connection.calls == []
+
+
+async def test_tenant_membership_prefilter_allow(test_client, fake_qs_connection):
+    """PROGRAMS principal with tenant in programs -> allow -> query runs."""
+    principal = Principal(kind=PrincipalKind.PROGRAMS, programs=("acme_schema",))
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme_schema",
+        table="acme_queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.filter_visible", new_callable=AsyncMock, return_value=["q1"]):
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    assert resp.status == 200
+
+
+async def test_tenant_sort_program_slug_400(test_client, fake_qs_connection):
+    """Attempting to sort by program_slug in tenant store -> 400."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme_schema",
+        table="acme_queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/describe?sort=program_slug")
+
+    assert resp.status == 400
+    data = await resp.json()
+    assert "program_slug" in data["message"]
+
+
+async def test_tenant_case_sensitive_schema(test_client, fake_qs_connection):
+    """Tenant schema names are case-sensitive; routing works as-is."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="AcMe_Schema",  # Mixed case
+        table="definitions",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.filter_visible", new_callable=AsyncMock, return_value=["q1"]):
+        resp = await test_client.get("/api/v1/AcMe_Schema/queries/describe")
+
+    assert resp.status == 200
+    # Verify schema was passed correctly (no lowercasing)
+    registry.resolve.assert_called_with(tenant="AcMe_Schema")
+
+
+async def test_tenant_detail_loader_repository(test_client, fake_qs_connection):
+    """Describe detail for tenant -> loader uses DefinitionRepository.get."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    # Mock that slug exists
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
+
+    # Mock DefinitionRepository.get to return a QueryModel
+    repository = test_client.app["qs_definition_repository"]
+    mock_model = MagicMock(spec=QueryModel)
+    mock_model.query_slug = "test_slug"
+    mock_model.program_slug = "acme"
+    mock_model.provider = "postgres"
+
+    from querysource.tenants import LoadedDefinition
+    loaded = LoadedDefinition(
+        identity=QueryIdentity(store=store, slug="test_slug"),
+        runtime=mock_model,
+        revision="1"
+    )
+    repository.get = AsyncMock(return_value=loaded)
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.can_access", new_callable=AsyncMock, return_value=True):
+        resp = await test_client.get("/api/v1/acme/queries/test_slug/describe")
+
+    # Verify repository was called
+    repository.get.assert_called_once()
+    call_args = repository.get.call_args
+    assert call_args[0][0].slug == "test_slug"
+    assert call_args[0][0].store.schema == "acme"
+
+
+async def test_tenant_detail_loader_toctou_query_not_found_gives_404(test_client, fake_qs_connection):
+    """A slug deleted between the exists-check and the repository load must
+    still degrade to a body-less 404, not an unhandled 500.
+
+    DefinitionRepository.get() (querysource/repositories/definitions.py) raises
+    TenantError(error_code="query_not_found") when its own row lookup misses —
+    a real race, since the exists-check (fetch_one) and the loader run as two
+    separate DB round-trips. Regression test for that gap.
+    """
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    # Exists-check passes...
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
+
+    # ...but the row vanished by the time the repository loads it.
+    repository = test_client.app["qs_definition_repository"]
+    repository.get = AsyncMock(
+        side_effect=TenantError("Query not found: 'test_slug'", error_code="query_not_found")
+    )
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/test_slug/describe")
+
+    # aiohttp's HTTPNotFound() default body is the generic "404: Not Found"
+    # text, not empty — the point is it's the same generic body every other
+    # describe 404 uses (AC6/AC18), never a cause-specific payload leaking
+    # the TenantError message.
+    assert resp.status == 404
+    body = await resp.text()
+    assert "test_slug" not in body
+    assert "Query not found" not in body
+
+
+async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connection):
+    """Columns endpoint for tenant -> passes tenant kwarg to QS()."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    # Mock that slug exists
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
+
+    # Mock DefinitionRepository
+    repository = test_client.app["qs_definition_repository"]
+    mock_model = MagicMock(spec=QueryModel)
+    from querysource.tenants import LoadedDefinition
+    loaded = LoadedDefinition(
+        identity=QueryIdentity(store=store, slug="test_slug"),
+        runtime=mock_model,
+        revision="1"
+    )
+    repository.get = AsyncMock(return_value=loaded)
+
+    # A real fake provider (not an AsyncMock): get_source()/get_query() are
+    # synchronous in the real QS/BaseProvider, so a bare AsyncMock() for `qs`
+    # makes get_source() return an unawaited coroutine instead of a usable
+    # provider object — this would 500 internally without ever surfacing,
+    # since AsyncMock() auto-mocks every attribute access.
+    fake_provider = MagicMock()
+    fake_provider.get_query.return_value = "SELECT * FROM acme.queries"
+    fake_provider.describe_columns = AsyncMock(return_value=[{"name": "id", "type": "integer"}])
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.can_access", new_callable=AsyncMock, return_value=True), \
+            patch("querysource.handlers.describe.QS") as mock_qs_class:
+        # Mock QS instance
+        mock_qs = MagicMock()
+        mock_qs_class.return_value = mock_qs
+        mock_qs.build_provider = AsyncMock()
+        mock_qs.get_source = MagicMock(return_value=fake_provider)
+        mock_qs.close = AsyncMock()
+
+        resp = await test_client.get("/api/v1/acme/queries/test_slug/columns")
+
+    # Verify QS was initialized with tenant parameter
+    mock_qs_class.assert_called_once()
+    call_kwargs = mock_qs_class.call_args[1]
+    assert call_kwargs.get("tenant") == "acme"
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["columns_source"] == "prepare"
+    assert data["columns"] == [{"name": "id", "type": "integer"}]
+
+
+async def test_tenant_evaluator_isolated_call_wiring(test_client, fake_qs_connection):
+    """Tenant list/detail/columns pass detached=True to filter_visible/can_access/describe_grants."""
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    with _patch_principal(principal), \
+            patch("querysource.handlers.describe.filter_visible", new_callable=AsyncMock, return_value=["q1"]) as mock_filter:
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    assert resp.status == 200
+    mock_filter.assert_called_once()
+    # Positional call: (request, principal, slugs, primary_action, fallback_action)
+    assert mock_filter.call_args.kwargs.get("detached") is True
+
+
+async def test_tenant_evaluator_never_shares_app_cache(test_client, fake_qs_connection):
+    """The real detached-evaluator mechanism never reads or writes the app evaluator's cache.
+
+    Uses a fake evaluator whose filter_resources() writes into self._cache (as a
+    real navigator_auth evaluator would, to memoize decisions) and asserts the
+    *app-registered* evaluator's cache dict is untouched after a tenant list
+    request — proving slug_visibility._evaluator_state(detached=True) actually
+    operates on a copy, not the shared object (spec's "Tenant ABAC decisions
+    never read or write the app evaluator's cache").
+    """
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    class FakeFilterResult:
+        def __init__(self, allowed, denied):
+            self.allowed = allowed
+            self.denied = denied
+
+    class FakeEvaluator:
+        """Mimics a real ABAC evaluator that memoizes decisions in self._cache."""
+
+        def __init__(self):
+            self._cache = {"preexisting": "poison"}
+            self._stats = {"hits": 0}
+
+        def filter_resources(self, **kwargs):
+            # Simulate real caching behavior: writes a decision into whichever
+            # evaluator object this method runs on.
+            self._cache["acme:q1"] = "allowed"
+            return FakeFilterResult(allowed=["q1"], denied=[])
+
+    app_evaluator = FakeEvaluator()
+    test_client.app["security"] = MagicMock()  # PBAC enabled
+    test_client.app["policy_evaluator"] = app_evaluator
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    assert resp.status == 200
+    # The tenant request's decision was cached on a *copy* — the app's own
+    # evaluator object must still have only its original, pre-existing entry.
+    assert app_evaluator._cache == {"preexisting": "poison"}

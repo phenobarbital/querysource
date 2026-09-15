@@ -8,14 +8,16 @@ work together correctly:
 
 Tests are hermetic — no live database, no real APScheduler startup.
 """
-import pytest
 from unittest.mock import MagicMock
 
-from querysource.scheduler.scheduler import QSScheduler
+import pytest
+
 from querysource.scheduler.jobs import (
-    scheduled_query_job,
     scheduled_multiqs_job,
+    scheduled_query_job,
 )
+from querysource.scheduler.scheduler import QSScheduler
+from querysource.tenants import TenantRegistry
 
 
 @pytest.fixture
@@ -67,6 +69,7 @@ def _make_sched_mocked():
     qs.logger = MagicMock()
     qs._timezone = "UTC"
     qs._notification_manager = MagicMock()
+    qs._registry = TenantRegistry()
     qs._scheduler = MagicMock()
     return qs
 

@@ -4,6 +4,8 @@ from typing import Optional
 import pandas as pd
 from aiohttp import web
 
+from querysource.tenants import QueryStore
+
 from .base import ThreadSource
 from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
 
@@ -32,6 +34,8 @@ class ThreadQuery(ThreadSource):
         request: web.Request,
         queue: asyncio.Queue,
         remote_config: Optional[RemoteConfig] = None,
+        *,
+        store: Optional[QueryStore] = None,
     ):
         assert isinstance(query, dict), (
             f"ThreadQuery expects a dict for 'query', got {type(query).__name__!r}"
@@ -40,6 +44,7 @@ class ThreadQuery(ThreadSource):
         # self._query aliases self._options (set by super().__init__); kept for
         # backward-compat with the slug property and internal fetch() references.
         self._query = query
+        self._store = store
         # Note: self._request is already set by ThreadSource.__init__ (via super());
         # the redundant assignment is intentionally omitted here.
         if remote_config is not None:
@@ -82,5 +87,6 @@ class ThreadQuery(ThreadSource):
             self._query,
             self._queue,
             self._request,
+            store=self._store,
         )
         return None

@@ -1,45 +1,39 @@
 """""
 Connections Manager.
 """
-from typing import Any, Optional, Union
-from collections.abc import Callable
-import random
 import asyncio
-from importlib import import_module
+import random
+from collections.abc import Callable
 from datetime import datetime
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+from asyncdb import AsyncDB
+from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 from datamodel import BaseModel
 from datamodel.exceptions import ValidationError
-from asyncdb import AsyncDB
-from asyncdb.exceptions import (
-    ProviderError,
-    DriverError,
-    NoDataFound
-)
 from navconfig import config
 from navconfig.logging import logging
-from ..providers import BaseProvider
-from ..exceptions import (
-    QueryException,
-    ConfigError,
-    QueryError,
-    SlugNotFound
-)
-from ..datasources.drivers import SUPPORTED, BaseDriver
+
 from ..conf import (
-    DB_MAX_WORKERS,
-    DB_KEEPALIVE_IDLE,
     DB_IDLE_IN_TRANSACTION_TIMEOUT,
+    DB_KEEPALIVE_IDLE,
+    DB_MAX_WORKERS,
     DB_SESSION_TIMEOUT,
-    POSTGRES_TIMEOUT,
-    asyncpg_url,
     POSTGRES_SSL,
     POSTGRES_SSL_CA,
     POSTGRES_SSL_CERT,
     POSTGRES_SSL_KEY,
+    POSTGRES_TIMEOUT,
     QUERYSET_REDIS,
-    DEFAULT_SLUG_CACHE_TTL
+    asyncpg_url,
 )
-from ..models import QueryModel
+from ..datasources.drivers import SUPPORTED, BaseDriver
+from ..exceptions import ConfigError, QueryError, QueryException, SlugNotFound
+from ..providers import BaseProvider
+
+if TYPE_CHECKING:
+    from ..repositories import DefinitionRepository
 
 
 DATASOURCES: dict = {}
@@ -441,26 +435,64 @@ class Connection:
                 f'Invalid Datasource type {source.driver_type} for {name}'
             )
 
+    async def get_definition_repository(self) -> "DefinitionRepository":
+        """Get registry and a loop-local definition repository.
+
+        Obtains the ``QuerySource`` singleton snapshot lazily (imported
+        inside the method body) to avoid the services/connections import
+        cycle: ``services`` imports ``connections``, which imports this
+        module, so this module cannot import ``services`` at module load
+        time. Repository construction is cheap/stateless (no I/O); the
+        connection factory itself binds to the calling loop on first use.
+        """
+        from ..repositories import DefinitionRepository
+        from ..services import QuerySource
+
+        qs = QuerySource()
+        registry = await qs.initialize_tenants()
+        return DefinitionRepository(
+            registry=registry,
+            connection_factory=qs.connection.definition_connection,
+        )
+
     async def get_query_slug(
         self,
         slug: str,
         evt: asyncio.AbstractEventLoop = None,
-        max_retries: int = 3
+        max_retries: int = 3,
+        *,
+        tenant: str | None = None
     ) -> BaseModel:
+        """Delegate to repository; return compatible detached runtime definition.
+
+        ``evt`` is preserved for signature compatibility with existing
+        callers; the repository's connection factory already binds to the
+        loop this coroutine is actually running on (AC-5), which is the
+        loop a caller passing an explicit ``evt`` would be running the
+        awaited coroutine on in every realistic usage of this parameter.
+        """
+        from ..tenant_errors import TenantError
+        from ..tenants import QueryIdentity
+
         attempt = 0
         while attempt < max_retries:
-            db = self.get_connection(driver='pg', evt=evt)
             try:
-                # Pass ``_connection=conn`` so the per-call connection is
-                # used directly instead of mutating ``QueryModel.Meta.connection``.
-                # The class-level slot is shared by every coroutine, which
-                # caused intermittent ``ConnectionMissing`` under FlowTask
-                # concurrency.
-                async with await db.connection() as conn:
-                    self.logger.notice(
-                        f'::: Getting Slug {slug} from {QueryModel.Meta.schema}.{QueryModel.Meta.name}'
-                    )
-                    return await QueryModel.get(query_slug=slug, _connection=conn)
+                repo = await self.get_definition_repository()
+                store = repo.registry.resolve(tenant)
+                identity = QueryIdentity(store=store, slug=slug)
+                self.logger.notice(
+                    f'::: Getting Slug {slug} from {store.schema}.{store.table}'
+                )
+                loaded = await repo.get(identity)
+                return loaded.runtime
+            except TenantError as ex:
+                # Owner resolution/lookup failure (unknown tenant, missing
+                # slug): an expected 404-style condition for this
+                # compatibility layer, never a fallback query.
+                raise SlugNotFound(
+                    f'Slug not Found {slug!s}' if ex.error_code == "query_not_found"
+                    else str(ex)
+                ) from None
             except DriverError as ex:
                 if attempt < max_retries - 1:
                     # Exponential backoff with jitter
@@ -491,9 +523,22 @@ class Connection:
                     f"Error getting Slug: {ex}"
                 ) from ex
 
-    async def get_slug(self, slug: str, program: str = None, evt: asyncio.AbstractEventLoop = None):
+    async def get_slug(
+        self,
+        slug: str,
+        program: str = None,
+        evt: asyncio.AbstractEventLoop = None,
+        *,
+        tenant: str | None = None
+    ):
+        """Preserve program argument; only tenant selects ownership.
+
+        ``program`` was never used to select a schema in the existing
+        implementation (verified: the prior body ignored it entirely) —
+        it remains a compatibility argument only.
+        """
         start = datetime.now()
-        obj = await self.get_query_slug(slug, evt=evt)
+        obj = await self.get_query_slug(slug, evt=evt, tenant=tenant)
         exec_time = (datetime.now() - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"

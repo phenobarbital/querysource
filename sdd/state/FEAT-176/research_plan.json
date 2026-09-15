@@ -1,0 +1,367 @@
+{
+  "schema_version": "1.0",
+  "mode_hint": "enrichment",
+  "rationale": "Trace schema-per-tenant query storage through discovery, CRUD, execution and all identity-dependent consumers while retaining public APIs. Follow indexed wiki orientation with line-level source evidence.",
+  "queries": [
+    {
+      "id": "Q001",
+      "intent": "Locate public table assumptions and query identity across runtime modules",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "public\\.queries|program_slug|query_slug",
+        "path": "querysource",
+        "max_results": 200
+      }
+    },
+    {
+      "id": "Q002",
+      "intent": "Locate server initialization, routes and query loading entrypoints",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "class QuerySource|server_mode|add_routes|/api/v[123]/|load_queries",
+        "path": "querysource",
+        "max_results": 160
+      }
+    },
+    {
+      "id": "Q003",
+      "intent": "Inspect query lifecycle and contracts in querysource/services.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/services.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q004",
+      "intent": "Inspect query lifecycle and contracts in querysource/models.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/models.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q005",
+      "intent": "Inspect query lifecycle and contracts in querysource/queries/models.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/queries/models.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q006",
+      "intent": "Inspect query lifecycle and contracts in querysource/queries/qs.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/queries/qs.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q007",
+      "intent": "Inspect query lifecycle and contracts in querysource/queries/obj.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/queries/obj.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q008",
+      "intent": "Inspect query lifecycle and contracts in querysource/queries/base.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/queries/base.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q009",
+      "intent": "Inspect query lifecycle and contracts in querysource/queries/executor.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/queries/executor.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q010",
+      "intent": "Inspect query lifecycle and contracts in querysource/interfaces/queries.py",
+      "type": "read",
+      "priority": 1,
+      "params": {
+        "path": "querysource/interfaces/queries.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q011",
+      "intent": "Find schema selection, introspection and tenant patterns already in the repository",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "information_schema|search_path|tenant|schema_name",
+        "path": "querysource",
+        "max_results": 160
+      }
+    },
+    {
+      "id": "Q012",
+      "intent": "Find definition and result caches, identity keys, refresh and invalidation",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "query_slug|cache_key|invalidate|redis|checksum",
+        "path": "querysource/cache",
+        "max_results": 120
+      }
+    },
+    {
+      "id": "Q013",
+      "intent": "Find tenant propagation needs in jobs, notifications and schedule persistence",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "query_slug|program_slug|QuerySource|query_id|redis|job_id",
+        "path": "querysource/scheduler",
+        "max_results": 160
+      }
+    },
+    {
+      "id": "Q014",
+      "intent": "Find nested, remote and composite query references needing tenant identity",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "query_slug|program_slug|QuerySource|/api/|query_id",
+        "path": "querysource/queries/multi",
+        "max_results": 180
+      }
+    },
+    {
+      "id": "Q015",
+      "intent": "Trace handler CRUD, execution, listing, pagination and request context",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "query_slug|program_slug|Queries|tenant|request.query",
+        "path": "querysource/handlers",
+        "max_results": 200
+      }
+    },
+    {
+      "id": "Q016",
+      "intent": "Identify authorization resources, credentials and access scopes",
+      "type": "grep",
+      "priority": 1,
+      "params": {
+        "pattern": "query_slug|program_slug|tenant|resource|permission",
+        "path": "querysource/auth",
+        "max_results": 150
+      }
+    },
+    {
+      "id": "Q017",
+      "intent": "Inspect initialization options and configuration defaults",
+      "type": "read",
+      "priority": 2,
+      "params": {
+        "path": "querysource/conf.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q018",
+      "intent": "Verify available dependencies and release metadata",
+      "type": "read",
+      "priority": 2,
+      "params": {
+        "path": "pyproject.toml",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q019",
+      "intent": "Find cache and definition consumers beyond the primary query classes",
+      "type": "grep",
+      "priority": 2,
+      "params": {
+        "pattern": "query_slug|program_slug|public\\.queries",
+        "path": "querysource",
+        "max_results": 200
+      }
+    },
+    {
+      "id": "Q020",
+      "intent": "Locate SQL schemas, migrations and database provisioning artifacts",
+      "type": "grep",
+      "priority": 2,
+      "params": {
+        "pattern": "CREATE TABLE|ALTER TABLE|public\\.queries",
+        "path": ".",
+        "include": "*.sql",
+        "max_results": 100
+      }
+    },
+    {
+      "id": "Q021",
+      "intent": "Locate compatibility tests and tenant isolation coverage gaps",
+      "type": "grep",
+      "priority": 2,
+      "params": {
+        "pattern": "query_slug|public\\.queries|program_slug|tenant|/api/v[123]",
+        "path": "tests",
+        "max_results": 180
+      }
+    },
+    {
+      "id": "Q022",
+      "intent": "Find documented public API and client integration contracts",
+      "type": "grep",
+      "priority": 2,
+      "params": {
+        "pattern": "/api/v[123]|query_slug|public\\.queries|program_slug",
+        "path": "docs",
+        "max_results": 120
+      }
+    },
+    {
+      "id": "Q023",
+      "intent": "Review recent changes to avoid conflicting with active query features",
+      "type": "git_log",
+      "priority": 3,
+      "params": {
+        "path": "querysource",
+        "since": "90.days.ago",
+        "max_results": 20
+      }
+    },
+    {
+      "id": "Q024",
+      "intent": "Inspect tenant-sensitive pagination contracts",
+      "type": "read",
+      "priority": 2,
+      "parent_id": "F015",
+      "depth": 1,
+      "params": {
+        "path": "querysource/handlers/_pagination.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q025",
+      "intent": "Inspect background context and notification compatibility",
+      "type": "read",
+      "priority": 2,
+      "parent_id": "F013",
+      "depth": 1,
+      "params": {
+        "path": "querysource/scheduler/jobs.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q026",
+      "intent": "Inspect scheduler API context propagation",
+      "type": "read",
+      "priority": 2,
+      "parent_id": "F013",
+      "depth": 1,
+      "params": {
+        "path": "querysource/handlers/scheduler.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q027",
+      "intent": "Inspect request routing and conditions boundaries",
+      "type": "read",
+      "priority": 2,
+      "parent_id": "F015",
+      "depth": 1,
+      "params": {
+        "path": "querysource/handlers/service.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q028",
+      "intent": "Inspect execution audit context",
+      "type": "read",
+      "priority": 2,
+      "parent_id": "F006",
+      "depth": 1,
+      "params": {
+        "path": "querysource/handlers/log.py",
+        "lines": null
+      }
+    },
+    {
+      "id": "Q029",
+      "intent": "Inspect provider program fallbacks and checksum overrides",
+      "type": "grep",
+      "priority": 2,
+      "parent_id": "F019",
+      "depth": 1,
+      "params": {
+        "pattern": "program_slug|_program|def checksum",
+        "path": "querysource/providers",
+        "max_results": 150
+      }
+    },
+    {
+      "id": "Q030",
+      "intent": "Verify discovery and schema isolation semantics in PostgreSQL documentation",
+      "type": "read",
+      "priority": 2,
+      "parent_id": null,
+      "depth": 1,
+      "params": {
+        "path": "https://www.postgresql.org/docs/18/infoschema-columns.html",
+        "lines": null
+      }
+    }
+  ],
+  "expected_findings": [
+    "Evidence-linked impact inventory with symbols and line ranges",
+    "Discovery and registry lifecycle, allowlist semantics and identifier handling",
+    "Public compatibility matrix and tenant API contract",
+    "Tenant isolation requirements for definitions, results, authorization, jobs and nested queries",
+    "Schema and migration constraints including removal of program_slug",
+    "Regression and isolation test plan, rollout risks and unresolved product decisions"
+  ],
+  "meta": {
+    "wiki_available": true,
+    "wiki_orientation": [
+      {
+        "type": "wiki_query",
+        "question": "QuerySource public.queries query loading CRUD routes cache query_slug"
+      },
+      {
+        "type": "wiki_query",
+        "question": "QuerySource scheduler multiquery authorization query identity tenant schema"
+      }
+    ],
+    "schema_note": "The plan schema excludes wiki query types despite workflow instructions. Free wiki orientation is recorded here and must run before Q001; follow up using returned page IDs.",
+    "base_branch": "dev",
+    "type": "feature",
+    "estimated_budget_use": {
+      "files_read": 10,
+      "grep_calls": 12,
+      "git_calls": 1
+    },
+    "followup_strategy": "Add targeted reads and caller searches from findings within the remaining budget; report any unexamined areas explicitly.",
+    "execution_note": "Original queries were grouped into equivalent source searches/range reads; seven follow-up topics are linked to findings. Web references are supplemental and do not count as repository file reads."
+  }
+}

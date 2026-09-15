@@ -56,12 +56,21 @@ class FakeConn:
             return handler(sql)
         return handler
 
-    async def fetch_all(self, sql: str) -> list[dict]:
+    async def fetch_all(self, sql: str, *args: Any) -> list[dict]:
         self._pool.calls.append(("fetch_all", sql))
+        self._pool.args_log.append(args)
         handler = self._pool.fetch_handler
         if callable(handler):
-            return handler(sql)
+            return handler(sql, *args) if args else handler(sql)
         return handler or []
+
+    async def fetch_one(self, sql: str, *args: Any) -> dict | None:
+        self._pool.calls.append(("fetch_one", sql))
+        self._pool.args_log.append(args)
+        handler = self._pool.fetch_one_handler
+        if callable(handler):
+            return handler(sql, *args)
+        return handler
 
     async def fetchrow(self, sql: str) -> Optional[dict]:
         self._pool.calls.append(("fetchrow", sql))
@@ -96,6 +105,8 @@ class FakeQSConnection:
         self.fetchval_handler: Any = 0
         self.fetch_handler: Any = []
         self.calls: list[tuple[str, str]] = []
+        self.args_log: list[tuple] = []
+        self.fetch_one_handler: Any = None
 
     async def acquire(self) -> _AcquireCM:
         return _AcquireCM(FakeConn(self))

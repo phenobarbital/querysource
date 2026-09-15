@@ -3,29 +3,28 @@ QueryResource.
 
 Handler to accessing querysource objects from API.
 """
-from typing import Optional
 import contextlib
 from datetime import datetime
+from typing import Optional
+
 # for aiohttp
 from aiohttp import web
-from asyncdb.exceptions import (
-    ProviderError,
-    ConnectionTimeout
-)  # QuerySource Query, Executor, etc
-# Output
-from ..outputs import DataOutput
-from ..types import graph_ouputs, mime_supported
+from asyncdb.exceptions import ConnectionTimeout, ProviderError  # QuerySource Query, Executor, etc
+
+from ..auth import ResourceType
+from ..conf import CSV_DEFAULT_DELIMITER, CSV_DEFAULT_QUOTING
 from ..exceptions import (
+    DriverError,
     ParserError,
     QueryException,
     SlugNotFound,
-    DriverError,
 )
-from ..conf import (
-    CSV_DEFAULT_DELIMITER,
-    CSV_DEFAULT_QUOTING
-)
-from ..auth import ResourceType
+
+# Output
+from ..outputs import DataOutput
+from ..tenant_errors import TenantError
+from ..tenants import QueryIdentity
+from ..types import graph_ouputs, mime_supported
 from .abstract import AbstractHandler
 
 
@@ -184,12 +183,46 @@ class QueryService(AbstractHandler):
                 message="QS: Error with parameters.", exception=err
             )
         # PBAC: enforce slug:execute before any DB/source work begins.
-        await self._enforce_pbac(
-            request,
-            resource_type=ResourceType.SLUG,
-            resource_name=slug,
-            action="slug:execute",
-        )
+        #
+        # Owner-aware evaluation: TenantQueryHandler.query() stashes the
+        # resolved (path-based) tenant selector on request['qs_tenant']
+        # before delegating here (querysource/handlers/tenant.py); legacy
+        # v2/v3 callers never set it, so tenant stays None. When the tenant
+        # feature is active for this app (qs_tenant_registry published by
+        # QuerySource.qs_start), resolve the real QueryIdentity and use the
+        # tenant-isolated evaluator (_enforce_owned_slug, a shallow copy
+        # with a fresh, per-request policy-decision cache) so decisions
+        # never leak across tenants via the shared app-level evaluator
+        # cache — the same convention MultiQuery's
+        # _preflight_multiquery_owned already applies. Apps that never
+        # adopted the tenant feature (no qs_tenant_registry) keep the
+        # original, unchanged _enforce_pbac path.
+        tenant = request.get('qs_tenant')
+        registry = request.app.get("qs_tenant_registry")
+        if registry is not None:
+            try:
+                store = registry.resolve(tenant)
+            except web.HTTPNotFound:
+                raise
+            except Exception as exc:  # pylint: disable=W0703
+                self.logger.warning(
+                    "QueryService ownership pre-flight error (fail-closed): %s",
+                    exc,
+                )
+                raise web.HTTPNotFound() from exc
+            identity = QueryIdentity(store=store, slug=slug)
+            await self._enforce_owned_slug(
+                request,
+                identity=identity,
+                action="slug:execute",
+            )
+        else:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.SLUG,
+                resource_name=slug,
+                action="slug:execute",
+            )
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             _format = params['queryformat']
@@ -264,7 +297,14 @@ class QueryService(AbstractHandler):
             f'Slug: {slug}, format: {queryformat}, conditions: {conditions}'
         )
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution: TenantQueryHandler.query() stashes the
+            # resolved tenant selector on request['qs_tenant'] before
+            # delegating here (querysource/handlers/tenant.py); legacy v2/v3
+            # callers never set it, so tenant stays None (QS's own default,
+            # AC-3 "existing legacy tenant conditions must not redirect
+            # storage" — behavior is unchanged for every non-tenant route).
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -272,6 +312,18 @@ class QueryService(AbstractHandler):
                         message=f"Slug Not Found: {slug}",
                         exception=err,
                         code=400
+                    )
+                except TenantError as err:
+                    # Preserve the ownership error's own stable machine code
+                    # (invalid_tenant=400, tenant_not_available/query_not_found=404,
+                    # tenant_store_unavailable=503, tenant_write_forbidden=403,
+                    # tenant_worker_unsupported=502) — spec §"New ownership
+                    # errors" requires "use the current error envelope for
+                    # new codes", never a collapsed generic 500.
+                    raise self.Error(
+                        message=str(err),
+                        exception=err,
+                        code=err.code
                     )
                 except ParserError as err:
                     raise self.Error(
@@ -381,7 +433,9 @@ class QueryService(AbstractHandler):
             f'Slug: {slug}, format: json, conditions: {conditions}'
         )
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -390,6 +444,14 @@ class QueryService(AbstractHandler):
                         'message': err.message
                     }
                     return self.error(response=response_obj, status=404)
+                except TenantError as err:
+                    # See the same comment in query() above — preserve the
+                    # error's own stable machine code, never collapse to 500.
+                    response_obj = {
+                        'status': 'error',
+                        'message': err.message
+                    }
+                    return self.error(response=response_obj, status=err.code)
                 except ParserError as err:
                     return self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -513,7 +575,9 @@ class QueryService(AbstractHandler):
         conditions = {**options, **params}
         self.logger.debug(f'Slug: {slug}, format: {queryformat}, conditions: {conditions}')
         try:
-            if query := await self.get_source(request, slug, conditions, driver=args):
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -522,6 +586,14 @@ class QueryService(AbstractHandler):
                         'message': err.message
                     }
                     return self.error(response=response_obj, status=404)
+                except TenantError as err:
+                    # See the same comment in query() above — preserve the
+                    # error's own stable machine code, never collapse to 500.
+                    response_obj = {
+                        'status': 'error',
+                        'message': err.message
+                    }
+                    return self.error(response=response_obj, status=err.code)
                 except ParserError as err:
                     return self.Error(
                         message=f"Error parsing Query Slug {slug}",
@@ -628,7 +700,9 @@ class QueryService(AbstractHandler):
         conditions = {**options, **params}
         self.logger.debug(f'Test Slug: {slug}, format: {queryformat}, conditions: {conditions}')
         try:
-            query = await self.get_source(request, slug, conditions, driver=args)
+            # Owner-aware execution — see the same comment in query() above.
+            tenant = request.get('qs_tenant')
+            query = await self.get_source(request, slug, conditions, driver=args, tenant=tenant)
             result, error = await query.dry_run()
             if error:
                 works = False
@@ -665,6 +739,14 @@ class QueryService(AbstractHandler):
 
         except SlugNotFound as err:
             return self.NotFound(message=f"{err!s}", exception=err)
+        except TenantError as err:
+            # See the same comment in query() above — preserve the error's
+            # own stable machine code, never collapse to 500.
+            return self.Error(
+                message=str(err),
+                exception=err,
+                code=err.code
+            )
         except ParserError as err:
             return self.Error(
                 message=f"Error parsing Query Slug {slug}",

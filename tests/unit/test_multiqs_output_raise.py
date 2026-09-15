@@ -18,7 +18,7 @@ from querysource.queries.multi import MultiQS
 class _FakeThread:
     """Stand-in for ThreadQuery: synchronously seeds the result queue."""
 
-    def __init__(self, name, query, request, queue, remote_config=None):
+    def __init__(self, name, query, request, queue, remote_config=None, store=None):
         self._name = name
         self._queue = queue
         self.exc = None
@@ -34,8 +34,33 @@ class _FakeThread:
         pass
 
 
+class _FakeRegistry:
+    """Stand-in tenant registry: resolves any selector without touching a DB."""
+
+    def resolve(self, tenant):
+        return None
+
+
+class _FakeDefinitionRepository:
+    """Stand-in DefinitionRepository (TASK-727): preflight `.get()` always
+    succeeds, so these tests keep exercising the Output loop without
+    touching a database — matching this module's own "no database or
+    thread" contract."""
+
+    registry = _FakeRegistry()
+
+    async def get(self, ident):
+        return None
+
+
 def _make_multiqs(output_steps):
-    return MultiQS(query={"queries": {"q": {"slug": "s"}}, "Output": output_steps})
+    mqs = MultiQS(query={"queries": {"q": {"slug": "s"}}, "Output": output_steps})
+
+    async def _fake_get_definition_repository():
+        return _FakeDefinitionRepository()
+
+    mqs.get_definition_repository = _fake_get_definition_repository
+    return mqs
 
 
 def _destination_that_raises(exc):

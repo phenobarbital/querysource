@@ -1,11 +1,12 @@
-import sys
-import subprocess
-from tqdm import tqdm
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
+from typing import TYPE_CHECKING, Any
+
+from tqdm import tqdm
+
 try:
     import gensim.downloader as api
 except ImportError:
@@ -15,37 +16,51 @@ from datamodel.typedefs import Singleton
 from navconfig.logging import logging
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
+
 # QS
 from .datasources.handlers import DatasourceDrivers, DatasourceView
-from .template import TemplateParser
 from .handlers import (
-    QueryService,
-    QueryHandler,
+    LoggingService,
+    QueryDescribe,
     QueryExecutor,
+    QueryHandler,
     QueryManager,
+    QueryService,
     VariablesService,
-    LoggingService
 )
+from .template import TemplateParser
+
 try:
     from settings.settings import QUERYSOURCE_FILTERS, QUERYSOURCE_VARIABLES
 except ImportError:
     QUERYSOURCE_FILTERS = {}
     QUERYSOURCE_VARIABLES = {}
 
-from .interfaces.connections import PROVIDERS
-from .connections import QueryConnection
-from .parsers import QS_VARIABLES, QS_FILTERS
+from .auth import setup_pbac
 from .conf import (
     ENABLE_QS_SCHEDULER,
-    USE_VECTORS,
-    vector_models,
     GENSIM_DATA_DIR,
+    QS_AIRTABLE_OAUTH_ENABLED,  # added (FEAT-096)
+    QS_PBAC_CACHE_TTL,
     QS_PBAC_ENABLED,
     QS_POLICY_PATH,
-    QS_PBAC_CACHE_TTL,
-    QS_AIRTABLE_OAUTH_ENABLED,    # added (FEAT-096)
+    USE_VECTORS,
+    vector_models,
 )
-from .auth import setup_pbac
+from .connections import QueryConnection
+from .interfaces.connections import PROVIDERS
+from .parsers import QS_FILTERS, QS_VARIABLES
+
+if TYPE_CHECKING:
+    from .repositories import DefinitionRepository
+    from .tenants import TenantRegistry
+
+# Sentinel distinguishing "tenant_allowlist not passed" from "explicitly
+# passed None" (None means unrestricted, per spec §2 None/empty/exact
+# semantics) — an internal, bare ``QuerySource()`` lookup (e.g. from
+# ``Connection.get_definition_repository()``) must never be treated as an
+# incompatible reinitialization attempt just because it omits the kwarg.
+_UNSET = object()
 
 class QuerySource(metaclass=Singleton):
     """QuerySource.
@@ -62,9 +77,27 @@ class QuerySource(metaclass=Singleton):
     """
     jupyter_process = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, tenant_allowlist: Sequence[str] | None = _UNSET, **kwargs: Any) -> None:
         if hasattr(self, '__initialized__') and self.__initialized__ is True:
+            # Already initialized: an explicit, differing tenant_allowlist
+            # is an incompatible reinitialization attempt and must not
+            # silently broaden or narrow access. Omitting the kwarg (the
+            # _UNSET sentinel) is always compatible — most callers (e.g.
+            # Connection.get_definition_repository()) grab the existing
+            # singleton with a bare QuerySource().
+            if tenant_allowlist is not _UNSET and tenant_allowlist != self._tenant_allowlist:
+                raise ValueError(
+                    "Incompatible QuerySource reinitialization: tenant_allowlist "
+                    "was frozen at first construction and cannot be changed."
+                )
             return
+        # Freeze ownership configuration before anything else can read it.
+        self._tenant_allowlist: Sequence[str] | None = (
+            None if tenant_allowlist is _UNSET else tenant_allowlist
+        )
+        self._tenant_registry: TenantRegistry | None = None
+        self._definition_repository: DefinitionRepository | None = None
+        self._tenant_init_lock = asyncio.Lock()
         self.lazy: bool = kwargs.get('lazy', False)
         # Deprecated: passing loop= is no longer needed. We capture the running
         # loop lazily — first inside __init__ if we happen to be in async
@@ -166,6 +199,26 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_post('/api/v1/queries/schema', ds.schema)
         routes.append(r)
 
+        ### Describe API (FEAT-148): read-only slug discovery.
+        dh = QueryDescribe()
+        r = self.app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/vocabulary', dh.vocabulary)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
+        routes.append(r)
+
+        ### Tenant describe routes (FEAT-148 TASK-743): per-tenant read-only slug discovery.
+        # Registered after legacy routes, before FEAT-147 tenant execution routes (see AC18).
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/describe', dh.describe_list, allow_head=True)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
+        routes.append(r)
+
         ### Logging Service:
         lg = LoggingService()
         r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)
@@ -217,7 +270,7 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
 
         ## Component Documentation:
-        from .handlers.components import ComponentHandler  # noqa: PLC0415
+        from .handlers.components import ComponentHandler
         ch = ComponentHandler()
         r = self.app.router.add_get(
             r'/api/v3/qs/components',
@@ -232,9 +285,9 @@ class QuerySource(metaclass=Singleton):
 
         # ── Airtable OAuth integration (FEAT-096) — gated by env flag ────────
         if QS_AIRTABLE_OAUTH_ENABLED:
-            from .handlers.integrations.airtable import (  # noqa: PLC0415
-                AirtableConnectView,
+            from .handlers.integrations.airtable import (
                 AirtableCallbackView,
+                AirtableConnectView,
             )
             _airtable_connect = AirtableConnectView()
             _airtable_callback = AirtableCallbackView()
@@ -309,6 +362,43 @@ class QuerySource(metaclass=Singleton):
             "*", "/api/v2/variables/{program}/{variable}", _redirect_variables
         )
 
+        ### Tenant execution/inspection routes (FEAT-147).
+        # Registered last, after every fixed-literal route above (management,
+        # datasources, qs/variables, v2/v3 multi-query, component docs,
+        # Airtable OAuth) — aiohttp's UrlDispatcher resolves routes in
+        # registration order, so /api/v1/{tenant}/... never shadows a
+        # reserved literal first segment like "management"/"datasources"/
+        # "qs" (AC-4 "legacy routes take precedence" /
+        # "reserve management tenant routing... against raw routes").
+        from .handlers import TenantQueryHandler
+        th = TenantQueryHandler()
+        r = self.app.router.add_get("/api/v1/{tenant}/queries/", th.list)
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries/", th.query)
+        routes.append(r)
+        r = self.app.router.add_get("/api/v1/{tenant}/queries", th.list)
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries", th.query)
+        routes.append(r)
+        r = self.app.router.add_get(
+            "/api/v1/{tenant}/queries/{slug}", th.query, allow_head=False
+        )
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/{tenant}/queries/{slug}", th.query)
+        routes.append(r)
+        r = self.app.router.add_head("/api/v1/{tenant}/queries/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_patch("/api/v1/{tenant}/queries/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_get(
+            "/api/v1/{tenant}/queries/{slug}/test", th.test_slug
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            "/api/v1/{tenant}/queries/{slug}/test", th.test_slug
+        )
+        routes.append(r)
+
         ### Startup Event for QuerySource:
         self.app.on_startup.append(
             self.qs_start
@@ -321,7 +411,7 @@ class QuerySource(metaclass=Singleton):
             from .scheduler import QSScheduler
             self._scheduler = QSScheduler()
             self._scheduler.setup(self.app)
-            from .handlers.scheduler import SchedulerJobsView  # noqa: PLC0415
+            from .handlers.scheduler import SchedulerJobsView
             r = self.app.router.add_view(
                 '/api/v1/qs/scheduler/jobs', SchedulerJobsView
             )
@@ -366,10 +456,43 @@ class QuerySource(metaclass=Singleton):
             )
         return func
 
+    async def initialize_tenants(self) -> "TenantRegistry":
+        """Idempotently initialize on the current loop for HTTP or Python use.
+
+        Safe under concurrent callers: the check-then-discover-then-set
+        sequence is guarded by an asyncio.Lock so two coroutines racing to
+        initialize (e.g. an HTTP request and a lazy programmatic caller)
+        never both scan the catalog.
+        """
+        if self._tenant_registry is not None:
+            return self._tenant_registry
+        async with self._tenant_init_lock:
+            if self._tenant_registry is not None:
+                return self._tenant_registry
+            from .repositories import DefinitionRepository
+            from .tenants import TenantRegistry
+            registry = TenantRegistry()
+            async with await self.connection.definition_connection() as conn:
+                await registry.discover(conn, allowlist=self._tenant_allowlist)
+            self._tenant_registry = registry
+            self._definition_repository = DefinitionRepository(
+                registry=registry,
+                connection_factory=self.connection.definition_connection,
+            )
+            return registry
+
     async def qs_start(self, app: WebApp) -> None:
         # We are inside aiohttp's running loop here — capture it once so any
         # later sync caller of event_loop() gets the right one.
         self._loop = asyncio.get_running_loop()
+        # Registry/repository must be ready before scheduler startup and
+        # before the app accepts traffic: register()'s on_startup order
+        # already places qs_start before the (conditional) QSScheduler
+        # startup hook, and a failed discovery here propagates and fails
+        # aiohttp startup (readiness), rather than serving with no registry.
+        registry = await self.initialize_tenants()
+        app["qs_tenant_registry"] = registry
+        app["qs_definition_repository"] = self._definition_repository
 
     async def qs_stop(self, app: WebApp) -> None:
         pass

@@ -20,13 +20,16 @@ process — multiple QS instances each report (and mutate) their own jobs.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 from navigator.views import BaseView
 
+from querysource.tenant_errors import TenantError
+
 if TYPE_CHECKING:
     from apscheduler.job import Job
+
     from querysource.scheduler import QSScheduler
 
 logger = logging.getLogger("QS.SchedulerJobsView")
@@ -35,12 +38,26 @@ logger = logging.getLogger("QS.SchedulerJobsView")
 def _kind_from_id(job_id: str) -> str:
     """Map job ID prefix to its kind.
 
+    Recognizes both the legacy shape (``"query_<slug>"``, owned by the
+    registry's configured default store) and the qsj2-qualified shape
+    (``"qsj2-<kind>-<store digest>-<slug>"``, TASK-729) used for every
+    other store — a non-default-store job must classify the same as a
+    default-store one (AC-2's serialized records carry tenant/store
+    identity, and an "unknown" kind for every tenant-owned job would
+    defeat that).
+
     Args:
-        job_id: APScheduler job ID, e.g. ``"query_foo"``.
+        job_id: APScheduler job ID, e.g. ``"query_foo"`` or
+            ``"qsj2-query-a1b2c3d4e5f6-foo"``.
 
     Returns:
         One of ``"query"``, ``"multi"``, ``"cache"``, ``"unknown"``.
     """
+    if job_id.startswith("qsj2-"):
+        parts = job_id.split("-", 2)
+        if len(parts) >= 2 and parts[1] in ("query", "multi", "cache"):
+            return parts[1]
+        return "unknown"
     if job_id.startswith("query_"):
         return "query"
     if job_id.startswith("multi_"):
@@ -64,7 +81,7 @@ class SchedulerJobsView(BaseView):
     instance answers only for (and mutates) its own jobstore.
     """
 
-    def _get_scheduler(self) -> Optional["QSScheduler"]:
+    def _get_scheduler(self) -> QSScheduler | None:
         """Retrieve the QSScheduler instance from the app state.
 
         Returns:
@@ -74,12 +91,8 @@ class SchedulerJobsView(BaseView):
         """
         return self.request.app.get("qs_scheduler")
 
-    def _serialize_job(self, job: "Job") -> dict:
-        """Serialize an APScheduler Job to a plain dict.
-
-        Only extracts ``slug`` from ``job.kwargs`` — never includes the raw
-        kwargs dict because it contains non-serialisable internal objects
-        such as ``notification_manager``.
+    def _serialize_job(self, job: Job) -> dict:
+        """Include canonical owner/tenant identity from validated job kwargs; preserve current response fields.
 
         Args:
             job: An APScheduler ``Job`` instance.
@@ -87,7 +100,7 @@ class SchedulerJobsView(BaseView):
         Returns:
             A dict with keys: ``id``, ``name``, ``kind``, ``slug``,
             ``next_run_time``, ``trigger``, ``coalesce``, ``max_instances``,
-            ``misfire_grace_time``, ``pending``.
+            ``misfire_grace_time``, ``pending``, and optionally ``owner``.
         """
         # APScheduler Job uses __slots__; some slots are only set after the
         # scheduler starts (e.g. next_run_time). Use getattr with a default
@@ -96,12 +109,12 @@ class SchedulerJobsView(BaseView):
         trigger_cls_name = type(job.trigger).__name__  # e.g. "IntervalTrigger"
         # Strip the "Trigger" suffix and lowercase to get "interval" / "cron"
         trigger_type = trigger_cls_name.lower()
-        if trigger_type.endswith("trigger"):
-            trigger_type = trigger_type[: -len("trigger")]
+        trigger_type = trigger_type.removesuffix("trigger")
 
-        slug: Optional[str] = (job.kwargs or {}).get("slug")
+        slug: str | None = (job.kwargs or {}).get("slug")
+        owner = (job.kwargs or {}).get("owner")
 
-        return {
+        result = {
             "id": job.id,
             "name": job.name,
             "kind": _kind_from_id(job.id),
@@ -116,6 +129,12 @@ class SchedulerJobsView(BaseView):
             "misfire_grace_time": getattr(job, "misfire_grace_time", None),
             "pending": bool(getattr(job, "pending", True)),
         }
+        
+        # Include canonical owner/tenant identity from validated job kwargs
+        if owner is not None:
+            result["owner"] = owner
+            
+        return result
 
     async def get(self) -> web.Response:
         """Handle GET requests for the scheduler jobs endpoint.
@@ -189,7 +208,7 @@ class SchedulerJobsView(BaseView):
     async def post(self) -> web.Response:
         """Register/sync a slug's scheduled job(s) into the live scheduler.
 
-        Body: ``{"slug": "<query_slug>"}``.
+        Body: ``{"slug": "<query_slug>", "tenant": "<tenant_selector>"}``.
 
         Reads the slug's current ``public.queries`` row and (re)registers its
         query/multi/cache jobs without a restart. If the slug no longer has a
@@ -219,9 +238,34 @@ class SchedulerJobsView(BaseView):
                 response={"error": "Body must include a non-empty 'slug' string."},
                 status=400,
             )
+            
+        # Extract tenant selector from body. Matches
+        # resolve_request_store's established selector-validation contract
+        # (querysource/handlers/tenant.py): an omitted/None selector means
+        # "use the configured default"; anything present must be a
+        # non-empty string. Without this check a malformed selector (e.g.
+        # "", a list, or a number) reached registry.resolve() unvalidated
+        # and only failed deep inside it with a confusing TenantError that
+        # the blanket `except Exception` below then collapsed to a generic
+        # 500 — never the documented 400 for a malformed selector.
+        tenant = body.get("tenant") if isinstance(body, dict) else None
+        if tenant is not None and (not isinstance(tenant, str) or tenant == ""):
+            return self.json_response(
+                response={"error": "'tenant' must be a non-empty string or omitted."},
+                status=400,
+            )
 
         try:
-            result = await scheduler.register_slug(slug)
+            result = await scheduler.register_slug(slug, tenant=tenant)
+        except TenantError as exc:
+            # Preserve the ownership error's own stable machine code
+            # (tenant_not_available=404, tenant_store_unavailable=503, ...)
+            # instead of collapsing every ownership failure to 500.
+            logger.warning("Ownership error registering slug '%s': %s", slug, exc)
+            return self.json_response(
+                response={"error": str(exc)},
+                status=exc.code,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error registering slug '%s': %s", slug, exc)
             return self.json_response(

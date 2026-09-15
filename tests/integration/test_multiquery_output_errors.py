@@ -20,7 +20,7 @@ Test Data / Fixtures section of the spec and the pattern already used by
 
 No live Postgres or network access is required.
 """
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
@@ -30,12 +30,13 @@ from aiohttp.test_utils import TestClient, TestServer
 import querysource.queries.multi as multiqs_module
 from querysource.exceptions import OutputError
 from querysource.handlers.multi import QueryHandler
+from querysource.queries.multi import MultiQS
 
 
 class _FakeThread:
     """Stand-in for ThreadQuery: synchronously seeds the result queue."""
 
-    def __init__(self, name, query, request, queue, remote_config=None):
+    def __init__(self, name, query, request, queue, remote_config=None, store=None):
         self._name = name
         self._queue = queue
         self.exc = None
@@ -49,6 +50,39 @@ class _FakeThread:
 
     def join(self, timeout=None):
         pass
+
+
+class _FakeRegistry:
+    """Stand-in tenant registry: resolves any selector without touching a DB."""
+
+    def resolve(self, tenant):
+        return None
+
+
+class _FakeDefinitionRepository:
+    """Stand-in DefinitionRepository (TASK-727): preflight `.get()` always
+    succeeds, so these tests keep exercising the Output loop without
+    touching a database — matching this module's own "No live Postgres or
+    network access is required" contract."""
+
+    registry = _FakeRegistry()
+
+    async def get(self, ident):
+        return None
+
+
+def _patch_definition_repository():
+    """Patch MultiQS.get_definition_repository for the `with` block below.
+
+    QueryHandler.query() constructs MultiQS internally, so there is no
+    instance to monkeypatch directly (unlike tests/unit/test_multiqs_
+    output_raise.py) — patch the class method instead.
+    """
+    return patch.object(
+        MultiQS,
+        "get_definition_repository",
+        new=AsyncMock(return_value=_FakeDefinitionRepository()),
+    )
 
 
 def _destination_that_raises(exc):
@@ -124,7 +158,9 @@ class TestOutputFailurePropagation:
         def _get_destination(_name):
             return _destination_that_raises(cause)
 
-        with patch.object(multiqs_module, "ThreadQuery", _FakeThread), patch(
+        with _patch_definition_repository(), patch.object(
+            multiqs_module, "ThreadQuery", _FakeThread
+        ), patch(
             "querysource.outputs.destinations.get_destination",
             side_effect=_get_destination,
         ):
@@ -158,7 +194,9 @@ class TestOutputFailurePropagation:
         def _get_destination(_name):
             return _destination_that_raises(oe)
 
-        with patch.object(multiqs_module, "ThreadQuery", _FakeThread), patch(
+        with _patch_definition_repository(), patch.object(
+            multiqs_module, "ThreadQuery", _FakeThread
+        ), patch(
             "querysource.outputs.destinations.get_destination",
             side_effect=_get_destination,
         ):
@@ -181,7 +219,9 @@ class TestOutputFailurePropagation:
         def _get_destination(_name):
             return _destination_that_raises(cause)
 
-        with patch.object(multiqs_module, "ThreadQuery", _FakeThread), patch(
+        with _patch_definition_repository(), patch.object(
+            multiqs_module, "ThreadQuery", _FakeThread
+        ), patch(
             "querysource.outputs.destinations.get_destination",
             side_effect=_get_destination,
         ):
@@ -197,7 +237,9 @@ class TestOutputFailurePropagation:
         def _get_destination(_name):
             return _SucceedingDestination
 
-        with patch.object(multiqs_module, "ThreadQuery", _FakeThread), patch(
+        with _patch_definition_repository(), patch.object(
+            multiqs_module, "ThreadQuery", _FakeThread
+        ), patch(
             "querysource.outputs.destinations.get_destination",
             side_effect=_get_destination,
         ), patch("querysource.handlers.multi.DataOutput", _FakeDataOutputResponse):
