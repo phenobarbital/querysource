@@ -76,6 +76,15 @@ attributes:
       ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when
       ``remote: true``. If no port is specified, QWORKER_PORT is used as the
       fallback (default: 8888).
+  - name: tenant
+    type: str
+    required: false
+    default: null
+    description: >-
+      Tenant owner for this query. If omitted, inherits from parent or uses
+      the configured default store. If explicitly ``null``, uses the legacy
+      store. If a string, selects that exact tenant from the allowlist.
+      Examples: ``null`` (legacy), ``client_a`` (explicit tenant).
 
 # Schema-level constraints overlaid onto the synthesized json_schema.
 schema:

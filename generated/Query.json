@@ -45,6 +45,13 @@
       "default": null,
       "required": false,
       "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
+    },
+    {
+      "name": "tenant",
+      "type": "str",
+      "default": null,
+      "required": false,
+      "description": "Tenant owner for this query. If omitted, inherits from parent or uses the configured default store. If explicitly ``null``, uses the legacy store. If a string, selects that exact tenant from the allowlist. Examples: ``null`` (legacy), ``client_a`` (explicit tenant)."
     }
   ],
   "json_schema": {
@@ -76,6 +83,11 @@
       "worker": {
         "type": "string",
         "description": "Address of the remote qworker to use for this query, in ``host:port`` format (e.g. ``qworker1.internal:8888``). Overrides the central ``QWORKER_HOST`` / ``QWORKER_PORT`` settings. Only relevant when ``remote: true``. If no port is specified, QWORKER_PORT is used as the fallback (default: 8888)."
+      },
+      "tenant": {
+        "type": "string",
+        "description": "Tenant owner for this query. If omitted, inherits from parent or uses the configured default store. If explicitly ``null``, uses the legacy store. If a string, selects that exact tenant from the allowlist. Examples: ``null`` (legacy), ``client_a`` (explicit tenant).",
+        "default": null
       }
     },
     "oneOf": [
@@ -94,6 +106,6 @@
     "additionalProperties": true,
     "description": "A single entry under the MultiQS ``queries:`` block. Must provide either ``slug`` or ``query`` (but not both)."
   },
-  "example": "{\n  \"queries\": {\n    \"stores\": {\n      \"query\": \"select * from hisense.stores\",\n      \"driver\": \"pg\"\n    },\n    \"products\": {\n      \"slug\": \"all_products\"\n    },\n    \"remote_orders\": {\n      \"slug\": \"daily_orders\",\n      \"remote\": true,\n      \"worker\": \"qworker1.internal:8888\",\n      \"store_id\": 42\n    }\n  }\n}",
+  "example": "{\n  \"queries\": {\n    \"stores\": {\n      \"query\": \"select * from hisense.stores\",\n      \"driver\": \"pg\"\n    },\n    \"products\": {\n      \"slug\": \"all_products\"\n    },\n    \"remote_orders\": {\n      \"slug\": \"daily_orders\",\n      \"remote\": true,\n      \"worker\": \"qworker1.internal:8888\",\n      \"store_id\": 42\n    },\n    \"tenant_sales\": {\n      \"slug\": \"sales_report\",\n      \"tenant\": \"client_a\"\n    }\n  }\n}",
   "icon": "database"
 }

@@ -103,6 +103,86 @@ sub-query fan-out will see it silently run only the plain SQL.
 
 No new flag is introduced by multi-query support (FEAT-092).
 
+## Tenant ownership
+
+QSScheduler supports scheduling queries from both legacy (`public.queries`)
+and tenant-owned stores. Each scheduled job carries ownership information
+that determines which store its query is loaded from.
+
+### Default IDs versus qsj2
+
+For the configured default store (typically `public.queries`), jobs use the
+legacy ID format:
+
+- Single-query: `query_<slug>`
+- Multi-query: `multi_<slug>`
+- Cache refresh: `cache_<slug>`
+
+For tenant stores, jobs use the qualified ID format:
+
+```
+qsj2:<kind>:<store_digest>:<encoded_slug>
+```
+
+Where:
+- `<kind>` is `query`, `multi`, or `cache`
+- `<store_digest>` is a URL-safe digest of the store's physical identity
+- `<encoded_slug>` is the URL-safe encoding of the query slug
+
+### Owner envelope
+
+Every tenant job carries an owner envelope that identifies the source store:
+
+```python
+{
+    "version": 1,
+    "database_namespace": "querysource",
+    "schema": "client_a",
+    "table": "queries",
+    "contract": "tenant"
+}
+```
+
+The scheduler validates this envelope against its initialized registry
+on deserialization. If the store is no longer available, the job fails
+with `tenant_not_available`.
+
+### Selected-owner sync
+
+When a management mutation changes a scheduled query (update/delete),
+the scheduler synchronizes only the affected owner's jobs. A sync
+failure is reported in the response header:
+
+```
+X-QS-Scheduler-Sync: failed
+```
+
+This header indicates the database mutation succeeded but scheduler
+synchronization failed. The job may continue running with stale data
+until the next restart or manual refresh.
+
+### Failure header
+
+If scheduler synchronization fails after a management mutation, the
+response includes:
+
+```
+X-QS-Scheduler-Sync: failed
+```
+
+Check logs for details. The mutation is **not** rolled back — the database
+change persists even if the scheduler fails to update.
+
+### Restart semantics
+
+The scheduler registry is rebuilt on every restart. To change scheduled
+jobs for a tenant:
+1. Update the query definition in the tenant's `queries` table
+2. Restart the QuerySource to rebuild the scheduler registry
+
+There is no runtime registry refresh — restart is required for any
+changes to the tenant registry or allowlist.
+
 ## Troubleshooting
 
 **All jobs are missing after startup**
@@ -116,3 +196,18 @@ ERROR  QSScheduler: Failed to query schedulable rows: <error detail>
 
 Verify that `default_dsn` is correctly configured and that the PostgreSQL
 server is reachable before the aiohttp app starts.
+
+**Tenant jobs fail with tenant_not_available**
+
+The tenant store is no longer in the registry. This can happen if:
+- The tenant was removed from the allowlist
+- The tenant schema was dropped
+- The registry was rebuilt without the tenant
+
+Verify the tenant is still in the allowlist and the schema exists.
+
+**Scheduler sync failed header on management update**
+
+The database mutation succeeded but the scheduler could not update
+the job. Check logs for the underlying error. The job may need a
+manual restart.
