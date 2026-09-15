@@ -211,7 +211,21 @@ accepted as-is (no diagnostic entry is raised for its absence).
 
 ### Cache transition
 
-- **Cold start**: All tenant caches start empty (`qs:r2:*` keys)
+- **Cold start applies to LEGACY/public queries too, not only tenant
+  ones.** The new `qs:r2:<sha256(...)>` result-cache key format
+  (`querysource/cache_identity.py` `result_cache_key`) replaces the
+  PREVIOUS cache key entirely for every slug-based query — before this
+  feature, the result cache key was the raw provider checksum; every
+  slug-based `QS.query()` call, tenant or legacy, now composes its cache
+  key from `(database_namespace, schema, table, slug, definition_revision,
+  provider_checksum)` instead. This means rolling out this feature cold-
+  starts the ENTIRE result cache for the whole QuerySource instance — every
+  previously-cached `public.queries` result becomes unreachable under the
+  old key on deploy, not just new tenant-store data. Operators should
+  expect a cache-miss spike immediately after rollout and size downstream
+  capacity accordingly; this is a one-time transition cost, not an ongoing
+  behavior change (subsequent lookups populate the new key format normally,
+  and Redis eviction/TTL reclaims the old, now-orphaned keys over time).
 - **No dual-read**: Old unqualified keys are not read for tenants
 - **Revision hashing**: Each lookup uses stable hash of persisted fields
 - **TTL preservation**: Existing TTL and refresh options remain intact
@@ -227,6 +241,29 @@ The scheduler uses qualified job IDs:
 
 Every job carries canonical schema/table/contract and tenant selection.
 Scheduler sync failures are reported in response header `X-QS-Scheduler-Sync: failed`.
+
+**Process ownership (per-process visibility only).** `QSScheduler`'s
+APScheduler instance uses an in-memory `MemoryJobStore` — jobs live only in
+the process that registered them. Under gunicorn (or any multi-worker
+deployment) each worker process runs its own independent scheduler and
+independently discovers/registers the same rows from the DB at its own
+startup, so:
+
+- The `GET`/`POST`/`DELETE`/`PATCH` job-management HTTP routes
+  (`querysource/handlers/scheduler.py`) only see and mutate **the worker
+  process that served that particular request** — a `POST` to sync a slug
+  against worker A never affects worker B's copy of that same job, and a
+  `GET /jobs` listing reflects only one worker's view, not a
+  cluster-wide one.
+- Actual scheduled execution therefore fires independently, once per
+  worker process, for every job every worker has registered — there is no
+  cross-process coordination or distributed lock. This is unchanged,
+  pre-existing `QSScheduler` behavior (not introduced by per-tenant
+  queries) but applies identically to every qualified tenant job.
+- Operators running more than one worker process should account for this
+  when sizing schedules (e.g. a `cache_refresh_job` firing N times, once
+  per worker, for the same slug) — see "Unverified production gates"
+  below.
 
 ### Versioned worker contract
 
