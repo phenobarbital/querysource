@@ -142,14 +142,26 @@ async def test_startup_all_stores_and_legacy_override() -> None:
 
 
 @pytest.mark.asyncio
-async def test_alias_dedup_and_same_slug_job_ids() -> None:
-    """alias dedup and same slug job ids."""
+async def test_cross_tenant_same_slug_name_schedules_independently() -> None:
+    """Two DIFFERENT tenant stores sharing a slug NAME must both schedule.
+
+    Code review finding 9: startup's de-dup set used to be keyed on slug
+    TEXT alone, shared across every store in the outer loop. That silently
+    dropped every store's row after the first that happened to share a
+    slug name with an earlier store — a real cross-tenant scheduling loss
+    (e.g. both client_a.queries and client_b.queries defining
+    "daily_report" would only ever schedule client_a's job). "physical
+    aliases schedule once" (AC-2) means a single physical store enumerated
+    more than once is only scheduled once (see
+    test_duplicate_physical_store_enumeration_schedules_once below) — it
+    does NOT mean two distinct tenant stores sharing a slug string collapse
+    into one job. De-dup is now keyed on (store identity, slug).
+    """
     store_a = _store("store_a", contract="legacy")
     store_b = _store("store_b", contract="tenant")
     registry = _FakeRegistry((store_a, store_b), default=store_a)
-    # Same slug text appears in BOTH stores (a physical alias / accidental
-    # name collision) — startup must schedule it exactly once (AC-2
-    # "physical aliases schedule once").
+    # Same slug text appears in BOTH stores — two independent tenants'
+    # queries, not a duplicate of the same physical row.
     repo = _FakeRepo(
         rows_by_store={
             "store_a": (_row("shared_slug"),),
@@ -164,10 +176,14 @@ async def test_alias_dedup_and_same_slug_job_ids() -> None:
         matching = [
             j for j in scheduler._scheduler.get_jobs() if "shared_slug" in j.id
         ]
-        assert len(matching) == 1
-        # It was scheduled from the FIRST store in registry.stores() order
-        # (store_a, the default) -> legacy id, not qsj2-qualified.
-        assert matching[0].id == "query_shared_slug"
+        # BOTH stores' "shared_slug" job were scheduled — distinct
+        # physical owners, same slug text, independent jobs.
+        assert len(matching) == 2
+        ids = {j.id for j in matching}
+        assert "query_shared_slug" in ids  # store_a: default -> legacy id
+        qualified = [i for i in ids if i.startswith("qsj2-")]
+        assert len(qualified) == 1
+        assert qualified[0].endswith("-shared_slug")  # store_b: qualified id
     finally:
         scheduler._scheduler.shutdown(wait=False)
 
@@ -183,6 +199,34 @@ async def test_alias_dedup_and_same_slug_job_ids() -> None:
     assert set(default_ids).isdisjoint(
         {jid for jid in other_ids if jid.startswith("qsj2-")}
     )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_physical_store_enumeration_schedules_once() -> None:
+    """The SAME physical store enumerated twice still schedules once.
+
+    This is AC-2's real "physical aliases schedule once" case — distinct
+    from test_cross_tenant_same_slug_name_schedules_independently above,
+    where two DIFFERENT stores sharing a slug name must schedule
+    independently. Here both registry entries resolve to the identical
+    physical identity (database_namespace, schema, table).
+    """
+    store_a = _store("store_a", contract="legacy")
+    duplicate_of_a = _store("store_a", contract="legacy")
+    registry = _FakeRegistry((store_a, duplicate_of_a), default=store_a)
+    repo = _FakeRepo(rows_by_store={"store_a": (_row("shared_slug"),)})
+
+    scheduler = _make_scheduler()
+    app = {"qs_tenant_registry": registry, "qs_definition_repository": repo}
+    await scheduler.startup(app)
+    try:
+        matching = [
+            j for j in scheduler._scheduler.get_jobs() if "shared_slug" in j.id
+        ]
+        assert len(matching) == 1
+        assert matching[0].id == "query_shared_slug"
+    finally:
+        scheduler._scheduler.shutdown(wait=False)
 
 
 @pytest.mark.asyncio

@@ -692,7 +692,17 @@ class QSScheduler:
         )
         total_query_count = 0
         total_cache_count = 0
-        seen_slugs: set[str] = set()  # physical aliases schedule once (AC-2)
+        # Keyed on (physical store identity, slug) — NOT slug alone. A bare
+        # slug key would collapse two DIFFERENT tenants' same-named queries
+        # (e.g. both client_a.queries and client_b.queries defining
+        # "daily_report") into "the same job", silently dropping every
+        # store after the first that happens to share a slug name — a real
+        # cross-tenant scheduling loss, not just a naming collision. "physical
+        # aliases schedule once" (AC-2) means a single physical store
+        # enumerated more than once (e.g. discovery yielding a duplicate
+        # identity) is only scheduled once — it does not mean two distinct
+        # tenant stores sharing a slug string collapse into one job.
+        seen_store_slugs: set[tuple[str, str, str, str]] = set()
 
         if self._repository is not None:
             for store in stores:
@@ -713,9 +723,14 @@ class QSScheduler:
                 )
                 for row in rows:
                     slug = row.get("query_slug")
-                    if not slug or slug in seen_slugs:
+                    if not slug:
                         continue
-                    seen_slugs.add(slug)
+                    store_slug_key = (
+                        store.database_namespace, store.schema, store.table, slug,
+                    )
+                    if store_slug_key in seen_store_slugs:
+                        continue
+                    seen_store_slugs.add(store_slug_key)
                     if self._register_query_row(row, store=store) is not None:
                         total_query_count += 1
                     if self._register_cache_row(row, store=store) is not None:
