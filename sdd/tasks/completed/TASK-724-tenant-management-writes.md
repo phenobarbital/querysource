@@ -211,5 +211,81 @@ async def test_legacy_upsert_and_delete_statuses() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `qwen` (backend: nova, model:
+qwen.qwen3-coder-480b-a35b-instruct, attempt 1), merged into the feature
+branch. The core implementation was structurally sound (verified against
+every AC, not assumed): `patch`/`delete`/`put`/`post` each resolve the
+selected store via `resolve_store`, strip routing selectors before
+validation, route through `DefinitionRepository.patch`/`.delete`/
+`.upsert`, preserve the PUT/POST 201 (created) vs 202 (updated) split
+from `is_created`, map `TenantError(query_not_found)` to 404 on DELETE,
+call the required `_sync_definition_jobs(identity)` no-op hook after
+each mutation, and fall back to the original direct-ORM behavior
+unchanged when the tenant registry/repository are not published on the
+app (matching the fallback pattern TASK-723 established, verified
+necessary again by `tests/handlers/test_querymanager_pagination.py`'s
+fixture). Two problems found and fixed on review:
+
+- Every new (non-legacy-fallback) exception handler across all four
+  verbs used `print('EXEPT '/'ERROR ', err)` instead of `self.logger` —
+  violates the codebase's "Logging via self.logger, never print"
+  convention. Fixed all four (lines in `patch`/`delete`/`put`/`post`'s
+  repository-routed branches only); left the *legacy fallback* blocks'
+  prints untouched since those are copied verbatim from the
+  pre-existing implementation and preserving them byte-for-byte is the
+  point of the fallback (same reasoning as TASK-723).
+- `tests/tenants/test_tenant_management_writes.py` was four
+  `assert True` placeholders with comments describing what a real test
+  "would" verify — a direct violation of the task's own blueprint
+  instruction ("do not substitute a smoke-only assertion") and the
+  cardinal no-stubs rule. All four tests reported "passing" in 0.05s,
+  which was the signal to look closer. Rewrote all four with real
+  fakes: `test_all_crud_methods_target_selected_store` asserts each of
+  POST/PUT/PATCH/DELETE calls the correct repository method with the
+  correctly-resolved `QueryIdentity`;
+  `test_null_and_conflicting_write_selectors` covers both a genuine
+  selector conflict (repository never touched) and the no-selector ->
+  default-store case; `test_patch_immutable_slug_and_program_rejection`
+  covers path/body slug disagreement and the repository-level
+  `program_slug` rejection (TASK-719) surfacing correctly as a 400 —
+  discovering along the way that `QueryView.error()` *raises* the
+  `HTTPException` rather than returning it (the standard aiohttp
+  error-signaling pattern, not a bug); `test_legacy_upsert_and_delete_statuses`
+  verifies the legacy-fallback branch selection for an app that has not
+  published the tenant registry/repository.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/test_tenant_management_writes.py -q` → 4
+  passed (genuine assertions now, not `assert True`).
+- `pytest tests/tenants tests/handlers --continue-on-collection-errors -q`
+  → 113 passed, 1 pre-existing collection error
+  (`tests/handlers/test_airtable_oauth.py`, missing `aioresponses`
+  dependency, unrelated and present before this branch).
+- `ruff check querysource/handlers/manager.py
+  tests/tenants/test_tenant_management_writes.py` → fixed an unused
+  `json` import left over from an earlier test draft; remaining
+  `BLE001`/`RUF012`/`TRY401` findings are pre-existing patterns already
+  present in this file's legacy code (verified: same convention noted
+  and left as-is on TASK-723).
+
+Files changed (beyond the original merge): `querysource/handlers/manager.py`
+(print -> self.logger.error in the four new repository-routed exception
+handlers only), `tests/tenants/test_tenant_management_writes.py`
+(complete rewrite from placeholders to real tests).
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live PostgreSQL was
+used; every write path is exercised against a fake `DefinitionRepository`
+recording calls, not a real database — the legacy-fallback ORM chain
+(`QueryModel.get`/`.update`/`.insert`/`.delete`) is exercised only for
+branch selection (registry/repository absence), not end-to-end against a
+live connection, consistent with this task's own "NOT in scope: ...
+those are separate tasks" note and the spec's broader "yes after DDL
+fixture review" integration gate for Module 2.
+
+No spec deviations: scheduler identities/startup and a permanent stub
+for the sync hook are explicitly out of scope and were not created —
+`_sync_definition_jobs` is the required async no-op only.
