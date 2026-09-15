@@ -118,18 +118,33 @@ class QueryManager(QueryView):
         qp.pop('tenant', None)
         return qp
 
-    async def _sync_definition_jobs(self, identity: QueryIdentity) -> None:
-        """Internal hook for scheduler synchronization after definition mutations.
+    async def _sync_definition_jobs(self, identity: QueryIdentity) -> bool:
+        """Synchronize jobs only after the definition transaction commits.
         
-        Async no-op when no scheduler is active; live scheduler hookup lands with 
-        scheduler API task. Never misrepresents committed data as rolled back.
+        No scheduler => success; otherwise selected-owner register/remove; failure logs and returns False; callers set failure header.
         
         Args:
             identity: The mutated definition's immutable identity
+            
+        Returns:
+            True if synchronization succeeded or no scheduler is active, False if synchronization failed
         """
-        # No-op when no scheduler is active
-        # This method will be implemented in the scheduler API task
-        return
+        # No scheduler => success
+        scheduler = self.request.app.get("qs_scheduler")
+        if scheduler is None:
+            return True
+            
+        try:
+            # Synchronize only the selected owner's scheduled jobs
+            await scheduler.register_slug(identity.slug, tenant=identity.store.schema if identity.store.contract == "tenant" else None)
+            return True
+        except Exception as exc:
+            # Failure logs and returns False; callers set failure header
+            self.logger.error(
+                "Scheduler synchronization failed for slug '%s' in store %s.%s: %s",
+                identity.slug, identity.store.schema, identity.store.table, exc
+            )
+            return False
 
     async def get(self):
         """
@@ -431,7 +446,11 @@ class QueryManager(QueryView):
                 result = await repo.patch(identity, data)
                 
                 # Sync definition jobs if scheduler is active
-                await self._sync_definition_jobs(identity)
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
                 
                 return self.json_response(result)
             except TenantError as err:
@@ -534,7 +553,11 @@ class QueryManager(QueryView):
                 result = await repo.delete(identity)
                 
                 # Sync definition jobs if scheduler is active
-                await self._sync_definition_jobs(identity)
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
                 
                 msg = {
                     "result": result
@@ -678,7 +701,11 @@ class QueryManager(QueryView):
                 result, is_created = await repo.upsert(identity, data)
                 
                 # Sync definition jobs if scheduler is active
-                await self._sync_definition_jobs(identity)
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
@@ -790,7 +817,11 @@ class QueryManager(QueryView):
                 result, is_created = await repo.upsert(identity, data)
                 
                 # Sync definition jobs if scheduler is active
-                await self._sync_definition_jobs(identity)
+                sync_success = await self._sync_definition_jobs(identity)
+                if not sync_success:
+                    # Report sync failure via X-QS-Scheduler-Sync: failed and logs, without claiming rollback
+                    headers = {"X-QS-Scheduler-Sync": "failed"}
+                    return self.json_response(result, headers=headers)
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
