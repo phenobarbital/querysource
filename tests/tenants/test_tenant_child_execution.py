@@ -5,7 +5,7 @@ import pandas as pd
 from unittest import mock
 from aiohttp import web
 
-from querysource.exceptions import QueryException, DriverError
+from querysource.exceptions import DriverError
 from querysource.models import QueryModel
 from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
 from querysource.queries.multi import MultiQS
@@ -248,19 +248,12 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
     res = await queue.get()
     assert res == {"alias1": "result_data"}
 
-    # RemoteExecutor test: accepts store keyword, rejects nonlegacy store
+    # RemoteExecutor test: accepts store keyword, dispatches by contract.
+    # (TASK-728 replaced the interim "reject non-legacy store" guard with
+    # real versioned dispatch for tenant-contract stores — see
+    # tests/tenants/test_tenant_remote_protocol.py for the full contract.)
     remote_exec = RemoteExecutor(host="localhost", port=9000)
-    
-    with pytest.raises(QueryException, match="rejected: non-legacy store contract"):
-        await remote_exec.execute(
-            name="alias1",
-            query={"slug": "q1"},
-            queue=queue,
-            request=None,
-            store=store_tenant
-        )
 
-    # RemoteExecutor accepts legacy store
     # We mock QClient to avoid actual network calls
     class FakeQClient:
         def __init__(self, *args, **kwargs):

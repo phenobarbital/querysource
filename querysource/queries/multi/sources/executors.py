@@ -16,7 +16,7 @@ from aiohttp import web
 from ...obj import QueryObject
 from ....exceptions import QueryException
 from ....conf import QWORKER_TIMEOUT, QWORKER_QUERY_TIMEOUT
-from querysource.tenants import QueryStore
+from querysource.tenants import QueryStore, TenantOwnerEnvelope
 
 
 @dataclass(frozen=True)
@@ -157,6 +157,20 @@ class RemoteExecutor(QueryExecutor):
     ) -> None:
         """Dispatch the query to a remote qworker and place the result in the queue.
 
+        Routes on the resolved ``store`` (TASK-728): a tenant-owned store
+        (``store.contract == "tenant"``) is always dispatched through the
+        versioned ``querysource.remote.tenant_query_handler_v1`` contract
+        with a validated :class:`TenantOwnerEnvelope` (AC-1) — a distinct
+        callable name so an old, ``**kwargs``-tolerant worker that doesn't
+        understand ``owner=`` fails explicitly (unknown-handler on the
+        worker side) instead of silently executing against its own
+        default schema. A legacy/default store (``store is None`` or
+        ``store.contract == "legacy"``) keeps dispatching through the
+        unchanged ``querysource.remote.query_handler`` contract (AC-2).
+        Neither path ever falls back to the other, and neither ever falls
+        back to local execution (AC-3) — any handler-, version- or
+        owner-related failure on the worker side propagates as-is.
+
         Args:
             name: DataFrame key name.
             query: Query dict; ``slug`` key is the primary dispatch handle.
@@ -165,22 +179,41 @@ class RemoteExecutor(QueryExecutor):
             queue: Shared asyncio queue for the result.
             request: aiohttp request (not sent to qworker; credentials are
                 resolved server-side by the qworker's own QuerySource install).
-            store: Resolved QueryStore for the query.
+            store: Resolved QueryStore for the query. ``None`` or a
+                ``"legacy"`` contract dispatches through the unchanged
+                legacy handler; a ``"tenant"`` contract dispatches through
+                the versioned handler with an owner envelope.
 
         Returns:
             None — the result is placed into the queue directly.
 
         Raises:
-            QueryException: When the qworker is unreachable, the TCP
-                connection fails, or the query times out.  qworker-side
-                errors (SlugNotFound, DriverError, etc.) propagate as-is.
+            QueryException: When ``store`` carries an unsupported
+                contract, the qworker is unreachable, the TCP connection
+                fails, or the query times out. qworker-side errors
+                (SlugNotFound, DriverError, missing/incompatible handler,
+                etc.) propagate as-is — there is no fallback to the other
+                handler or to local execution.
         """
-        # Until versioned transport task lands, reject nonlegacy remote store explicitly.
-        if store is not None and store.contract != "legacy":
+        if store is not None and store.contract not in ("legacy", "tenant"):
             raise QueryException(
-                f"Remote query {name!r} rejected: non-legacy store contract {store.contract!r} "
-                "is not supported on remote executors until versioned transport lands."
+                f"Remote query {name!r} rejected: unsupported store contract "
+                f"{store.contract!r}."
             )
+        is_tenant = store is not None and store.contract == "tenant"
+
+        owner: TenantOwnerEnvelope | None = None
+        if is_tenant:
+            handler = "querysource.remote.tenant_query_handler_v1"
+            owner = TenantOwnerEnvelope(
+                version=1,
+                database_namespace=store.database_namespace,
+                schema=store.schema,
+                table=store.table,
+                contract=store.contract,
+            )
+        else:
+            handler = "querysource.remote.query_handler"
 
         from qw.client import QClient  # lazy import — qworker is optional
 
@@ -204,12 +237,11 @@ class RemoteExecutor(QueryExecutor):
         worker_list = self._workers if self._workers else [(self._host, self._port)]
         client = QClient(worker_list=worker_list, timeout=self._timeout)
         try:
+            call_kwargs = {"conditions": conditions}
+            if owner is not None:
+                call_kwargs["owner"] = owner
             result = await asyncio.wait_for(
-                client.run(
-                    "querysource.remote.query_handler",
-                    slug,
-                    conditions=conditions,
-                ),
+                client.run(handler, slug, **call_kwargs),
                 timeout=QWORKER_QUERY_TIMEOUT,
             )
             await queue.put({name: result})
