@@ -173,6 +173,10 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
         r = self.app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
         routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/vocabulary', dh.vocabulary)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
+        routes.append(r)
 
         ### Logging Service:
         lg = LoggingService()
