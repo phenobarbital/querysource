@@ -32,7 +32,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -40,8 +40,8 @@
       "parallelism_notes": "Disjoint files (_pagination.py, conf.py, policies/defaults.yaml, new tests); no imports from other FEAT-148 tasks. Can run in parallel with TASK-734/736.",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-735-describe-pagination-config-policies.md"
+      "completed_at": "2026-09-15T12:20:37+00:00",
+      "file": "sdd/tasks/completed/TASK-735-describe-pagination-config-policies.md"
     },
     {
       "id": "TASK-736",
