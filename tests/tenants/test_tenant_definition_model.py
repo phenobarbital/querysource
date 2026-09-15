@@ -14,7 +14,16 @@ async def test_tenant_columns_exclude_program_slug() -> None:
         program_id=1,
     )
     assert not hasattr(tenant_def, 'program_slug')
-    
+
+    # AC-3: program_slug must be rejected before model construction, not
+    # silently accepted/ignored as an extra field.
+    with pytest.raises(TypeError):
+        TenantQueryDefinition(
+            query_slug="test_query",
+            program_id=1,
+            program_slug="tenant1",
+        )
+
     # Verify that QueryModel has program_slug
     query_model = QueryModel(
         query_slug="test_query",
@@ -84,10 +93,15 @@ async def test_json_array_datetime_validation() -> None:
     tenant_def = TenantQueryDefinition(
         query_slug="test_query",
         created_at=now,
-        updated_at=now,
     )
     assert tenant_def.created_at == now
-    assert tenant_def.updated_at == now
+
+    # updated_at uses encoder=rigth_now (matching QueryModel), which always
+    # rewrites the value to datetime.now() regardless of what was passed —
+    # verify that timestamp-factory parity with the legacy model, not a
+    # pass-through of the supplied value.
+    assert isinstance(tenant_def.updated_at, datetime.datetime)
+    assert tenant_def.updated_at != now
 
 
 @pytest.mark.asyncio

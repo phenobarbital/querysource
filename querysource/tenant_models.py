@@ -1,38 +1,69 @@
-from __future__ import annotations
+"""Tenant persistence definition: an independent plain datamodel that keeps
+tenant persistence separate from the unchanged legacy QueryModel ORM shape.
 
+Note: this module intentionally does NOT use
+``from __future__ import annotations`` (PEP 563), and uses
+``typing.Optional``/``typing.List`` rather than ``X | None``/``list[X]``
+union syntax. This project's Cython ``datamodel`` validator resolves field
+types at runtime from the live type objects: with postponed evaluation the
+annotations become plain strings, and with ``X | None`` unions combined
+with a non-trivial type (e.g. ``dict | None``) construction fails with
+``TypeError: Expected type, got types.UnionType``. Both failure modes were
+verified directly against the installed ``datamodel`` package in this
+worktree. ``querysource/models.py`` (``QueryModel``) follows the same
+``typing.Optional``/``typing.List`` convention.
+"""
 from datetime import datetime
+from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from datamodel import BaseModel, Field
+
+from querysource.models import rigth_now
 
 
 class TenantQueryDefinition(BaseModel):
-    query_slug: str = Field(required=True)
-    description: str | None = Field(required=False, default=None)
-    source: str | None = Field(required=False, default=None)
-    params: dict | None = Field(required=False, default=None)
-    attributes: dict | None = Field(required=False, default=None)
-    conditions: dict | None = Field(required=False, default=None)
-    cond_definition: dict | None = Field(required=False, default=None)
-    fields: list[str] | None = Field(required=False, default=None)
-    filtering: dict | None = Field(required=False, default=None)
-    ordering: list[str] | None = Field(required=False, default=None)
-    grouping: list[str] | None = Field(required=False, default=None)
-    qry_options: dict | None = Field(required=False, default=None)
-    h_filtering: bool = Field(required=False, default=False)
-    query_raw: str | None = Field(required=False, default=None)
+    """Persistence-validated tenant query definition.
+
+    Declares every ``QueryModel`` field except ``program_slug`` — tenant
+    schema selection is structural (the physical store), never a model
+    field — with the exact defaults, validation and JSON/array metadata
+    of the legacy model. ``datamodel.BaseModel`` rejects unexpected
+    keyword arguments (``TypeError``) by construction, so passing
+    ``program_slug`` here is rejected before model construction rather
+    than silently ignored.
+    """
+    query_slug: str = Field(required=True, primary_key=True)
+    description: str = Field(required=False, default=None)
+    source: Optional[str] = Field(required=False)
+    params: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
+    attributes: Optional[dict] = Field(
+        required=False,
+        db_type='jsonb',
+        default_factory=dict,
+        comment='Optional Attributes for Query',
+    )
+    conditions: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
+    cond_definition: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
+    fields: List[str] = Field(required=False, db_type='array', default_factory=list)
+    filtering: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
+    ordering: List[str] = Field(required=False, db_type='array', default_factory=list)
+    grouping: List[str] = Field(required=False, db_type='array', default_factory=list)
+    qry_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
+    h_filtering: bool = Field(required=False, default=False, comment='filtering based on Hierarchical rules.')
+    query_raw: str = Field(required=False)
     is_raw: bool = Field(required=False, default=False)
     is_cached: bool = Field(required=False, default=True)
     provider: str = Field(required=False, default='db')
-    parser: str = Field(required=False, default='SQLParser')
+    parser: str = Field(required=False, default='SQLParser', comment='Parser to be used for parsing Query.')
     cache_timeout: int = Field(required=True, default=3600)
     cache_refresh: int = Field(required=True, default=0)
-    cache_options: dict | None = Field(required=False, default=None)
+    cache_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     program_id: int = Field(required=True, default=1)
     dwh: bool = Field(required=True, default=False)
-    dwh_driver: str | None = Field(required=False, default=None)
-    dwh_info: dict | None = Field(required=False, default=None)
-    dwh_scheduler: dict | None = Field(required=False, default=None)
-    created_at: datetime | None = Field(required=False, default=None)
-    created_by: int | None = Field(required=False, default=None)
-    updated_at: datetime | None = Field(required=False, default=None)
-    updated_by: int | None = Field(required=False, default=None)
+    dwh_driver: str = Field(required=False, default=None)
+    dwh_info: Optional[dict] = Field(required=False, db_type='jsonb')
+    dwh_scheduler: Optional[dict] = Field(required=False, db_type='jsonb')
+    created_at: datetime = Field(required=False, default=datetime.now, db_default='now()')
+    created_by: int = Field(required=False)
+    updated_at: datetime = Field(required=False, default=datetime.now, encoder=rigth_now)
+    updated_by: int = Field(required=False)
