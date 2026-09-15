@@ -24,7 +24,7 @@ from ..auth.slug_visibility import (
     resolve_principal,
 )
 from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT, QS_DESCRIBE_MAX_SCAN
-from ..exceptions import ParserError, SlugNotFound
+from ..exceptions import ParserError, QueryException, SlugNotFound
 from ..queries.describe import (
     RESERVED_PLACEHOLDERS,
     describe_slug,
@@ -168,11 +168,12 @@ class QueryDescribe(AbstractHandler):
             rows = [dict(r) for r in rows or []]
         
         # Handle truncation
-        truncated = len(rows) > QS_DESCRIBE_MAX_SCAN
+        original_count = len(rows)
+        truncated = original_count > QS_DESCRIBE_MAX_SCAN
         if truncated:
             rows = rows[:QS_DESCRIBE_MAX_SCAN]
             self.logger.warning(
-                "describe_list truncated %d rows to %d", len(rows) + 1, QS_DESCRIBE_MAX_SCAN
+                "describe_list truncated %d rows to %d", original_count, QS_DESCRIBE_MAX_SCAN
             )
         
         # Filter visible slugs
@@ -244,7 +245,10 @@ class QueryDescribe(AbstractHandler):
         provider = None
         qs = QS(slug=slug, conditions=conditions, request=request)
         try:
-            await qs.build_provider()
+            # Bounded like the describe_columns() call below: an unreachable
+            # datasource must degrade to columns_source="unavailable" within
+            # QS_DESCRIBE_COLUMNS_TIMEOUT, never hang the request indefinitely.
+            await asyncio.wait_for(qs.build_provider(), QS_DESCRIBE_COLUMNS_TIMEOUT)
             provider = qs.get_source()
             query_str = str(provider.get_query() or "")
             names, _ = extract_placeholders(query_str)
@@ -261,7 +265,11 @@ class QueryDescribe(AbstractHandler):
                     warnings.append(f"prepare_failed: {type(err).__name__}")
         except SlugNotFound:
             raise web.HTTPNotFound()
-        except (ParserError, ProviderError, DriverError) as err:
+        except (ParserError, ProviderError, DriverError, QueryException, asyncio.TimeoutError) as err:
+            # QS.build_provider() wraps every provider-construction failure —
+            # including asyncdb's own ProviderError/DriverError — into a
+            # QueryException (querysource/queries/qs.py); SlugNotFound (a
+            # QueryException subclass) is handled above and never reaches here.
             warnings.append(f"provider_unavailable: {type(err).__name__}")
         finally:
             try:

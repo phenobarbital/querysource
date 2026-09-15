@@ -6,7 +6,7 @@ import pytest
 from aiohttp import web
 from asyncdb.exceptions import DriverError
 
-from querysource.exceptions import ParserError, SlugNotFound
+from querysource.exceptions import ParserError, QueryException, SlugNotFound
 from querysource.handlers.describe import QueryDescribe
 
 
@@ -40,7 +40,15 @@ class FakeQS:
         if self.slug == "parser_err":
             raise ParserError("parser error")
         if self.slug == "driver_err":
-            raise DriverError("driver error")
+            # The real QS.build_provider() (querysource/queries/qs.py) wraps
+            # every provider-construction failure — including asyncdb's own
+            # DriverError/ProviderError — into a QueryException before it
+            # reaches the caller. Raising DriverError directly here would
+            # mask the exact gap this fake exists to catch: describe.py's
+            # columns() must also catch QueryException, not just the asyncdb
+            # exception types, or a real down datasource produces a 500
+            # instead of the AC15-mandated 200/"unavailable".
+            raise QueryException("driver error") from DriverError("driver error")
         if self.provider is None:
             self.provider = FakeProvider()
 
@@ -138,7 +146,11 @@ async def test_columns_datasource_down_unavailable(handler, mock_request):
         resp_data = mock_jr.call_args[0][0]
         assert resp_data["columns_source"] == "unavailable"
         assert resp_data["columns"] == []
-        assert any("provider_unavailable: DriverError" in w for w in resp_data["warnings"])
+        # QueryException, not DriverError: the real QS.build_provider() wraps
+        # every provider-construction failure into a QueryException (see the
+        # comment on FakeQS.build_provider above) — this is the regression
+        # guard for that exact gap.
+        assert any("provider_unavailable: QueryException" in w for w in resp_data["warnings"])
 
 
 @pytest.mark.asyncio

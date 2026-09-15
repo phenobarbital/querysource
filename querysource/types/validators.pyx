@@ -191,14 +191,18 @@ cpdef dict resolve_udf_conditions(dict conditions, dict cond_definition = None):
     """
     cdef dict result = dict(conditions) if conditions else {}
     cdef dict hints = cond_definition or {}
-    cdef str hint
+    cdef object raw_hint
     for key, value in list(result.items()):
         if not isinstance(value, str):
             continue
         if value.strip().upper() not in UDF_LIST:
             continue
-        hint = hints.get(key)
-        if hint is not None and hint.lower() not in _KEYWORD_HINTS:
+        raw_hint = hints.get(key)
+        # Defensive str(): cond_definition values are documented as strings,
+        # but this now runs unconditionally on every raw-query provider call
+        # (not just the describe path) — a non-string hint must not crash
+        # the request.
+        if raw_hint is not None and str(raw_hint).lower() not in _KEYWORD_HINTS:
             continue
         result[key] = str(to_udf(value.strip()))
     return result
