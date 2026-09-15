@@ -306,7 +306,7 @@ def build_where_clause(
     return "WHERE " + " AND ".join(predicates)
 
 
-def build_order_by(params: PaginationParams) -> str:
+def build_order_by(params: PaginationParams, nulls_last: bool = False) -> str:
     """Return ``ORDER BY "<col>" <DIR>`` with a validated column name.
 
     Defence in depth: even though :class:`PaginationParams` already rejects
@@ -314,6 +314,10 @@ def build_order_by(params: PaginationParams) -> str:
 
     Args:
         params: Pre-validated :class:`PaginationParams`.
+        nulls_last: When ``True``, append ``NULLS LAST`` to the clause.
+            Defaults to ``False``, which keeps the output byte-identical to
+            before this parameter existed (:class:`QueryManager` depends on
+            this).
 
     Returns:
         The ``ORDER BY`` clause.
@@ -326,7 +330,8 @@ def build_order_by(params: PaginationParams) -> str:
             f"sort field not allowed: {params.sort_field!r}"
         )
     direction = "ASC" if params.sort_direction == "asc" else "DESC"
-    return f'ORDER BY "{params.sort_field}" {direction}'
+    clause = f'ORDER BY "{params.sort_field}" {direction}'
+    return f"{clause} NULLS LAST" if nulls_last else clause
 
 
 def build_count_sql(schema: str, table: str, where: str) -> str:
@@ -347,6 +352,65 @@ def build_count_sql(schema: str, table: str, where: str) -> str:
     if where:
         return f"{base} {where}"
     return base
+
+
+def compose_where(where: str, extra_clause: str) -> str:
+    """Combine a :func:`build_where_clause` result with an extra predicate.
+
+    Args:
+        where: ``""`` or a clause starting with ``"WHERE "``.
+        extra_clause: A trusted SQL predicate (may reference ``$n`` bound params) or ``""``.
+
+    Returns:
+        ``""``, ``"WHERE <extra>"``, ``where`` or ``"<where> AND (<extra>)"``.
+
+    Raises:
+        ValueError: If ``where`` is non-empty and does not start with ``"WHERE "``.
+    """
+    if where and not where.startswith("WHERE "):
+        raise ValueError(f"where must start with 'WHERE ', got {where!r}")
+    if not where and not extra_clause:
+        return ""
+    if not where:
+        return f"WHERE {extra_clause}"
+    if not extra_clause:
+        return where
+    return f"{where} AND ({extra_clause})"
+
+
+def build_scan_sql(
+    schema: str,
+    table: str,
+    fields: list[str],
+    where: str,
+    order_by: str,
+    limit: int,
+) -> str:
+    """Return an un-paged ``SELECT`` bounded by ``LIMIT`` (no OFFSET).
+
+    Used by the describe list, which paginates in memory after the ABAC filter.
+
+    Raises:
+        ValueError: On non-bare identifiers, empty/unknown ``fields`` or ``limit < 1``.
+    """
+    _validate_bare_identifier(schema, "schema")
+    _validate_bare_identifier(table, "table")
+    if not fields:
+        raise ValueError("fields must be a non-empty list")
+    unknown = [c for c in fields if c not in FILTERABLE_COLUMNS]
+    if unknown:
+        raise ValueError(f"unknown projection column(s): {unknown}")
+    if not isinstance(limit, int) or limit < 1:
+        raise ValueError(f"limit must be an int >= 1, got {limit!r}")
+
+    select_list = ", ".join(f'"{c}"' for c in fields)
+    parts = [f'SELECT {select_list} FROM "{schema}"."{table}"']
+    if where:
+        parts.append(where)
+    if order_by:
+        parts.append(order_by)
+    parts.append(f"LIMIT {limit}")
+    return " ".join(parts)
 
 
 def build_page_sql(

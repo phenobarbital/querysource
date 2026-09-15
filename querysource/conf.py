@@ -353,6 +353,18 @@ CSV_DEFAULT_QUOTING = config.get('CSV_DEFAULT_QUOTING', fallback='string')
 QS_QUERIES_SCHEMA = config.get('QS_QUERIES_SCHEMA', fallback='public')
 QS_QUERIES_TABLE = config.get('QS_QUERIES_TABLE', fallback='queries')
 
+## Describe API (FEAT-148):
+# Max pre-filtered rows the describe list scans before ABAC + in-memory paging.
+QS_DESCRIBE_MAX_SCAN = config.getint('QS_DESCRIBE_MAX_SCAN', fallback=10000)
+# Session groups that may see admin-only describe fields (dwh_info, cache_options, ...).
+QS_DESCRIBE_ADMIN_GROUPS = [
+    g.strip().lower()
+    for g in str(config.get('QS_DESCRIBE_ADMIN_GROUPS', fallback='admin,superuser')).split(',')
+    if g.strip()
+]
+# Seconds allowed for GET /api/v1/queries/{slug}/columns to prepare the statement.
+QS_DESCRIBE_COLUMNS_TIMEOUT = float(config.get('QS_DESCRIBE_COLUMNS_TIMEOUT', fallback=5))
+
 ## QSScheduler (APScheduler-based query scheduler):
 ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
 QS_SCHEDULER_TIMEZONE = config.get('QS_SCHEDULER_TIMEZONE', fallback=TIMEZONE)
