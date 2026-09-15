@@ -68,7 +68,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -79,8 +79,8 @@
       "parallelism_notes": "Imports QS_DESCRIBE_ADMIN_GROUPS (TASK-735) and DescribeGrants (TASK-736).",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-737-slug-visibility-service.md"
+      "completed_at": "2026-09-15T12:30:22+00:00",
+      "file": "sdd/tasks/completed/TASK-737-slug-visibility-service.md"
     },
     {
       "id": "TASK-738",
