@@ -123,7 +123,10 @@ async def test_raw_owner_context_without_saved_lookup() -> None:
 
     qs_with_tenant.get_definition_repository = _must_not_be_called
     assert qs_with_tenant._type == "raw"
-    assert not hasattr(qs_with_tenant, "_definition_identity")
+    # TASK-722 initializes both fields to None in AbstractQuery.__init__
+    # (pre-declared owner/revision context slots); a raw query's
+    # build_provider() never sets them away from that default.
+    assert qs_with_tenant._definition_identity is None
 
 
 @pytest.mark.asyncio

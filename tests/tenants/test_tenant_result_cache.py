@@ -1,12 +1,9 @@
 """Apply revision-scoped keys to every result cache boundary regression contracts."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from asyncdb.exceptions import ProviderError
 
-from querysource.cache_identity import result_cache_key, definition_revision
+import pytest
+
+from querysource.cache_identity import definition_revision, result_cache_key
 from querysource.tenants import QueryIdentity, QueryStore
-from querysource.interfaces.queries import AbstractQuery
-from querysource.queries.qs import QS
 
 
 # Fixtures for test data
