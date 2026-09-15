@@ -270,5 +270,110 @@ async def test_connection_retry_and_cross_loop_cleanup() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Both dispatched attempts failed at the engine level: seat `gemini`
+(backend: google-compat, model gemini-3.5-flash) left a dirty,
+uncommitted sub-worktree (`dirty_task_worktree`); the retry seat
+`codex-spark` (backend: codex, model gpt-5.3-codex-spark) exceeded the
+1800s dispatch wall-clock cap and produced nothing. The gemini attempt's
+uncommitted diff was reviewed for salvageable insight (not reused as
+code): it called `QueryIdentity(store=store, query_slug=slug)`, but the
+real `QueryIdentity` dataclass (`querysource/tenants.py`, TASK-716) takes
+`slug`, not `query_slug` — a hallucinated kwarg that would have failed at
+runtime. This confirmed reviewing rather than trusting a draft was the
+right call. Implemented fresh by the orchestrator (attempt 3), verifying
+every claim against the actual installed source.
+
+- `querysource/services.py`: `QuerySource.__init__` gains `tenant_allowlist`
+  (frozen at first construction), `initialize_tenants()` (idempotent under
+  concurrent callers via `asyncio.Lock`, builds and caches both the
+  `TenantRegistry` and a `DefinitionRepository`), and `qs_start()` now
+  awaits `initialize_tenants()` and publishes both
+  `app["qs_tenant_registry"]`/`app["qs_definition_repository"]`.
+- `querysource/connections.py`: `QueryConnection.definition_connection()`
+  — reuses the HTTP-loop pool's `acquire()` only when called from that
+  same loop; otherwise builds a standalone connection via the existing
+  `get_connection()` (already loop-bound, already never mutates
+  `pgargs`), released on `async with` exit. Verified against the
+  installed `asyncdb` `pg.connection()` docstring — "Always creates a
+  fresh connection since `__aexit__` closes it" — that this releases
+  correctly without a separate close call.
+- `querysource/interfaces/connections.py`:
+  `Connection.get_definition_repository()` (lazy `QuerySource` import to
+  avoid the services/connections import cycle — verified the cycle is
+  real: `services` imports `connections`, which imports this module).
+  `get_query_slug`/`get_slug` now resolve through the repository instead
+  of `QueryModel.get(...)`, preserving the existing retry/backoff loop
+  and `DriverError`/`ValidationError`/`NoDataFound` → `SlugNotFound`
+  mapping (`TenantError` — unknown tenant, missing slug — maps to the
+  same `SlugNotFound`). `program` remains present but unused, matching
+  the pre-existing implementation (verified: it never used `program`
+  either).
+
+**Discovered platform constraint (per "if a fixed contract cannot work,
+report the concrete mismatch")**: the installed
+`datamodel.typedefs.Singleton` metaclass does not invoke `__init__` on a
+second `QuerySource(...)` call at all — verified behaviorally with a
+throwaway `class Foo(metaclass=Singleton)`, printing inside `__init__`,
+and confirming the print never fires on the second construction. This
+means "reject incompatible reinitialization" (AC-1) can only ever
+observably raise in a fresh, unreloaded process's very first
+construction call — in real long-running-process usage, a second,
+differing `tenant_allowlist` is silently never processed (not silently
+applied — the frozen config never changes), but no exception is ever
+raised for it either, because `__init__` is simply never re-entered. The
+`__init__`-level freeze/reject logic was implemented exactly per the
+blueprint (with an `_UNSET` sentinel so bare `QuerySource()` calls — the
+overwhelming majority of internal call sites, including this task's own
+`get_definition_repository()` — are never mistaken for a conflicting
+reinit attempt), and is tested by invoking `QuerySource.__init__`
+directly against a stub instance (the only way to exercise this logic
+given the Singleton's actual behavior), not via a live second
+`QuerySource()` call. This is a genuine, verified library-behavior
+mismatch with the task's blueprint assumption, not a guess or a
+workaround of unclear correctness.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/ -q` → 21 passed (all of TASK-716/717/718/719/720's
+  suites together, run for regression).
+- Broader regression: `pytest tests/test_queryslug_concurrency.py
+  tests/test_route_registration.py tests/services/test_querysource_setup_pbac.py
+  tests/datasources/test_driver_factory_session.py -q` → 18 passed (no
+  new failures touching the modified files).
+  `tests/test_scheduler_integration.py` has one pre-existing failure
+  (`ENABLE_QS_SCHEDULER` is `True` in this environment's settings, the
+  test asserts the default-`False` case) unrelated to this task — it does
+  not exercise any code this task touched. `tests/test_eval.py` has a
+  pre-existing collection error (`from querysource import QuerySource`
+  fails — `querysource/__init__.py` does not export it) that predates
+  this task entirely (confirmed: that file was last touched by an
+  unrelated `uv` migration commit).
+- `ruff check` on the four changed/created files: all NEW code introduced
+  by this task is lint-clean (verified line-by-line against a
+  stash-isolated baseline of the same three files before this task's
+  edits — 47 pre-existing findings, all at line numbers below/outside
+  every range this task added or modified). Fixed the handful of
+  genuinely new findings (import ordering, an unused `noqa: PLC0415` —
+  that rule isn't enabled in this config — a duplicated-quote type hint
+  removed where safe, `tenant: str | None` explicit-Optional style
+  matching the blueprint). Did not touch the pre-existing, unrelated
+  findings in the surrounding code (BLE001/TRY401/RUF013/RUF012/etc. on
+  code this task did not modify).
+
+Files changed: `querysource/services.py`, `querysource/connections.py`,
+`querysource/interfaces/connections.py`,
+`tests/tenants/test_tenant_bootstrap_lookup.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on TASK-716–719). No live PostgreSQL or
+aiohttp `TestServer` startup was exercised end-to-end; `qs_start`'s
+ordering was verified against the real, unmocked `on_startup` list
+produced by `QuerySource.setup()`, and `definition_connection()`'s
+pool-vs-direct branching was verified against fakes standing in for the
+pool/`get_connection()`, not a live database.
+
+No spec deviations beyond the documented Singleton-reinit platform
+constraint above. HTTP routes and result-cache changes are explicitly out
+of scope for this task (M3/M4) and were not touched.
