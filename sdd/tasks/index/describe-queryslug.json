@@ -151,7 +151,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -163,8 +163,8 @@
       "parallelism_notes": "Extends handlers/describe.py and services.py created/edited by TASK-740; uses TASK-738 hook and TASK-739 registry.",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-741-describe-handler-columns-vocabulary.md"
+      "completed_at": "2026-09-15T13:44:50+00:00",
+      "file": "sdd/tasks/completed/TASK-741-describe-handler-columns-vocabulary.md"
     },
     {
       "id": "TASK-742",
