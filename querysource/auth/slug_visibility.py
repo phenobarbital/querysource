@@ -403,6 +403,7 @@ async def tenant_store(request: web.Request, tenant: str) -> DescribeStore | Non
 
     Tenant names are exact (case-sensitive, not trimmed). Program context is the schema name.
     """
+    from querysource.tenant_errors import TenantError
     from querysource.tenants import QueryIdentity
 
     registry = request.app.get("qs_tenant_registry")
@@ -412,10 +413,12 @@ async def tenant_store(request: web.Request, tenant: str) -> DescribeStore | Non
         return None
 
     try:
-        # Resolve the tenant store using FEAT-147's registry
+        # Resolve the tenant store using FEAT-147's registry. TenantRegistry.resolve()
+        # raises TenantError (error_code="tenant_not_available") for an unknown tenant —
+        # caught narrowly here so a genuine bug in this function surfaces instead of
+        # silently degrading to a 404.
         store = registry.resolve(tenant=tenant)
-    except Exception:
-        # Unknown tenant or invalid selector
+    except TenantError:
         return None
 
     # Loader wraps DefinitionRepository.get(QueryIdentity(store, slug)).runtime

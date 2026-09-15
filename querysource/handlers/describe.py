@@ -159,7 +159,7 @@ class QueryDescribe(AbstractHandler):
 
         # Tenant stores: reject program_slug in sort/filter
         if not store.has_program_slug:
-            if "program_slug" in params.sort or "program_slug" in extra:
+            if params.sort_field == "program_slug" or "program_slug" in extra:
                 return self.error(
                     response={"message": "program_slug filtering/sorting not supported in tenant stores"},
                     status=400

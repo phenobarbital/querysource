@@ -10,6 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from querysource.auth.slug_visibility import Principal, PrincipalKind
 from querysource.handlers.describe import QueryDescribe
 from querysource.models import QueryModel
+from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity, QueryStore
 
 
@@ -54,7 +55,7 @@ async def test_tenant_unknown_404(test_client, fake_qs_connection):
 
     # Mock registry to raise on unknown tenant
     registry = test_client.app["qs_tenant_registry"]
-    registry.resolve.side_effect = Exception("tenant_not_found")
+    registry.resolve.side_effect = TenantError("tenant not found", error_code="tenant_not_available")
 
     with _patch_principal(principal):
         resp = await test_client.get("/api/v1/unknown_tenant/queries/describe")
@@ -210,7 +211,7 @@ async def test_tenant_detail_loader_repository(test_client, fake_qs_connection):
     registry.resolve.return_value = store
 
     # Mock that slug exists
-    fake_qs_connection.fetch_one_result = [{"query_slug": "test_slug"}]
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
 
     # Mock DefinitionRepository.get to return a QueryModel
     repository = test_client.app["qs_definition_repository"]
@@ -275,7 +276,7 @@ async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connectio
     registry.resolve.return_value = store
 
     # Mock that slug exists
-    fake_qs_connection.fetch_one_result = [{"query_slug": "test_slug"}]
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
 
     # Mock DefinitionRepository
     repository = test_client.app["qs_definition_repository"]
@@ -288,13 +289,23 @@ async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connectio
     )
     repository.get = AsyncMock(return_value=loaded)
 
+    # A real fake provider (not an AsyncMock): get_source()/get_query() are
+    # synchronous in the real QS/BaseProvider, so a bare AsyncMock() for `qs`
+    # makes get_source() return an unawaited coroutine instead of a usable
+    # provider object — this would 500 internally without ever surfacing,
+    # since AsyncMock() auto-mocks every attribute access.
+    fake_provider = MagicMock()
+    fake_provider.get_query.return_value = "SELECT * FROM acme.queries"
+    fake_provider.describe_columns = AsyncMock(return_value=[{"name": "id", "type": "integer"}])
+
     with _patch_principal(principal), \
             patch("querysource.handlers.describe.can_access", new_callable=AsyncMock, return_value=True), \
             patch("querysource.handlers.describe.QS") as mock_qs_class:
         # Mock QS instance
-        mock_qs = AsyncMock()
+        mock_qs = MagicMock()
         mock_qs_class.return_value = mock_qs
         mock_qs.build_provider = AsyncMock()
+        mock_qs.get_source = MagicMock(return_value=fake_provider)
         mock_qs.close = AsyncMock()
 
         resp = await test_client.get("/api/v1/acme/queries/test_slug/columns")
@@ -303,6 +314,10 @@ async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connectio
     mock_qs_class.assert_called_once()
     call_kwargs = mock_qs_class.call_args[1]
     assert call_kwargs.get("tenant") == "acme"
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["columns_source"] == "prepare"
+    assert data["columns"] == [{"name": "id", "type": "integer"}]
 
 
 async def test_tenant_evaluator_isolated(test_client, fake_qs_connection):
