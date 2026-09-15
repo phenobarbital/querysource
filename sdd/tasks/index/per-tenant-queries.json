@@ -132,7 +132,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -142,8 +142,8 @@
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-722-tenant-result-cache.md"
+      "completed_at": "2026-09-15T15:02:56+00:00",
+      "file": "sdd/tasks/completed/TASK-722-tenant-result-cache.md"
     },
     {
       "id": "TASK-723",

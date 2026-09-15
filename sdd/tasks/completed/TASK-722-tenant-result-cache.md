@@ -227,5 +227,71 @@ async def test_ttl_refresh_and_no_double_wrapping() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder, native haiku
+seat), 2026-09-15.
+
+Implemented by the native `haiku` coder (no MCP dispatch; ran directly as
+a Task subagent in its own prepared sub-worktree). The implementation was
+reviewed carefully given TASK-718/TASK-721's merged-but-broken history,
+and found genuinely correct on this pass:
+
+- `AbstractQuery.result_cache_key(provider_checksum)` composes the key via
+  the real `querysource.cache_identity.result_cache_key` (module-level
+  function, imported at the top of the file) using
+  `self._definition_identity`/`self._definition_revision`. Verified there
+  is no accidental self-recursion despite the instance method and the
+  imported function sharing the exact name `result_cache_key` — Python
+  resolves the bare call inside the method body against the module
+  global, not the class's own method (confirmed with a standalone
+  runtime check constructing a `BaseQuery`, setting identity/revision,
+  and calling `result_cache_key()` — returned a `qs:r2:...` key, no
+  `RecursionError`).
+- `save_cache()`/`save_in_cache()`/`caching_data()`/`cache_saved()` all
+  carry the *already-composed* key through — `save_cache()` defensively
+  detects an already-`qs:r2:`-prefixed checksum and reuses it verbatim
+  rather than re-wrapping (AC-1/AC-3 "wrap exactly once").
+- `QS.query()` computes `cache_key = self.result_cache_key(checksum)`
+  once and threads that same value through `in_cache`/`from_cache`/
+  `save_cache` — no dual-read of an unqualified/legacy key (AC-3).
+  `build_provider()` (TASK-721) already reads the definition and captures
+  `_definition_identity`/`_definition_revision` before any cache access,
+  satisfying AC-4's "read definitions before cache access" ordering.
+- `AbstractQuery.__init__` now pre-declares
+  `_definition_identity`/`_definition_revision` as `None` — a reasonable,
+  intentional design choice (owner/revision context slots exist from
+  construction, not only after a slug lookup) that broke one assumption
+  in TASK-721's own test (`not hasattr(qs, "_definition_identity")` for a
+  raw query, previously true only because the attribute was never set at
+  all for that path). Fixed that assertion to check the new, correct
+  `None` default instead — a genuine cross-task regression, not a defect
+  in this task's own scope, but left unfixed the suite would be red.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/ -q` → 29 passed (all of TASK-716–722's suites
+  together, run for regression; catches the TASK-721 assumption break
+  described above).
+- `ruff check` — fixed unused imports
+  (`AsyncMock`/`MagicMock`/`patch`/`ProviderError`/`AbstractQuery`/`QS`)
+  and import ordering in the coder's own
+  `tests/tenants/test_tenant_result_cache.py` via `ruff --fix`; no other
+  findings in that file. `querysource/interfaces/queries.py`/
+  `querysource/queries/qs.py` findings are all pre-existing
+  (`RUF013`/`TRY401`/`BLE001`/`SIM102`) on lines this task did not modify
+  — left as-is, matching the same convention observed on every prior
+  task in this feature.
+
+Files changed (beyond the original merge):
+`tests/tenants/test_tenant_execution_context.py` (TASK-721's suite,
+one-line compat fix), `tests/tenants/test_tenant_result_cache.py` (lint
+only, no logic change).
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live Redis/
+PostgreSQL was used; the four tests exercise `result_cache_key`/
+`definition_revision` and the cache-key composition logic directly, not a
+real cache round-trip.
+
+No spec deviations: user-specific cache redesign and source-table change
+invalidation are explicitly out of scope for this task and were not
+touched.
