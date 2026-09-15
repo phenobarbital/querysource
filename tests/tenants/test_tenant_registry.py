@@ -1,12 +1,12 @@
 """Implement immutable store identities and catalog discovery regression contracts."""
 
 import pytest
+
 from querysource.tenants import (
     DefinitionPage,
     LoadedDefinition,
     QueryIdentity,
     QueryStore,
-    TenantOwnerEnvelope,
     TenantRegistry,
     quote_identifier,
 )
@@ -15,25 +15,31 @@ from querysource.tenants import (
 @pytest.mark.asyncio
 async def test_allowlist_none_empty_exact_and_duplicates() -> None:
     """allowlist none empty exact and duplicates."""
-    # Create a mock connection
-    class MockCursor:
-        async def execute(self, query: str) -> None:
-            pass
-
-        async def fetchall(self) -> list:
-            return [
-                ("tenant1", "queries", "BASE TABLE"),
-                ("tenant2", "queries", "BASE TABLE"),
-                ("public", "queries", "BASE TABLE"),
-            ]
-
+    # Create a mock connection matching the asyncdb `pg` driver's
+    # `query(sentence) -> (result, error)` contract used elsewhere in the
+    # codebase (see querysource/datasources/introspection.py `_run`).
     class MockConn:
         def __init__(self):
             self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
-            self._cursor = MockCursor()
 
-        async def cursor(self):
-            return self._cursor
+        async def query(self, sentence: str):
+            if "information_schema.columns" in sentence:
+                return (
+                    [
+                        ("tenant1", "queries", "query_slug", "text", "NO"),
+                        ("tenant2", "queries", "query_slug", "text", "NO"),
+                        ("public", "queries", "query_slug", "text", "NO"),
+                    ],
+                    None,
+                )
+            return (
+                [
+                    ("tenant1", "queries", "BASE TABLE"),
+                    ("tenant2", "queries", "BASE TABLE"),
+                    ("public", "queries", "BASE TABLE"),
+                ],
+                None,
+            )
 
     registry = TenantRegistry()
 
@@ -71,24 +77,30 @@ async def test_allowlist_none_empty_exact_and_duplicates() -> None:
 @pytest.mark.asyncio
 async def test_discovery_tables_views_marker_shape_grants() -> None:
     """discovery tables views marker shape grants."""
-    class MockCursor:
-        async def execute(self, query: str) -> None:
-            pass
-
-        async def fetchall(self) -> list:
-            return [
-                ("tenant1", "queries", "BASE TABLE"),
-                ("tenant2", "queries", "BASE TABLE"),
-                ("public", "queries", "BASE TABLE"),
-            ]
-
     class MockConn:
         def __init__(self):
             self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
-            self._cursor = MockCursor()
 
-        async def cursor(self):
-            return self._cursor
+        async def query(self, sentence: str):
+            if "information_schema.columns" in sentence:
+                return (
+                    [
+                        ("tenant1", "queries", "query_slug", "text", "NO"),
+                        ("tenant2", "queries", "query_slug", "text", "NO"),
+                        ("public", "queries", "query_slug", "text", "NO"),
+                    ],
+                    None,
+                )
+            return (
+                [
+                    ("tenant1", "queries", "BASE TABLE"),
+                    ("tenant2", "queries", "BASE TABLE"),
+                    ("public", "queries", "BASE TABLE"),
+                    # Reserved schema — must be excluded and recorded as a diagnostic.
+                    ("management", "queries", "BASE TABLE"),
+                ],
+                None,
+            )
 
     registry = TenantRegistry()
     conn = MockConn()
@@ -129,24 +141,28 @@ async def test_discovery_tables_views_marker_shape_grants() -> None:
 @pytest.mark.asyncio
 async def test_quoted_names_and_default_alias_dedup() -> None:
     """quoted names and default alias dedup."""
-    class MockCursor:
-        async def execute(self, query: str) -> None:
-            pass
-
-        async def fetchall(self) -> list:
-            return [
-                ("tenant1", "queries", "BASE TABLE"),
-                ("tenant1", "queries", "BASE TABLE"),  # Duplicate
-                ("public", "queries", "BASE TABLE"),
-            ]
-
     class MockConn:
         def __init__(self):
             self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
-            self._cursor = MockCursor()
 
-        async def cursor(self):
-            return self._cursor
+        async def query(self, sentence: str):
+            if "information_schema.columns" in sentence:
+                return (
+                    [
+                        ("tenant1", "queries", "query_slug", "text", "NO"),
+                        ("tenant1", "queries", "query_slug", "text", "NO"),  # Duplicate
+                        ("public", "queries", "query_slug", "text", "NO"),
+                    ],
+                    None,
+                )
+            return (
+                [
+                    ("tenant1", "queries", "BASE TABLE"),
+                    ("tenant1", "queries", "BASE TABLE"),  # Duplicate
+                    ("public", "queries", "BASE TABLE"),
+                ],
+                None,
+            )
 
     registry = TenantRegistry()
     conn = MockConn()
@@ -161,7 +177,7 @@ async def test_quoted_names_and_default_alias_dedup() -> None:
     assert quoted == '"tenant1"'
 
     quoted_with_quotes = quote_identifier('tenant"1"')
-    assert quoted_with_quotes == '"tenant""1""'
+    assert quoted_with_quotes == '"tenant""1"""'
 
     # Test invalid identifier
     with pytest.raises(ValueError):
@@ -204,21 +220,13 @@ async def test_quoted_names_and_default_alias_dedup() -> None:
 @pytest.mark.asyncio
 async def test_scan_failure_has_no_partial_snapshot() -> None:
     """scan failure has no partial snapshot."""
-    class MockCursor:
-        async def execute(self, query: str) -> None:
-            pass
-
-        async def fetchall(self) -> list:
-            # Simulate a scan failure by raising an exception
-            raise Exception("Connection lost")
-
     class MockConn:
         def __init__(self):
             self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
-            self._cursor = MockCursor()
 
-        async def cursor(self):
-            return self._cursor
+        async def query(self, sentence: str):
+            # Simulate a scan failure by raising an exception
+            raise ConnectionError("Connection lost")
 
     registry = TenantRegistry()
     conn = MockConn()

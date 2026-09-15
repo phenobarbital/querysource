@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Sequence, Tuple
+from typing import Any, Literal, TypedDict
 
 from asyncdb.drivers.pg import pg
+
 from querysource.models import QueryModel
 from querysource.tenant_errors import TenantError
 
@@ -57,7 +59,7 @@ class LoadedDefinition:
 class DefinitionPage:
     """Persisted projections and total matching the same validated filters."""
 
-    rows: Tuple[Mapping[str, Any], ...]
+    rows: tuple[Mapping[str, Any], ...]
     total: int
 
 
@@ -76,8 +78,8 @@ class TenantRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty registry."""
-        self._stores: Tuple[QueryStore, ...] = ()
-        self._diagnostics: Tuple[Mapping[str, Any], ...] = ()
+        self._stores: tuple[QueryStore, ...] = ()
+        self._diagnostics: tuple[Mapping[str, Any], ...] = ()
         self._default_store: QueryStore | None = None
 
     def _is_system_schema(self, schema: str) -> bool:
@@ -109,7 +111,7 @@ class TenantRegistry:
         """Build a database namespace from host, port, and database without secrets."""
         return f"{host}:{port}/{database}"
 
-    def _deduplicate_stores(self, stores: Sequence[QueryStore]) -> Tuple[QueryStore, ...]:
+    def _deduplicate_stores(self, stores: Sequence[QueryStore]) -> tuple[QueryStore, ...]:
         """Deduplicate stores by their physical identity."""
         seen = set()
         unique_stores: list[QueryStore] = []
@@ -124,7 +126,7 @@ class TenantRegistry:
         self,
         columns: frozenset[str],
         has_program_slug: bool,
-    ) -> Tuple[bool, str | None]:
+    ) -> tuple[bool, str | None]:
         """Check if a store is compatible with the tenant contract."""
         # Check for program_slug - incompatible with tenant contract
         if has_program_slug:
@@ -184,9 +186,14 @@ class TenantRegistry:
         AND table_type = 'BASE TABLE'
         """
 
-        async with conn.cursor() as cur:
-            await cur.execute(tables_query)
-            tables = await cur.fetchall()
+        try:
+            result, error = await conn.query(tables_query)
+        except Exception:  # noqa: BLE001 - scan failure must publish nothing
+            # Scan failure must publish nothing (state already reset above).
+            return
+        if error:
+            return
+        tables = result or []
 
         if not tables:
             # No queries tables found - no stores to register
@@ -205,9 +212,13 @@ class TenantRegistry:
         AND column_name = 'query_slug'
         """
 
-        async with conn.cursor() as cur:
-            await cur.execute(columns_query)
-            columns = await cur.fetchall()
+        try:
+            result, error = await conn.query(columns_query)
+        except Exception:  # noqa: BLE001 - scan failure must publish nothing
+            return
+        if error:
+            return
+        columns = result or []
 
         # Build a mapping of schema -> table -> columns
         schema_columns: dict[str, dict[str, frozenset[str]]] = {}
@@ -358,11 +369,11 @@ class TenantRegistry:
             error_code="tenant_not_available",
         )
 
-    def stores(self) -> Tuple[QueryStore, ...]:
+    def stores(self) -> tuple[QueryStore, ...]:
         """Return unique eligible physical stores, including configured default."""
         return self._stores
 
-    def diagnostics(self) -> Tuple[Mapping[str, Any], ...]:
+    def diagnostics(self) -> tuple[Mapping[str, Any], ...]:
         """Return administrative discovery reasons without secrets."""
         return self._diagnostics
 
