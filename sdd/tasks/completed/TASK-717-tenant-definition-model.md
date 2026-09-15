@@ -215,5 +215,72 @@ async def test_legacy_model_meta_unchanged() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Implemented by seat `mistral` (backend: nova, model: mistral.devstral-2-123b,
+attempt 2 after a `dirty_task_worktree` retry on seat `qwen`), merged into
+the feature branch, then rewritten by the orchestrator after a fidelity
+check found the merged code did not match the task's blueprint:
+
+- The merged `TenantQueryDefinition` used `pydantic.BaseModel` instead of
+  `datamodel.BaseModel` — the task's own Codebase Contract states
+  "Datamodel BaseModel is not Pydantic BaseModel" verbatim. It also
+  dropped every `db_type='jsonb'`/`db_type='array'`/`primary_key`/`comment`
+  field-metadata argument (AC-1's "retain exact ... JSON/array metadata"),
+  and never enforced AC-3 ("Reject program_slug in tenant write input
+  before model construction") — pydantic's default `BaseModel` silently
+  ignores unknown kwargs, so `program_slug=...` was accepted, not
+  rejected, and untested.
+- Rewrote `querysource/tenant_models.py` field-for-field against the
+  task's Implementation Blueprint, on `datamodel.BaseModel`/`Field`,
+  matching `querysource/models.py` (`QueryModel`) conventions.
+  `datamodel.BaseModel` raises `TypeError` for unexpected constructor
+  kwargs, so AC-3 falls out of construction itself rather than needing
+  bespoke rejection logic.
+- Discovered two real `datamodel`/Cython incompatibilities while getting
+  the rewrite to actually construct (verified directly against the
+  installed `datamodel` package, not guessed): `from __future__ import
+  annotations` turns field annotations into plain strings and breaks
+  validation for every field (`TypeError: Expected type, got str`, even
+  a single-field model); `X | None` union syntax combined with a
+  non-trivial type (e.g. `dict | None`) raises `TypeError: Expected
+  type, got types.UnionType`. Neither is used in the final file — kept
+  `typing.Optional`/`typing.List`, matching `querysource/models.py`'s
+  existing convention (confirmed `ruff check querysource/models.py`
+  raises the identical UP045/UP006/UP035 findings, so this is a
+  pre-existing, load-bearing, accepted pattern, not something to "fix").
+- Added an explicit AC-3 regression test
+  (`pytest.raises(TypeError)` on `program_slug=...`) that the merged
+  code never had. Fixed two incorrect test assertions inherited from the
+  merge: an `updated_at == now` check that ignored the
+  `encoder=rigth_now` override (which always rewrites to
+  `datetime.now()`, verified to match `QueryModel`'s own behavior byte
+  for byte), and left the `hasattr(..., 'program_slug')` assertions as
+  originally written (still correct).
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/ -q` → 8 passed (both TASK-716 and TASK-717
+  suites, run together for regression).
+- `ruff check querysource/tenant_models.py
+  tests/tenants/test_tenant_definition_model.py` → 14 UP045/UP006/UP035
+  findings, all intentionally left as-is (see above); no other findings.
+
+Files changed (beyond the original merge): `querysource/tenant_models.py`,
+`tests/tenants/test_tenant_definition_model.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (binary not executable); not part of this task's own
+toolchain failure, left unverified rather than guessed at (same gap
+noted on TASK-716).
+
+Spec deviation from the approved Implementation Blueprint: the blueprint's
+literal `from __future__ import annotations` header and `X | None`/
+`list[X]` union-style annotations were dropped for the reasons above —
+both are genuine runtime incompatibilities with this project's Cython
+`datamodel` validator, not stylistic choices, and the replacement
+(`typing.Optional`/`typing.List`, no postponed annotations) matches the
+existing, working convention in `querysource/models.py` exactly. All
+field names, defaults, `db_type`/`primary_key`/`comment` metadata, and
+the `program_id`/`created_at`/`updated_at` factory/encoder behavior match
+the blueprint verbatim.
