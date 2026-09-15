@@ -260,7 +260,7 @@ class TenantRegistry:
 
         # Build a mapping of schema -> table -> columns
         schema_columns: dict[str, dict[str, frozenset[str]]] = {}
-        for schema, table, col_name, data_type, is_nullable in columns:
+        for schema, table, col_name, _data_type, _is_nullable in columns:
             if schema not in schema_columns:
                 schema_columns[schema] = {}
             schema_columns[schema][table] = schema_columns[schema].get(table, frozenset()) | {col_name}
@@ -269,7 +269,7 @@ class TenantRegistry:
         discovered_stores: list[QueryStore] = []
         diagnostics: list[Mapping[str, Any]] = []
 
-        for schema, table, table_type in tables:
+        for schema, table, _table_type in tables:
             # Skip system schemas
             if self._is_system_schema(schema):
                 diagnostics.append(

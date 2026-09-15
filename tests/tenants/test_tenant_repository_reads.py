@@ -119,9 +119,7 @@ async def test_get_returns_detached_runtime_and_revision() -> None:
     assert loaded.runtime.program_slug == store.schema
     assert loaded.runtime.query_slug == "test_query"
     assert not hasattr(loaded, "program_slug")
-    assert loaded.revision == definition_revision(
-        {k: v for k, v in row.items()}
-    )
+    assert loaded.revision == definition_revision(dict(row.items()))
 
     # Missing row raises TenantError(query_not_found), not a silent None.
     empty_conn = _MockConn(rows=[])

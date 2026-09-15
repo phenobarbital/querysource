@@ -201,7 +201,6 @@ class QueryHandler(AbstractHandler):
         args = self.match_parameters(request)
         slug = args.get('slug', None)
         _format: str = 'json'
-        meta = args.get('meta', None)
         writer_options = {}
         try:
             slug, _format = slug.split(':')

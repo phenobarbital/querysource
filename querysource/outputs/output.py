@@ -1,36 +1,38 @@
 from typing import Union
+
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
-
+from asyncdb.exceptions import DriverError, NoDataFound, StatementError
+from datamodel.parsers.encoders import DefaultEncoder
 from navconfig import DEBUG
 from navconfig.logging import logging
-from datamodel.parsers.encoders import DefaultEncoder
-from asyncdb.exceptions import NoDataFound, StatementError, DriverError
-from ..interfaces.queries import AbstractQuery
+from pandas import DataFrame
+
 from ..exceptions import (
     DataNotFound,
     QueryException,
 )
+from ..interfaces.queries import AbstractQuery
 from ..ownership_logging import implicit_artifact_name
 from ..utils.errors import build_error_payload
 from .writers import (
-    jsonWriter,
+    BokehWriter,
     CSVWriter,
     ExcelWriter,
-    TXTWriter,
     HTMLWriter,
-    BokehWriter,
-    PlotlyWriter,
-    TSVWriter,
+    PDFWriter,
     PickleWriter,
-    TableWriter,
+    PlotlyWriter,
     # ProfileWriter,
     ReportWriter,
-    PDFWriter,
+    TableWriter,
+    TSVWriter,
+    TXTWriter,
     XMLWriter,
     # EDAWriter,
     # DescribeWriter,
     # ClusterWriter
+    jsonWriter,
 )
 
 WRITERS = {
@@ -65,7 +67,7 @@ class DataOutput:
     def __init__(
         self,
         request: web.Request,
-        query: Union[AbstractQuery, "DataFrame", list],
+        query: Union[AbstractQuery, DataFrame, list],
         ctype: str = 'json',
         slug: str = None,
         **kwargs

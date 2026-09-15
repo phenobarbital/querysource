@@ -112,6 +112,6 @@ async def test_legacy_model_meta_unchanged() -> None:
     assert QueryModel.Meta.driver == 'pg'
     assert QueryModel.Meta.name == 'queries'
     assert QueryModel.Meta.schema == 'public'
-    assert QueryModel.Meta.strict == True
-    assert QueryModel.Meta.frozen == False
-    assert QueryModel.Meta.remove_nulls == True
+    assert QueryModel.Meta.strict
+    assert not QueryModel.Meta.frozen
+    assert QueryModel.Meta.remove_nulls
