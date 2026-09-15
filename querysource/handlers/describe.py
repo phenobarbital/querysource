@@ -126,8 +126,13 @@ class QueryDescribe(AbstractHandler):
                 self.logger.warning("Failed to load slug %r: %s", slug, err)
                 raise web.HTTPNotFound() from None
 
-            # Check access
-            if not await can_access(request, principal, slug, "slug:describe", "slug:execute"):
+            # Check access. Tenant stores use a detached evaluator (cleared
+            # decision cache) so a cached decision for one tenant's slug can
+            # never leak into another tenant's identically-named slug.
+            if not await can_access(
+                request, principal, slug, "slug:describe", "slug:execute",
+                detached=not store.has_program_slug,
+            ):
                 raise web.HTTPNotFound()
 
             return model
@@ -220,7 +225,12 @@ class QueryDescribe(AbstractHandler):
 
         # Filter visible slugs
         slugs = [r["query_slug"] for r in rows]
-        allowed = await filter_visible(request, principal, slugs, "slug:list", "slug:execute")
+        # Tenant stores use a detached evaluator — see the comment in
+        # _load_visible for why this matters.
+        allowed = await filter_visible(
+            request, principal, slugs, "slug:list", "slug:execute",
+            detached=not store.has_program_slug,
+        )
         allowed_set = set(allowed)
         visible = [r for r in rows if r["query_slug"] in allowed_set]
         
@@ -262,7 +272,7 @@ class QueryDescribe(AbstractHandler):
         store = await self._store(request)
         slug = request.match_info.get("slug", "")
         model = await self._load_visible(request, principal, store, slug)
-        grants = await describe_grants(request, principal, slug)
+        grants = await describe_grants(request, principal, slug, detached=not store.has_program_slug)
         payload = describe_slug(
             model, grants,
             columns_link=request.path.rsplit("/", 1)[0] + "/columns",

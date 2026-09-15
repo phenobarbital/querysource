@@ -320,8 +320,8 @@ async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connectio
     assert data["columns"] == [{"name": "id", "type": "integer"}]
 
 
-async def test_tenant_evaluator_isolated(test_client, fake_qs_connection):
-    """Tenant stores use detached evaluator; app evaluator cache untouched."""
+async def test_tenant_evaluator_isolated_call_wiring(test_client, fake_qs_connection):
+    """Tenant list/detail/columns pass detached=True to filter_visible/can_access/describe_grants."""
     principal = Principal(kind=PrincipalKind.SUPERUSER)
 
     store = QueryStore(
@@ -339,14 +339,69 @@ async def test_tenant_evaluator_isolated(test_client, fake_qs_connection):
     ]
     fake_qs_connection.fetch_handler = lambda sql, *args: rows
 
-    # Mock app evaluator (should NOT be called for tenant stores)
-    app_evaluator = MagicMock()
-    test_client.app["policy_evaluator"] = app_evaluator
-
     with _patch_principal(principal), \
             patch("querysource.handlers.describe.filter_visible", new_callable=AsyncMock, return_value=["q1"]) as mock_filter:
         resp = await test_client.get("/api/v1/acme/queries/describe")
 
     assert resp.status == 200
-    # filter_visible is called (ABAC), but using the detached evaluator, not app's
     mock_filter.assert_called_once()
+    # Positional call: (request, principal, slugs, primary_action, fallback_action)
+    assert mock_filter.call_args.kwargs.get("detached") is True
+
+
+async def test_tenant_evaluator_never_shares_app_cache(test_client, fake_qs_connection):
+    """The real detached-evaluator mechanism never reads or writes the app evaluator's cache.
+
+    Uses a fake evaluator whose filter_resources() writes into self._cache (as a
+    real navigator_auth evaluator would, to memoize decisions) and asserts the
+    *app-registered* evaluator's cache dict is untouched after a tenant list
+    request — proving slug_visibility._evaluator_state(detached=True) actually
+    operates on a copy, not the shared object (spec's "Tenant ABAC decisions
+    never read or write the app evaluator's cache").
+    """
+    principal = Principal(kind=PrincipalKind.SUPERUSER)
+
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
+
+    rows = [
+        {"query_slug": "q1", "provider": "postgres", "description": "Query 1", "updated_at": "2026-01-01"},
+    ]
+    fake_qs_connection.fetch_handler = lambda sql, *args: rows
+
+    class FakeFilterResult:
+        def __init__(self, allowed, denied):
+            self.allowed = allowed
+            self.denied = denied
+
+    class FakeEvaluator:
+        """Mimics a real ABAC evaluator that memoizes decisions in self._cache."""
+
+        def __init__(self):
+            self._cache = {"preexisting": "poison"}
+            self._stats = {"hits": 0}
+
+        def filter_resources(self, **kwargs):
+            # Simulate real caching behavior: writes a decision into whichever
+            # evaluator object this method runs on.
+            self._cache["acme:q1"] = "allowed"
+            return FakeFilterResult(allowed=["q1"], denied=[])
+
+    app_evaluator = FakeEvaluator()
+    test_client.app["security"] = MagicMock()  # PBAC enabled
+    test_client.app["policy_evaluator"] = app_evaluator
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/describe")
+
+    assert resp.status == 200
+    # The tenant request's decision was cached on a *copy* — the app's own
+    # evaluator object must still have only its original, pre-existing entry.
+    assert app_evaluator._cache == {"preexisting": "poison"}
