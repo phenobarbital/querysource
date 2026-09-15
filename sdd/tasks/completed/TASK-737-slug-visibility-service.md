@@ -378,10 +378,52 @@ See the blueprint test file above. `tests/auth/` already exists (`tests/auth/tes
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: parrot-sdd-coder (seat qwen, nova/qwen.qwen3-coder-480b-a35b-instruct),
+consolidated and fixed by sdd-worker (Claude Sonnet 5).
+**Date**: 2026-09-15
 **Notes**:
+- The dispatched coder implemented `querysource/auth/slug_visibility.py` and
+  `tests/auth/test_slug_visibility.py` faithfully to the blueprint (models,
+  `normalize_programs`, `resolve_principal`, `legacy_store`,
+  `build_program_predicate`, `is_admin`, `_evaluator_state`, `_eval_context`,
+  `filter_visible`, `can_access`, `describe_grants`), but its self-reported test
+  run was not actually green — 5 of 11 tests in `tests/auth/test_slug_visibility.py`
+  failed when I ran the acceptance suite in this worktree. Fixed as the
+  consolidating step of the FEAT-549 orchestrator loop (task outcome "merged" →
+  run ACs → red → fix in place, since the implementation logic itself was
+  spec-compliant and the issues were narrowly scoped):
+  - **Real production bug** in `normalize_programs`: a `None` item fell through
+    to the `else: slug = str(item)` branch, producing the literal string
+    `"none"` instead of being dropped as an empty value (spec: "Drop empties").
+    Fixed with an explicit `if item is None: continue` guard.
+  - **Defensive fix** in `is_admin`: made the `QS_DESCRIBE_ADMIN_GROUPS` ∩
+    `principal.groups` intersection check case-insensitive
+    (`{str(g).lower() for g in ...}` on both sides) — both are already
+    lowercase by contract via their respective constructors, but the check no
+    longer depends on that caller discipline.
+  - **Test-only fixes** (fixture bugs, not implementation bugs):
+    `test_normalize_programs`'s "objects with name attribute" case used a bare
+    `MagicMock()`, whose auto-vivified `.slug` attribute is always truthy and
+    so shadowed the intended `.name`-only code path — replaced with
+    `types.SimpleNamespace(name=...)`, which has no such auto-attribute.
+    Three `filter_visible`/`can_access` tests built their mock `request.app`
+    with only `{'policy_evaluator': evaluator}`, omitting the `'security'`
+    key that `_evaluator_state` checks first — with `guardian is None` these
+    tests were silently exercising the PBAC-disabled short-circuit instead of
+    the evaluator path under test. Added `'security': MagicMock()` to those
+    three `_request(...)` calls.
+- `pytest tests/auth/test_slug_visibility.py -q` → 11 passed (was 6/11 as merged).
+- Verified: `QueryModel.Meta` is only ever read (`.schema`, `.name`), never
+  assigned. `describe_grants` calls `can_access(..., "slug:describe_raw")`
+  with no `fallback_action`, so `raw_query:execute` can never imply `raw`.
+- `ruff check querysource/auth/slug_visibility.py tests/auth/test_slug_visibility.py`
+  → clean.
+- Only the 2 listed files touched (both already part of the task); no scope
+  creep — my edits are fixes within the same files the dispatched coder
+  already owned for this task.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: qwen · Backend: nova · Model: qwen.qwen3-coder-480b-a35b-instruct · Attempts: 1 ·
+Duration: 147.2s (2m27s) · Tokens: in=1,315,269 out=9,429 — plus a consolidation-phase
+fix pass by sdd-worker (native, Claude Sonnet 5, interactive, not tracked by the roster).

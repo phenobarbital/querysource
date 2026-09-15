@@ -24,7 +24,8 @@ from .handlers import (
     QueryExecutor,
     QueryManager,
     VariablesService,
-    LoggingService
+    LoggingService,
+    QueryDescribe,
 )
 try:
     from settings.settings import QUERYSOURCE_FILTERS, QUERYSOURCE_VARIABLES
@@ -164,6 +165,17 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
         # Driver-agnostic schema introspection (tables + lazy columns):
         r = self.app.router.add_post('/api/v1/queries/schema', ds.schema)
+        routes.append(r)
+
+        ### Describe API (FEAT-148): read-only slug discovery.
+        dh = QueryDescribe()
+        r = self.app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/vocabulary', dh.vocabulary)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
         routes.append(r)
 
         ### Logging Service:

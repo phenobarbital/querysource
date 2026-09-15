@@ -3,6 +3,139 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 
+class TestDescribeRoutes:
+    """Verify describe routes are registered (FEAT-148 TASK-740)."""
+
+    def _collect_routes(self, setup_routes_fn):
+        """Build a minimal aiohttp Application and call setup_routes_fn to collect routes."""
+        from aiohttp import web
+        app = web.Application()
+        setup_routes_fn(app)
+        return {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+
+    def test_describe_list_get_route_registered(self):
+        """GET /api/v1/queries/describe must be registered."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/describe") in routes
+
+    def test_describe_detail_get_route_registered(self):
+        """GET /api/v1/queries/{slug}/describe must be registered."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/{slug}/describe") in routes
+
+    def test_describe_list_head_route_registered(self):
+        """HEAD /api/v1/queries/describe must be registered (allow_head=True)."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("HEAD", "/api/v1/queries/describe") in routes
+
+    def test_describe_list_handler_bound_to_get_route(self):
+        """describe_list handler is the one registered for GET /api/v1/queries/describe."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        for route in app.router.routes():
+            if route.method == "GET" and route.resource.canonical == "/api/v1/queries/describe":
+                # Compare via __func__
+                assert route.handler.__func__ is QueryDescribe.describe_list
+                return
+        pytest.fail("GET /api/v1/queries/describe route not found")
+
+    def test_describe_handler_bound_to_detail_route(self):
+        """describe handler is the one registered for GET /api/v1/queries/{slug}/describe."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/describe', dh.describe_list, allow_head=True)
+        app.router.add_get('/api/v1/queries/{slug}/describe', dh.describe)
+
+        for route in app.router.routes():
+            if route.method == "GET" and route.resource.canonical == "/api/v1/queries/{slug}/describe":
+                # Compare via __func__
+                assert route.handler.__func__ is QueryDescribe.describe
+                return
+        pytest.fail("GET /api/v1/queries/{slug}/describe route not found")
+
+    def test_vocabulary_route_registered(self):
+        """GET /api/v1/queries/vocabulary must be registered."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/vocabulary', dh.vocabulary)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/vocabulary") in routes
+
+    def test_columns_route_registered(self):
+        """GET /api/v1/queries/{slug}/columns must be registered."""
+        from aiohttp import web
+
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/{slug}/columns") in routes
+
+
 class TestRouteRegistration:
     def test_services_imports_query_source(self):
         from querysource.services import QuerySource

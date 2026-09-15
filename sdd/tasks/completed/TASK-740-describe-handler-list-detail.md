@@ -392,10 +392,72 @@ See the blueprint test outlines above. Use the aiohttp `TestServer`/`TestClient`
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Claude Sonnet 5), salvaging the uncommitted work left by the
+parrot-sdd-coder dispatch's first attempt (seat mistral, nova/mistral.devstral-2-123b) after
+both dispatched attempts failed — attempt 1 hit `dirty_task_worktree` (never committed its
+work), attempt 2 (seat minimax) timed out with no output at all.
+**Date**: 2026-09-15
 **Notes**:
+- Inspected the dirty sub-worktree left by attempt 1
+  (`.claude/worktrees/feat-FEAT-148-describe-queryslug--pool/TASK-740-a1`) before
+  reimplementing from scratch. `querysource/handlers/describe.py`,
+  `querysource/handlers/__init__.py`, `querysource/services.py`,
+  `tests/handlers/conftest.py` and the `TestDescribeRoutes` additions to
+  `tests/test_route_registration.py` were faithful to the blueprint and correct; adopted
+  them (via a `git diff`/`git apply` patch for the 4 shared files, a direct copy for
+  `describe.py`). Discarded an out-of-scope stray file the coder left at the repo root
+  (`test_describe_isolation.py`, a self-verification scratch script — not part of the
+  task's file list) and rewrote both integration test files from scratch (see below).
+- **Two production bugs found and fixed in the adopted `describe.py`:**
+  1. `describe_list` built `where` from `build_where_clause(params, extra)` alone and
+     never combined it with the program pre-filter `predicate.sql` — the ABAC program
+     predicate was computed but its SQL fragment was silently dropped from the query
+     (only `predicate.args` were still passed to `fetch_all`, which would have bound
+     stray positional parameters against a placeholder-free WHERE clause). Fixed by
+     importing `compose_where` and using
+     `where = compose_where(build_where_clause(params, extra), predicate.sql)`.
+  2. `_load_visible` called `_validate_bare_identifier(store.schema)` /
+     `_validate_bare_identifier(store.table)` with only one argument; the real
+     signature (TASK-735) is `_validate_bare_identifier(value, kind)` — this would have
+     raised `TypeError` on every detail request. Fixed by passing `"schema"`/`"table"`.
+- **Test files rewritten** (`tests/handlers/test_describe_list.py`,
+  `tests/handlers/test_describe_detail.py`): the salvaged versions patched
+  `querysource.auth.slug_visibility.resolve_principal` / `.can_access` /
+  `.describe_grants` and `querysource.queries.describe.describe_slug`, but
+  `describe.py` imports each of those names directly
+  (`from ..auth.slug_visibility import (..., resolve_principal, ...)`), so patching the
+  *origin* module never affected the *bound* name `describe.py` actually calls —
+  those patches were silent no-ops. Also: `test_normalize_programs`-style bare
+  `MagicMock()` objects for "object with only `.name`" cases (n/a here, but the same
+  bug class appeared as `patch.object(legacy_store(), 'loader', ...)` mutating a
+  **frozen** `DescribeStore` dataclass instance, and `patch.object(<a function
+  object>, '__call__', ...)`, neither of which works). Rewrote both files: patch
+  `querysource.handlers.describe.<name>` (the binding actually in scope) or, for the
+  principal, patch `QueryDescribe._principal` directly; use `patch.object(QueryModel,
+  'get', ...)` (patches the shared class attribute, works regardless of which module
+  imported the name) instead of touching a frozen `DescribeStore` instance.
+- `pytest tests/handlers tests/test_route_registration.py -q` (excluding the
+  pre-existing, unrelated `tests/handlers/test_airtable_oauth.py` collection error —
+  `ModuleNotFoundError: No module named 'aioresponses'`, verified present on `dev`
+  before this task too) → 112 passed, including all pre-existing QueryManager/
+  pagination/route-registration tests (AC19, no regressions).
+- AC4 (401, no SQL), AC5/AC7 (bound-args program predicate; NO_PROGRAMS → 204 list /
+  404 detail), AC6 (byte-identical 404s; execute implies describe), AC8/AC9 (exact
+  totals after ABAC; NULLS LAST default order; X-Truncated), AC12 (redaction by
+  grants), AC14 (no QS/provider import in `describe.py` — verified by grep) all
+  directly exercised by the test suite.
+- `ruff check querysource/handlers/describe.py querysource/handlers/__init__.py
+  querysource/services.py tests/handlers tests/test_route_registration.py`: `describe.py`
+  and both new test files are fully clean; the 4 modified pre-existing files
+  (`__init__.py`, `services.py`, `conftest.py`, `test_route_registration.py`) carry
+  exactly their pre-task violation counts (verified file-by-file against the
+  pre-task revision) — this task's diff introduces zero new lint issues. (Two lines
+  needed small adjustments to *stay* at zero: a blank line between import groups in
+  the 5 new `TestDescribeRoutes` methods, and `dict | None` instead of `Optional[dict]`
+  for the new `fetch_one` return type in `conftest.py`.)
+- Exactly the 7 listed files touched (verified via `git status` — 4 modified, 3
+  created); the stray root-level scratch file was discarded, not adopted.
+
+**Deviations from spec**: none
 
 **Deviations from spec**: none | describe if any

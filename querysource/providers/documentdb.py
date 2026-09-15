@@ -99,7 +99,9 @@ class documentdbProvider(BaseProvider):
             if HAS_RUST:
                 try:
                     sql = _rs.safe_format_map(query, self.replacement)
-                    substituted = _rs.safe_format_map_validated(sql, self._conditions, self._get_cond_definition())
+                    substituted = _rs.safe_format_map_validated(
+                        sql, self._udf_resolved_conditions(), self._get_cond_definition()
+                    )
                     try:
                         return json_decoder(substituted)
                     except Exception:

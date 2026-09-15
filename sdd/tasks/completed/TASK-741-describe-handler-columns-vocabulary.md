@@ -288,10 +288,65 @@ See the blueprint test outlines above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: parrot-sdd-coder (seat gemini, google-compat/gemini-3.5-flash, attempt 2 —
+attempt 1 seat minimax exceeded max_turns=60 with no recoverable output), consolidated and
+lint-fixed by sdd-worker (Claude Sonnet 5).
+**Date**: 2026-09-15
 **Notes**:
+- The dispatched coder implemented `ColumnInfo`/`ColumnsResponse` and the `columns`/
+  `vocabulary` methods on `QueryDescribe` faithfully to the blueprint, registered both
+  routes in `services.py`, and — correctly, unlike the salvaged TASK-740 attempt —
+  patched `querysource.handlers.describe.QS` (the actual bound name `describe.py`
+  calls), not the origin module. Its own test files were already logically sound.
+- **No production bugs found** in `columns()`/`vocabulary()` this time; verified the
+  full flow manually against the blueprint (SlugNotFound → 404, Parser/Provider/
+  DriverError → `provider_unavailable` warning, unresolved-placeholder skip,
+  `asyncio.wait_for` timeout/error → `prepare_failed` warning, declared-columns
+  fallback from `provider.get_definition()` or `model`, `qs.close()` always awaited
+  in `finally`, only exception *class names* ever appear in `warnings` — never
+  messages or SQL text).
+- **Consolidation work (lint only, no logic changes):**
+  - The coder appended its new imports as a *second* import block after
+    `from .abstract import AbstractHandler` instead of merging into TASK-740's
+    existing block at the top of the file — merged into one sorted block and
+    dropped the resulting unused `Optional` (switched `ColumnInfo.type` to
+    `str | None`, safe under `from __future__ import annotations`).
+  - Annotated the blueprint-mandated `except Exception: # pylint: disable=broad-except`
+    around `qs.close()` with `# noqa: BLE001, S110` — ruff doesn't honour pylint
+    disable comments, and this exact swallow-close pattern is explicitly specified
+    by the task; the alternative (dropping the swallow) would diverge from spec.
+  - Fixed import-grouping (`I001`) in the 2 new `TestDescribeRoutes` methods in
+    `tests/test_route_registration.py` (blank line between the `aiohttp` and
+    `querysource` import groups — same fixable-only pattern as TASK-740).
+  - In `tests/handlers/test_describe_columns.py`: removed an unused
+    `ProviderError` import, removed 3 unused `as mock_x` context-manager
+    bindings (F841), and combined 2 pairs of nested `with` statements
+    (`patch(...)` + `pytest.raises(...)`) into single `with` statements (SIM117).
+  - In `tests/handlers/test_describe_vocabulary.py`: combined a nested `with`
+    into one (SIM117), and added the blueprint-listed but missing
+    `test_vocabulary_authz_ok` (sessionless authz allowed per spec §8 default) —
+    patches `querysource.auth.slug_visibility.QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`
+    (where `resolve_principal` actually reads it), not `describe.py`.
+- `pytest tests/handlers tests/test_route_registration.py -q` (excluding the
+  pre-existing, unrelated `test_airtable_oauth.py` collection error) → 127 passed
+  (was 126 before the added `test_vocabulary_authz_ok`; no regressions).
+- `ruff check querysource/handlers/describe.py querysource/services.py
+  tests/handlers/test_describe_columns.py tests/handlers/test_describe_vocabulary.py
+  tests/test_route_registration.py`: `describe.py` and both new test files are fully
+  clean; `services.py` and `test_route_registration.py` carry exactly their
+  pre-task violation counts (10 and 7 respectively, verified against the pre-task
+  revision) — this task's diff introduces zero new lint issues.
+- AC16 verified directly: `git diff` shows no changes under `querysource/providers/`
+  or to `querysource/handlers/manager.py` (the `HEAD /api/v2/services/queries/{slug}`
+  handler).
+- Exactly the 5 listed files touched.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: gemini · Backend: google-compat · Model: gemini-3.5-flash · Attempts: 2
+(attempt 1 seat minimax/nova/minimax-m2.5 exceeded max_turns=60 with no recoverable
+DevelopmentOutput, duration 721.3s, in=2,162,083 out=20,649; attempt 2 seat gemini
+completed and merged, duration 269.5s, in=2,743,924 out=13,544) · Duration: 990.8s
+(16m31s total across both attempts) · Tokens: in=4,906,007 out=34,193 — plus a
+consolidation-phase lint fix pass by sdd-worker (native, Claude Sonnet 5, interactive,
+not tracked by the roster).
