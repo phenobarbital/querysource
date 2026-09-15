@@ -89,7 +89,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -99,8 +99,8 @@
       "parallelism_notes": "Edits providers/abstract.py, also modified by TASK-734; sequential to avoid conflicting edits.",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-738-provider-describe-columns.md"
+      "completed_at": "2026-09-15T12:17:22+00:00",
+      "file": "sdd/tasks/completed/TASK-738-provider-describe-columns.md"
     },
     {
       "id": "TASK-739",
@@ -109,7 +109,7 @@
       "feature_id": "FEAT-148",
       "feature": "describe-queryslug",
       "spec": "sdd/specs/describe-queryslug.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -119,8 +119,8 @@
       "parallelism_notes": "Needs udf_keywords/pg_constants/pg_udfs accessors from TASK-734 (Cython rebuild).",
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-739-date-keyword-vocabulary.md"
+      "completed_at": "2026-09-15T12:17:22+00:00",
+      "file": "sdd/tasks/completed/TASK-739-date-keyword-vocabulary.md"
     },
     {
       "id": "TASK-740",

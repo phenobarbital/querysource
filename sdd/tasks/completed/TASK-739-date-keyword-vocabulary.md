@@ -256,10 +256,23 @@ See the blueprint test file above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker orchestrator (parrot-sdd-coder, consolidated by Claude Sonnet 5)
+**Date**: 2026-09-15
 **Notes**:
+- Implemented per blueprint: `querysource/utils/vocabulary.py` with `KeywordEntry`,
+  `FunctionArg`, `FunctionEntry`, `VOCABULARY_VERSION`, `KEYWORD_REGISTRY` (exactly the
+  7 keywords from Implementation Notes), `FUNCTION_REGISTRY` (exactly `date_diff`,
+  `date_sum`, `days_ago`, `previous_month`, `fdow`, `ldow`, in that order, all
+  `invocable=False`, `previous_year` absent), `keyword_example()` (resolves via
+  `to_udf`, int stays int, else `str`, `None` on any exception, logged at debug) and
+  `build_vocabulary()` (keywords in `udf_list` order, unknown names get
+  `description: None`, `constants`/`pg_functions` are list copies, `functions` is
+  `[f.model_dump() for f in FUNCTION_REGISTRY]`, plus `usage` text).
+- `pytest tests/unit/test_vocabulary.py -q` → 4 passed.
+- `ruff check querysource/utils/vocabulary.py tests/unit/test_vocabulary.py` → clean,
+  zero violations.
+- Only the 2 listed files created; no scope creep.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: minimax · Backend: nova · Model: minimax.minimax-m2.5 · Attempts: 1 · Duration: 387.2s (6m27s) · Tokens: in=1,401,827 out=8,697

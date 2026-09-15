@@ -222,10 +222,27 @@ See the blueprint test file above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker orchestrator (parrot-sdd-coder, consolidated by Claude Sonnet 5)
+**Date**: 2026-09-15
 **Notes**:
+- Implemented per blueprint: `BaseProvider.describe_columns()` (additive, before `dry_run`)
+  normalizes `columns()` output (`str` / `dict` with `name` / other) into
+  `{"name", "type"}`, catching `AttributeError`/`NotImplementedError` → `[]`.
+  `pgProvider.describe_columns()` prepares (never executes) and returns typed
+  `{"name", "type"}` pairs from `stmt.get_attributes()`, raising `ParserError` on
+  `AttributeError` (mirrors `columns()`), and never assigns `self._columns`.
+- Verified: `git diff` shows no edits inside either `columns()` body (AC16) — both
+  files only gained the new additive method.
+- No `execute`/`fetch` calls added — only `prepare` + `get_attributes`.
+- `pytest tests/unit/test_provider_describe_columns.py tests/unit/test_provider_raw_query_validated.py -q`
+  → 21 passed.
+- `ruff check querysource/providers/abstract.py querysource/providers/pg.py
+  tests/unit/test_provider_describe_columns.py`: the new test file is fully clean;
+  `abstract.py`/`pg.py` carry the same 14 pre-existing lint violations as on `dev`
+  before this task (verified by diffing counts against the pre-task revision) —
+  this task's diff introduces zero new lint issues.
+- Only the 3 listed files touched; no scope creep.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
+
+Seat: minimax · Backend: nova · Model: minimax.minimax-m2.5 · Attempts: 2 (attempt 1 seat mistral/nova/mistral.devstral-2-123b ended `dirty_task_worktree`, salvaged; attempt 2 seat minimax completed and merged) · Duration: 1265.1s (21m05s total across both attempts) · Tokens: in=3,377,681 out=23,286
