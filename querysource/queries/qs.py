@@ -377,6 +377,8 @@ class QS(BaseQuery):
         error = None
         self._result = []
         exists = False
+        cache_key = None
+        checksum = None
         if not self._qs:
             await self.build_provider()
         refresh = self._qs.refresh()
@@ -394,9 +396,13 @@ class QS(BaseQuery):
             self._logger.debug('= Query Cache is Enabled =')
             checksum = self._qs.checksum()
             self._logger.debug(f"= Query Checksum is {checksum}")
+            # Compose the cache key using definition identity and revision
+            # (already set in build_provider for slug-based queries)
+            cache_key = self.result_cache_key(checksum)
+            self._logger.debug(f"= Composed Cache Key: {cache_key}")
             try:
                 exists = bool(
-                    await self.connection.in_cache(checksum)
+                    await self.connection.in_cache(cache_key)
                 )
                 self._logger.debug(f"= Detected on Cache? {exists}")
             except (ProviderError, DriverError, RuntimeError) as err:
@@ -413,7 +419,7 @@ class QS(BaseQuery):
         if self.is_cached is True and exists is True:
             # cache exists from this query
             try:
-                result = await self.connection.from_cache(checksum)
+                result = await self.connection.from_cache(cache_key)
             except asyncio.TimeoutError:
                 self._logger.warning(
                     'Querysource: Cache Miss due Timeout'
@@ -424,7 +430,7 @@ class QS(BaseQuery):
                 )
             if result:
                 self._logger.debug(
-                    f"Query {checksum} was cached!"
+                    f"Query {cache_key} was cached!"
                 )
                 try:
                     if is_parquet_payload(result):
@@ -518,9 +524,9 @@ class QS(BaseQuery):
                 )
             self._result = result
             ## Saving into Cache:
-            if self.is_cached is True:
+            if self.is_cached is True and cache_key is not None:
                 try:
-                    self.save_cache(checksum, result)
+                    self.save_cache(cache_key, result)
                 except Exception:
                     pass
             ## returning data:
