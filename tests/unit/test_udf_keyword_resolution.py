@@ -2,6 +2,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from querysource.types.validators import (
@@ -16,6 +17,13 @@ from querysource.qs_parsers import _qs_parsers as rs
 
 HINTS = [None, "date", "DATE", "datetime", "timestamp"]
 INTEGER_KEYWORDS = {"CURRENT_YEAR", "CURRENT_MONTH"}
+# tests/unit/test_udf_keyword_resolution.py -> tests/unit -> tests -> project root.
+# Pinned explicitly: navconfig.conf does an unconditional os.chdir(BASE_DIR) on
+# first import (anywhere in the same pytest session), so relying on the ambient
+# cwd for the subprocess below is order-dependent and can resolve a *different*
+# querysource checkout (e.g. the main repo instead of this worktree) depending
+# on which tests ran first.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _rust_render(value, hint):
@@ -91,6 +99,7 @@ def test_udf_env_override_comma_separated():
     result = subprocess.run(
         [sys.executable, "-c", code],
         env=env,
+        cwd=_PROJECT_ROOT,
         capture_output=True,
         text=True,
         check=True,
