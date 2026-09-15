@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
-from asyncdb.drivers.pg import pg
+from asyncdb.drivers.pg import UndefinedTableError, pg
 
 from querysource.cache_identity import definition_revision
 from querysource.models import QueryModel
@@ -124,6 +124,37 @@ class DefinitionRepository:
         sql = f"SELECT * FROM {table} WHERE query_slug = $1 LIMIT 1"
         async with await self.connection_factory() as conn:
             return await conn.fetch_one(sql, slug)
+
+    def _translate_write_error(self, err: Exception, store: QueryStore) -> None:
+        """Translate a mutation failure to the correct TenantError and raise it.
+
+        AC-4: "Translate write grant failures to tenant_write_forbidden and
+        runtime table loss to tenant_store_unavailable; do not turn
+        validation or missing-row errors into fallback queries." Runtime
+        table loss uses the driver's typed ``UndefinedTableError``
+        (verified: ``asyncdb.drivers.pg.UndefinedTableError``); no typed
+        exception is re-exported by the driver for a permission failure, so
+        that branch matches the underlying error text — the same
+        constraint the driver itself is subject to. Never swallows an
+        unrelated error: anything that matches neither case re-raises.
+        """
+        if isinstance(err, UndefinedTableError):
+            raise TenantError(
+                f"Store table not available: {store.schema}.{store.table}",
+                error_code="tenant_store_unavailable",
+            ) from err
+        error_msg = str(err).lower()
+        if "permission denied" in error_msg or "must be owner" in error_msg:
+            raise TenantError(
+                f"Write permission denied for store {store.schema}",
+                error_code="tenant_write_forbidden",
+            ) from err
+        if "relation" in error_msg and "does not exist" in error_msg:
+            raise TenantError(
+                f"Store table not available: {store.schema}.{store.table}",
+                error_code="tenant_store_unavailable",
+            ) from err
+        raise err
 
     # -- public API ----------------------------------------------------------------
 
@@ -281,19 +312,8 @@ class DefinitionRepository:
         try:
             async with await self.connection_factory() as conn:
                 row = await conn.fetch_one(sql, *values)
-        except Exception as e:
-            # Check for permission/table errors
-            error_msg = str(e).lower()
-            if "permission denied" in error_msg or "must be owner" in error_msg:
-                raise TenantError(
-                    f"Write permission denied for store {store.schema}",
-                    error_code="tenant_write_forbidden",
-                )
-            if "relation" in error_msg and "does not exist" in error_msg:
-                raise TenantError(
-                    f"Store table not available: {store.schema}.{store.table}",
-                    error_code="tenant_store_unavailable",
-                )
+        except Exception as exc:
+            self._translate_write_error(exc, store)
             raise
 
         if row is None:
@@ -350,18 +370,8 @@ class DefinitionRepository:
         try:
             async with await self.connection_factory() as conn:
                 row = await conn.fetch_one(sql, *values)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "permission denied" in error_msg or "must be owner" in error_msg:
-                raise TenantError(
-                    f"Write permission denied for store {store.schema}",
-                    error_code="tenant_write_forbidden",
-                )
-            if "relation" in error_msg and "does not exist" in error_msg:
-                raise TenantError(
-                    f"Store table not available: {store.schema}.{store.table}",
-                    error_code="tenant_store_unavailable",
-                )
+        except Exception as exc:
+            self._translate_write_error(exc, store)
             raise
 
         if row is None:
@@ -444,18 +454,8 @@ class DefinitionRepository:
         try:
             async with await self.connection_factory() as conn:
                 row = await conn.fetch_one(sql, *values)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "permission denied" in error_msg or "must be owner" in error_msg:
-                raise TenantError(
-                    f"Write permission denied for store {store.schema}",
-                    error_code="tenant_write_forbidden",
-                )
-            if "relation" in error_msg and "does not exist" in error_msg:
-                raise TenantError(
-                    f"Store table not available: {store.schema}.{store.table}",
-                    error_code="tenant_store_unavailable",
-                )
+        except Exception as exc:
+            self._translate_write_error(exc, store)
             raise
 
         if row is None:
@@ -483,18 +483,8 @@ class DefinitionRepository:
         try:
             async with await self.connection_factory() as conn:
                 row = await conn.fetch_one(sql, identity.slug)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "permission denied" in error_msg or "must be owner" in error_msg:
-                raise TenantError(
-                    f"Write permission denied for store {store.schema}",
-                    error_code="tenant_write_forbidden",
-                )
-            if "relation" in error_msg and "does not exist" in error_msg:
-                raise TenantError(
-                    f"Store table not available: {store.schema}.{store.table}",
-                    error_code="tenant_store_unavailable",
-                )
+        except Exception as exc:
+            self._translate_write_error(exc, store)
             raise
 
         if row is None:

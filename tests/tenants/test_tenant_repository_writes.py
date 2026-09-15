@@ -2,6 +2,7 @@
 import datetime
 
 import pytest
+from asyncdb.drivers.pg import UndefinedTableError
 
 from querysource.repositories.definitions import DefinitionRepository
 from querysource.tenant_errors import TenantError
@@ -89,7 +90,7 @@ class _MockConn:
             if isinstance(self.error_on_write, Exception):
                 raise self.error_on_write
             # If it's a string, create an exception from it
-            raise Exception(self.error_on_write)
+            raise RuntimeError(self.error_on_write)
         return self.rows[0] if self.rows else None
 
     async def fetch_all(self, sql, *args, **kwargs):
@@ -304,3 +305,21 @@ async def test_delete_missing_permission_and_store_loss() -> None:
     with pytest.raises(TenantError) as exc_info:
         await repo_patch_perm.patch(identity, {"description": "updated"})
     assert exc_info.value.error_code == "tenant_write_forbidden"
+
+    # Test delete with the driver's typed UndefinedTableError (not just a
+    # message-text match) also raises tenant_store_unavailable.
+    conn_typed_table = _MockConn(
+        rows=None,
+        error_on_write=UndefinedTableError('relation "tenant1.queries" does not exist'),
+    )
+    repo_typed_table = DefinitionRepository(registry=None, connection_factory=_factory(conn_typed_table))
+    with pytest.raises(TenantError) as exc_info:
+        await repo_typed_table.delete(identity)
+    assert exc_info.value.error_code == "tenant_store_unavailable"
+
+    # An unrelated failure (neither permission nor missing-table) must
+    # propagate unchanged, never becoming a fallback query.
+    conn_unrelated = _MockConn(rows=None, error_on_write=RuntimeError("connection reset by peer"))
+    repo_unrelated = DefinitionRepository(registry=None, connection_factory=_factory(conn_unrelated))
+    with pytest.raises(RuntimeError, match="connection reset by peer"):
+        await repo_unrelated.delete(identity)
