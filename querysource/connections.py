@@ -4,36 +4,33 @@ Manage Database connections and supporting datasources.
 """
 import asyncio
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Union
+
 from aiohttp import web
-from datamodel.parsers.json import JSONContent
-from datamodel.exceptions import ValidationError
 from asyncdb import AsyncDB, AsyncPool
-from asyncdb.exceptions import (
-    ProviderError,
-    DriverError
-)
+from asyncdb.drivers.pg import pg
+from asyncdb.exceptions import DriverError, ProviderError
 from asyncdb.utils import cPrint
+from datamodel.exceptions import ValidationError
+from datamodel.parsers.json import JSONContent
 from navigator.applications.base import BaseApplication
 from navigator.types import WebApp
+
 from .conf import (
+    DB_IDLE_IN_TRANSACTION_TIMEOUT,
+    DB_SESSION_TIMEOUT,
     POSTGRES_MAX_CONNECTIONS,
     POSTGRES_MIN_CONNECTIONS,
     POSTGRES_TIMEOUT,
-    DB_SESSION_TIMEOUT,
-    DB_IDLE_IN_TRANSACTION_TIMEOUT,
+    QUERYSET_REDIS,
     asyncpg_url,
     default_dsn,
-    QUERYSET_REDIS,
 )
+from .exceptions import ConfigError
+from .interfaces.connections import DATASOURCES, Connection
 from .types import Singleton
-from .exceptions import (
-    ConfigError
-)
-from .interfaces.connections import (
-    Connection,
-    DATASOURCES
-)
+
 
 class QueryConnection(Connection, metaclass=Singleton):
     """QueryConnection.
@@ -133,6 +130,31 @@ class QueryConnection(Connection, metaclass=Singleton):
         if self.lazy is True:
             self.pgargs['server_settings']['application_name'] = 'QS.Lazy'
         return super().get_connection(driver=driver, evt=evt)
+
+    async def definition_connection(self) -> AbstractAsyncContextManager[pg]:
+        """Acquire metadata access bound to the running loop.
+
+        On the master (HTTP) loop, with an active pool, reuses that pool
+        via the existing ``acquire()`` — the same connection-sharing every
+        other internal QS lookup already relies on. On any other loop
+        (threaded/scheduler execution, a different worker's loop) creates
+        a fresh, standalone connection bound to the *current* running loop
+        via ``get_connection()`` and releases it on ``async with`` exit
+        (``pg.connection()`` "always creates a fresh connection since
+        __aexit__ closes it" — verified in the installed asyncdb driver).
+        Never reuses the HTTP-loop pool from a different loop (AC-5); never
+        mutates ``self.pgargs`` (``get_connection()`` only reads it).
+        """
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError as ex:
+            raise RuntimeError(
+                "definition_connection must be called from a running event loop"
+            ) from ex
+        if self._postgres is not None and current_loop is self._loop:
+            return await self._postgres.acquire()
+        db = self.get_connection(driver='pg', evt=current_loop)
+        return await db.connection()
 
     def setup(self, app: web.Application) -> web.Application:
         if isinstance(app, BaseApplication):  # migrate to BaseApplication (on types)
