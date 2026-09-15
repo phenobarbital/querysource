@@ -23,7 +23,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T11:54:08+00:00",
-      "file": "sdd/tasks/completed/TASK-734-udf-keyword-resolution.md"
+      "file": "sdd/tasks/completed/TASK-734-udf-keyword-resolution.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-735",
@@ -41,7 +42,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T12:20:37+00:00",
-      "file": "sdd/tasks/completed/TASK-735-describe-pagination-config-policies.md"
+      "file": "sdd/tasks/completed/TASK-735-describe-pagination-config-policies.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-736",
@@ -59,7 +61,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T12:23:03+00:00",
-      "file": "sdd/tasks/completed/TASK-736-slug-describer.md"
+      "file": "sdd/tasks/completed/TASK-736-slug-describer.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-737",
@@ -80,7 +83,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T12:30:22+00:00",
-      "file": "sdd/tasks/completed/TASK-737-slug-visibility-service.md"
+      "file": "sdd/tasks/completed/TASK-737-slug-visibility-service.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-738",
@@ -100,7 +104,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T12:17:22+00:00",
-      "file": "sdd/tasks/completed/TASK-738-provider-describe-columns.md"
+      "file": "sdd/tasks/completed/TASK-738-provider-describe-columns.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-739",
@@ -120,7 +125,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T12:17:22+00:00",
-      "file": "sdd/tasks/completed/TASK-739-date-keyword-vocabulary.md"
+      "file": "sdd/tasks/completed/TASK-739-date-keyword-vocabulary.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-740",
@@ -142,7 +148,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T13:21:49+00:00",
-      "file": "sdd/tasks/completed/TASK-740-describe-handler-list-detail.md"
+      "file": "sdd/tasks/completed/TASK-740-describe-handler-list-detail.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-741",
@@ -164,7 +171,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T13:44:50+00:00",
-      "file": "sdd/tasks/completed/TASK-741-describe-handler-columns-vocabulary.md"
+      "file": "sdd/tasks/completed/TASK-741-describe-handler-columns-vocabulary.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-742",
@@ -184,7 +192,8 @@
       "assigned_to": null,
       "started_at": "2026-09-15T11:35:37+00:00",
       "completed_at": "2026-09-15T13:49:15+00:00",
-      "file": "sdd/tasks/completed/TASK-742-describe-docs-changelog-version.md"
+      "file": "sdd/tasks/completed/TASK-742-describe-docs-changelog-version.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-743",
