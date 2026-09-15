@@ -230,5 +230,99 @@ async def test_sessionless_authz_async_result_and_denied_child() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+Attempt 1 (seat `mistral`, backend nova, model mistral.devstral-2-123b)
+left a dirty sub-worktree (`dirty_task_worktree`, uncommitted changes to
+`abstract.py`/`multi.py` + the untracked test file — a real ~19-minute
+attempt, not a stub). Attempt 2 (seat `minimax`, backend nova, model
+minimax.minimax-m2.5) completed and merged.
+`AbstractHandler._enforce_owned_slug` (`querysource/handlers/abstract.py`)
+was verified correct against every AC on review: shallow evaluator copy
+(`copy.copy`), `_cache` replaced with `{}`, `_stats` copied (not shared),
+session extraction via the real `_get_user_session`, sessionless-authz
+gated by `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`, real
+`navigator_auth.abac.context.EvalContext`/`...policies.environment.Environment`
+construction (both verified to genuinely exist and import cleanly, not
+assumed), and `inspect.iscoroutine(result)`-gated awaiting for
+`check_access`'s coroutine-or-sync return. Two classes of problem found
+and fixed on review:
+
+- `querysource/handlers/multi.py`'s new `_preflight_multiquery_owned`
+  read the registry from `app["tenant_registry"]` — the same wrong key
+  TASK-723 found and fixed elsewhere (TASK-720 publishes
+  `app["qs_tenant_registry"]`, verified again against
+  `querysource/services.py`). Its fallback called `QuerySource().registry`
+  — an attribute that does not exist on `QuerySource` at all (TASK-720
+  exposes the registry only via the async `initialize_tenants()`, never a
+  plain `.registry` property); this fallback could only ever raise
+  `AttributeError`. Both the broken fallback and a second
+  `except Exception: return` around `registry.resolve()` silently
+  **skipped** the ownership check on any error — fail-**open**, directly
+  contradicting AC-1's "fail-closed errors" and the established
+  convention in the very same file: the pre-existing
+  `_preflight_multiquery` (called immediately before this new method)
+  already does `except Exception as exc: ... raise
+  web.HTTPNotFound() from exc`. Fixed the key; dropped the broken
+  fallback entirely (an absent `qs_tenant_registry` app key now means
+  "tenant feature not wired up for this app" — a legitimate no-op,
+  matching TASK-723/724's established fallback convention — not an error
+  to swallow); made a genuine `registry.resolve()` failure raise
+  `HTTPNotFound` instead of silently letting the batch through
+  unverified.
+- `tests/tenants/test_tenant_policy_preflight.py`'s four original tests
+  never touched the real `querysource.handlers.abstract.AbstractHandler`
+  class at all: a `DummyHandler` class hand-duplicated a full second copy
+  of `_enforce_owned_slug`'s logic, and every test called *that* copy.
+  A bug in the real implementation — or any future change to it — would
+  never be caught by this suite; the tests would keep "passing" against
+  a frozen, disconnected clone. This is a more insidious version of
+  TASK-724's `assert True` placeholders: it looks like real coverage but
+  provides none. Rewrote to bind the real
+  `AbstractHandler._enforce_owned_slug`/`_get_user_session` **function
+  objects** (not reimplementations) to a minimal harness instance, using
+  a small dict-backed `_FakeRequest` (avoiding the `MagicMock`
+  `__getitem__`/`__setitem__` round-trip gotcha already documented from
+  TASK-723) extended with exactly the attributes the real
+  `navigator_auth.abac.context.EvalContext.__init__` reads
+  (`remote`/`method`/`headers`/`path_qs`/`path`/`rel_url`) — discovered
+  by running the rewritten tests against the real code and reading the
+  resulting `AttributeError`s one at a time, not guessed upfront. Also
+  added three new tests for `_preflight_multiquery_owned` (AC-4), which
+  had zero coverage in the original test file despite being defined in
+  one of only two files this task was scoped to modify.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/test_tenant_policy_preflight.py -q` → 7 passed
+  (4 original scenarios rewritten to exercise real code + 3 new
+  `_preflight_multiquery_owned` tests).
+- `pytest tests/tenants tests/handlers tests/test_abstract_multi.py
+  --continue-on-collection-errors -q` → 143 passed, 1 pre-existing
+  collection error (`tests/handlers/test_airtable_oauth.py`, missing
+  `aioresponses` dependency, unrelated and present before this branch).
+  `tests/handlers/test_multiquery_pbac_smoke.py` (31 tests, the existing
+  PBAC/multiquery regression suite) passed unchanged.
+- `ruff check querysource/handlers/multi.py
+  tests/tenants/test_tenant_policy_preflight.py` → fixed an import-order
+  shuffle and an unused local variable within lines this task
+  added/modified; `querysource/handlers/abstract.py`'s pre-existing
+  `RUF013`/`TRY401`/etc. findings are all on lines well outside
+  `_enforce_owned_slug` and were left as-is, matching the convention on
+  every prior task in this feature.
+
+Files changed (beyond the original merge): `querysource/handlers/multi.py`
+(`_preflight_multiquery_owned`'s app key and error-handling only —
+`_enforce_owned_slug` in `abstract.py` needed no changes),
+`tests/tenants/test_tenant_policy_preflight.py` (complete rewrite from a
+duplicated-fake-based suite to one exercising the real production code).
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live PBAC/navigator-auth
+deployment or real navigator_session backend was used — every test
+constructs a real `EvalContext`/`Environment` but mocks `check_access`
+itself and the session/evaluator objects around it.
+
+No spec deviations: new membership policies, upstream navigator-auth
+changes, and translating schema names to auth org IDs are explicitly out
+of scope for this task and were not touched.
