@@ -26,6 +26,7 @@ from ..conf import (
     CSV_DEFAULT_QUOTING
 )
 from ..auth import ResourceType
+from ..tenants import QueryIdentity
 from .abstract import AbstractHandler
 
 
@@ -184,12 +185,46 @@ class QueryService(AbstractHandler):
                 message="QS: Error with parameters.", exception=err
             )
         # PBAC: enforce slug:execute before any DB/source work begins.
-        await self._enforce_pbac(
-            request,
-            resource_type=ResourceType.SLUG,
-            resource_name=slug,
-            action="slug:execute",
-        )
+        #
+        # Owner-aware evaluation: TenantQueryHandler.query() stashes the
+        # resolved (path-based) tenant selector on request['qs_tenant']
+        # before delegating here (querysource/handlers/tenant.py); legacy
+        # v2/v3 callers never set it, so tenant stays None. When the tenant
+        # feature is active for this app (qs_tenant_registry published by
+        # QuerySource.qs_start), resolve the real QueryIdentity and use the
+        # tenant-isolated evaluator (_enforce_owned_slug, a shallow copy
+        # with a fresh, per-request policy-decision cache) so decisions
+        # never leak across tenants via the shared app-level evaluator
+        # cache — the same convention MultiQuery's
+        # _preflight_multiquery_owned already applies. Apps that never
+        # adopted the tenant feature (no qs_tenant_registry) keep the
+        # original, unchanged _enforce_pbac path.
+        tenant = request.get('qs_tenant')
+        registry = request.app.get("qs_tenant_registry")
+        if registry is not None:
+            try:
+                store = registry.resolve(tenant)
+            except web.HTTPNotFound:
+                raise
+            except Exception as exc:  # pylint: disable=W0703
+                self.logger.warning(
+                    "QueryService ownership pre-flight error (fail-closed): %s",
+                    exc,
+                )
+                raise web.HTTPNotFound() from exc
+            identity = QueryIdentity(store=store, slug=slug)
+            await self._enforce_owned_slug(
+                request,
+                identity=identity,
+                action="slug:execute",
+            )
+        else:
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.SLUG,
+                resource_name=slug,
+                action="slug:execute",
+            )
         # get the format: returns a valid MIME-Type string to use in DataOutput
         try:
             _format = params['queryformat']

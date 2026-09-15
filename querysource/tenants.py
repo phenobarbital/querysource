@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
@@ -10,6 +11,8 @@ from asyncdb.drivers.pg import pg
 
 from querysource.models import QueryModel
 from querysource.tenant_errors import TenantError
+
+logger = logging.getLogger("QS.TenantRegistry")
 
 # System schemas to exclude from discovery
 _SYSTEM_SCHEMAS = ("information_schema", "pg_catalog", "pg_toast", "pg_temp")
@@ -81,6 +84,13 @@ class TenantRegistry:
         self._stores: tuple[QueryStore, ...] = ()
         self._diagnostics: tuple[Mapping[str, Any], ...] = ()
         self._default_store: QueryStore | None = None
+        # Real database_namespace captured during discover(), used by
+        # resolve()'s legacy-fallback branches so a synthetic fallback
+        # store never reports a different physical identity (and thus a
+        # different cache-key/job-id digest) than the same logical
+        # database's other, actually-discovered stores. None until
+        # discover() has run at least once.
+        self._database_namespace: str | None = None
 
     def _is_system_schema(self, schema: str) -> bool:
         """Check if a schema is a system schema."""
@@ -162,6 +172,9 @@ class TenantRegistry:
         port = db_info.get("port", 5432)
         database = db_info.get("database", "querysource")
         database_namespace = self._build_database_namespace(host, port, database)
+        # Capture the real connection's namespace so resolve()'s
+        # legacy-fallback branches never diverge from it.
+        self._database_namespace = database_namespace
 
         # Build allowlist set
         allowlist_set: set[str] | None = None
@@ -188,11 +201,23 @@ class TenantRegistry:
 
         try:
             result, error = await conn.query(tables_query)
-        except Exception:  # noqa: BLE001 - scan failure must publish nothing
-            # Scan failure must publish nothing (state already reset above).
-            return
+        except Exception as exc:  # noqa: BLE001 - re-raised as TenantError below
+            logger.error(
+                "TenantRegistry.discover: catalog table scan failed: %s", exc
+            )
+            raise TenantError(
+                f"Catalog table scan failed: {exc}",
+                error_code="tenant_store_unavailable",
+            ) from exc
         if error:
-            return
+            logger.error(
+                "TenantRegistry.discover: catalog table scan returned an error: %s",
+                error,
+            )
+            raise TenantError(
+                f"Catalog table scan failed: {error}",
+                error_code="tenant_store_unavailable",
+            )
         tables = result or []
 
         if not tables:
@@ -214,10 +239,23 @@ class TenantRegistry:
 
         try:
             result, error = await conn.query(columns_query)
-        except Exception:  # noqa: BLE001 - scan failure must publish nothing
-            return
+        except Exception as exc:  # noqa: BLE001 - re-raised as TenantError below
+            logger.error(
+                "TenantRegistry.discover: catalog column scan failed: %s", exc
+            )
+            raise TenantError(
+                f"Catalog column scan failed: {exc}",
+                error_code="tenant_store_unavailable",
+            ) from exc
         if error:
-            return
+            logger.error(
+                "TenantRegistry.discover: catalog column scan returned an error: %s",
+                error,
+            )
+            raise TenantError(
+                f"Catalog column scan failed: {error}",
+                error_code="tenant_store_unavailable",
+            )
         columns = result or []
 
         # Build a mapping of schema -> table -> columns
@@ -326,23 +364,37 @@ class TenantRegistry:
         self._stores = self._deduplicate_stores(discovered_stores)
         self._diagnostics = tuple(diagnostics)
 
-        # If no default store found, use the first discovered store
-        if self._default_store is None and self._stores:
-            self._default_store = self._stores[0]
+        # No owner fallback (repeated, explicit constraint throughout this
+        # feature's spec/tasks): if no "public" schema was discovered,
+        # _default_store stays None — resolve(None) then falls through to
+        # its own well-defined hardcoded legacy public.queries fallback,
+        # never an arbitrary tenant picked by catalog query result order.
+
+    def _legacy_fallback_store(self) -> QueryStore:
+        """Synthetic legacy public.queries store for when nothing was discovered.
+
+        Uses the REAL database_namespace captured by discover() (host/port/
+        database from the actual metadata connection) whenever discovery has
+        run at least once, so this fallback's cache-key/job-id digest never
+        diverges from the namespace any actually-discovered store on the
+        same physical database reports. Only falls back to the symbolic
+        ``"localhost:5432/querysource"`` literal when discover() never ran
+        at all (e.g. a bare, never-discovered TenantRegistry()).
+        """
+        return QueryStore(
+            database_namespace=self._database_namespace or "localhost:5432/querysource",
+            schema="public",
+            table="queries",
+            contract=_LEGACY_CONTRACT,
+            columns=frozenset(["query_slug"]),
+        )
 
     def resolve(self, tenant: str | None = None) -> QueryStore:
         """Resolve exact selector; never fall back from an explicit name."""
         if tenant is None:
             # Return configured default store
             if self._default_store is None:
-                # Fallback to legacy public.queries
-                return QueryStore(
-                    database_namespace="localhost:5432/querysource",
-                    schema="public",
-                    table="queries",
-                    contract=_LEGACY_CONTRACT,
-                    columns=frozenset(["query_slug"]),
-                )
+                return self._legacy_fallback_store()
             return self._default_store
 
         # Check if tenant is in allowlist
@@ -354,14 +406,7 @@ class TenantRegistry:
         if tenant == "public":
             if self._default_store is not None and self._default_store.schema == "public":
                 return self._default_store
-            # Return legacy public.queries
-            return QueryStore(
-                database_namespace="localhost:5432/querysource",
-                schema="public",
-                table="queries",
-                contract=_LEGACY_CONTRACT,
-                columns=frozenset(["query_slug"]),
-            )
+            return self._legacy_fallback_store()
 
         # Tenant not found
         raise TenantError(
