@@ -1,0 +1,1674 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-176",
+  "mode": "enrichment",
+  "summary_oneline": "Per-tenant query storage requires explicit tenant identity across persistence, execution, caches, scheduling and access control.",
+  "localization": [
+    {
+      "path": "querysource/models.py",
+      "symbol": "QueryModel",
+      "lines": "48-107",
+      "role": "Stored query identity is a single query_slug primary key with one configured model schema. Runtime consumers cluster in connection lookup, management, scheduling, providers and parsers.",
+      "evidence": [
+        "F001"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/connections.py",
+      "symbol": "Connection.get_query_slug",
+      "lines": "444-488",
+      "role": "Stored query identity is a single query_slug primary key with one configured model schema. Runtime consumers cluster in connection lookup, management, scheduling, providers and parsers.",
+      "evidence": [
+        "F001"
+      ]
+    },
+    {
+      "path": "querysource/services.py",
+      "symbol": "QuerySource.setup",
+      "lines": "134-216",
+      "role": "QuerySource registers distinct legacy single-query, multi-query, management and raw executor routes. qs_start currently only captures the running loop; discovery is new behavior.",
+      "evidence": [
+        "F002"
+      ]
+    },
+    {
+      "path": "querysource/services.py",
+      "symbol": "QuerySource.qs_start",
+      "lines": "369-375",
+      "role": "QuerySource registers distinct legacy single-query, multi-query, management and raw executor routes. qs_start currently only captures the running loop; discovery is new behavior.",
+      "evidence": [
+        "F002"
+      ]
+    },
+    {
+      "path": "querysource/services.py",
+      "symbol": "QuerySource",
+      "lines": "50-105",
+      "role": "QuerySource and QueryConnection are singletons. Connection setup registers its startup before qs_start and scheduler startup. Master mode currently preloads datasources, not all query definitions; lazy mode opens a direct connection.",
+      "evidence": [
+        "F003"
+      ]
+    },
+    {
+      "path": "querysource/connections.py",
+      "symbol": "QueryConnection.start",
+      "lines": "156-209",
+      "role": "QuerySource and QueryConnection are singletons. Connection setup registers its startup before qs_start and scheduler startup. Master mode currently preloads datasources, not all query definitions; lazy mode opens a direct connection.",
+      "evidence": [
+        "F003"
+      ]
+    },
+    {
+      "path": "querysource/queries/models.py",
+      "symbol": "Query",
+      "lines": "11-25",
+      "role": "Query and QueryResult describe arbitrary execution, driver and datasource parameters rather than persisted slug identity. A tenant routing field must not silently become a SQL parameter or alter datasource selection.",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "path": "querysource/queries/models.py",
+      "symbol": "QueryResult",
+      "lines": "28-43",
+      "role": "Query and QueryResult describe arbitrary execution, driver and datasource parameters rather than persisted slug identity. A tenant routing field must not silently become a SQL parameter or alter datasource selection.",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "path": "querysource/queries/qs.py",
+      "symbol": "QS.build_provider",
+      "lines": "164-225",
+      "role": "QS loads a definition through get_slug, obtains its provider and computes the provider checksum before reading/writing the shared Redis result cache.",
+      "evidence": [
+        "F006"
+      ]
+    },
+    {
+      "path": "querysource/queries/qs.py",
+      "symbol": "QS.query",
+      "lines": "380-430",
+      "role": "QS loads a definition through get_slug, obtains its provider and computes the provider checksum before reading/writing the shared Redis result cache.",
+      "evidence": [
+        "F006"
+      ]
+    },
+    {
+      "path": "querysource/queries/obj.py",
+      "symbol": "QueryObject.__init__",
+      "lines": "28-62",
+      "role": "QueryObject extracts slug from its query dictionary and calls get_slug without tenant context. This is a separate definition lookup path used by local multi-query execution.",
+      "evidence": [
+        "F007"
+      ]
+    },
+    {
+      "path": "querysource/queries/obj.py",
+      "symbol": "QueryObject.build_provider",
+      "lines": "88-101",
+      "role": "QueryObject extracts slug from its query dictionary and calls get_slug without tenant context. This is a separate definition lookup path used by local multi-query execution.",
+      "evidence": [
+        "F007"
+      ]
+    },
+    {
+      "path": "querysource/queries/base.py",
+      "symbol": "BaseQuery",
+      "lines": "19-62",
+      "role": "BaseQuery forwards constructor kwargs to AbstractQuery and provides context manager and output mechanics. AbstractQuery stores program from conditions and generic kwargs; no explicit tenant field is present in the inspected constructor.",
+      "evidence": [
+        "F008"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/queries.py",
+      "symbol": "AbstractQuery.__init__",
+      "lines": "50-102",
+      "role": "BaseQuery forwards constructor kwargs to AbstractQuery and provides context manager and output mechanics. AbstractQuery stores program from conditions and generic kwargs; no explicit tenant field is present in the inspected constructor.",
+      "evidence": [
+        "F008"
+      ]
+    },
+    {
+      "path": "querysource/queries/executor.py",
+      "symbol": "Executor.introspect",
+      "lines": "17-55",
+      "role": "Executor resolves datasources or drivers for raw execution and introspection. The existing schema endpoint introspects the target datasource, so tenant discovery must explicitly use the main query metadata database instead.",
+      "evidence": [
+        "F009"
+      ]
+    },
+    {
+      "path": "querysource/queries/executor.py",
+      "symbol": "Executor.start",
+      "lines": "57-64",
+      "role": "Executor resolves datasources or drivers for raw execution and introspection. The existing schema endpoint introspects the target datasource, so tenant discovery must explicitly use the main query metadata database instead.",
+      "evidence": [
+        "F009"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/queries.py",
+      "symbol": "AbstractQuery.caching_data",
+      "lines": "296-355",
+      "role": "AbstractQuery writes the supplied checksum unchanged into QUERYSET_REDIS from asynchronous/threaded cache work. Tenant context must be encoded in the key before this boundary.",
+      "evidence": [
+        "F010"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/queries.py",
+      "symbol": "AbstractQuery.save_in_cache",
+      "lines": "267-283",
+      "role": "AbstractQuery writes the supplied checksum unchanged into QUERYSET_REDIS from asynchronous/threaded cache work. Tenant context must be encoded in the key before this boundary.",
+      "evidence": [
+        "F010"
+      ]
+    },
+    {
+      "path": "querysource/datasources/introspection.py",
+      "symbol": "AnsiSQLIntrospector._tables_sql",
+      "lines": "121-133",
+      "role": "An existing information_schema introspector enumerates columns and excludes system schemas. No schema-per-query tenant registry was found in the scoped runtime search; SharePoint tenant_id matches concern external authentication.",
+      "evidence": [
+        "F011"
+      ]
+    },
+    {
+      "path": "querysource/datasources/introspection.py",
+      "symbol": "AnsiSQLIntrospector._columns_sql",
+      "lines": "135-142",
+      "role": "An existing information_schema introspector enumerates columns and excludes system schemas. No schema-per-query tenant registry was found in the scoped runtime search; SharePoint tenant_id matches concern external authentication.",
+      "evidence": [
+        "F011"
+      ]
+    },
+    {
+      "path": "querysource/connections.py",
+      "symbol": "QueryConnection.in_cache",
+      "lines": "98-103",
+      "role": "The active slug result cache is reached through QueryConnection, rather than solely through the generic cache package. SLUG_CACHE is declared but the inspected get_slug implementation reads from PostgreSQL on each call.",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "path": "querysource/connections.py",
+      "symbol": "QueryConnection.from_cache",
+      "lines": "105-118",
+      "role": "The active slug result cache is reached through QueryConnection, rather than solely through the generic cache package. SLUG_CACHE is declared but the inspected get_slug implementation reads from PostgreSQL on each call.",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/connections.py",
+      "symbol": "SLUG_CACHE",
+      "lines": "45-48",
+      "role": "The active slug result cache is reached through QueryConnection, rather than solely through the generic cache package. SLUG_CACHE is declared but the inspected get_slug implementation reads from PostgreSQL on each call.",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "path": "querysource/interfaces/connections.py",
+      "symbol": "Connection.get_slug",
+      "lines": "494-506",
+      "role": "The active slug result cache is reached through QueryConnection, rather than solely through the generic cache package. SLUG_CACHE is declared but the inspected get_slug implementation reads from PostgreSQL on each call.",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/scheduler.py",
+      "symbol": "QSScheduler.startup",
+      "lines": "523-546",
+      "role": "Scheduler startup hardcodes public.queries; live refresh uses QueryModel. Query, multi and refresh jobs use slug-only IDs and kwargs, making same-slug tenant jobs collide unless both are extended.",
+      "evidence": [
+        "F013"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/scheduler.py",
+      "symbol": "QSScheduler._slug_job_ids",
+      "lines": "379-381",
+      "role": "Scheduler startup hardcodes public.queries; live refresh uses QueryModel. Query, multi and refresh jobs use slug-only IDs and kwargs, making same-slug tenant jobs collide unless both are extended.",
+      "evidence": [
+        "F013"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/scheduler.py",
+      "symbol": "QSScheduler._fetch_slug_row",
+      "lines": "383-410",
+      "role": "Scheduler startup hardcodes public.queries; live refresh uses QueryModel. Query, multi and refresh jobs use slug-only IDs and kwargs, making same-slug tenant jobs collide unless both are extended.",
+      "evidence": [
+        "F013"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/scheduler.py",
+      "symbol": "QSScheduler.register_slug",
+      "lines": "442-481",
+      "role": "Scheduler startup hardcodes public.queries; live refresh uses QueryModel. Query, multi and refresh jobs use slug-only IDs and kwargs, making same-slug tenant jobs collide unless both are extended.",
+      "evidence": [
+        "F013"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/__init__.py",
+      "symbol": "MultiQS.query",
+      "lines": "197-241",
+      "role": "MultiQS resolves the outer slug itself, then constructs ThreadQuery children. LocalExecutor uses QueryObject; RemoteExecutor passes slug and conditions to a worker callable without a separate tenant argument.",
+      "evidence": [
+        "F014"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/executors.py",
+      "symbol": "LocalExecutor.execute",
+      "lines": "85-112",
+      "role": "MultiQS resolves the outer slug itself, then constructs ThreadQuery children. LocalExecutor uses QueryObject; RemoteExecutor passes slug and conditions to a worker callable without a separate tenant argument.",
+      "evidence": [
+        "F014"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/executors.py",
+      "symbol": "RemoteExecutor.execute",
+      "lines": "180-208",
+      "role": "MultiQS resolves the outer slug itself, then constructs ThreadQuery children. LocalExecutor uses QueryObject; RemoteExecutor passes slug and conditions to a worker callable without a separate tenant argument.",
+      "evidence": [
+        "F014"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/query.py",
+      "symbol": "ThreadQuery.fetch",
+      "lines": "64-85",
+      "role": "MultiQS resolves the outer slug itself, then constructs ThreadQuery children. LocalExecutor uses QueryObject; RemoteExecutor passes slug and conditions to a worker callable without a separate tenant argument.",
+      "evidence": [
+        "F014"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.get",
+      "lines": "71-131",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager._paginate_list",
+      "lines": "169-205",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.patch",
+      "lines": "277-289",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.delete",
+      "lines": "341-349",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.put",
+      "lines": "414-453",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.post",
+      "lines": "461-495",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/handlers/manager.py",
+      "symbol": "QueryManager.get_query_insert",
+      "lines": "47-69",
+      "role": "Every CRUD branch selects QueryModel; listing, count, schema metadata and INSERT export also use it. tenant must be extracted before model validation and equality filters. Default listing explicitly projects program_slug.",
+      "evidence": [
+        "F015"
+      ]
+    },
+    {
+      "path": "querysource/auth/credentials.py",
+      "symbol": "ResolvedCredentials",
+      "lines": "17-37",
+      "role": "Credentials are resolved per user/profile/default, not per query-storage schema. Runtime policy enforcement uses resource names from handlers. Deployment tenant allowlisting alone cannot define end-user authorization.",
+      "evidence": [
+        "F016"
+      ]
+    },
+    {
+      "path": "querysource/handlers/abstract.py",
+      "symbol": "AbstractHandler._enforce_pbac",
+      "lines": "324-355",
+      "role": "Credentials are resolved per user/profile/default, not per query-storage schema. Runtime policy enforcement uses resource names from handlers. Deployment tenant allowlisting alone cannot define end-user authorization.",
+      "evidence": [
+        "F016"
+      ]
+    },
+    {
+      "path": "querysource/handlers/service.py",
+      "symbol": "QueryService.query",
+      "lines": "186-192",
+      "role": "Credentials are resolved per user/profile/default, not per query-storage schema. Runtime policy enforcement uses resource names from handlers. Deployment tenant allowlisting alone cannot define end-user authorization.",
+      "evidence": [
+        "F016"
+      ]
+    },
+    {
+      "path": "querysource/handlers/multi.py",
+      "symbol": "QueryHandler._preflight_multiquery",
+      "lines": "50-71",
+      "role": "Credentials are resolved per user/profile/default, not per query-storage schema. Runtime policy enforcement uses resource names from handlers. Deployment tenant allowlisting alone cannot define end-user authorization.",
+      "evidence": [
+        "F016"
+      ]
+    },
+    {
+      "path": "querysource/conf.py",
+      "symbol": "QS_QUERIES_SCHEMA",
+      "lines": "352-354",
+      "role": "Default storage schema and table are already configurable; public.queries is the default, not the sole possible existing configuration. PBAC and scheduling are disabled by default.",
+      "evidence": [
+        "F017"
+      ]
+    },
+    {
+      "path": "querysource/conf.py",
+      "symbol": "ENABLE_QS_SCHEDULER",
+      "lines": "356-358",
+      "role": "Default storage schema and table are already configurable; public.queries is the default, not the sole possible existing configuration. PBAC and scheduling are disabled by default.",
+      "evidence": [
+        "F017"
+      ]
+    },
+    {
+      "path": "querysource/conf.py",
+      "symbol": "QS_PBAC_ENABLED",
+      "lines": "428-431",
+      "role": "Default storage schema and table are already configurable; public.queries is the default, not the sole possible existing configuration. PBAC and scheduling are disabled by default.",
+      "evidence": [
+        "F017"
+      ]
+    },
+    {
+      "path": "querysource/conf.py",
+      "symbol": "QUERYSET_REDIS",
+      "lines": "93-96",
+      "role": "Default storage schema and table are already configurable; public.queries is the default, not the sole possible existing configuration. PBAC and scheduling are disabled by default.",
+      "evidence": [
+        "F017"
+      ]
+    },
+    {
+      "path": "pyproject.toml",
+      "symbol": "dependencies",
+      "lines": "43-80",
+      "role": "The project declares APScheduler, psycopg2, navigator-api, jsonschema and navigator-auth. This proposal introduces no dependency. The persistence model imports asyncdb; schema override behavior needs a focused dependency contract check during specification.",
+      "evidence": [
+        "F018"
+      ]
+    },
+    {
+      "path": "querysource/providers/abstract.py",
+      "symbol": "BaseProvider",
+      "lines": "73-79",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "querysource/providers/abstract.py",
+      "symbol": "BaseProvider.checksum",
+      "lines": "229-230",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "querysource/parsers/abstract.pyx",
+      "symbol": "AbstractParser._program_slug_sync",
+      "lines": "162-166",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "pgSQLParser.build_query",
+      "lines": "295-304",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "querysource/providers/external.py",
+      "symbol": "externalProvider.checksum",
+      "lines": "68-70",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "querysource/providers/sources/abstract.py",
+      "symbol": "baseSource.checksum",
+      "lines": "150-161",
+      "role": "program_slug also feeds provider defaults and compiled parser filter callbacks. Base and overridden provider checksums omit explicit tenant context. Tenant storage must be distinct from program semantics and execution datasource.",
+      "evidence": [
+        "F019"
+      ]
+    },
+    {
+      "path": "docs/sample_sqlserver.sql",
+      "symbol": "public.queries sample INSERT",
+      "lines": "15-24",
+      "role": "The scoped SQL search found sample inserts into public.queries and datasource DDL, but no canonical CREATE TABLE for query definitions. Production defaults, constraints, grants and triggers cannot be inferred completely from the Python model.",
+      "evidence": [
+        "F020"
+      ]
+    },
+    {
+      "path": "docs/sql/datasources_logic.sql",
+      "symbol": "public.datasources DDL",
+      "lines": "5-5",
+      "role": "The scoped SQL search found sample inserts into public.queries and datasource DDL, but no canonical CREATE TABLE for query definitions. Production defaults, constraints, grants and triggers cannot be inferred completely from the Python model.",
+      "evidence": [
+        "F020"
+      ]
+    },
+    {
+      "path": "tests/test_queryslug_concurrency.py",
+      "symbol": "test_new_pattern_is_race_free",
+      "lines": "78-89",
+      "role": "Existing tests cover shared-model concurrency and public-route pagination with fake DB pools. Search results locate PBAC, scheduler and multi-query tests; they do not establish schema-per-tenant isolation coverage.",
+      "evidence": [
+        "F021"
+      ]
+    },
+    {
+      "path": "tests/handlers/conftest.py",
+      "symbol": "seeded_query_slugs",
+      "lines": "152-173",
+      "role": "Existing tests cover shared-model concurrency and public-route pagination with fake DB pools. Search results locate PBAC, scheduler and multi-query tests; they do not establish schema-per-tenant isolation coverage.",
+      "evidence": [
+        "F021"
+      ]
+    },
+    {
+      "path": "tests/handlers/test_querymanager_pagination.py",
+      "symbol": "TestQueryManagerListPagination.test_default_pagination_returns_envelope",
+      "lines": "275-301",
+      "role": "Existing tests cover shared-model concurrency and public-route pagination with fake DB pools. Search results locate PBAC, scheduler and multi-query tests; they do not establish schema-per-tenant isolation coverage.",
+      "evidence": [
+        "F021"
+      ]
+    },
+    {
+      "path": "docs/QSSCHEDULER.md",
+      "symbol": "Job kinds",
+      "lines": "1-17",
+      "role": "Scheduler documentation explicitly describes public storage, slug-only IDs and restart reconstruction. Query component documentation treats extra slug keys as conditions, so tenant routing needs a documented reserved field.",
+      "evidence": [
+        "F022"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/query.catalog.yaml",
+      "symbol": "Query component contract",
+      "lines": "15-40",
+      "role": "Scheduler documentation explicitly describes public storage, slug-only IDs and restart reconstruction. Query component documentation treats extra slug keys as conditions, so tenant routing needs a documented reserved field.",
+      "evidence": [
+        "F022"
+      ]
+    },
+    {
+      "path": "querysource/handlers/_pagination.py",
+      "symbol": "FILTERABLE_COLUMNS",
+      "lines": "45-48",
+      "role": "Pagination derives filter fields once from QueryModel and explicitly includes program_slug in search/sort lists. Qualified table names are validated as bare identifiers; supported PostgreSQL schema names may be broader than this helper permits.",
+      "evidence": [
+        "F024"
+      ]
+    },
+    {
+      "path": "querysource/handlers/_pagination.py",
+      "symbol": "SORTABLE_COLUMNS",
+      "lines": "52-62",
+      "role": "Pagination derives filter fields once from QueryModel and explicitly includes program_slug in search/sort lists. Qualified table names are validated as bare identifiers; supported PostgreSQL schema names may be broader than this helper permits.",
+      "evidence": [
+        "F024"
+      ]
+    },
+    {
+      "path": "querysource/handlers/_pagination.py",
+      "symbol": "SEARCHABLE_COLUMNS",
+      "lines": "64-70",
+      "role": "Pagination derives filter fields once from QueryModel and explicitly includes program_slug in search/sort lists. Qualified table names are validated as bare identifiers; supported PostgreSQL schema names may be broader than this helper permits.",
+      "evidence": [
+        "F024"
+      ]
+    },
+    {
+      "path": "querysource/handlers/_pagination.py",
+      "symbol": "build_where_clause",
+      "lines": "280-300",
+      "role": "Pagination derives filter fields once from QueryModel and explicitly includes program_slug in search/sort lists. Qualified table names are validated as bare identifiers; supported PostgreSQL schema names may be broader than this helper permits.",
+      "evidence": [
+        "F024"
+      ]
+    },
+    {
+      "path": "querysource/handlers/_pagination.py",
+      "symbol": "_validate_bare_identifier",
+      "lines": "404-413",
+      "role": "Pagination derives filter fields once from QueryModel and explicitly includes program_slug in search/sort lists. Qualified table names are validated as bare identifiers; supported PostgreSQL schema names may be broader than this helper permits.",
+      "evidence": [
+        "F024"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/jobs.py",
+      "symbol": "scheduled_query_job",
+      "lines": "35-46",
+      "role": "All three job functions instantiate QS/MultiQS using only slug; their extra kwargs are ignored. Notifications use an established three-argument callback signature that must remain compatible.",
+      "evidence": [
+        "F025"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/jobs.py",
+      "symbol": "scheduled_multiqs_job",
+      "lines": "50-90",
+      "role": "All three job functions instantiate QS/MultiQS using only slug; their extra kwargs are ignored. Notifications use an established three-argument callback signature that must remain compatible.",
+      "evidence": [
+        "F025"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/jobs.py",
+      "symbol": "cache_refresh_job",
+      "lines": "94-121",
+      "role": "All three job functions instantiate QS/MultiQS using only slug; their extra kwargs are ignored. Notifications use an established three-argument callback signature that must remain compatible.",
+      "evidence": [
+        "F025"
+      ]
+    },
+    {
+      "path": "querysource/scheduler/notifications.py",
+      "symbol": "NotificationManager.notify",
+      "lines": "37-52",
+      "role": "All three job functions instantiate QS/MultiQS using only slug; their extra kwargs are ignored. Notifications use an established three-argument callback signature that must remain compatible.",
+      "evidence": [
+        "F025"
+      ]
+    },
+    {
+      "path": "querysource/handlers/scheduler.py",
+      "symbol": "SchedulerJobsView._serialize_job",
+      "lines": "77-105",
+      "role": "The scheduler management API extracts only slug from job kwargs, and POST forwards only slug to register_slug. List/get/delete/pause/resume need tenant-aware addressing and access checks.",
+      "evidence": [
+        "F026"
+      ]
+    },
+    {
+      "path": "querysource/handlers/scheduler.py",
+      "symbol": "SchedulerJobsView.post",
+      "lines": "189-224",
+      "role": "The scheduler management API extracts only slug from job kwargs, and POST forwards only slug to register_slug. List/get/delete/pause/resume need tenant-aware addressing and access checks.",
+      "evidence": [
+        "F026"
+      ]
+    },
+    {
+      "path": "querysource/handlers/abstract.py",
+      "symbol": "AbstractHandler.get_source",
+      "lines": "264-279",
+      "role": "Single-query handler combines URL query parameters and body into conditions. Multi-query handler constructs MultiQS without passing request explicitly in the inspected call; tenant identity and authorization context must survive this transition.",
+      "evidence": [
+        "F027"
+      ]
+    },
+    {
+      "path": "querysource/handlers/multi.py",
+      "symbol": "QueryHandler.query",
+      "lines": "214-230",
+      "role": "Single-query handler combines URL query parameters and body into conditions. Multi-query handler constructs MultiQS without passing request explicitly in the inspected call; tenant identity and authorization context must survive this transition.",
+      "evidence": [
+        "F027"
+      ]
+    },
+    {
+      "path": "querysource/handlers/log.py",
+      "symbol": "LoggingService.request_info",
+      "lines": "75-84",
+      "role": "QS execution telemetry currently includes slug and timing only. LoggingService records request paths, which is insufficient to identify tenant for scheduled or programmatic execution.",
+      "evidence": [
+        "F028"
+      ]
+    },
+    {
+      "path": "querysource/providers/rethink.py",
+      "symbol": "rethinkProvider.checksum",
+      "lines": "83-89",
+      "role": "Scoped source search shows program-derived target fallbacks in RethinkDB, Influx and ArangoDB. Other provider hashes use slug/conditions/table path, so a central tenant cache envelope avoids missing provider-specific overrides.",
+      "evidence": [
+        "F029"
+      ]
+    },
+    {
+      "path": "querysource/providers/influx.py",
+      "symbol": "influxProvider.checksum",
+      "lines": "51-64",
+      "role": "Scoped source search shows program-derived target fallbacks in RethinkDB, Influx and ArangoDB. Other provider hashes use slug/conditions/table path, so a central tenant cache envelope avoids missing provider-specific overrides.",
+      "evidence": [
+        "F029"
+      ]
+    },
+    {
+      "path": "querysource/providers/arangodb.py",
+      "symbol": "arangodbProvider.checksum",
+      "lines": "72-87",
+      "role": "Scoped source search shows program-derived target fallbacks in RethinkDB, Influx and ArangoDB. Other provider hashes use slug/conditions/table path, so a central tenant cache envelope avoids missing provider-specific overrides.",
+      "evidence": [
+        "F029"
+      ]
+    },
+    {
+      "path": "querysource/providers/deltatbl.py",
+      "symbol": "deltatblProvider.checksum",
+      "lines": "95-98",
+      "role": "Scoped source search shows program-derived target fallbacks in RethinkDB, Influx and ArangoDB. Other provider hashes use slug/conditions/table path, so a central tenant cache envelope avoids missing provider-specific overrides.",
+      "evidence": [
+        "F029"
+      ]
+    },
+    {
+      "path": "querysource/providers/iceberg.py",
+      "symbol": "icebergProvider.checksum",
+      "lines": "89-92",
+      "role": "Scoped source search shows program-derived target fallbacks in RethinkDB, Influx and ArangoDB. Other provider hashes use slug/conditions/table path, so a central tenant cache envelope avoids missing provider-specific overrides.",
+      "evidence": [
+        "F029"
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "statement": "QueryModel has static schema metadata and a required program_slug field.",
+      "evidence": [
+        "F004"
+      ],
+      "implication": "Use an immutable tenant-specific persistence contract, retaining the public model."
+    },
+    {
+      "statement": "The existing per-call connection pattern avoids a demonstrated shared-model race.",
+      "evidence": [
+        "F021",
+        "F023"
+      ],
+      "implication": "Do not change QueryModel.Meta.schema or connection on a request-by-request basis."
+    },
+    {
+      "statement": "Legacy query schema and table can be configured independently of the new feature.",
+      "evidence": [
+        "F017"
+      ],
+      "implication": "Preserve existing schema/table overrides for legacy/default calls; default remains public.queries."
+    },
+    {
+      "statement": "Result cache access consumes provider-defined checksums.",
+      "evidence": [
+        "F006",
+        "F010",
+        "F019",
+        "F029"
+      ],
+      "implication": "Namespace both reads and writes, plus refresh/invalidation, by tenant and query identity."
+    },
+    {
+      "statement": "Discovery through information_schema is role-visible and includes view columns.",
+      "evidence": [
+        "F030"
+      ],
+      "implication": "Define table-type, privilege and compatibility validation; do not treat incomplete visibility as an exhaustive server inventory."
+    }
+  ],
+  "investigation": null,
+  "enrichment": {
+    "scope_confidence": "medium",
+    "new": [
+      "Registry discovery and immutable tenant identity",
+      "Central tenant-aware definition repository and schema validation",
+      "Tenant execution route family and tenant CRUD selection",
+      "Owner-scoped result keys and scheduler identities",
+      "Migration/preflight tooling and cross-tenant regression coverage"
+    ],
+    "modified": [
+      {
+        "path": "querysource/models.py",
+        "symbol": "QueryModel",
+        "evidence": [
+          "F001"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/connections.py",
+        "symbol": "Connection.get_query_slug",
+        "evidence": [
+          "F001"
+        ]
+      },
+      {
+        "path": "querysource/services.py",
+        "symbol": "QuerySource.setup",
+        "evidence": [
+          "F002"
+        ]
+      },
+      {
+        "path": "querysource/services.py",
+        "symbol": "QuerySource.qs_start",
+        "evidence": [
+          "F002"
+        ]
+      },
+      {
+        "path": "querysource/services.py",
+        "symbol": "QuerySource",
+        "evidence": [
+          "F003"
+        ]
+      },
+      {
+        "path": "querysource/connections.py",
+        "symbol": "QueryConnection.start",
+        "evidence": [
+          "F003"
+        ]
+      },
+      {
+        "path": "querysource/queries/models.py",
+        "symbol": "Query",
+        "evidence": [
+          "F005"
+        ]
+      },
+      {
+        "path": "querysource/queries/models.py",
+        "symbol": "QueryResult",
+        "evidence": [
+          "F005"
+        ]
+      },
+      {
+        "path": "querysource/queries/qs.py",
+        "symbol": "QS.build_provider",
+        "evidence": [
+          "F006"
+        ]
+      },
+      {
+        "path": "querysource/queries/qs.py",
+        "symbol": "QS.query",
+        "evidence": [
+          "F006"
+        ]
+      },
+      {
+        "path": "querysource/queries/obj.py",
+        "symbol": "QueryObject.__init__",
+        "evidence": [
+          "F007"
+        ]
+      },
+      {
+        "path": "querysource/queries/obj.py",
+        "symbol": "QueryObject.build_provider",
+        "evidence": [
+          "F007"
+        ]
+      },
+      {
+        "path": "querysource/queries/base.py",
+        "symbol": "BaseQuery",
+        "evidence": [
+          "F008"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/queries.py",
+        "symbol": "AbstractQuery.__init__",
+        "evidence": [
+          "F008"
+        ]
+      },
+      {
+        "path": "querysource/queries/executor.py",
+        "symbol": "Executor.introspect",
+        "evidence": [
+          "F009"
+        ]
+      },
+      {
+        "path": "querysource/queries/executor.py",
+        "symbol": "Executor.start",
+        "evidence": [
+          "F009"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/queries.py",
+        "symbol": "AbstractQuery.caching_data",
+        "evidence": [
+          "F010"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/queries.py",
+        "symbol": "AbstractQuery.save_in_cache",
+        "evidence": [
+          "F010"
+        ]
+      },
+      {
+        "path": "querysource/datasources/introspection.py",
+        "symbol": "AnsiSQLIntrospector._tables_sql",
+        "evidence": [
+          "F011"
+        ]
+      },
+      {
+        "path": "querysource/datasources/introspection.py",
+        "symbol": "AnsiSQLIntrospector._columns_sql",
+        "evidence": [
+          "F011"
+        ]
+      },
+      {
+        "path": "querysource/connections.py",
+        "symbol": "QueryConnection.in_cache",
+        "evidence": [
+          "F012"
+        ]
+      },
+      {
+        "path": "querysource/connections.py",
+        "symbol": "QueryConnection.from_cache",
+        "evidence": [
+          "F012"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/connections.py",
+        "symbol": "SLUG_CACHE",
+        "evidence": [
+          "F012"
+        ]
+      },
+      {
+        "path": "querysource/interfaces/connections.py",
+        "symbol": "Connection.get_slug",
+        "evidence": [
+          "F012"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/scheduler.py",
+        "symbol": "QSScheduler.startup",
+        "evidence": [
+          "F013"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/scheduler.py",
+        "symbol": "QSScheduler._slug_job_ids",
+        "evidence": [
+          "F013"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/scheduler.py",
+        "symbol": "QSScheduler._fetch_slug_row",
+        "evidence": [
+          "F013"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/scheduler.py",
+        "symbol": "QSScheduler.register_slug",
+        "evidence": [
+          "F013"
+        ]
+      },
+      {
+        "path": "querysource/queries/multi/__init__.py",
+        "symbol": "MultiQS.query",
+        "evidence": [
+          "F014"
+        ]
+      },
+      {
+        "path": "querysource/queries/multi/sources/executors.py",
+        "symbol": "LocalExecutor.execute",
+        "evidence": [
+          "F014"
+        ]
+      },
+      {
+        "path": "querysource/queries/multi/sources/executors.py",
+        "symbol": "RemoteExecutor.execute",
+        "evidence": [
+          "F014"
+        ]
+      },
+      {
+        "path": "querysource/queries/multi/sources/query.py",
+        "symbol": "ThreadQuery.fetch",
+        "evidence": [
+          "F014"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.get",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager._paginate_list",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.patch",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.delete",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.put",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.post",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/handlers/manager.py",
+        "symbol": "QueryManager.get_query_insert",
+        "evidence": [
+          "F015"
+        ]
+      },
+      {
+        "path": "querysource/auth/credentials.py",
+        "symbol": "ResolvedCredentials",
+        "evidence": [
+          "F016"
+        ]
+      },
+      {
+        "path": "querysource/handlers/abstract.py",
+        "symbol": "AbstractHandler._enforce_pbac",
+        "evidence": [
+          "F016"
+        ]
+      },
+      {
+        "path": "querysource/handlers/service.py",
+        "symbol": "QueryService.query",
+        "evidence": [
+          "F016"
+        ]
+      },
+      {
+        "path": "querysource/handlers/multi.py",
+        "symbol": "QueryHandler._preflight_multiquery",
+        "evidence": [
+          "F016"
+        ]
+      },
+      {
+        "path": "querysource/conf.py",
+        "symbol": "QS_QUERIES_SCHEMA",
+        "evidence": [
+          "F017"
+        ]
+      },
+      {
+        "path": "querysource/conf.py",
+        "symbol": "ENABLE_QS_SCHEDULER",
+        "evidence": [
+          "F017"
+        ]
+      },
+      {
+        "path": "querysource/conf.py",
+        "symbol": "QS_PBAC_ENABLED",
+        "evidence": [
+          "F017"
+        ]
+      },
+      {
+        "path": "querysource/conf.py",
+        "symbol": "QUERYSET_REDIS",
+        "evidence": [
+          "F017"
+        ]
+      },
+      {
+        "path": "querysource/providers/abstract.py",
+        "symbol": "BaseProvider",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/providers/abstract.py",
+        "symbol": "BaseProvider.checksum",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/parsers/abstract.pyx",
+        "symbol": "AbstractParser._program_slug_sync",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/parsers/pgsql.pyx",
+        "symbol": "pgSQLParser.build_query",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/providers/external.py",
+        "symbol": "externalProvider.checksum",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/providers/sources/abstract.py",
+        "symbol": "baseSource.checksum",
+        "evidence": [
+          "F019"
+        ]
+      },
+      {
+        "path": "querysource/queries/multi/sources/query.catalog.yaml",
+        "symbol": "Query component contract",
+        "evidence": [
+          "F022"
+        ]
+      },
+      {
+        "path": "querysource/handlers/_pagination.py",
+        "symbol": "FILTERABLE_COLUMNS",
+        "evidence": [
+          "F024"
+        ]
+      },
+      {
+        "path": "querysource/handlers/_pagination.py",
+        "symbol": "SORTABLE_COLUMNS",
+        "evidence": [
+          "F024"
+        ]
+      },
+      {
+        "path": "querysource/handlers/_pagination.py",
+        "symbol": "SEARCHABLE_COLUMNS",
+        "evidence": [
+          "F024"
+        ]
+      },
+      {
+        "path": "querysource/handlers/_pagination.py",
+        "symbol": "build_where_clause",
+        "evidence": [
+          "F024"
+        ]
+      },
+      {
+        "path": "querysource/handlers/_pagination.py",
+        "symbol": "_validate_bare_identifier",
+        "evidence": [
+          "F024"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/jobs.py",
+        "symbol": "scheduled_query_job",
+        "evidence": [
+          "F025"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/jobs.py",
+        "symbol": "scheduled_multiqs_job",
+        "evidence": [
+          "F025"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/jobs.py",
+        "symbol": "cache_refresh_job",
+        "evidence": [
+          "F025"
+        ]
+      },
+      {
+        "path": "querysource/scheduler/notifications.py",
+        "symbol": "NotificationManager.notify",
+        "evidence": [
+          "F025"
+        ]
+      },
+      {
+        "path": "querysource/handlers/scheduler.py",
+        "symbol": "SchedulerJobsView._serialize_job",
+        "evidence": [
+          "F026"
+        ]
+      },
+      {
+        "path": "querysource/handlers/scheduler.py",
+        "symbol": "SchedulerJobsView.post",
+        "evidence": [
+          "F026"
+        ]
+      },
+      {
+        "path": "querysource/handlers/abstract.py",
+        "symbol": "AbstractHandler.get_source",
+        "evidence": [
+          "F027"
+        ]
+      },
+      {
+        "path": "querysource/handlers/multi.py",
+        "symbol": "QueryHandler.query",
+        "evidence": [
+          "F027"
+        ]
+      },
+      {
+        "path": "querysource/handlers/log.py",
+        "symbol": "LoggingService.request_info",
+        "evidence": [
+          "F028"
+        ]
+      },
+      {
+        "path": "querysource/providers/rethink.py",
+        "symbol": "rethinkProvider.checksum",
+        "evidence": [
+          "F029"
+        ]
+      },
+      {
+        "path": "querysource/providers/influx.py",
+        "symbol": "influxProvider.checksum",
+        "evidence": [
+          "F029"
+        ]
+      },
+      {
+        "path": "querysource/providers/arangodb.py",
+        "symbol": "arangodbProvider.checksum",
+        "evidence": [
+          "F029"
+        ]
+      },
+      {
+        "path": "querysource/providers/deltatbl.py",
+        "symbol": "deltatblProvider.checksum",
+        "evidence": [
+          "F029"
+        ]
+      },
+      {
+        "path": "querysource/providers/iceberg.py",
+        "symbol": "icebergProvider.checksum",
+        "evidence": [
+          "F029"
+        ]
+      }
+    ],
+    "untouched": [
+      "No automatic movement or deletion of public queries",
+      "No schema-wide rewrite of arbitrary query SQL or target datasource selection",
+      "No migration of all datasources, credentials, process variables or output tables solely because query definitions are tenant-scoped",
+      "No mandatory new tenant-membership or PBAC requirement in this release",
+      "No restriction on which schemas a tenant-owned query may read under existing database permissions"
+    ],
+    "patterns": [
+      {
+        "statement": "Preserve per-call connections and async startup ordering.",
+        "evidence": [
+          "F003",
+          "F021"
+        ]
+      },
+      {
+        "statement": "Keep existing public pagination and metadata contracts while selecting a tenant-specific column set.",
+        "evidence": [
+          "F015",
+          "F024"
+        ]
+      }
+    ],
+    "integration_risks": [
+      {
+        "id": "C3",
+        "statement": "Tenant tables without program_slug require changes to persistence fields, pagination, metadata and INSERT exports.",
+        "evidence": [
+          "F004",
+          "F015",
+          "F024"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C4",
+        "statement": "Schema selection must avoid shared mutable model metadata to preserve concurrent query isolation.",
+        "evidence": [
+          "F001",
+          "F021",
+          "F023"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C5",
+        "statement": "The current cache path accepts provider-specific hashes with no explicit tenant namespace.",
+        "evidence": [
+          "F006",
+          "F010",
+          "F019",
+          "F029"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C6",
+        "statement": "Multi-query parent, child and remote dispatch paths must carry tenant identity explicitly.",
+        "evidence": [
+          "F007",
+          "F014",
+          "F027"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C7",
+        "statement": "Scheduler startup, live sync, job IDs, execution kwargs and serialization must become tenant-aware.",
+        "evidence": [
+          "F013",
+          "F025",
+          "F026"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C8",
+        "statement": "Removing program_slug changes custom filter context and some non-SQL target fallbacks unless a compatibility adapter is designed.",
+        "evidence": [
+          "F019",
+          "F029"
+        ],
+        "confidence": "high",
+        "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+      },
+      {
+        "id": "C9",
+        "statement": "Existing policy checks use slug resource names and PBAC is optional; tenant loading can preserve current access controls, as the user selected.",
+        "evidence": [
+          "F016",
+          "F017",
+          "F027"
+        ],
+        "confidence": "high",
+        "reasoning": "Existing code establishes optional PBAC; U4 selects the release access-control scope."
+      },
+      {
+        "id": "C12",
+        "statement": "Production schema migration details and the remote worker contract are not sufficiently established by this repository trace.",
+        "evidence": [
+          "F014",
+          "F020",
+          "F022"
+        ],
+        "confidence": "medium",
+        "reasoning": "Design inference or bounded evidence gap; requires specification or deployment verification."
+      }
+    ]
+  },
+  "confidence_map": [
+    {
+      "id": "C1",
+      "statement": "Current slug lookup uses one configured QueryModel schema and does not use the program argument to choose storage.",
+      "evidence": [
+        "F001",
+        "F012",
+        "F017"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C2",
+      "statement": "Server startup currently preloads datasources; tenant discovery and a registry would be new startup behavior.",
+      "evidence": [
+        "F002",
+        "F003"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C3",
+      "statement": "Tenant tables without program_slug require changes to persistence fields, pagination, metadata and INSERT exports.",
+      "evidence": [
+        "F004",
+        "F015",
+        "F024"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C4",
+      "statement": "Schema selection must avoid shared mutable model metadata to preserve concurrent query isolation.",
+      "evidence": [
+        "F001",
+        "F021",
+        "F023"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C5",
+      "statement": "The current cache path accepts provider-specific hashes with no explicit tenant namespace.",
+      "evidence": [
+        "F006",
+        "F010",
+        "F019",
+        "F029"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C6",
+      "statement": "Multi-query parent, child and remote dispatch paths must carry tenant identity explicitly.",
+      "evidence": [
+        "F007",
+        "F014",
+        "F027"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C7",
+      "statement": "Scheduler startup, live sync, job IDs, execution kwargs and serialization must become tenant-aware.",
+      "evidence": [
+        "F013",
+        "F025",
+        "F026"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C8",
+      "statement": "Removing program_slug changes custom filter context and some non-SQL target fallbacks unless a compatibility adapter is designed.",
+      "evidence": [
+        "F019",
+        "F029"
+      ],
+      "confidence": "high",
+      "reasoning": "Direct source ranges or exact search matches establish the current behavior and affected contract."
+    },
+    {
+      "id": "C9",
+      "statement": "Existing policy checks use slug resource names and PBAC is optional; tenant loading can preserve current access controls, as the user selected.",
+      "evidence": [
+        "F016",
+        "F017",
+        "F027"
+      ],
+      "confidence": "high",
+      "reasoning": "Existing code establishes optional PBAC; U4 selects the release access-control scope."
+    },
+    {
+      "id": "C10",
+      "statement": "A shared repository plus immutable tenant context is the preferred way to cover the identified lookup paths without per-request schema mutation.",
+      "evidence": [
+        "F001",
+        "F003",
+        "F015",
+        "F021"
+      ],
+      "confidence": "medium",
+      "reasoning": "Design inference or bounded evidence gap; requires specification or deployment verification."
+    },
+    {
+      "id": "C11",
+      "statement": "A central tenant-aware result-cache key wrapper is preferable to modifying every provider checksum independently.",
+      "evidence": [
+        "F006",
+        "F010",
+        "F019",
+        "F029"
+      ],
+      "confidence": "medium",
+      "reasoning": "Design inference or bounded evidence gap; requires specification or deployment verification."
+    },
+    {
+      "id": "C12",
+      "statement": "Production schema migration details and the remote worker contract are not sufficiently established by this repository trace.",
+      "evidence": [
+        "F014",
+        "F020",
+        "F022"
+      ],
+      "confidence": "medium",
+      "reasoning": "Design inference or bounded evidence gap; requires specification or deployment verification."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "U1",
+      "question": "Should tenant execution use one v3-style handler for single and multi queries, with CRUD kept on the management API using a tenant selector; what should GET on the tenant collection return?",
+      "blocks_claims": [
+        "C3",
+        "C6"
+      ],
+      "plausible_answers": [
+        "Unified tenant execution; GET collection lists definitions; management remains the CRUD API",
+        "Mirror legacy v2 execution for tenant routes and keep multi execution separate",
+        "Use the tenant collection for CRUD and a distinct execution suffix"
+      ],
+      "ask_user": false,
+      "user_answer": "Yes",
+      "resolution": "Use one tenant handler for single/multi execution, GET collection listing, and existing management endpoints for CRUD with a tenant selector.",
+      "status": "resolved",
+      "answered_at": "2026-09-15T01:42:15.620509+00:00"
+    },
+    {
+      "id": "U2",
+      "question": "For deployments overriding QS_QUERIES_SCHEMA or QS_QUERIES_TABLE, should legacy calls retain that configured default or become strictly public.queries?",
+      "blocks_claims": [
+        "C1"
+      ],
+      "plausible_answers": [
+        "Preserve configured legacy default; explicit public still means public.queries",
+        "Legacy APIs must always use public.queries; deprecate overrides with migration guidance"
+      ],
+      "ask_user": false,
+      "user_answer": "preserve",
+      "resolution": "Preserve existing QS_QUERIES_SCHEMA and QS_QUERIES_TABLE overrides for legacy/default calls. Without overrides they continue to use public.queries.",
+      "status": "resolved",
+      "answered_at": "2026-09-15T01:42:15.620509+00:00"
+    },
+    {
+      "id": "U3",
+      "question": "Should the tenant name replace program_slug for filter callbacks and provider fallbacks, and should tenant rows retain the existing program_id column?",
+      "blocks_claims": [
+        "C3",
+        "C8"
+      ],
+      "plausible_answers": [
+        "Derive program context from tenant; retain program_id",
+        "Keep program context separate in attributes; retain program_id",
+        "Remove both program columns and define a new callback contract"
+      ],
+      "ask_user": false,
+      "user_answer": "yes, derived from tenant name, and yes, probably tenant tables will retain program_id",
+      "resolution": "Derive runtime program_slug from the tenant name without persisting that column. Retain program_id as the working DDL assumption; the user qualified retention as probable.",
+      "status": "resolved",
+      "answered_at": "2026-09-15T01:42:15.620509+00:00"
+    },
+    {
+      "id": "U4",
+      "question": "What authorizes a caller to use a tenant: the deployment allowlist alone, or tenant membership enforced by PBAC or another existing identity source?",
+      "blocks_claims": [
+        "C9"
+      ],
+      "plausible_answers": [
+        "Shared trusted service: deployment allowlist plus current access controls",
+        "Require tenant membership through PBAC on execution, CRUD, listing and jobs",
+        "Require tenant membership from the host application's authorization layer"
+      ],
+      "ask_user": false,
+      "user_answer": "sufficient for now",
+      "resolution": "The initialization allowlist plus current access controls is sufficient for this release. Do not introduce mandatory tenant-membership authorization or require PBAC to enable tenant queries.",
+      "status": "resolved",
+      "answered_at": "2026-09-15T01:42:15.620509+00:00"
+    },
+    {
+      "id": "U5",
+      "question": "Should discovery load only a tenant registry and scheduled definitions at startup, or eagerly load all tenant query definitions; are runtime tenant refresh and cross-tenant child queries required in this release?",
+      "blocks_claims": [
+        "C2",
+        "C6",
+        "C7",
+        "C10"
+      ],
+      "plausible_answers": [
+        "Startup registry, on-demand definitions, child queries inherit tenant, no cross-tenant children",
+        "Eagerly preload all definitions with startup-only discovery",
+        "Support runtime registry refresh and explicitly authorized cross-tenant children"
+      ],
+      "ask_user": false,
+      "user_answer": "tenant's ownership is structural, not related if query cross tenants, is about a client accessing a data for their consumpcion, unrelated if internal query lands across different schemas.",
+      "resolution": "Tenant denotes structural ownership of the saved definition, not a restriction on schemas queried for the client. Cross-schema SQL and data-source access remain subject to existing access controls. Do not infer a ban on cross-tenant data access or inspect SQL to enforce ownership.",
+      "status": "resolved",
+      "answered_at": "2026-09-15T01:42:15.620509+00:00",
+      "proposal_assumption": "Startup discovery with on-demand definition reads is the proposed baseline, not an explicitly confirmed loading preference. Child definition lookup inherits its owner context when not specified; reading data across schemas does not change the owner."
+    }
+  ],
+  "recommended_next_command": {
+    "command": "sdd-spec",
+    "rationale": "The user approved the impact synthesis and settled the main contracts. Produce the specification with explicit technical verification tasks for ORM schema selection, deployed DDL, worker propagation and route collisions; preserve the bounded-research confidence."
+  },
+  "overall_confidence": "medium",
+  "meta": {
+    "findings_used": [
+      "F001",
+      "F002",
+      "F003",
+      "F004",
+      "F005",
+      "F006",
+      "F007",
+      "F008",
+      "F009",
+      "F010",
+      "F011",
+      "F012",
+      "F013",
+      "F014",
+      "F015",
+      "F016",
+      "F017",
+      "F018",
+      "F019",
+      "F020",
+      "F021",
+      "F022",
+      "F023",
+      "F024",
+      "F025",
+      "F026",
+      "F027",
+      "F028",
+      "F029",
+      "F030"
+    ],
+    "findings_unused": [],
+    "notes": "Synthesis approved and U1-U5 answered. Ownership is structural query-definition ownership, not query target isolation. Startup-only registry discovery with on-demand definitions and retention of program_id are proposed baselines with their caveats recorded. Research remains static and range-targeted; production DDL, external worker behavior and installed ORM schema mechanics remain technical specification follow-ups."
+  }
+}

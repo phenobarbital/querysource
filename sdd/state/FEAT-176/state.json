@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-176",
+  "feature_slug": "per-tenant-queries",
+  "started_at": "2026-09-15T01:01:49Z",
+  "updated_at": "2026-09-15T01:46:07.498063+00:00",
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "raw_path": "sdd/state/FEAT-176/source.md",
+    "fetched_at": "2026-09-15T01:01:49Z",
+    "summary_oneline": "Schema-per-tenant query discovery, storage and APIs with public-query backward compatibility"
+  },
+  "mode": "auto",
+  "phase": "proposal_drafted",
+  "phases": {
+    "source": {
+      "status": "completed"
+    },
+    "plan": {
+      "status": "completed",
+      "queries_total": 30,
+      "approved_by_user": true,
+      "edited_by_user": false,
+      "plan_path": "sdd/state/FEAT-176/research_plan.json",
+      "wiki_available": true,
+      "base_branch": "dev"
+    },
+    "research": {
+      "status": "completed",
+      "started_at": "2026-09-15T01:06:31.935235+00:00",
+      "completed_at": "2026-09-15T01:11:03+00:00",
+      "duration_seconds": 271.065,
+      "queries_executed": 30,
+      "queries_skipped": 0,
+      "depth_reached": 1,
+      "files_read": 40,
+      "grep_calls": 23,
+      "git_calls": 4,
+      "truncated": true,
+      "truncation_reason": "Reached the 40-file targeted-read limit. Planned impact localization completed; deeper output/extension, installed ORM and deployment/worker verification is deferred and explicitly documented.",
+      "findings_total": 30,
+      "accounting": "Distinct files inspected in targeted ranges; additional grep-only references are not counted as full reads. Equivalent original queries batched. Wiki and upstream documentation are supplemental. Later artifact and citation validation excluded from research counters."
+    },
+    "synthesis": {
+      "status": "completed",
+      "completed_at": "2026-09-15T01:16:36.727335+00:00",
+      "synthesis_path": "sdd/state/FEAT-176/synthesis.json",
+      "overall_confidence": "medium",
+      "claims_total": 12,
+      "claims_high_conf": 9,
+      "claims_medium_conf": 3,
+      "claims_low_conf": 0,
+      "unknowns_count": 0,
+      "lint_passed": true,
+      "lint_iterations": 1,
+      "review_approved_by_user": true,
+      "review_path": "sdd/state/FEAT-176/research-review.md",
+      "review_approved_at": "2026-09-15T01:20:01.450642+00:00"
+    },
+    "qa": {
+      "status": "completed",
+      "questions_total": 5,
+      "questions_answered": 5,
+      "completed_at": "2026-09-15T01:42:15.620509+00:00",
+      "decisions_path": "sdd/state/FEAT-176/decisions.md"
+    },
+    "output": {
+      "status": "completed",
+      "proposal_path": "sdd/proposals/per-tenant-queries.proposal.md",
+      "commit_sha": null,
+      "next_command_recommended": "sdd-spec",
+      "next_command_rationale": "The user approved the impact synthesis and settled the main contracts. Produce the specification with explicit technical verification tasks for ORM schema selection, deployed DDL, worker propagation and route collisions; preserve the bounded-research confidence."
+    }
+  },
+  "budget": {
+    "profile": "default",
+    "max_files_read": 40,
+    "max_grep_calls": 25,
+    "max_git_calls": 10,
+    "max_depth": 2,
+    "max_wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 40,
+    "grep_calls": 23,
+    "git_calls": 4,
+    "wall_seconds": 271.065
+  },
+  "errors": [],
+  "resume_hint": {
+    "next_phase": "committed",
+    "next_action": "Validate and commit only the proposal and FEAT-176 state files."
+  },
+  "detected_mode": "enrichment"
+}

@@ -1,0 +1,16 @@
+{
+  "validated_at": "2026-09-15T01:46:07.498063+00:00",
+  "passed": true,
+  "checks": [
+    "State/research-plan JSON schemas",
+    "80 source-backed localization entries and existing ranges",
+    "Python symbols match AST identifiers",
+    "Finding references resolve",
+    "Five user answers persisted and reflected in scope",
+    "Proposal sections, review status and local links",
+    "Confidence remains medium for bounded research"
+  ],
+  "limitations": [
+    "No implementation, runtime tests, live database, Redis or external-worker verification."
+  ]
+}
