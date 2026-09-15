@@ -34,9 +34,38 @@ from ._pagination import (
 )
 from .abstract import AbstractHandler
 
+import asyncio
+from typing import Literal, Optional
+
+from asyncdb.exceptions import DriverError, ProviderError
+from pydantic import BaseModel
+
+from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT
+from ..exceptions import ParserError
+from ..queries.describe import RESERVED_PLACEHOLDERS, extract_placeholders
+from ..queries.qs import QS
+from ..types.validators import pg_constants, pg_udfs, udf_keywords
+from ..utils.vocabulary import build_vocabulary
+
 SLUG_PATTERN = r"[A-Za-z0-9_.\-:]{1,255}"
 VOCABULARY_LINK = "/api/v1/queries/vocabulary"
 _PAGINATION_KEYS = frozenset({"page", "page_size", "sort", "search", "q", "fields"})
+
+
+class ColumnInfo(BaseModel):
+    """One output column; ``type`` is None when not introspectable."""
+
+    name: str
+    type: Optional[str] = None
+
+
+class ColumnsResponse(BaseModel):
+    """Response of GET .../queries/{slug}/columns."""
+
+    slug: str
+    columns: list[ColumnInfo]
+    columns_source: Literal["prepare", "declared", "unavailable"]
+    warnings: list[str] = []
 
 
 class QueryDescribe(AbstractHandler):
@@ -200,3 +229,63 @@ class QueryDescribe(AbstractHandler):
             vocabulary_link=VOCABULARY_LINK,
         )
         return self.json_response(payload)
+
+    async def columns(self, request: web.Request) -> web.Response:
+        """GET .../queries/{slug}/columns — 200 | 401 | 404 (prepare, never execute)."""
+        principal = await self._principal(request)
+        store = await self._store(request)
+        slug = request.match_info.get("slug", "")
+        model = await self._load_visible(request, principal, store, slug)
+        try:
+            options = await self.json_data(request) or {}
+        except (TypeError, ValueError):
+            options = {}
+        conditions = {**options, **self.query_parameters(request)}
+        warnings: list[str] = []
+        columns: list[dict] = []
+        source = "unavailable"
+        provider = None
+        qs = QS(slug=slug, conditions=conditions, request=request)
+        try:
+            await qs.build_provider()
+            provider = qs.get_source()
+            query_str = str(provider.get_query() or "")
+            names, _ = extract_placeholders(query_str)
+            unresolved = [n for n in (names or []) if n not in RESERVED_PLACEHOLDERS]
+            if unresolved:
+                warnings.append(f"prepare_skipped: unresolved placeholders {sorted(unresolved)}")
+            else:
+                try:
+                    cols = await asyncio.wait_for(provider.describe_columns(), QS_DESCRIBE_COLUMNS_TIMEOUT)
+                    if cols:
+                        columns = cols
+                        source = "prepare"
+                except (ParserError, ProviderError, DriverError, asyncio.TimeoutError) as err:
+                    warnings.append(f"prepare_failed: {type(err).__name__}")
+        except SlugNotFound:
+            raise web.HTTPNotFound()
+        except (ParserError, ProviderError, DriverError) as err:
+            warnings.append(f"provider_unavailable: {type(err).__name__}")
+        finally:
+            try:
+                await qs.close()
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        if source != "prepare":
+            definition = provider.get_definition() if provider is not None else model
+            attrs = (definition.get("attributes") if isinstance(definition, dict) else getattr(definition, "attributes", None)) or {}
+            declared = attrs.get("columns") or []
+            if declared:
+                columns = [{"name": str(c), "type": None} for c in declared]
+                source = "declared"
+
+        return self.json_response(
+            ColumnsResponse(slug=slug, columns=columns, columns_source=source, warnings=warnings).model_dump()
+        )
+
+    async def vocabulary(self, request: web.Request) -> web.Response:
+        """GET /api/v1/queries/vocabulary — 200 | 401."""
+        await self._principal(request)
+        return self.json_response(build_vocabulary(udf_keywords(), pg_constants(), pg_udfs()))
+

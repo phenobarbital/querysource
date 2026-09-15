@@ -103,6 +103,36 @@ class TestDescribeRoutes:
                 return
         pytest.fail("GET /api/v1/queries/{slug}/describe route not found")
 
+    def test_vocabulary_route_registered(self):
+        """GET /api/v1/queries/vocabulary must be registered."""
+        from aiohttp import web
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/vocabulary', dh.vocabulary)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/vocabulary") in routes
+
+    def test_columns_route_registered(self):
+        """GET /api/v1/queries/{slug}/columns must be registered."""
+        from aiohttp import web
+        from querysource.handlers.describe import QueryDescribe
+
+        dh = QueryDescribe()
+        app = web.Application()
+        app.router.add_get('/api/v1/queries/{slug}/columns', dh.columns)
+
+        routes = {
+            (r.method, r.resource.canonical)
+            for r in app.router.routes()
+        }
+        assert ("GET", "/api/v1/queries/{slug}/columns") in routes
+
 
 class TestRouteRegistration:
     def test_services_imports_query_source(self):
