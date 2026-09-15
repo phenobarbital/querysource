@@ -239,26 +239,47 @@ async def test_tenant_detail_loader_repository(test_client, fake_qs_connection):
     assert call_args[0][0].store.schema == "acme"
 
 
-async def test_legacy_slug_queries_precedence(test_client, fake_qs_connection):
-    """Legacy route /api/v1/queries/{slug} still works; 'queries' is not a tenant."""
+async def test_tenant_detail_loader_toctou_query_not_found_gives_404(test_client, fake_qs_connection):
+    """A slug deleted between the exists-check and the repository load must
+    still degrade to a body-less 404, not an unhandled 500.
+
+    DefinitionRepository.get() (querysource/repositories/definitions.py) raises
+    TenantError(error_code="query_not_found") when its own row lookup misses —
+    a real race, since the exists-check (fetch_one) and the loader run as two
+    separate DB round-trips. Regression test for that gap.
+    """
     principal = Principal(kind=PrincipalKind.SUPERUSER)
 
-    # Mock legacy store resolution (no tenant param)
-    with patch.object(QueryDescribe, "_store", new_callable=AsyncMock) as mock_store:
-        legacy_store_result = MagicMock()
-        legacy_store_result.schema = "public"
-        legacy_store_result.table = "queries"
-        legacy_store_result.has_program_slug = True
-        legacy_store_result.tenant = None
-        mock_store.return_value = legacy_store_result
+    store = QueryStore(
+        database_namespace="test_ns",
+        schema="acme",
+        table="queries",
+        contract="tenant",
+        columns=frozenset(["query_slug", "provider", "description", "updated_at"])
+    )
+    registry = test_client.app["qs_tenant_registry"]
+    registry.resolve.return_value = store
 
-        with _patch_principal(principal):
-            # Try to describe the slug 'queries' (testing that it's not treated as a tenant)
-            resp = await test_client.get("/api/v1/queries/queries/describe")
+    # Exists-check passes...
+    fake_qs_connection.fetch_one_handler = lambda sql, *args: {"query_slug": "test_slug"}
 
-    # The route should resolve to the legacy describe handler with slug='queries'
-    # (not try to resolve tenant='queries')
-    assert resp.status in [200, 404]  # Depends on mock setup, but should not error
+    # ...but the row vanished by the time the repository loads it.
+    repository = test_client.app["qs_definition_repository"]
+    repository.get = AsyncMock(
+        side_effect=TenantError("Query not found: 'test_slug'", error_code="query_not_found")
+    )
+
+    with _patch_principal(principal):
+        resp = await test_client.get("/api/v1/acme/queries/test_slug/describe")
+
+    # aiohttp's HTTPNotFound() default body is the generic "404: Not Found"
+    # text, not empty — the point is it's the same generic body every other
+    # describe 404 uses (AC6/AC18), never a cause-specific payload leaking
+    # the TenantError message.
+    assert resp.status == 404
+    body = await resp.text()
+    assert "test_slug" not in body
+    assert "Query not found" not in body
 
 
 async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connection):

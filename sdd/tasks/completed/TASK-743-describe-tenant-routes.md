@@ -322,32 +322,66 @@ sdd-worker (Claude Sonnet 5).
 - `ruff check` on all 7 changed/created files: clean, and the 2 pre-existing
   files (`querysource/services.py`, `tests/test_route_registration.py`) carry no
   new violations vs the merged-FEAT-148 baseline (verified file-by-file).
-- **Known limitation, not fixed** (documented here for a future task, not blocking):
-  the new tenant describe routes (`/api/v1/{tenant}/queries/describe`,
-  registered in `services.py` right after the legacy describe block) are
-  registered *before* `QueryManager`'s existing `/api/v1/management/queries/{slug}`
-  route (registered later, at the `management` block). Since "management" is a
-  reserved tenant schema (`TenantRegistry._RESERVED_SCHEMAS`), `tenant_store()`
-  correctly 404s for `tenant="management"` — but this means a hypothetical `GET`
-  to `/api/v1/management/queries/describe` intended for `QueryManager` (i.e. a
-  stored query literally named "describe") would now be intercepted by the
-  tenant describe route and get a 404 instead of ever reaching `QueryManager`.
-  Extremely narrow in practice (requires a query slug literally named
-  "describe"), not covered by any AC or existing test, and not introduced by
-  this task's route *ordering* choice alone — it's inherent to how the two
-  route shapes coexist. No code change made; flagging for the PR reviewer.
+- **CORRECTION (after a second, independent adversarial code review of this
+  already-committed work): the "management route shadowing" limitation
+  originally recorded here was factually wrong.** I claimed a `GET
+  /api/v1/management/queries/describe` would be intercepted by the new tenant
+  describe route ahead of `QueryManager`'s `/api/v1/management/queries/{slug}`.
+  The reviewer verified empirically (standalone aiohttp `UrlDispatcher` script)
+  that the **opposite** is true, and I independently reproduced it: aiohttp
+  resolves `/api/v1/management/queries/describe` to `QueryManager`
+  (`slug='describe'`) regardless of which route is registered first — the same
+  "more literal segments win" behavior already noted above for the
+  `/api/v1/queries/queries/describe` AC18 case. There is no real shadowing risk
+  here in either direction. Removing the incorrect limitation; no code change
+  was ever needed for it.
+- **Second review found two more real issues, both addressed:**
+  1. **IMPORTANT**, confirmed by reading `querysource/repositories/definitions.py`:
+     `DefinitionRepository.get()` raises `TenantError(error_code="query_not_found")`
+     when its row lookup misses — and `_load_visible`'s loader `except` clause
+     did not include `TenantError`, so a slug deleted between the exists-check
+     (`fetch_one`) and the repository load (a real TOCTOU window, since they are
+     two separate DB round-trips) would escape as an unhandled 500 instead of
+     the same body-less 404 every other loader failure produces. Fixed by
+     importing `TenantError` and adding it to that except tuple; added
+     `test_tenant_detail_loader_toctou_query_not_found_gives_404` as a
+     regression guard (replacing the now-redundant `test_legacy_slug_queries_precedence`
+     in this file, whose coverage duplicated — much more rigorously — the
+     real HTTP-round-trip precedence test added to `tests/test_route_registration.py`).
+  2. **IMPORTANT, confirmed but not fixed (accepted trade-off, flagged for a
+     FEAT-147 follow-up):** `tenant_loader(conn, slug)` never uses the `conn`
+     parameter `_load_visible` already acquired from `request.app['qs_connection']`
+     — it calls `repository.get()`, which internally acquires its own connection
+     via `DefinitionRepository.connection_factory` (`self.connection.definition_connection`,
+     `querysource/connections.py`), confirmed to draw from the **same** pool
+     (`self._postgres.acquire()`) on the HTTP loop. Every tenant `describe()`/
+     `columns()` request therefore holds two pool connections concurrently for
+     the loader's duration, unlike the legacy path's `_legacy_loader`, which
+     correctly reuses the passed `conn`. This matches the task's own blueprint
+     verbatim ("Loader wraps `DefinitionRepository.get(QueryIdentity(store,
+     slug)).runtime`") — fixing it properly would mean reaching into
+     `DefinitionRepository`'s private row-fetch/model-building methods or
+     changing its public API, both explicitly out of this task's scope ("NOT in
+     scope: Any FEAT-147 implementation"). Left as-is; noted here for the PR
+     description and as a candidate FEAT-147 follow-up (e.g. an optional
+     `conn=` parameter on `DefinitionRepository.get()`).
+  3. **Nitpick, fixed:** `querysource/auth/slug_visibility.py` was missing its
+     trailing newline.
 - Exactly the 7 listed files touched (`querysource/auth/slug_visibility.py`,
   `querysource/handlers/describe.py`, `querysource/services.py`, `CHANGES.rst`,
   `docs/DESCRIBE_API.md`, `tests/handlers/test_describe_tenant.py`,
   `tests/test_route_registration.py`).
 
-**Deviations from spec**: none (see "Known limitation" above for a documented,
-unfixed edge case, not a deviation).
+**Deviations from spec**: none. One accepted, documented trade-off (the tenant
+loader's extra pool connection, see above) rather than a deviation.
 
 Seat: haiku (native) · Backend: n/a · Attempts: 1 · Duration: ~11m (650s per the
 dispatch's own reported duration) · Tokens: n/a (native seat, not tracked by the
-roster) — plus a substantial consolidation-phase fix pass by sdd-worker (native,
-Claude Sonnet 5, interactive, not tracked by the roster): 1 critical bug
-(AttributeError crash), 1 unimplemented acceptance criterion (evaluator
-detachment) implemented from scratch, 1 narrowed exception handler, and 6 test
-bugs fixed across 2 files.
+roster) — plus two consolidation-phase fix passes by sdd-worker (native, Claude
+Sonnet 5, interactive, not tracked by the roster): the first implemented 1
+critical bug fix (AttributeError crash), 1 unimplemented acceptance criterion
+(evaluator detachment) from scratch, 1 narrowed exception handler, and 6 test
+bugs across 2 files; a second, independent adversarial review of that already-committed
+work then found and fixed 1 more real bug (uncaught TenantError on a TOCTOU
+path), corrected 1 factual error in this note, and confirmed 1 accepted
+trade-off (double pool connection) as out of scope to fix here.

@@ -32,6 +32,7 @@ from ..queries.describe import (
     extract_placeholders,
 )
 from ..queries.qs import QS
+from ..tenant_errors import TenantError
 from ..types.validators import pg_constants, pg_udfs, udf_keywords
 from ..utils.vocabulary import build_vocabulary
 from ._pagination import (
@@ -119,10 +120,14 @@ class QueryDescribe(AbstractHandler):
             if row is None:
                 raise web.HTTPNotFound()
 
-            # Load the model
+            # Load the model. TenantError (raised by DefinitionRepository.get()
+            # when the row vanishes between this exists-check and the load —
+            # a real TOCTOU window, since they run as separate DB round-trips)
+            # must degrade to the same body-less 404 as every other loader
+            # failure, never an unhandled 500.
             try:
                 model = await store.loader(conn, slug)
-            except (NoDataFound, ValidationError, SlugNotFound) as err:
+            except (NoDataFound, ValidationError, SlugNotFound, TenantError) as err:
                 self.logger.warning("Failed to load slug %r: %s", slug, err)
                 raise web.HTTPNotFound() from None
 
