@@ -14,14 +14,14 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-716-tenant-registry.md"
     },
@@ -32,7 +32,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -41,7 +41,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-717-tenant-definition-model.md"
     },
@@ -52,7 +52,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -61,7 +61,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-718-tenant-repository-reads.md"
     },
@@ -72,7 +72,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -81,7 +81,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-719-tenant-repository-writes.md"
     },
@@ -92,7 +92,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -101,7 +101,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-720-tenant-bootstrap-lookup.md"
     },
@@ -112,7 +112,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -121,7 +121,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-721-tenant-execution-context.md"
     },
@@ -132,7 +132,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -141,7 +141,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-722-tenant-result-cache.md"
     },
@@ -152,7 +152,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -161,7 +161,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-723-tenant-management-reads.md"
     },
@@ -172,7 +172,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -181,7 +181,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-724-tenant-management-writes.md"
     },
@@ -192,7 +192,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -201,7 +201,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-725-tenant-policy-preflight.md"
     },
@@ -212,7 +212,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -221,7 +221,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-726-tenant-http-routes.md"
     },
@@ -232,7 +232,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -241,7 +241,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-727-tenant-child-execution.md"
     },
@@ -252,7 +252,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -261,7 +261,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-728-tenant-remote-protocol.md"
     },
@@ -272,7 +272,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -281,7 +281,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-729-tenant-scheduler-registry.md"
     },
@@ -292,7 +292,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -301,7 +301,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-730-tenant-scheduler-api-jobs.md"
     },
@@ -312,7 +312,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -321,7 +321,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-731-tenant-observability-outputs.md"
     },
@@ -332,7 +332,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -341,7 +341,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-732-tenant-integration-verification.md"
     },
@@ -352,7 +352,7 @@
       "feature_id": "FEAT-147",
       "feature": "per-tenant-queries",
       "spec": "sdd/specs/per-tenant-queries.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -361,7 +361,7 @@
       "parallel": false,
       "parallelism_notes": "Per-spec sequential execution required by approved Worktree Strategy; shared modules and prerequisite imports prohibit independent worktrees.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-15T11:36:43+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-733-tenant-rollout-documentation.md"
     }
