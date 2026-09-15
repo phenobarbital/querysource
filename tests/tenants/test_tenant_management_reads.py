@@ -316,3 +316,63 @@ async def test_legacy_overrides_explicit_public() -> None:
     with pytest.raises(web.HTTPBadRequest) as exc_info:
         resolve_request_store(request, registry_unknown)
     assert "Invalid tenant selector" in str(exc_info.value.reason)
+
+
+@pytest.mark.asyncio
+async def test_tenant_store_search_never_sql_references_program_slug() -> None:
+    """A tenant-store ?search= request must never SQL-reference program_slug.
+
+    Code review finding 11: tenant-contract stores never persist
+    program_slug (see docs/PER_TENANT_QUERIES.md "Persistence versus
+    runtime shape"), but build_where_clause's search OR-group used to
+    unconditionally include program_slug for every caller — a tenant-store
+    ?search= request generated SQL referencing a column that table does
+    not have, a real runtime SQL error (not a 400 validation rejection;
+    _paginate_list's existing program_slug guard only checked
+    sort_field/fields/equality-filter keys, never params.search).
+    """
+    from querysource.handlers.manager import QueryManager
+
+    class _CapturingCursor(_FakeCursor):
+        def __init__(self, total: int, rows: list):
+            super().__init__(total, rows)
+            self.sql_statements: list[str] = []
+
+        async def fetchval(self, sql):
+            self.sql_statements.append(sql)
+            return await super().fetchval(sql)
+
+        async def fetch_all(self, sql):
+            self.sql_statements.append(sql)
+            return await super().fetch_all(sql)
+
+    captured = _CapturingCursor(total=0, rows=[])
+
+    class _CapturingDb:
+        async def acquire(self):
+            return captured
+
+    registry = _mock_registry()
+    store = registry.resolve("tenant1")
+    assert store.contract == "tenant"
+    app = {}
+    app['qs_tenant_registry'] = registry
+    app['qs_connection'] = _CapturingDb()
+    app['qs_definition_repository'] = _FakeRepo(store)
+
+    request = _mock_request(
+        method="GET",
+        path="/api/v1/management/queries",
+        query={"tenant": "tenant1", "search": "report"},
+        match_info={},
+    )
+    request.app = app
+
+    manager = QueryManager(request)
+    response = await manager.get()
+    # No SQL error (500) — request completes normally (204: no matching rows
+    # in the fake cursor).
+    assert response.status == 204
+    assert captured.sql_statements, "expected at least one SQL statement to run"
+    for sql in captured.sql_statements:
+        assert "program_slug" not in sql

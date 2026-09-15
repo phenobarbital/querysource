@@ -336,7 +336,24 @@ class QueryManager(QueryView):
             table = store.table
 
         try:
-            where = build_where_clause(params, extra_filters)
+            # Tenant-contract stores never persist program_slug (see
+            # docs/PER_TENANT_QUERIES.md "Persistence versus runtime
+            # shape") — excluded from the search OR-group here so a
+            # tenant-store ?search= request never references a nonexistent
+            # column. This is a request-local exclusion (never a mutation
+            # of the shared SEARCHABLE_COLUMNS constant, which must keep
+            # serving legacy search unchanged). The explicit sort/fields/
+            # equality-filter rejection above stays as-is — this only
+            # closes the gap for ?search=, which was previously
+            # unconditionally SQL'd against program_slug for every store.
+            exclude_search_columns = (
+                frozenset({"program_slug"})
+                if store is not None and store.contract == "tenant"
+                else frozenset()
+            )
+            where = build_where_clause(
+                params, extra_filters, exclude_search_columns=exclude_search_columns
+            )
             order_by = build_order_by(params)
             count_sql = build_count_sql(schema, table, where)
             page_sql = build_page_sql(

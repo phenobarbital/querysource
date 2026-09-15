@@ -257,6 +257,8 @@ def _coerce_value(col_name: str, value: Any) -> str:
 def build_where_clause(
     params: PaginationParams,
     extra_filters: dict,
+    *,
+    exclude_search_columns: frozenset[str] = frozenset(),
 ) -> str:
     """Return a SQL WHERE clause (including the leading ``WHERE``) or ``""``.
 
@@ -275,6 +277,14 @@ def build_where_clause(
         params: Pre-validated :class:`PaginationParams`.
         extra_filters: Additional filter kwargs (typically the leftover
             query-string params).
+        exclude_search_columns: Columns to drop from the search ``OR``
+            group for THIS call only — never a mutation of the shared,
+            module-level :data:`SEARCHABLE_COLUMNS` constant (which must
+            keep serving legacy listing unchanged). Used by tenant-contract
+            callers to drop ``program_slug`` (a column their table does not
+            persist — see docstring on :data:`SEARCHABLE_COLUMNS`) so a
+            tenant-store ``?search=`` request never references a
+            nonexistent column.
 
     Returns:
         The WHERE clause (possibly empty).
@@ -302,7 +312,7 @@ def build_where_clause(
         or_terms = [
             f"{_quote_ident(col)}::text ILIKE {like_literal}"
             for col in SEARCHABLE_COLUMNS
-            if col in FILTERABLE_COLUMNS
+            if col in FILTERABLE_COLUMNS and col not in exclude_search_columns
         ]
         if or_terms:
             predicates.append("(" + " OR ".join(or_terms) + ")")
