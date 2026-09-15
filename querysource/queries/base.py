@@ -4,14 +4,14 @@ Base Class for all Query-objects in QuerySource.
 """
 import asyncio
 from abc import abstractmethod
-from typing import Union, Optional
-from datamodel.exceptions import ValidationError
+
 from aiohttp import web
+from datamodel.exceptions import ValidationError
 from navconfig.logging import logging
+
 from ..interfaces.queries import AbstractQuery
 from ..outputs.dt import OutputFactory
 from .models import Query, QueryResult
-
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -23,17 +23,20 @@ class BaseQuery(AbstractQuery):
             slug: str = None,
             conditions: dict = None,
             request: web.Request = None,
-            loop: Optional[asyncio.AbstractEventLoop] = None,
+            loop: asyncio.AbstractEventLoop | None = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
         """
         Initialize the Query Object
         """
-        super(BaseQuery, self).__init__(
+        super().__init__(
             slug=slug,
             conditions=conditions,
             request=request,
             loop=loop,
+            tenant=tenant,
             **kwargs
         )
 
@@ -47,7 +50,7 @@ class BaseQuery(AbstractQuery):
         await self.close()
         return False
 
-    def query_model(self, data: Union[str, dict]) -> Query:
+    def query_model(self, data: str | dict) -> Query:
         if isinstance(data, str):
             q = {
                 "query": data
@@ -64,7 +67,7 @@ class BaseQuery(AbstractQuery):
     def get_result(
         self,
         query: Query,
-        data: Optional[Union[list, dict]],
+        data: list | dict | None,
         duration: float,
         errors: list = None,
         state: str = None
@@ -97,7 +100,6 @@ class BaseQuery(AbstractQuery):
         Create and configure the provider for this query.
         Override in subclasses if provider setup is needed.
         """
-        pass
 
     async def close(self):
         """close.
@@ -105,7 +107,6 @@ class BaseQuery(AbstractQuery):
         Close and cleanup resources used by the query.
         Override in subclasses if cleanup is needed.
         """
-        pass
 
     @abstractmethod
     async def query(self):

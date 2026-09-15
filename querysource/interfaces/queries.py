@@ -3,38 +3,33 @@
 Base Class for all Query-objects in QuerySource.
 """
 import asyncio
-from abc import abstractmethod
-from typing import Any, Union, Optional
-from collections.abc import Callable
 import time
-from datetime import datetime, timezone
 import traceback
+from abc import abstractmethod
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from datetime import datetime, timezone
 from functools import partial
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from typing import Any
 
+from aiohttp import web
 from asyncdb import AsyncDB
 from asyncdb.exceptions import ProviderError
-from navigator_session import get_session
-from navigator_session import SessionData
-from aiohttp import web
 from navconfig.logging import logging
-from ..libs.encoders import DefaultEncoder
-from ..conf import (
-    SEMAPHORE_LIMIT,
-    QUERYSET_REDIS,
-    DEFAULT_QUERY_TIMEOUT,
-    DEFAULT_QUERY_FORMAT
-)
-from ..exceptions import (
-    QueryException,
-    CacheException,
-    DataNotFound
-)
-from .connections import Connection
-from ..events import LogEvent
-from ..utils.events import enable_uvloop
-from ..utils.cache_serialization import serialize_cache_payload
+from navigator_session import SessionData, get_session
 
+from ..conf import (
+    DEFAULT_QUERY_FORMAT,
+    DEFAULT_QUERY_TIMEOUT,
+    QUERYSET_REDIS,
+    SEMAPHORE_LIMIT,
+)
+from ..events import LogEvent
+from ..exceptions import CacheException, DataNotFound, QueryException
+from ..libs.encoders import DefaultEncoder
+from ..utils.cache_serialization import serialize_cache_payload
+from ..utils.events import enable_uvloop
+from .connections import Connection
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -52,7 +47,9 @@ class AbstractQuery(Connection):
             slug: str = None,
             conditions: dict = None,
             request: web.Request = None,
-            loop: Optional[asyncio.AbstractEventLoop] = None,
+            loop: asyncio.AbstractEventLoop | None = None,
+            *,
+            tenant: str | None = None,
             **kwargs
     ):
         """
@@ -74,7 +71,7 @@ class AbstractQuery(Connection):
             except RuntimeError:
                 self._loop = None
         Connection.__init__(self, loop=self._loop, **kwargs)
-        self._result: Union[dict, list] = None
+        self._result: dict | list = None
         self._output_format: Any = None
         try:
             self._program = conditions.get('program', 'public')
@@ -89,8 +86,8 @@ class AbstractQuery(Connection):
         self._conditions = conditions or {}
         # web Request:
         self._request = request
-        self._generated: Union[int, datetime] = None
-        self._starttime: Union[int, datetime] = self.epoch_time()
+        self._generated: int | datetime = None
+        self._starttime: int | datetime = self.epoch_time()
         ## set the Output factory for Query:
         frm = kwargs.pop('output_format', DEFAULT_QUERY_FORMAT)
         self.output_format(frm)
@@ -100,6 +97,8 @@ class AbstractQuery(Connection):
         self._encoder = DefaultEncoder()
         ## default executor:
         self._executor = ThreadPoolExecutor(max_workers=2)
+        # Tenant selector (keyword-only, preserved from Python routing)
+        self._tenant_selector = tenant
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         return self._loop if self._loop else asyncio.get_running_loop()
@@ -140,14 +139,14 @@ class AbstractQuery(Connection):
         return self._generated
 
     @abstractmethod
-    def query_model(self, data: Union[str, dict]) -> Any:
+    def query_model(self, data: str | dict) -> Any:
         pass
 
     @abstractmethod
     def get_result(
         self,
         query: object,
-        data: Optional[Union[list, dict]],
+        data: list | dict | None,
         duration: float,
         errors: list = None,
         state: str = None
@@ -342,7 +341,7 @@ class AbstractQuery(Connection):
                 self._logger.error(
                     f'Cache Encode Error: {err}'
                 )
-                return None
+                return
             async with await redis.connection() as conn:
                 # async with  as conn:
                 await conn.setex(
