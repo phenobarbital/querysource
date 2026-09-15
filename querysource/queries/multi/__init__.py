@@ -199,9 +199,16 @@ class MultiQS(BaseQuery):
         return []
 
     async def query(self):
-        """
-        Executing Multiple Queries/Files
-        """
+        """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
+        import copy
+        from querysource.tenants import QueryIdentity
+
+        # Deep-copy pipeline config to avoid mutating input config
+        self._queries = copy.deepcopy(self._queries)
+        self._files = copy.deepcopy(self._files)
+        self._sources = copy.deepcopy(self._sources)
+        self._options = copy.deepcopy(self._options)
+
         tasks = {}
         if self.slug:
             query = await self.get_slug(slug=self.slug)
@@ -244,6 +251,47 @@ class MultiQS(BaseQuery):
                 if isinstance(self._conditions, dict):
                     self._conditions.clear()
                 self._options = {}
+
+        # Preflight policy checks on resolved references before a known batch starts.
+        # Resolve parent store
+        repo = await self.get_definition_repository()
+        parent_store = repo.registry.resolve(self._tenant_selector)
+
+        resolved_stores = {}
+        if self._queries:
+            for name, query_cfg in list(self._queries.items()):
+                # Keep alias separate from stored slug.
+                child_slug = query_cfg.get("slug")
+                if not child_slug:
+                    # No owner fallback/search if slug is missing.
+                    raise DriverError(
+                        f"Query {name!r} is missing a 'slug' key."
+                    )
+
+                # Resolve child tenant selector:
+                # Apply parent inheritance and explicit tenant/null overrides to saved queries.
+                # "tenant" key in query_cfg can be:
+                # - explicit string (e.g. "tenant2")
+                # - explicit None (explicit-null override)
+                # - missing (inherits parent)
+                if "tenant" in query_cfg:
+                    child_tenant = query_cfg.get("tenant")
+                else:
+                    child_tenant = self._tenant_selector
+
+                child_store = repo.registry.resolve(child_tenant)
+                resolved_stores[name] = child_store
+
+                # Preflight policy check: verify the definition exists in the resolved store
+                try:
+                    ident = QueryIdentity(store=child_store, slug=child_slug)
+                    await repo.get(ident)
+                except Exception as ex:
+                    raise self.Error(
+                        message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
+                        exception=ex
+                    ) from ex
+
         total_sources = (
             len(self._queries or {})
             + len(self._files or {})
@@ -268,6 +316,8 @@ class MultiQS(BaseQuery):
                 # never reach QueryObject or any database driver.
                 is_remote = query.pop("remote", False)
                 worker_addr = query.pop("worker", None)
+                # Also pop tenant key so it doesn't reach QueryObject or database driver
+                query.pop("tenant", None)
                 remote_config = None
                 if is_remote:
                     if worker_addr:
@@ -310,6 +360,7 @@ class MultiQS(BaseQuery):
                     t = ThreadQuery(
                         name, query, self._request, self._queue,
                         remote_config=remote_config,
+                        store=resolved_stores[name],
                     )
                 except Exception as ex:
                     raise self.Error(
