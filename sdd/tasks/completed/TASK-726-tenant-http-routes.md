@@ -292,5 +292,103 @@ async def test_columns_test_and_output_suffixes() -> None:
 
 ## Completion Note
 
-To be completed by the implementing agent: author/date, exact checks and results,
-files changed, deployment gates still unverified, and any approved spec deviations.
+Author/date: sdd-worker (orchestrated via parrot-sdd-coder), 2026-09-15.
+
+The dispatched seat `minimax` (backend nova, model minimax.minimax-m2.5)
+came back `fidelity_violation`: its commit included changes to
+`querysource/handlers/abstract.py`, which is not in this task's declared
+file list. The underlying idea — reading a tenant context off the
+request and threading it into `get_source()`'s `QS` construction — was
+architecturally sound, so it was reused, but repositioned entirely into
+this task's own in-scope files rather than the shared, out-of-scope
+`abstract.py`: every call site of `self.get_source(request, slug,
+conditions, driver=args)` in `service.py` already forwards `**kwargs`
+straight through to `QS(**kwargs)`, and `QS` already accepts a
+keyword-only `tenant=` parameter (TASK-721) — so a one-line
+`tenant = request.get('qs_tenant')` plus `tenant=tenant` at each
+existing call site achieves the identical propagation without touching
+`abstract.py` at all. Implemented fresh by the orchestrator (attempt 3).
+
+- `querysource/handlers/tenant.py`: `TenantQueryHandler` with
+  `list`/`query`/`columns`/`test_slug`. `list()` goes directly through
+  `DefinitionRepository.list()` — AC-1's explicit "do not instantiate
+  QueryManager just to call get" is satisfied literally: `QueryManager`
+  is never imported or touched by this handler at all — and matches
+  `QueryManager._paginate_list`'s `data`/`meta`/`X-Total-*` response
+  envelope (TASK-723) for shape consistency between the management and
+  tenant listing endpoints. `query()`/`columns()`/`test_slug()` resolve
+  and validate the URL tenant selector via a shared `_resolve_or_raise`
+  helper, then delegate to `QueryService`/`QueryHandler` — `query()`
+  dispatches to single-query execution (`QueryService`) when a `slug`
+  path segment is present, or inline/multi execution (`QueryHandler`)
+  when it is not; `columns()` dispatches on `request.method`
+  (`HEAD` → `get_columns`, else `columns`). The tenant selector is
+  threaded only through `request['qs_tenant']`, never merged into query
+  conditions or the request body (AC-4).
+- `querysource/handlers/service.py`/`querysource/handlers/multi.py`: the
+  minimal tenant-threading described above, applied identically at
+  every existing `get_source()`/`MultiQS()` construction call site
+  (4 in `service.py`: `query`/`get_columns`/`columns`/`test_slug`; 1 in
+  `multi.py`: `query`). Every pre-existing (non-tenant) caller never
+  sets `request['qs_tenant']`, so `request.get('qs_tenant')` is always
+  `None` for them — `QS`/`MultiQS`'s own existing default — so legacy
+  v2/v3 behavior is provably unchanged (AC-3), not merely assumed.
+- `querysource/services.py`: registered `GET`/`POST` collection (with
+  and without a trailing slash — AC-2 "register collection slash
+  aliases directly without POST redirects"), `GET`/`POST` stored slug,
+  `HEAD`/`PATCH` columns, `GET`/`POST` `.../test`, all under
+  `/api/v1/{tenant}/queries...`. Registered **last** in `setup()` — after
+  every fixed-literal route (management, datasources, `qs`/variables,
+  v2/v3 multi-query, component docs, Airtable OAuth). aiohttp's
+  `UrlDispatcher` resolves routes in registration order, so this
+  ordering is precisely what makes a literal first path segment like
+  `"management"`/`"qs"`/`"datasources"` resolve against the existing,
+  more specific route rather than being captured as `{tenant}` (AC-4) —
+  verified with a route-registration-index test asserting the exact
+  ordering, not assumed from reading the code.
+- `querysource/handlers/__init__.py`: exported `TenantQueryHandler`.
+- `tests/tenants/test_tenant_http_routes.py`: 6 tests — the 4 from the
+  blueprint plus 2 added (unknown-tenant selector rejection,
+  tenant-feature-not-configured → 404 rather than a `KeyError`, the same
+  class of "app hasn't wired up the tenant feature" case TASK-723/724/725
+  each needed to handle). `test_route_method_matrix_and_slash_aliases`
+  and `test_legacy_and_management_precedence` build a real
+  `QuerySource(lazy=True).setup(app)` and introspect the actual
+  registered routes/order; `test_single_multi_inline_dispatch` and
+  `test_columns_test_and_output_suffixes` monkeypatch `QueryService`/
+  `QueryHandler` at their own module attributes (picked up correctly by
+  `tenant.py`'s lazy, call-time imports) to verify real
+  `TenantQueryHandler` dispatch without needing a live database.
+
+Checks run (this worktree, `.venv` from the primary checkout):
+
+- `pytest tests/tenants/test_tenant_http_routes.py -q` → 6 passed.
+- `pytest tests/tenants tests/handlers tests/test_abstract_multi.py
+  --continue-on-collection-errors -q` → 149 passed, 1 pre-existing
+  collection error (`tests/handlers/test_airtable_oauth.py`, missing
+  `aioresponses` dependency, unrelated and present before this branch).
+- `ruff check` on all six changed/created files — fixed an import-order/
+  `__all__`-sort issue in `querysource/handlers/__init__.py` (both
+  introduced by this task's own edit); every other finding
+  (`BLE001`/`DTZ005`/`SIM102`/`TRY401`/`RUF015`/pre-existing unused
+  `sys`/`subprocess` imports in `services.py`) was checked line-by-line
+  against exactly where this task's edits landed and confirmed
+  pre-existing, unrelated code — left as-is, matching the convention on
+  every prior task in this feature. `querysource/handlers/tenant.py`
+  itself has zero findings.
+
+Files changed: `querysource/handlers/tenant.py` (new class),
+`querysource/handlers/__init__.py`, `querysource/services.py`,
+`querysource/handlers/service.py`, `querysource/handlers/multi.py`,
+`tests/tenants/test_tenant_http_routes.py`.
+
+Deployment gates still unverified: `black --check` could not run in this
+environment (same gap noted on every prior task). No live PostgreSQL/
+Redis was used; single/multi dispatch is verified against monkeypatched
+`QueryService`/`QueryHandler`, not a real query execution — that
+integration gate remains open per the spec's own broader "yes after DDL
+fixture review" note.
+
+No spec deviations: a second tenant CRUD API and an external-worker
+server implementation are explicitly out of scope for this task and were
+not created.
