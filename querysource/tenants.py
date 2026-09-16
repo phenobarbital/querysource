@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from asyncdb.drivers.pg import pg
 
@@ -167,10 +168,15 @@ class TenantRegistry:
         self._default_store = None
 
         # Get database connection info without secrets
-        db_info = conn.config
-        host = db_info.get("host", "localhost")
-        port = db_info.get("port", 5432)
-        database = db_info.get("database", "querysource")
+        # Acquired pg wrappers keep their DSN on the owning pool.
+        dsn = conn.get_dsn()
+        if not dsn and conn.pool() is not None:
+            dsn = conn.pool().get_dsn()
+        db_info = urlsplit(dsn or "")
+        options = parse_qs(db_info.query)
+        host = options.get("host", [unquote(db_info.hostname or "localhost")])[-1]
+        port = int(options.get("port", [db_info.port or 5432])[-1])
+        database = options.get("dbname", [unquote(db_info.path.lstrip("/")) or "querysource"])[-1]
         database_namespace = self._build_database_namespace(host, port, database)
         # Capture the real connection's namespace so resolve()'s
         # legacy-fallback branches never diverge from it.
@@ -224,7 +230,8 @@ class TenantRegistry:
             # No queries tables found - no stores to register
             return
 
-        # Query information_schema.columns for query_slug column
+        # Read the full shape: program_slug distinguishes legacy rows and
+        # disqualifies nonlegacy tables from the tenant contract.
         columns_query = """
         SELECT
             table_schema,
@@ -234,7 +241,6 @@ class TenantRegistry:
             is_nullable
         FROM information_schema.columns
         WHERE table_name = 'queries'
-        AND column_name = 'query_slug'
         """
 
         try:
@@ -315,7 +321,7 @@ class TenantRegistry:
                 continue
 
             # Get columns for this table
-            if schema not in schema_columns or table not in schema_columns[schema]:
+            if "query_slug" not in schema_columns.get(schema, {}).get(table, frozenset()):
                 diagnostics.append(
                     {
                         "schema": schema,
@@ -330,8 +336,12 @@ class TenantRegistry:
             # Check for program_slug column
             has_program_slug = "program_slug" in columns_set
 
-            # Check compatibility
-            is_compatible, reason = self._is_compatible_store(columns_set, has_program_slug)
+            # public.queries retains the legacy row contract. Only other
+            # schemas must satisfy the tenant contract (no program_slug).
+            is_legacy = schema == "public"
+            is_compatible, reason = self._is_compatible_store(
+                columns_set, has_program_slug and not is_legacy
+            )
             if not is_compatible:
                 diagnostics.append(
                     {
@@ -343,7 +353,7 @@ class TenantRegistry:
                 continue
 
             # Determine contract
-            contract = _LEGACY_CONTRACT if has_program_slug else _TENANT_CONTRACT
+            contract = _LEGACY_CONTRACT if is_legacy else _TENANT_CONTRACT
 
             # Create store
             store = QueryStore(

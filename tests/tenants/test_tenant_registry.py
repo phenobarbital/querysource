@@ -1,7 +1,9 @@
 """Implement immutable store identities and catalog discovery regression contracts."""
 
 import pytest
+from asyncdb.drivers.pg import pg, pgPool
 
+from querysource.repositories.definitions import DefinitionRepository
 from querysource.tenant_errors import TenantError
 from querysource.tenants import (
     DefinitionPage,
@@ -14,14 +16,110 @@ from querysource.tenants import (
 
 
 @pytest.mark.asyncio
+async def test_discovery_preserves_legacy_program_slug_when_loading() -> None:
+    """Catalog discovery and row adaptation agree on the physical contract."""
+    class CatalogConnection:
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
+
+        async def query(self, sentence: str) -> tuple[list[tuple[str, ...]], None]:
+            columns = {
+                "public": ("query_slug", "program_slug", "description"),
+                "tenant1": ("query_slug", "description"),
+                "old_tenant": ("query_slug", "program_slug"),
+                "unrelated": ("description",),
+            }
+            if "information_schema.columns" in sentence:
+                rows = [
+                    (schema, "queries", column, "text", "NO")
+                    for schema, names in columns.items()
+                    for column in names
+                ]
+                # Model the original SQL predicate so this catches regressions
+                # in the catalog scan, rather than only classification.
+                if "AND column_name = 'query_slug'" in sentence:
+                    rows = [row for row in rows if row[2] == "query_slug"]
+                return rows, None
+            return [(schema, "queries", "BASE TABLE") for schema in columns], None
+
+        async def fetch_one(self, sentence: str, slug: str) -> dict[str, str]:
+            if '"public"."queries"' in sentence:
+                return {"query_slug": slug, "program_slug": "hisense"}
+            assert '"tenant1"."queries"' in sentence
+            return {"query_slug": slug}
+
+        async def __aenter__(self) -> "CatalogConnection":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    conn = CatalogConnection()
+
+    async def connection_factory() -> CatalogConnection:
+        return conn
+
+    registry = TenantRegistry()
+    await registry.discover(conn)
+    assert {store.schema for store in registry.stores()} == {"public", "tenant1"}
+    legacy = registry.resolve(None)
+    assert legacy == registry.resolve("public")
+    assert legacy.contract == "legacy"
+    assert legacy.columns == frozenset({"query_slug", "program_slug", "description"})
+    assert registry.resolve("tenant1").contract == "tenant"
+    assert any(
+        item["schema"] == "old_tenant" and "program_slug" in item["reason"]
+        for item in registry.diagnostics()
+    )
+
+    repo = DefinitionRepository(registry=registry, connection_factory=connection_factory)
+    loaded = await repo.get(QueryIdentity(store=legacy, slug="hisense_stores"))
+    assert loaded.runtime.program_slug == "hisense"
+    tenant_loaded = await repo.get(QueryIdentity(store=registry.resolve("tenant1"), slug="sample"))
+    assert tenant_loaded.runtime.program_slug == "tenant1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pooled", [False, True])
+@pytest.mark.parametrize(
+    ("dsn", "namespace"),
+    [
+        ("postgresql://user:secret@prod-db.internal:6543/metadata", "prod-db.internal:6543/metadata"),
+        ("postgresql://user:secret@prod-db.internal/my%20database", "prod-db.internal:5432/my database"),
+        (
+            "postgresql://user:secret@localhost/unused?host=prod-db.internal&port=6543&dbname=metadata",
+            "prod-db.internal:6543/metadata",
+        ),
+    ],
+)
+async def test_real_pg_connection_namespace(
+    monkeypatch: pytest.MonkeyPatch, pooled: bool, dsn: str, namespace: str
+) -> None:
+    """Driver objects need no invented config attribute or live database."""
+    conn = pg(pool=pgPool(dsn=dsn)) if pooled else pg(dsn=dsn)
+    assert not hasattr(conn, "config")
+
+    async def query(sentence: str) -> tuple[list[tuple[str, ...]], None]:
+        if "information_schema.columns" in sentence:
+            return [("tenant1", "queries", "query_slug", "text", "NO")], None
+        return [("tenant1", "queries", "BASE TABLE")], None
+
+    monkeypatch.setattr(conn, "query", query)
+    registry = TenantRegistry()
+    await registry.discover(conn)
+    assert registry.resolve("tenant1").database_namespace == namespace
+    assert registry.resolve(None).database_namespace == namespace
+
+
+@pytest.mark.asyncio
 async def test_allowlist_none_empty_exact_and_duplicates() -> None:
     """allowlist none empty exact and duplicates."""
     # Create a mock connection matching the asyncdb `pg` driver's
     # `query(sentence) -> (result, error)` contract used elsewhere in the
     # codebase (see querysource/datasources/introspection.py `_run`).
     class MockConn:
-        def __init__(self):
-            self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
 
         async def query(self, sentence: str):
             if "information_schema.columns" in sentence:
@@ -79,8 +177,8 @@ async def test_allowlist_none_empty_exact_and_duplicates() -> None:
 async def test_discovery_tables_views_marker_shape_grants() -> None:
     """discovery tables views marker shape grants."""
     class MockConn:
-        def __init__(self):
-            self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
 
         async def query(self, sentence: str):
             if "information_schema.columns" in sentence:
@@ -143,8 +241,8 @@ async def test_discovery_tables_views_marker_shape_grants() -> None:
 async def test_quoted_names_and_default_alias_dedup() -> None:
     """quoted names and default alias dedup."""
     class MockConn:
-        def __init__(self):
-            self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
 
         async def query(self, sentence: str):
             if "information_schema.columns" in sentence:
@@ -231,8 +329,8 @@ async def test_scan_failure_has_no_partial_snapshot() -> None:
     which is a different, misleading state from "the scan itself broke."
     """
     class MockConn:
-        def __init__(self):
-            self.config = {"host": "localhost", "port": 5432, "database": "querysource"}
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
 
         async def query(self, sentence: str):
             # Simulate a scan failure by raising an exception
@@ -267,8 +365,8 @@ async def test_no_public_schema_never_picks_arbitrary_tenant_as_default() -> Non
     execute against that arbitrary tenant's data).
     """
     class MockConn:
-        def __init__(self):
-            self.config = {"host": "prod-db.internal", "port": 5432, "database": "querysource"}
+        def get_dsn(self) -> str:
+            return "postgresql://prod-db.internal:5432/querysource"
 
         async def query(self, sentence: str):
             if "information_schema.columns" in sentence:
