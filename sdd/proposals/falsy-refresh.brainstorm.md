@@ -9,10 +9,10 @@ base_branch: dev
 #   auth, cache, scheduler) or an area (sdd-tooling, dev-loop, docs, ci). Unknown values warn, not fail.
 projects: [providers, parsers, querysource]
 # tags: free-form kebab-case keywords for organizing specs (e.g. bigquery, cache).
-tags: [refresh, cache, boolean-coercion, query-conditions]
+tags: [refresh, paged, cache, boolean-coercion, query-conditions]
 ---
 
-# Brainstorm: Falsy Refresh — `refresh="false"` must not bypass the cache
+# Brainstorm: Falsy Refresh — `refresh="false"` must not bypass the cache (+ `paged` coercion)
 
 **Date**: 2026-09-24
 **Author**: Jesus Lara (with Claude)
@@ -43,6 +43,10 @@ The parser already does this correctly (`AbstractParser._query_refresh_sync`,
 parser **disagree** on the same input. Only the provider's value drives the
 cache decision.
 
+The parser's `paged` condition (`querysource/parsers/abstract.pyx:211-219`) has
+a related coercion defect and is folded into this feature (user decision): see
+"Sibling: `paged`" below.
+
 **Affected**: API clients and dashboards that pass `refresh=false` explicitly
 (they get uncached, slower responses); ops (unnecessary DB load).
 
@@ -59,13 +63,16 @@ cache decision.
   - Strings, case-insensitive, whitespace-stripped: the `strtobool` vocabulary
     (`y yes t true on 1` → True; `n no f false off 0 null` → False).
   - **Empty string** (bare `?refresh` or `?refresh=`) → `True` (flag style).
-  - Anything else (e.g. `"maybe"`, `2`, `1.5`, lists) → **`False` + a warning log**.
+  - `bytes` / `bytearray` → **unrecognized** (not decoded).
+  - Anything else (e.g. `"maybe"`, `2`, `1.5`, lists, bytes) → **`False` + a warning log**.
     Never raise to the client; never bypass the cache by accident.
+- The same helper and fallback also parse the parser's `paged` condition.
 - `externalProvider.refresh()` keeps always returning `True` — out of scope.
 - No change to the public `refresh()` method signatures or the `refresh`
   condition name (`describe.py:243` advertises `"refresh_param": "refresh"`).
 - Tests: parametrized unit truth table for the helper, a provider test proving
-  `refresh="false"` → `refresh() is False`, and a parser parity test.
+  `refresh="false"` → `refresh() is False`, and parser parity tests for
+  `refresh` and `paged`.
 
 ---
 
@@ -217,17 +224,39 @@ Coerce `refresh` to a real bool where query-string/body conditions are built in
    The key is still deleted from `self._conditions`.
 3. `AbstractParser._query_refresh_sync` uses the same helper with the same
    fallback (keeps catching `KeyError`/`AttributeError`).
-4. `QS.query()` is unchanged — it simply receives a correct boolean.
+4. `AbstractParser._offset_pagination_sync` replaces the `is_boolean` /
+   `strtobool` branch for `paged` with the same helper and fallback (catch
+   `ValueError` → warning + `False`).
+5. `QS.query()` is unchanged — it simply receives a correct boolean.
 
 ### Edge Cases & Error Handling
 - Whitespace/case: `" FALSE "` → `False`.
-- `bytes` values: decode as ASCII then treat as string (spec to confirm; see Open Questions).
+- `bytes` / `bytearray` values: unrecognized → warn + False (not decoded).
 - `bool` is a subclass of `int` — check `bool` first so `True`/`False` aren't
   routed through the int branch (harmless, but explicit).
 - Numeric `1.0`/`0.0`: per agreed rule "any other number → unrecognized" → warn + False.
 - Lists/dicts (e.g. repeated `?refresh=a&refresh=b` producing a list) → warn + False.
 - Warning log must not echo unbounded user input — truncate/`repr` the value.
+- `paged=""` becomes `True` under the shared flag semantics (previously the
+  `ValueError` was swallowed and `_paged` stayed `False`).
 - `uap.py:107` deletes `refresh` from its own conditions afterwards — unaffected.
+
+### Sibling: `paged` (folded in)
+Current code (`parsers/abstract.pyx:211-219`), inside `cdef void _offset_pagination_sync(self)`
+(declared in `abstract.pxd:70` **without** an `except` clause):
+
+- `self._paged` is `cdef bint` (`abstract.pxd:42`), so assigning `"true"` is coerced
+  to `True` — string values are *not* stored raw (correction to the first draft).
+- Actual defects:
+  1. Unrecognized strings (`"maybe"`, `""`) reach `strtobool(paged)`, which raises
+     `ValueError`; only `KeyError`/`AttributeError` are caught, and because the
+     function is a `cdef void` with no `except` declaration, Cython prints the
+     error as "unraisable" and **silently aborts the rest of the function** —
+     any statements after the `paged` block in `_offset_pagination_sync` are
+     skipped. The spec must re-read the full function to list what is skipped.
+  2. The semantics differ from `refresh` (e.g. `""`), so the two flags disagree.
+- Impact is currently low: nothing outside `parsers/abstract.pyx` reads `_paged`
+  (verified by grep). The fix is consistency + removing the unraisable path.
 
 ---
 
@@ -241,6 +270,8 @@ Coerce `refresh` to a real bool where query-string/body conditions are built in
 - `provider-refresh-condition`: `BaseProvider` parses `refresh` with the shared helper.
 - `parser-refresh-condition`: `AbstractParser` parses `refresh` with the shared
   helper (empty string now `True`, matching the provider).
+- `parser-paged-condition`: `AbstractParser` parses `paged` with the shared helper;
+  unrecognized values warn + `False` instead of raising an unraisable `ValueError`.
 
 ---
 
@@ -251,10 +282,10 @@ Coerce `refresh` to a real bool where query-string/body conditions are built in
 | `querysource/types/validators.pyx` | extends | new `cpdef` helper; rebuild required |
 | `querysource/types/__init__.py` | extends | re-export helper, add to `__all__` |
 | `querysource/providers/abstract.py` | modifies | lines 83-85 |
-| `querysource/parsers/abstract.pyx` | modifies | `_query_refresh_sync` (177-186); rebuild required |
+| `querysource/parsers/abstract.pyx` | modifies | `_query_refresh_sync` (177-186) and `paged` block in `_offset_pagination_sync` (203-219); rebuild required |
 | `querysource/queries/qs.py` | depends on | consumes `refresh()`; behavior now correct, no code change |
 | `querysource/providers/external.py` | unchanged | `refresh()` still hard-coded `True` |
-| Behavior change | minor | `refresh=false` now honors cache; parser's `''` flips from False → True |
+| Behavior change | minor | `refresh=false` now honors cache; parser's `''` flips from False → True for `refresh` and `paged` |
 
 No new dependencies. No API/schema change.
 
@@ -331,6 +362,24 @@ def refresh(self) -> bool:                                 # line 65
     return True
 ```
 
+```python
+# From querysource/parsers/abstract.pyx — paged
+    cdef void _offset_pagination_sync(self):              # line 203
+        paged = self.conditions.pop('paged', False)        # line 211
+        if is_boolean(paged): self._paged = paged          # lines 212-213
+        elif isinstance(paged, str): self._paged = strtobool(paged)  # 214-215 (ValueError uncaught)
+        else: self._paged = False                          # 216-217
+        # except (KeyError, AttributeError): self._paged = False     # 218-219
+```
+
+```python
+# From querysource/parsers/abstract.pxd
+cdef public bint refresh                                   # line 23
+cdef bint _paged                                           # line 42
+cdef void _query_refresh_sync(self)                        # line 67  (no except clause)
+cdef void _offset_pagination_sync(self)                    # line 70  (no except clause)
+```
+
 #### Verified Imports
 ```python
 from querysource.types import strtobool, is_boolean, is_empty   # querysource/types/__init__.py:2
@@ -340,7 +389,8 @@ from querysource.types import strtobool, is_boolean, is_empty   # querysource/ty
 #### Key Attributes & Constants
 - `BaseProvider._refresh` → `bool` (querysource/providers/abstract.py:71)
 - `BaseProvider._logger` → `logging.Logger` (querysource/providers/abstract.py:50)
-- `AbstractParser.refresh` → `bool` (querysource/parsers/abstract.pyx:86)
+- `AbstractParser.refresh` → `cdef public bint` (abstract.pxd:23; init abstract.pyx:86)
+- `AbstractParser._paged` → `cdef bint` (abstract.pxd:42; init abstract.pyx:90)
 - Extension build entry: `querysource.types.validators` (setup.py:140-141)
 - `describe.py:243` — `"refresh_param": "refresh"` (public contract; keep name)
 
@@ -348,6 +398,7 @@ from querysource.types import strtobool, is_boolean, is_empty   # querysource/ty
 - ~~`querysource/types/validators.pxd`~~ — no `.pxd`; `cimport` of validators symbols is NOT possible without adding one.
 - ~~A shared flag/boolean-condition helper~~ — nothing today implements the agreed truth table (`''` → True, non-0/1 ints → reject).
 - ~~`validators.to_boolean` as a Python-callable~~ — it is `cdef` (not `cpdef`) and returns SQL strings.
+- ~~Any reader of `AbstractParser._paged` outside `parsers/abstract.pyx`~~ — none found (`providers/sql.py:68` only lists `"paged"` as a reserved condition key).
 - ~~Tests for `BaseProvider` refresh parsing~~ — no existing test file covers it (tests/ has parser tests like `test_sql_parser_combinations.py` but none for refresh).
 
 ---
@@ -374,5 +425,5 @@ from querysource.types import strtobool, is_boolean, is_empty   # querysource/ty
 - [x] Helper location — *Owner: Jesus Lara*: Cython `cpdef` in `querysource/types/validators.pyx`
 - [x] `externalProvider.refresh()` — *Owner: Jesus Lara*: keep as-is (always True)
 - [x] Test depth — *Owner: Jesus Lara*: unit tests for helper + provider (+ parser parity); no HTTP-level test
-- [ ] Should `bytes` values be decoded and accepted, or treated as unrecognized? — *Owner: Jesus Lara*
-- [ ] Sibling bug: `AbstractParser` `paged` handling (`parsers/abstract.pyx:~211-214`) assigns the raw string when `is_boolean(paged)` is True (e.g. `paged="true"` → `self._paged = "true"`). Fold into this feature using the new helper, or file separately? — *Owner: Jesus Lara*
+- [x] Should `bytes` values be decoded and accepted, or treated as unrecognized? — *Owner: Jesus Lara*: unrecognized → warn + False
+- [x] Sibling `paged` handling (`parsers/abstract.pyx:211-219`) — fold in or file separately? — *Owner: Jesus Lara*: fold in; parse `paged` with the same helper and fallback. (Correction: `_paged` is `cdef bint`, so `"true"` is coerced, not stored raw; the real defect is the uncaught `ValueError` in a `cdef void` function — see "Sibling: `paged`".)
