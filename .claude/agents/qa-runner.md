@@ -60,11 +60,14 @@ also edits can mask the very defects it should surface.
    ```
 3. **Run the test suite** (capture exit codes — they decide the verdict):
    ```bash
-   # a) Targeted: the feature's own tests
-   pytest <feature-test-paths> -q --tb=short
-   # b) Sanity: quick full-suite signal (tolerate pre-existing failures,
-   #    but attribute them correctly in the report)
-   pytest -q --tb=line 2>&1 | tail -30
+   # Feature tier (FEAT-563): mirror of directories over the feature's changes ∪ every
+   # task's `## Validation Commands` ∪ core escalation (paid once, ledger-deduped).
+   # Never run the whole suite here — CI owns full-suite and e2e runs.
+   # --task-file enumerates the feature's own tasks from its per-spec index, so the
+   # "∪ declared Validation Commands" half of the feature tier is actually exercised.
+   TASK_FILES=$(jq -r '.tasks[].file' "sdd/tasks/index/<feature-slug>.json")
+   python -m scripts.sdd.select_tests --tier feature --base origin/<base_branch> \
+     $(printf -- '--task-file %s ' $TASK_FILES) --run
    ```
    Use `pytest-asyncio` conventions already in the repo for async tests.
 4. **Lint and type-check the changed files only:**

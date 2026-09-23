@@ -70,6 +70,43 @@ class ExistingClass(BaseClass):
 
 ---
 
+## Complexity Contract
+
+> **MANDATORY.** Declares the measurable targets and contract symbols used for
+> deterministic complexity routing (FEAT-561) before any coder is dispatched.
+> This is a declaration, not a hand-authored score — the evaluator computes
+> classification from measured evidence, never from this section's prose.
+> Legacy tasks without this section remain parseable but route conservatively
+> (unknown symbol coverage requires the complex-task route until upgraded).
+>
+> `targets` MUST match the "Files to Create / Modify" table exactly after
+> normalization (same paths, uppercase `"CREATE"` / `"MODIFY"` actions).
+> `contract_symbols` MUST list every exact `sym:<repo-relative-path>#<qualname>`
+> identifier the Codebase Contract above verified as an existing reference —
+> use `[]` (not `null`) when there are none; `null` means legacy/unknown
+> coverage and is only for tasks predating this section.
+
+```json
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "path": "querysource/path/to/new_file.py",
+      "action": "CREATE"
+    },
+    {
+      "path": "querysource/path/to/existing.py",
+      "action": "MODIFY"
+    }
+  ],
+  "contract_symbols": [
+    "sym:querysource/path/to/existing.py#ExistingClass"
+  ]
+}
+```
+
+---
+
 ## Delegation Contract
 
 > **OPTIONAL.** Include this section ONLY when the task is
@@ -233,6 +270,15 @@ anchor unique` instead of a bare one-line anchor.
 - [ ] No linting errors: `ruff check querysource/<path>`
 - [ ] Imports work: `from querysource.<module> import <Component>`
 - [ ] Criterion N
+
+---
+
+## Validation Commands
+
+> File-level pytest only — no directories, no package roots.
+
+- `pytest tests/handlers/test_describe_list.py -q`
+- `pytest tests/test_error_formatter.py::test_production_minimal -q`
 
 ---
 

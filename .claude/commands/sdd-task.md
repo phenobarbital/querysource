@@ -1,3 +1,11 @@
+---
+model: opus
+description: /sdd-task — Decompose a Spec into SDD Tasks
+# Per-task Codebase Contract, Complexity/Delegation Contract and Implementation
+# Blueprint. Pinned to opus so it neither inherits Fable 5.1 (2x the rate) nor
+# drops to sonnet for the per-edit-site verification work.
+---
+
 # /sdd-task — Decompose a Spec into SDD Tasks
 
 Decompose an approved Feature Specification into atomic, assignable implementation tasks.
@@ -165,6 +173,16 @@ only the marked gaps:
    not introduce a symbol the Codebase Contract does not list.
 5. **Derive from the spec's Interface Skeletons** (spec §3) and re-verify the
    anchors now; signatures fixed by the skeleton are not renegotiable.
+   **Start from the spec's §6 Edit Sites table** when it is populated: it already
+   carries the verbatim anchor, its `path:NN` and its occurrence count for every
+   file the modules touch, so do not search for the anchor again — but the table
+   was verified at spec time and code moves, so for every row you use, re-run
+   `grep -c '<anchor>' <path>` and use the fresh count. A count that no longer
+   matches the table means the anchor moved: re-locate it and correct the row's
+   `path:NN` in the task's blueprint (the spec is not rewritten at task time).
+   A count of `0` means the anchor is gone — stop and report the drift rather
+   than inventing a new attachment point. If §6 has no Edit Sites table (spec
+   predates it), derive the anchors yourself as in the rest of this step.
 6. **Size cap**: no block over ~80 lines. If a file needs more, split the task.
 7. **Explain-for-executor rule**: every non-trivial decision is written as an
    imperative instruction *plus its reason* ("do X — because Y"), in the
@@ -224,6 +242,25 @@ file, the task is too big.
    task. Use each id verbatim for both the filename and every `id` field
    in the per-spec index; never invent, recompute, or reuse a `TASK-<NNN>`
    number outside of what `reserve_ids.py` returned.
+
+   **`--from-issue <issue-id>` (FEAT-566):** the promoted task still gets a
+   normally-reserved `TASK-<NNN>` from `reserve_ids.py` above — a ledger
+   issue id is never used as (or in place of) a task id. Seed the task's
+   Context/Scope from the selected issue and its file context. When called by
+   `/sdd-fix`, preserve its selected FixPlan/claimed issue as the handoff; do not
+   re-query ready work to recover an issue that is now claimed. For standalone
+   promotion, locate the issue in `wikitoolkit ledger plan-fix --json` first.
+   Use `wikitoolkit ledger context <issue.files...>` with repo-relative file
+   paths, not the issue ID. Include `discovered_from: <issue-id>` in the task.
+   Promotion never runs `ledger close`: filing a task is not resolution.
+   Close separately only after implementation and validation, with the
+   two-key evidence required by `/sdd-fix`.
+   **Deprecated (FEAT-572)**: `--from-issue` remains for one deprecation cycle but is no
+   longer the ledger entry point — it can only append a task to an *existing* spec, which
+   for a finished feature (per-spec index `completed_at` set) is wrong. Use `/sdd-fix
+   <issue-id>` instead: it plans the issue's group, routes it to the Fast lane (branch → PR)
+   or the SDD lane (reuse the open parent spec, else mint a fresh `FEAT-<NNN>`), and closes
+   by evidence.
    Fill the template's `## Implementation Blueprint` section for every task
    per §3's rules; a task without one is incomplete.
 
@@ -254,6 +291,7 @@ and ignored by all FEAT-145 commands). Schema:
   "created_at": "<ISO-8601>",
   "completed_at": null,
   "parallel_semantics": "exclusive",
+  "validation_contract": "required",
   "tasks": [
     {
       "id": "TASK-<NNN>",
@@ -316,6 +354,54 @@ complete. `design_complete: true` is a declaration the task author signs.
 - Omit the section entirely when the task is not eligible. Most tasks are not,
   and that is the normal, expected route.
 
+#### Validation Commands (mandatory, per task — FEAT-563)
+
+Every generated task MUST carry a `## Validation Commands` section placed right
+after `## Acceptance Criteria`: one bullet per command, each a backticked
+`pytest` invocation whose operands are **test files or node ids** — never a
+directory, never `tests/`, never a bare `pytest`.
+
+```markdown
+## Validation Commands
+- `pytest tests/handlers/test_describe_list.py -q`
+- `pytest tests/test_error_formatter.py::test_production_minimal -q`
+```
+
+This is what the sdd-coder guard rewrites a broad pytest to. New per-spec index
+headers MUST include `"validation_contract": "required"`; `check_task_graph`
+then reports `missing-validation-commands`, `broad-validation-command` and
+`directory-validation-target` as errors (`validation-path-unknown` warns).
+
+#### Complexity Contract (mandatory, per task)
+
+Every generated task MUST carry a `## Complexity Contract` section containing
+a JSON block with `schema_version: 1`.
+- **`targets`**: A list of objects with `path` (repo-relative path) and
+  `action` (`"CREATE"` or `"MODIFY"`, uppercase) matching the "Files to
+  Create / Modify" table exactly.
+- **`contract_symbols`**: A list of exact symbol IDs referenced by the
+  Codebase Contract (e.g.,
+  `"sym:querysource/providers/abstract.py#BaseProvider"`).
+  If there are no existing symbol references, use an empty list `[]` (do not
+  omit the field — an absent list means legacy/unknown coverage).
+- Legacy tasks without this section default to unknown complexity.
+  Natural-language assurances cannot downgrade this — the deterministic
+  evaluator, not the task author's prose, decides classification.
+
+Example:
+```json
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "path": "querysource/providers/abstract.py",
+      "action": "MODIFY"
+    }
+  ],
+  "contract_symbols": []
+}
+```
+
 ### 4b. Validate the Task Graph
 
 Run the deterministic graph check on the index you just wrote:
@@ -331,6 +417,10 @@ python -m scripts.sdd.check_task_graph sdd/tasks/index/<feature-slug>.json
   edge, or write its evidence in `parallelism_notes` (naming the dependency id);
   `possible-missing-dependency` → add the edge or confirm the reference is not
   a use; `duplicate-notes` / `exclusive-without-notes` → write per-task notes.
+- FEAT-563 validation-contract codes: `missing-validation-commands`,
+  `broad-validation-command`, `directory-validation-target` (errors when the
+  header requires the contract) and `validation-path-unknown` (warning) — add
+  or fix the task's `## Validation Commands` section.
 - Copy the report's first line (`<N> tasks, <W> waves, max width <M>`) into the
   §6 output. A width of 1 on a multi-task feature needs a one-line justification.
 

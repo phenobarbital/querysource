@@ -1,3 +1,10 @@
+---
+model: sonnet
+description: /sdd-start — Start an SDD Task
+# Implementation executor: resolves the task, checks deps, ensures the worktree and
+# writes code. Pinned so it never inherits an Opus/Fable session model.
+---
+
 # /sdd-start — Start an SDD Task
 
 Pick up a task from the SDD task index by ID or slug, validate it is ready, mark it in-progress,
@@ -109,6 +116,40 @@ The commit lives on the current branch. The merge in `/sdd-done` brings it
 to `base_branch` alongside the code commit — atomically, with no conflict
 surface (other features touch other per-spec index files).
 
+**Ledger `task.started` (FEAT-566, best-effort):** immediately after the
+commit above, record the start in the shared work ledger — never blocking
+on failure (missing ledger package, unwritable shared root, ...):
+
+```bash
+# parrot is not a querysource dependency: use the parrot-sdd-coder runtime.
+PARROT_PY=$(python3 -m scripts.sdd._parrot_runtime --print-python 2>/dev/null || echo python3)
+"$PARROT_PY" - "<TASK-NNN>" "<feature-slug>" <<'PYEOF' || true
+import sys
+from pathlib import Path
+
+task_id, feature_slug = sys.argv[1:3]
+try:
+    from parrot.knowledge.wiki.ledger.events import LedgerEvent
+    from parrot.knowledge.wiki.ledger.log import LedgerLog
+    from parrot.knowledge.wiki.project import find_shared_root
+
+    shared_root = find_shared_root(Path.cwd()) or Path.cwd()
+    ledger_dir = shared_root / ".parrot" / "ledger"
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    event = LedgerEvent(
+        kind="task.started", subject=f"task:{task_id}",
+        actor="agent:sdd-start", payload={"feature": feature_slug},
+    )
+    LedgerLog(str(ledger_dir / "events.jsonl")).append(event)
+except Exception as exc:  # noqa: BLE001 — ledger emission never blocks /sdd-start
+    print(f"⚠️  task.started ledger emission skipped: {exc}", file=sys.stderr)
+PYEOF
+```
+
+Log-only append (same durability guarantee as `close_task.sh`'s
+`task.closed` — spec §2: "never takes a database lock") — there is no
+SQLite writer contention to handle here.
+
 ### 5. Read Context
 1. Read the **task file** at the path from the index.
 2. Read the **spec file** referenced in the task header.
@@ -117,6 +158,19 @@ surface (other features touch other per-spec index files).
    - Files to create/modify
    - Acceptance criteria
    - Test specification
+
+### Prime with Ledger Context (FEAT-566, best-effort)
+
+Before implementing, surface open ledger issues/insights that intersect the
+task's declared file/symbol scope — never fatal, never blocking on a busy or
+unbuilt ledger:
+
+```bash
+wikitoolkit ledger context <file-1> <file-2> ... 2>/dev/null || true
+```
+
+Fold any non-empty output into the context you carry into Step 7 — it is
+informational (known related issues, prior insights), not a gate.
 
 ### 6. Print Kickoff Summary
 Output:
@@ -209,6 +263,16 @@ implement the task yourself — the normal route is the default.
    (`sdd/tasks/index/*.json`, task files) are never edited by the writer.
 
 ### 8. Mark Done (in place)
+
+## Deterministic task inspection and closure (FEAT-584)
+Keep wiki-first and read the complete task contract through bounded references.
+Prefer task-context inspection when the engine is present; fallback keeps explicit checks.
+Use the existing declared test selector, environment protection and semantic delivery review.
+Finalize only with structured green evidence and the exact implementation HEAD; call
+python -m scripts.sdd.finalize_task, inspect returned staged paths and commit explicitly.
+Reject stale evidence and divergent active/completed twins; never reset unrelated staging.
+Do not compact for every task. Feature handoff uses a durable checkpoint and fresh reviewer;
+Codex/Antigravity without a verified adapter report unsupported_host, never call Claude /compact.
 
 After the code is committed, update the per-spec index in the same branch
 — no `cd` to the main repo (FEAT-145).

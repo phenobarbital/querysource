@@ -4,6 +4,14 @@ Reads the task file from `sdd/tasks/completed/`, loads every referenced file, ap
 `code-reviewer` rule, and runs an adversarial cross-check (`codex`) before
 producing a structured review report.
 
+**Mandatory Deferred Findings Table**: Every CONFIRMED 🔴/🟡 finding not fixed in-review MUST be
+attempted with `wikitoolkit ledger open` (or the `mcp__wikitoolkit__ledger_open` tool, same fields,
+when it is available) and listed in the report's Deferred findings table. The ledger intentionally
+resolves to the main checkout's `.parrot/ledger/`. If a sandbox makes it read-only, do not request
+broader filesystem access or create a worktree-local ledger; list the full finding with
+`(NOT filed: shared ledger is read-only)`. Reviews with unfiled confirmed findings and an empty
+Deferred table are invalid.
+
 ## Usage
 ```
 /sdd-codereview sdd/tasks/completed/TASK-001-music-generation-model.md
@@ -14,6 +22,16 @@ producing a structured review report.
 If nothing is provided, list the files in `sdd/tasks/completed/` and ask the user to pick one.
 
 ## Steps
+
+## Durable review boundary (FEAT-584)
+Before feature review, settle owned attempts and supervised validations and close execution.
+Unknown activity is a blocker, never evidence of an idle worktree. Persist the checkpoint,
+record actual supported compaction outcome once per checkpoint/context, revalidate and start
+a fresh reviewer. Unsupported contexts continue from checkpoint with an explicit reason.
+Keep review criteria, adversarial checks, full lint, integration validation and ledger gates.
+Changes after checkpoint require new hashes/evidence and invalidate old review coverage.
+For sdd-done, preserve existing verification stamping, approval and push/merge policy;
+do not run task closure again on base_branch and do not clean worktrees with unknown activity.
 
 ### 1. Resolve the Task File
 1. If the user passes a full path, use it directly.
@@ -143,6 +161,19 @@ Output a structured markdown report:
 
 ### 🟢 Minor / Suggestions
 - **[file:line]** <description>
+
+## Deferred Findings
+Every CONFIRMED 🔴/🟡 finding not fixed in-review MUST be attempted with `wikitoolkit ledger open`
+and listed below. Use `ledger open` with `--kind bug --severity major|critical --discovered-from task:TASK-NNN
+--about "sym:<rel>#<qualname>" --title … --body …` for each finding. If it reports the shared
+ledger is read-only, retain the full finding and use `(NOT filed: shared ledger is read-only)` as
+the Issue ID.
+
+| Severity | Title | Issue ID | Filed By |
+|----------|-------|----------|----------|
+| none     | n/a   | n/a      | n/a      |
+
+> **Note**: Reviews with unfixed confirmed findings and an empty Deferred table are invalid.
 
 ## Acceptance Criteria Check
 | Criterion | Status | Notes |
