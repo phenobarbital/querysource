@@ -10,7 +10,7 @@ tags: [pbac, authorization, principal, tenancy, library-api]
 **Feature ID**: FEAT-150
 **Date**: 2026-09-24
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.1.0
 **Exploration**: `sdd/proposals/pbac-request-credentials.brainstorm.md` (Option A)
 
