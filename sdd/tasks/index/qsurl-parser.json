@@ -194,7 +194,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -205,8 +205,8 @@
       "parallelism_notes": "QS._apply_residual calls residual.apply from TASK-772 (querysource/qsurl/residual.py) and types the kwarg with ResidualPlan from TASK-765 (querysource/qsurl/plan.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-773-qs-residual-stage.md"
+      "completed_at": "2026-09-24T20:38:48+00:00",
+      "file": "sdd/tasks/completed/TASK-773-qs-residual-stage.md"
     },
     {
       "id": "TASK-774",
