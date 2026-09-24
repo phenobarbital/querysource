@@ -18,6 +18,7 @@ from ..exceptions import (
 from ..models import QueryModel
 from ..utils.functions import get_hash
 from ..parsers.abstract import AbstractParser
+from ..types import to_flag
 
 
 class BaseProvider(ABC):
@@ -81,7 +82,15 @@ class BaseProvider(ABC):
             # making a copy of conditions:
             self._conditions = copy.deepcopy(conditions)
             if 'refresh' in self._conditions:
-                self._refresh = bool(self._conditions['refresh'])
+                raw_refresh = self._conditions['refresh']
+                try:
+                    self._refresh = to_flag(raw_refresh)
+                except ValueError:
+                    self._logger.warning(
+                        "Unrecognized 'refresh' condition value %s; treating as False",
+                        repr(raw_refresh)[:64]
+                    )
+                    self._refresh = False
                 del self._conditions['refresh']
         else:
             self._conditions: dict = {}
