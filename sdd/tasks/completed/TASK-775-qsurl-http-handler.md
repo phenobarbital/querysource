@@ -350,10 +350,54 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Created `querysource/handlers/qsurl.py` with `QSUrlService(AbstractHandler)`
+(`query`, `_source`, `_enforce_slug_execute`, `_output_args`, `resolve_capabilities`)
+exactly per the Implementation Blueprint, filling in every FILL IN: the `query` execution
+block (`get_source(..., residual=plan)` → `build_provider()` with the full
+SlugNotFound/TenantError/ParserError/(ProviderError,DriverError)/Exception mapping copied
+verbatim from `service.py:311-345` → datasource:use/driver:use PBAC copied from
+`service.py:346-367` → `DataOutput(...).response()` with the same
+ConnectionTimeout/(ProviderError,DriverError)/QSUrlError/(QueryException,Exception)
+handling as `service.py:369-396`, plus the outer `except QSUrlError → 400 detail`,
+`except web.HTTPException → raise`, `(ProviderError, DriverError) → 'Query Failed'`,
+`(QueryException, Exception) → Except` mapping from `service.py:401-412`);
+`_enforce_slug_execute` (verbatim copy of `service.py:200-225`); `_output_args` (verbatim
+copy of `service.py:227-289`, returns `(queryformat, output_args)`); `resolve_capabilities`
+(the lazy probe QS design note, plus `SlugNotFound`/`TenantError` error mapping and a
+`finally: await probe.close()` swallowing exceptions). Exported `QSUrlService` from
+`querysource/handlers/__init__.py` (alphabetical order preserved) and registered
+`GET /api/v1/services/qsurl/{path:.*}` in `querysource/services.py` right after the
+existing `add_head('/api/v2/services/queries/{slug}', qs.get_columns)` route.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Environment limitation (documented, not a task failure)**: the qsurl parser back-ends
+(Rust extension TASK-764/777, Lark fallback TASK-766) are blocked in this sandbox — see
+TASK-764's Completion Note (porting the user-provided reference tarball was denied by the
+sandbox's auto-mode classifier as "Code from External", pending explicit operator
+permission). `querysource.qsurl.parse()` is therefore not functional yet. Every test in
+`tests/handlers/test_qsurl_service.py` patches `querysource.handlers.qsurl.parse` directly
+(documented in the test module's own docstring) instead of exercising the real grammar,
+so the handler's own logic — source assembly/decode-once, PBAC ordering, capability-probe
+wiring, `translate.split` integration (real, unmocked — TASK-771 is done), and the error
+envelope — is fully covered independent of the blocked parser back-ends. All 7 tests pass:
+`test_parse_error_is_400_with_detail`, `test_pbac_deny_before_capability_probe`,
+`test_q_form_joins_slug_and_rest`, `test_q_with_nonbare_path_is_400`,
+`test_q_not_in_conditions`, `test_unsupported_capability_is_400` (via the real `split()`),
+and `test_decodes_once_via_real_router` (a genuine `aiohttp.test_utils.TestServer` +
+`TestClient` round-trip through the real router, confirming aiohttp's own single
+percent-decode: `%2527` reaches the parser as `%27`, never `'`). Once TASK-764/766/777 land,
+a follow-up should additionally exercise the real parser end-to-end (out of this task's
+scope; the handler code itself needs no changes for that).
 
-**Deviations from spec**: none | describe if any
+`pytest tests/handlers/test_qsurl_service.py -q` → 7 passed. `pytest
+tests/handlers/test_queryservice_pbac_smoke.py -q` → 3 passed (legacy route untouched,
+AC18). `pytest tests/handlers -q` → 142 passed, 2 pre-existing failures in
+`test_airtable_oauth.py` confirmed via `git stash` to be unrelated (aioresponses/aiohttp
+version mismatch: `ClientResponse.__init__() missing 1 required keyword-only argument:
+'stream_writer'`, present before this task's changes too). `ruff check
+querysource/handlers/qsurl.py querysource/handlers/__init__.py querysource/services.py
+tests/handlers/test_qsurl_service.py` clean.
+
+**Deviations from spec**: none (the environment limitation above is pre-existing and
+documented, not a deviation from what this task implements).

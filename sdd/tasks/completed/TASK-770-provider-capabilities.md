@@ -234,10 +234,24 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented exactly per the Implementation Blueprint: `capabilities` /
+`residual_scan` class attributes added to `BaseProvider` (defaults `qsurl_caps.BASE` /
+`True`) right after `_parser_options`; `sqlProvider.capabilities` override under
+`__parser__ = SQLParser`; `pgProvider.capabilities = sqlProvider.capabilities |
+{TEXT_MATCH}` under `__parser__ = pgSQLParser` (confirmed `sqlProvider` already imported
+at `pg.py:11`, no duplicate import added); `cassandraProvider.capabilities` +
+`residual_scan = False` under `__parser__ = CQLParser`. `tests/qsurl/test_provider_capabilities.py`
+created with the exact-set parametrized test plus `test_no_provider_declares_phase1_unsupported`.
+`pytest tests/qsurl/test_provider_capabilities.py -q` → 5 passed. `pytest
+tests/e2e/test_qs_dry_run.py -q` → 23 passed (no regression). `python -c "import
+querysource.providers.pg, querysource.providers.cassandra"` succeeds — no import cycle.
+`ruff check` on the four modified provider files reports 8 pre-existing findings (import
+sorting, `super()` call style, one `B904`) — confirmed via `git stash`/re-check to be
+identical before and after this task's one-line-per-file additions, i.e. pre-existing
+style debt unrelated to this task; `ruff check --select E9,F63,F7,F82` (syntax
+errors/undefined names, the sdd-worker fallback-loop lint gate) is clean on every touched
+file including the new test.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
