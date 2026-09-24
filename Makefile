@@ -62,6 +62,7 @@ develop:
 # root pyproject.toml (which uses setuptools for the rest of the project).
 build-rust:
 	$(MATURIN) develop --release --manifest-path rust/Cargo.toml
+	$(MATURIN) develop --release --manifest-path rust/qsurl/Cargo.toml
 
 # Stage the compiled Rust extension (.so) INTO the source tree so that
 # `uv build` (setuptools backend) bundles it into the wheel. setuptools only
@@ -80,6 +81,15 @@ stage-rust:
 	  find "$$tmp" -name '_qs_parsers*.so' -exec cp {} querysource/qs_parsers/ \; ; \
 	  rm -rf "$$tmp"; \
 	  ls -la querysource/qs_parsers/_qs_parsers*.so
+	$(MATURIN) build --release -i python --manifest-path rust/qsurl/Cargo.toml --out $(RUST_WHEEL_OUT)
+	@whl=$$(ls -t $(RUST_WHEEL_OUT)/qsurl-*.whl | head -1); \
+	  test -n "$$whl" || { echo "ERROR: maturin produced no qsurl wheel in $(RUST_WHEEL_OUT)"; exit 1; }; \
+	  echo "Staging qsurl extension from $$whl"; \
+	  tmp=$$(mktemp -d); \
+	  unzip -o -q "$$whl" -d "$$tmp"; \
+	  find "$$tmp" -name '_qsurl*.so' -exec cp {} querysource/qsurl/ \; ; \
+	  rm -rf "$$tmp"; \
+	  ls -la querysource/qsurl/_qsurl*.so
 
 # Alternative: install without lock file (faster for development)
 develop-fast:
