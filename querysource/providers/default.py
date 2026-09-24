@@ -18,7 +18,7 @@ from ..parsers.sql import SQLParser
 from ..qs_parsers import HAS_RUST
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
-from .abstract import BaseProvider
+from .abstract import RAW_DEFINITION_REASON, BaseProvider
 
 
 class defaultProvider(BaseProvider):
@@ -50,6 +50,7 @@ class defaultProvider(BaseProvider):
             if self._definition.is_raw is True:
                 self.is_raw = True
                 self._query = self._definition.query_raw
+                self._check_raw_placeholders(self._query, RAW_DEFINITION_REASON)
 
     async def prepare_connection(self) -> Callable:
         """Signal run before connection is made.

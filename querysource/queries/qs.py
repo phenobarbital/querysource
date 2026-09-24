@@ -96,6 +96,8 @@ class QS(BaseQuery):
                 )
         elif 'raw_query' in self.kwargs:
             self._query = kwargs.pop('raw_query', None)
+            self.kwargs.pop('raw_query', None)
+            self._driver = kwargs.pop('driver', 'db')
             self._type = 'raw'
             if not self._query:
                 raise ValueError(
@@ -286,10 +288,11 @@ class QS(BaseQuery):
                 raise QueryError(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 ) from err
-        elif self._type == 'query':
-            ## Query Object (TBD)
+        elif self._type in ('query', 'raw'):
+            # 'query' goes through the dialect parser; 'raw' is rendered by the
+            # provider's validating substitution only (no parser).
             self._logger.debug(
-                f':: Query: {self._query_preview(self._query)} for {self._driver}'
+                f':: {self._type.capitalize()}: {self._query_preview(self._query)} for {self._driver}'
             )
             ### build manually objquery:
             objquery = AttrDict({"provider": self._driver})
@@ -329,11 +332,6 @@ class QS(BaseQuery):
                 raise QueryError(
                     f"Cannot Initialize the provider {self._provider}, error: {err}"
                 ) from err
-        elif self._type == 'raw':
-            ## Raw Query
-            self._logger.debug(
-                f':: Raw Query: {self._query_preview(self._query)} for {self._driver}'
-            )
         elif self._type == 'driver':
             ### calling an HTTP, REST or other provider:
             self._logger.debug(

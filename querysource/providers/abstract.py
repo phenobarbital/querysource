@@ -23,6 +23,12 @@ from ..utils.functions import get_hash
 _SQL_LITERALS = re.compile(r"'(?:[^']|'')*'|\$([A-Za-z_]\w*|)\$.*?\$\1\$", re.DOTALL)
 # Replacement placeholders, same key rule as the Rust safe_format_map.
 _PLACEHOLDER = re.compile(r"\{([A-Za-z0-9_.]+)\}")
+# Why a raw query's leftover placeholders can never be filled.
+RAW_DEFINITION_REASON = (
+    "is_raw=True queries bypass the parser, so placeholders are never replaced; "
+    "remove them from query_raw or set is_raw=False"
+)
+RAW_QUERY_REASON = "no value was supplied for them in the conditions"
 
 
 class BaseProvider(ABC):
