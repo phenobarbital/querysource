@@ -212,6 +212,11 @@ result, error = await QS(slug="legacy_report", tenant="public").query()
 # GET /api/v1/public/queries/legacy_report
 ```
 
+### Programmatic callers and PBAC
+
+Library callers that run a slug on behalf of a user pass `principal=QSPrincipal(...)`;
+`tenant=` still selects the store. See [PBAC_PROGRAMMATIC.md](PBAC_PROGRAMMATIC.md).
+
 ## Discovery and allowlist
 
 ### Startup discovery

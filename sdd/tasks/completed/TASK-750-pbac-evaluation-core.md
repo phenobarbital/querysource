@@ -360,7 +360,31 @@ def test_real_evaluator_contract(tmp_path): ...                 # AC-8 (skipif n
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Created `querysource/auth/enforcement.py` with `AccessDecision`,
+`_ServiceRequest`, `resolve_evaluator`, `build_eval_context`, `evaluate` and
+`enforce_principal`, filling in every `FILL IN` per the decision matrix:
+`resolve_evaluator` mirrors `slug_visibility._evaluator_state` for both the
+request and request-less (runtime) paths, including the detached-copy
+semantics; `build_eval_context` feature-detects `EvalContext.from_userinfo`
+(absent on the installed navigator-auth 0.26.0) and falls back to
+`_ServiceRequest`; `enforce_principal` implements PBAC-off (allow +
+once-per-process warning when `QS_PBAC_ENABLED`), missing-evaluator deny,
+authz-flag gating (`QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`), and deny→
+`QueryAccessDenied` with full decision logging via `principal.log_fields()`.
+Exported `QSPrincipal`/`get_pbac_runtime` from `querysource/auth/__init__.py`.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+Wrote `tests/auth/test_enforcement.py` (11 tests incl.
+`test_real_evaluator_contract`, gated on `_RS_PEP_AVAILABLE` like
+`tests/policies/test_authorized_policy.py:17` — the Rust engine IS
+installed here, so it ran for real, not skipped). Had to build the Cython
+extensions in this worktree (`make build-inplace`; artifacts are gitignored,
+not committed) because `querysource/models.py` (imported by
+`slug_visibility.py`) requires the compiled `utils/functions` extension,
+which a fresh worktree checkout does not carry. All 55 `tests/auth/` tests
+pass (including TASK-748/749's and the pre-existing
+`test_pbac_bootstrap.py`/`test_slug_visibility.py` suites, unmodified).
+`ruff check` clean on all three files. Verified AC-9: no new module-level
+`navigator_auth` import in `enforcement.py`/`principal.py`.
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24

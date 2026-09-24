@@ -55,6 +55,17 @@ class QueryNotFound(QueryException):
         super().__init__(message, code=404)
 
 
+class QueryAccessDenied(QueryException):
+    """Principal may not run this query, or the query/tenant is not available to it.
+
+    Message is generic and never names the matched policy; code 404 so HTTP
+    layers that surface it keep the same not-found semantics as handlers.
+    """
+
+    def __init__(self, message: str = None):
+        super().__init__(message or "Query not available.", code=404)
+
+
 class DriverError(QueryException):
     pass
 

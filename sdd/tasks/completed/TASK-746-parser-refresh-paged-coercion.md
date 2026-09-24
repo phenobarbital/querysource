@@ -218,10 +218,16 @@ Dedicated tests are written in TASK-747 (`test_parser_refresh_parity`,
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Replaced the `strtobool`/`is_boolean` import with `to_flag`; rewrote
+`_query_refresh_sync` and the `paged` try-block in `_offset_pagination_sync`
+per the blueprint, including the `# FILL IN:` `ValueError` warning branch for
+`paged` (mirrors the `refresh` warning). `page` pop untouched. `make
+build-inplace` succeeded. `pytest tests/test_grouping_sync.py
+tests/test_sql_parser_combinations.py -q` → 105 passed. Manually verified
+`{'paged': 'maybe'|''}` no longer raise from `set_options()`, `page` still
+consumed, and parser `refresh` parity with the provider (`'false'`→False,
+`''`→True). No remaining `strtobool`/`is_boolean` references in this file.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -24,17 +24,24 @@ from ..connections import QueryConnection
 from ..exceptions import (
     DataNotFound,
     EmptySentence,
+    QueryAccessDenied,
     QueryError,
     QueryException,
 )
 from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
+from ..tenant_errors import TenantError
 from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
 from .base import BaseQuery
 
 if TYPE_CHECKING:
+    from ..auth.principal import QSPrincipal
     from ..tenants import LoadedDefinition
+
+# FEAT-150: with a principal, these TenantError codes collapse into
+# QueryAccessDenied so "missing" and "denied" look identical.
+_COLLAPSED_OWNER_ERRORS = frozenset({"query_not_found", "tenant_not_available"})
 
 
 class QS(BaseQuery):
@@ -52,6 +59,7 @@ class QS(BaseQuery):
             *,
             tenant: str | None = None,
             definition: "LoadedDefinition | None" = None,
+            principal: "QSPrincipal | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -61,6 +69,7 @@ class QS(BaseQuery):
             loop=loop,
             tenant=tenant,
             definition=definition,
+            principal=principal,
             **kwargs
         )
         if not conditions:
@@ -170,8 +179,23 @@ class QS(BaseQuery):
             except Exception:
                 _pbac_session = None
 
+        if self._principal is not None and self._type != 'slug':
+            from ..auth._resource_types import ResourceType
+            from ..auth.enforcement import enforce_principal
+            await enforce_principal(
+                self._principal, ResourceType.RAW_QUERY, "raw_query", "raw_query:execute",
+                tenant=self._tenant_selector, logger=self._logger,
+            )
+
         if self._type == 'slug':  # query-based provider:
             self._logger.debug(f':: QS Slug: {self._query!s}')
+            if self._principal is not None:
+                from ..auth._resource_types import ResourceType
+                from ..auth.enforcement import enforce_principal
+                await enforce_principal(
+                    self._principal, ResourceType.SLUG, self._query, "slug:execute",
+                    tenant=self._tenant_selector, logger=self._logger,
+                )
             # Resolve tenant store and create QueryIdentity. Retrieved via
             # get_definition_repository() (TASK-720) so the registry used
             # is the one initialized on QuerySource's singleton (real
@@ -184,9 +208,14 @@ class QS(BaseQuery):
                 self._logger.debug(f"Using pre-loaded definition for slug={self._query}")
             else:
                 repo = await self.get_definition_repository()
-                store = repo.registry.resolve(self._tenant_selector)
-                identity = QueryIdentity(store=store, slug=self._query)
-                loaded_def = await repo.get(identity)
+                try:
+                    store = repo.registry.resolve(self._tenant_selector)
+                    identity = QueryIdentity(store=store, slug=self._query)
+                    loaded_def = await repo.get(identity)
+                except TenantError as ex:
+                    if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
+                        raise QueryAccessDenied() from ex
+                    raise
             # Store definition identity and revision on the execution object
             self._definition_identity = loaded_def.identity
             self._definition_revision = loaded_def.revision

@@ -35,6 +35,7 @@ from ..utils.events import enable_uvloop
 from .connections import Connection
 
 if TYPE_CHECKING:
+    from ..auth.principal import QSPrincipal
     from ..tenants import LoadedDefinition
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
@@ -57,6 +58,7 @@ class AbstractQuery(Connection):
             *,
             tenant: str | None = None,
             definition: "LoadedDefinition | None" = None,
+            principal: "QSPrincipal | None" = None,
             **kwargs
     ):
         """
@@ -119,6 +121,12 @@ class AbstractQuery(Connection):
         # Pre-loaded stored definition (FEAT-151): when a caller already read the
         # definition (tenant dispatcher), executors reuse it instead of re-reading.
         self._preloaded_definition: "LoadedDefinition | None" = definition  # noqa: UP037
+        # FEAT-150: identity for programmatic (request-less) PBAC enforcement.
+        if request is not None and principal is not None:
+            raise ValueError(
+                "QS Error: pass either request= or principal=, not both (ambiguous identity)."
+            )
+        self._principal = principal
         # Definition identity and revision for result cache keys (set during load)
         self._definition_identity: Any = None
         self._definition_revision: str | None = None

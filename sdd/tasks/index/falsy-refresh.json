@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-24T00:24:58+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-24T01:01:35+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,7 +16,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "exclusive: runs `make build-inplace` (rebuilds shared Cython .so files, incl. querysource/types/validators)",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-744-to-flag-helper.md"
+      "completed_at": "2026-09-24T00:36:28+00:00",
+      "file": "sdd/tasks/completed/TASK-744-to-flag-helper.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-745",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -44,8 +45,9 @@
       "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/validators.pyx, exported in querysource/types/__init__.py)",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-745-provider-refresh-coercion.md"
+      "completed_at": "2026-09-24T00:37:22+00:00",
+      "file": "sdd/tasks/completed/TASK-745-provider-refresh-coercion.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-746",
@@ -54,7 +56,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -64,8 +66,9 @@
       "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/__init__.py); exclusive: runs `make build-inplace` to rebuild querysource/parsers/abstract.pyx",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-746-parser-refresh-paged-coercion.md"
+      "completed_at": "2026-09-24T00:38:35+00:00",
+      "file": "sdd/tasks/completed/TASK-746-parser-refresh-paged-coercion.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-747",
@@ -74,7 +77,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -86,8 +89,9 @@
       "parallelism_notes": "tests to_flag from TASK-744 (querysource/types), BaseProvider.refresh fix from TASK-745 (querysource/providers/abstract.py), parser refresh/paged fix from TASK-746 (querysource/parsers/abstract.pyx)",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-747-flag-conditions-tests.md"
+      "completed_at": "2026-09-24T00:39:24+00:00",
+      "file": "sdd/tasks/completed/TASK-747-flag-conditions-tests.md",
+      "verification": "verified"
     }
   ]
 }

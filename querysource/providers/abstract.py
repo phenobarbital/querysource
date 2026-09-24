@@ -2,22 +2,21 @@
 
 Abstract Provider for all Datasource objects.
 """
-from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import Any, Union
 import asyncio
 import copy
 import traceback
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any, Union
+
 from aiohttp import web
 from navconfig.logging import logging
-from ..exceptions import (
-    DataNotFound,
-    ParserError,
-    QueryException
-)
+
+from ..exceptions import DataNotFound, ParserError, QueryException
 from ..models import QueryModel
-from ..utils.functions import get_hash
 from ..parsers.abstract import AbstractParser
+from ..types import to_flag
+from ..utils.functions import get_hash
 
 
 class BaseProvider(ABC):
@@ -81,7 +80,15 @@ class BaseProvider(ABC):
             # making a copy of conditions:
             self._conditions = copy.deepcopy(conditions)
             if 'refresh' in self._conditions:
-                self._refresh = bool(self._conditions['refresh'])
+                raw_refresh = self._conditions['refresh']
+                try:
+                    self._refresh = to_flag(raw_refresh)
+                except ValueError:
+                    self._logger.warning(
+                        "Unrecognized 'refresh' condition value %s; treating as False",
+                        repr(raw_refresh)[:64]
+                    )
+                    self._refresh = False
                 del self._conditions['refresh']
         else:
             self._conditions: dict = {}

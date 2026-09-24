@@ -298,7 +298,47 @@ async def test_allowed_uses_trusted_credentials(principal, allow): ...      # AC
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Added keyword-only `principal=` to `AbstractQuery.__init__` (`self._principal`,
+`ValueError` when both `request` and `principal` are given), forwarded it
+through `BaseQuery.__init__` and `QS.__init__`, using `TYPE_CHECKING` imports
+of `QSPrincipal` in all three files to avoid import cycles. In
+`QS.build_provider()`: a non-slug gate (`query`/`raw`/`driver`) checks
+`raw_query:execute` on `"raw_query"` before any type-specific branch runs;
+the slug branch checks `slug:execute` on the slug name before
+`get_definition_repository()`; both `enforce_principal`/`ResourceType`
+imports are lazy, inside the `if self._principal is not None:` blocks only
+(principal=None never imports the enforcement module — AC-2). Added
+`_COLLAPSED_OWNER_ERRORS = frozenset({"query_not_found",
+"tenant_not_available"})` and wrapped the resolve/identity/get sequence in
+`try/except TenantError`, collapsing only those two codes (only when a
+principal is set) into `QueryAccessDenied`; `tenant_store_unavailable` and
+the no-principal path propagate `TenantError` unchanged.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+Wrote `tests/test_qs_principal.py` (11 tests, all AC-1..AC-8 + AC-9 covered).
+Noted a **pre-existing, unrelated bug** found while writing the `raw_query`/
+`driver` AC-6 tests: `QS.__init__` never sets `self._driver` for `_type ==
+'raw'`, yet `build_provider()`'s `raw` branch references
+`self._driver` in a debug f-string, causing `AttributeError` on any real
+`raw_query=...` construction reaching that branch. This predates FEAT-150
+(verified via `git show HEAD:querysource/queries/qs.py`, same bug at the old
+line numbers) and is out of this task's file scope (not listed in Files to
+Create/Modify) — NOT fixed here; the two affected tests route around it by
+setting `qs._driver = None` after construction with an inline comment. Also
+had to pass `driver={"driver": "pg"}` (not a bare string) for the `driver`-only
+AC-6 parametrize case, matching what `build_provider`'s `driver` branch
+actually expects (`self._driver['driver']`).
+
+`grep -c "check_access("` doesn't apply to this task; `ruff check` clean on
+all three modified files except two pre-existing `B904` findings in
+`qs.py` (lines ~535/549, unrelated `except` blocks, present at HEAD before
+this task, out of scope). `tests/tenants/test_tenant_execution_context.py`
+passes unmodified (4 tests). Broader regression
+(`tests/handlers/`, `tests/tenants/`, `tests/auth/`, `tests/test_qs_principal.py`,
+`tests/test_abstract_multi.py`, `tests/test_abstract_refactor.py`, excluding
+the pre-existing `test_airtable_oauth.py` collection failure): 319 passed, 5
+skipped, 3 failed — the same 3 pre-existing, unrelated sandbox/environment
+failures already recorded in TASK-752's Completion Note (read-only
+`templates/.compiled` write + missing `resources.functions` module).
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24

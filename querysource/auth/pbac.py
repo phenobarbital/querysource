@@ -13,23 +13,52 @@ See FEAT-091 (pbac-support) spec §2 for the bootstrap design.
 from __future__ import annotations
 
 import logging
-from typing import Optional, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 
 from querysource.auth.credentials import CredentialResolver
 
 if TYPE_CHECKING:
-    from navigator_auth.abac.pdp import PDP
     from navigator_auth.abac.guardian import Guardian
+    from navigator_auth.abac.pdp import PDP
     from navigator_auth.abac.policies.evaluator import PolicyEvaluator
+
+
+@dataclass(frozen=True)
+class PBACRuntime:
+    """Guardian + evaluator registered by the last successful setup_pbac()."""
+
+    guardian: Any
+    evaluator: Any
+
+
+_RUNTIME: PBACRuntime | None = None
+
+
+def get_pbac_runtime() -> PBACRuntime | None:
+    """Return the registered runtime, or None when setup_pbac() never succeeded in this process."""
+    return _RUNTIME
+
+
+def clear_pbac_runtime() -> None:
+    """Forget the registered runtime (tests / app shutdown)."""
+    global _RUNTIME
+    _RUNTIME = None
+
+
+def _set_pbac_runtime(guardian: Any, evaluator: Any) -> None:
+    """Record the runtime; called only from setup_pbac() success branches."""
+    global _RUNTIME
+    _RUNTIME = PBACRuntime(guardian=guardian, evaluator=evaluator)
 
 
 def setup_pbac(
     app: web.Application,
     policy_dir: str = "policies",
     cache_ttl: int = 300,
-) -> "tuple[Optional[PDP], Optional[PolicyEvaluator], Optional[Guardian]]":
+) -> tuple[Optional[PDP], Optional[PolicyEvaluator], Optional[Guardian]]:
     """Initialise navigator-auth PBAC and register it on the aiohttp app.
 
     Side effects (only when initialisation succeeds):
@@ -65,12 +94,13 @@ def setup_pbac(
         # Still ensure credential_resolver is registered (QS-specific).
         if "credential_resolver" not in app:
             app["credential_resolver"] = CredentialResolver(logger=_log)
+        _set_pbac_runtime(existing_guardian, existing_evaluator)
         return (app.get("abac"), existing_evaluator, existing_guardian)
 
     # ── Lazy navigator-auth imports ────────────────────────────────────────
     try:
-        from navigator_auth.abac.pdp import PDP
         from navigator_auth.abac.guardian import Guardian
+        from navigator_auth.abac.pdp import PDP
         from navigator_auth.abac.policies.evaluator import PolicyLoader
         from navigator_auth.abac.storages.yaml_storage import YAMLStorage
     except ImportError as exc:
@@ -139,6 +169,7 @@ def setup_pbac(
     app["abac"] = pdp
     app["policy_evaluator"] = evaluator
     app["credential_resolver"] = CredentialResolver(logger=_log)
+    _set_pbac_runtime(guardian, evaluator)
 
     _log.info(
         "PBAC enabled: %d policies loaded from %s, cache_ttl=%ds",

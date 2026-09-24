@@ -1,5 +1,3 @@
-import copy
-import inspect
 from typing import Optional
 
 from aiohttp import web
@@ -10,6 +8,7 @@ from navigator.views import BaseHandler
 from navigator_session import SessionData, get_session
 
 # Config:
+from ..auth.enforcement import build_eval_context, evaluate, resolve_evaluator
 from ..conf import QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
 from ..exceptions import QueryException
 
@@ -402,17 +401,11 @@ class AbstractHandler(BaseHandler):
                 )
                 raise web.HTTPNotFound()
 
-        evaluator = request.app.get('policy_evaluator')
+        pbac_enabled, evaluator = resolve_evaluator(request, detached=False)
         if evaluator is None:
-            # Bootstrap inconsistency — Guardian set but no evaluator.
-            self.logger.error(
-                "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
-            )
             raise web.HTTPNotFound()
 
-        # Lazy-import navigator-auth EvalContext (only when PBAC is active).
-        from navigator_auth.abac.context import EvalContext
-        from navigator_auth.abac.policies.environment import Environment
+        # Lazy-import navigator-auth session constant (only when PBAC is active).
         from navigator_auth.conf import AUTH_SESSION_OBJECT
 
         if authz_userinfo is not None:
@@ -428,35 +421,19 @@ class AbstractHandler(BaseHandler):
                 userinfo = {}
             user = userinfo if userinfo else None
 
-        ctx = EvalContext(
-            request=request,
-            user=user,
-            userinfo=userinfo,
-            session=session,
+        ctx = build_eval_context(
+            userinfo=userinfo, user=user, session=session, request=request,
         )
 
-        # ``PolicyEvaluator.check_access`` is currently synchronous in
-        # navigator-auth (Rust-backed). The defensive ``iscoroutine`` await
-        # below guarantees forward-compatibility if upstream ever flips it
-        # to ``async def`` — without that guard, a coroutine return value
-        # would be truthy and silently bypass enforcement.
-        result = evaluator.check_access(
-            ctx=ctx,
-            resource_type=resource_type,
-            resource_name=resource_name,
-            action=action,
-            env=Environment(),
-        )
-        if inspect.iscoroutine(result):
-            result = await result
-        if not result.allowed:
+        decision = await evaluate(evaluator, ctx, resource_type, resource_name, action)
+        if not decision.allowed:
             self.logger.info(
                 "PBAC denied: %s/%s action=%s policy=%s reason=%s",
                 resource_type,
                 resource_name,
                 action,
-                getattr(result, 'matched_policy', None),
-                getattr(result, 'reason', None),
+                decision.matched_policy,
+                decision.reason,
             )
             raise web.HTTPNotFound()
 
@@ -481,16 +458,11 @@ class AbstractHandler(BaseHandler):
             web.HTTPNotFound: When the evaluator denies access, or when
                 PBAC is enabled but the request has no user session.
         """
-        evaluator = request.app.get("policy_evaluator")
-        if request.app.get("security") is None:
+        pbac_enabled, detached = resolve_evaluator(request, detached=True)
+        if not pbac_enabled:
             return  # PBAC disabled — fast-path no-op
-        if evaluator is None:
+        if detached is None:
             raise web.HTTPNotFound()
-
-        # Create a shallow copy with cleared cache for tenant isolation
-        detached = copy.copy(evaluator)
-        detached._cache = {}
-        detached._stats = dict(evaluator._stats)
 
         # Extract session or use sessionless authz
         session = await self._get_user_session(request)
@@ -524,8 +496,6 @@ class AbstractHandler(BaseHandler):
                 raise web.HTTPNotFound()
 
         # Build the evaluation context
-        from navigator_auth.abac.context import EvalContext
-        from navigator_auth.abac.policies.environment import Environment
         from navigator_auth.conf import AUTH_SESSION_OBJECT
 
         if authz_userinfo is not None:
@@ -540,29 +510,18 @@ class AbstractHandler(BaseHandler):
                 userinfo = {}
             user = userinfo if userinfo else None
 
-        ctx = EvalContext(
-            request=request,
-            user=user,
-            userinfo=userinfo,
-            session=session,
+        ctx = build_eval_context(
+            userinfo=userinfo, user=user, session=session, request=request,
         )
 
         # Evaluate using the detached evaluator with the identity's slug
-        result = detached.check_access(
-            ctx=ctx,
-            resource_type="slug",
-            resource_name=identity.slug,
-            action=action,
-            env=Environment(),
-        )
-        if inspect.iscoroutine(result):
-            result = await result
-        if not result.allowed:
+        decision = await evaluate(detached, ctx, "slug", identity.slug, action)
+        if not decision.allowed:
             self.logger.info(
                 "PBAC denied: slug=%s action=%s policy=%s reason=%s",
                 identity.slug,
                 action,
-                getattr(result, 'matched_policy', None),
-                getattr(result, 'reason', None),
+                decision.matched_policy,
+                decision.reason,
             )
             raise web.HTTPNotFound()
