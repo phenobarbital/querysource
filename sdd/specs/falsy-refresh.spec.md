@@ -17,7 +17,7 @@ tags: [refresh, paged, cache, boolean-coercion, query-conditions]
 **Feature ID**: FEAT-149
 **Date**: 2026-09-24
 **Author**: Jesus Lara (with Claude)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.0.1 (current: `querysource/version.py:9` → `5.0.0`)
 
 Source: `sdd/proposals/falsy-refresh.brainstorm.md` (Recommended Option A).

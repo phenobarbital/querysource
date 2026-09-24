@@ -25,5 +25,22 @@
   "namespaces": {},
   "obsidian_sync": null,
   "symbol_depth": 2,
-  "structural_backend": true
+  "structural_backend": true,
+  "decisions": {
+    "enabled": true,
+    "adr_globs": [
+      "docs/adr/**/*.md",
+      "docs/adrs/**/*.md",
+      "docs/decisions/**/*.md"
+    ],
+    "max_records": 10000,
+    "generation_enabled": false,
+    "max_input_tokens": 12000,
+    "max_output_tokens": 2000,
+    "max_files": 8,
+    "max_candidates": 3,
+    "timeout_seconds": 60
+  },
+  "sqlite_busy_timeout": 15.0,
+  "sqlite_performance_pragmas": false
 }
