@@ -259,7 +259,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -272,8 +272,8 @@
       "parallelism_notes": "Asserts ILIKE rendering added by TASK-769, uses pgProvider/cassandraProvider.capabilities from TASK-770, translate.split from TASK-771 and QS(residual=...)/_apply_residual from TASK-773.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-776-qsurl-e2e-dry-run.md"
+      "completed_at": "2026-09-24T20:55:32+00:00",
+      "file": "sdd/tasks/completed/TASK-776-qsurl-e2e-dry-run.md"
     },
     {
       "id": "TASK-777",
