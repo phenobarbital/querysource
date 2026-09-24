@@ -4,8 +4,9 @@
 // Extends the base sql_parser filter logic with PG operators:
 // ILIKE, array containment, range types, JSONB, and CamelCase quoting.
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyAny, PyDict, PyString};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
@@ -36,7 +37,27 @@ fn pg_safe_identifier_key(key: &str) -> Option<String> {
 fn pg_validate_operator(op: &str) -> bool {
     COMPARISON_TOKENS.contains(&op)
         || VALID_OPERATORS.contains(&op)
-        || ["->>", "->", "@>", "<@"].contains(&op)
+        || JSONB_OPERATORS.contains(&op)
+}
+
+/// Quote a value as a PostgreSQL string literal.
+///
+/// Single quotes are doubled. When the value contains `{`, `}` or `\`, an
+/// escape-string literal (`E'...'`) is emitted with the braces written as
+/// `\x7b`/`\x7d`: the rendered SQL goes through further `str.format_map`
+/// passes (limits, conditions) that would otherwise parse JSON braces as
+/// placeholders.
+fn pg_literal(value: &str) -> String {
+    let escaped = value.replace('\'', "''");
+    if escaped.contains(['{', '}', '\\']) {
+        let escaped = escaped
+            .replace('\\', "\\\\")
+            .replace('{', "\\x7b")
+            .replace('}', "\\x7d");
+        format!("E'{}'", escaped)
+    } else {
+        format!("'{}'", escaped)
+    }
 }
 
 /// Validate a BETWEEN clause for injection markers.
@@ -55,6 +76,9 @@ const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
 /// Valid SQL operators for list-based conditions.
 const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "IS"];
 
+/// JSONB operators accepted as the key of a dict-typed filter value.
+const JSONB_OPERATORS: &[&str] = &["@>", "<@", "->", "->>"];
+
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
 // ---------------------------------------------------------------------------
@@ -68,6 +92,8 @@ enum FilterValue {
     Bool(bool),
     List(Vec<FilterValue>),
     Dict(Vec<(String, FilterValue)>),
+    /// A WHERE condition already rendered while holding the GIL (JSONB filters).
+    Condition(String),
     Null,
 }
 
@@ -82,17 +108,8 @@ impl FilterValue {
             FilterValue::Null => "NULL".to_string(),
             FilterValue::List(_) => String::new(),
             FilterValue::Dict(_) => String::new(),
+            FilterValue::Condition(c) => c.clone(),
         }
-    }
-
-    /// Check if this is a string value.
-    fn is_str(&self) -> bool {
-        matches!(self, FilterValue::Str(_))
-    }
-
-    /// Check if this is an integer value.
-    fn is_int(&self) -> bool {
-        matches!(self, FilterValue::Int(_))
     }
 }
 
@@ -150,6 +167,131 @@ fn extract_filter_value(obj: &Bound<'_, pyo3::types::PyAny>) -> FilterValue {
 }
 
 // ---------------------------------------------------------------------------
+// JSONB filters (runs on GIL thread: JSON is serialized with orjson)
+// ---------------------------------------------------------------------------
+
+/// Outcome of inspecting a dict-typed filter value for JSONB semantics.
+#[derive(Debug, PartialEq)]
+enum JsonbOutcome {
+    /// Comparison-token dict (`{">=": 5}`): handled by the generic path.
+    NotJsonb,
+    /// JSONB filter that cannot be rendered safely: the condition is dropped.
+    Skip,
+    /// Fully rendered JSONB condition.
+    Condition(String),
+}
+
+/// Serialize a Python object to JSON text with `orjson.dumps`.
+fn orjson_dumps(obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    let raw = obj.py().import("orjson")?.call_method1("dumps", (obj,))?;
+    let bytes: Vec<u8> = raw.extract()?;
+    String::from_utf8(bytes).map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+/// JSON text for a containment operand.
+///
+/// A `str` operand is taken as JSON text: it is parsed and re-serialized with
+/// orjson, so invalid JSON is rejected. Any other object is serialized as-is.
+fn jsonb_operand(obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    if obj.is_instance_of::<PyString>() {
+        let parsed = obj.py().import("orjson")?.call_method1("loads", (obj,))?;
+        return orjson_dumps(&parsed);
+    }
+    orjson_dumps(obj)
+}
+
+/// Render `{"->>": {"path": value, ...}}` / `{"->": {...}}` as key comparisons.
+///
+/// `->>` compares the text of the key (non-string values are compared by
+/// their JSON text, e.g. `true`, `1`); `->` compares the JSONB value. A
+/// `None` value renders `IS NULL`. Several paths are AND-ed.
+fn jsonb_path_condition(col: &str, op: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let Ok(paths) = operand.downcast::<PyDict>() else {
+        return Ok(None);
+    };
+    if paths.is_empty() {
+        return Ok(None);
+    }
+    let mut parts: Vec<String> = Vec::with_capacity(paths.len());
+    for (path_obj, value) in paths.iter() {
+        let Ok(path) = path_obj.extract::<String>() else {
+            return Ok(None);
+        };
+        let path_lit = pg_literal(&path);
+        let cond = if value.is_none() {
+            format!("{} {} {} IS NULL", col, op, path_lit)
+        } else if op == "->>" {
+            let text = if value.is_instance_of::<PyString>() {
+                value.extract::<String>()?
+            } else {
+                orjson_dumps(&value)?
+            };
+            format!("{} ->> {} = {}", col, path_lit, pg_literal(&text))
+        } else {
+            format!("{} -> {} = {}::jsonb", col, path_lit, pg_literal(&orjson_dumps(&value)?))
+        };
+        parts.push(cond);
+    }
+    if parts.len() == 1 {
+        Ok(parts.pop())
+    } else {
+        Ok(Some(format!("({})", parts.join(" AND "))))
+    }
+}
+
+/// Inspect a dict-typed filter value and render it as a JSONB condition.
+///
+/// * No operator keys (`{"status": "active"}`): implicit containment,
+///   `col @> '<json>'::jsonb`.
+/// * `{"@>": operand}` / `{"<@": operand}`: explicit containment; the
+///   operand is a dict/list/scalar or a JSON text string.
+/// * `{"->>": {...}}` / `{"->": {...}}`: key comparisons (see
+///   [`jsonb_path_condition`]).
+/// * A first key that is a comparison token is left to the generic path;
+///   dicts mixing operator and plain keys are dropped.
+fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
+    if dict.is_empty() {
+        return JsonbOutcome::NotJsonb;
+    }
+    let is_operator = |k: &Bound<'_, PyAny>| {
+        k.extract::<String>()
+            .map(|k| COMPARISON_TOKENS.contains(&k.as_str()) || JSONB_OPERATORS.contains(&k.as_str()))
+            .unwrap_or(false)
+    };
+    let operators = dict.keys().iter().filter(|k| is_operator(k)).count();
+    let Some((op_obj, operand)) = dict.iter().next() else {
+        return JsonbOutcome::NotJsonb;
+    };
+    if operators > 0 {
+        if let Ok(op) = op_obj.extract::<String>() {
+            if COMPARISON_TOKENS.contains(&op.as_str()) {
+                return JsonbOutcome::NotJsonb;
+            }
+        }
+    }
+    // SECURITY: the column must be a safe identifier.
+    let Some(col) = pg_safe_identifier_key(key) else {
+        return JsonbOutcome::Skip;
+    };
+    let rendered = if operators == 0 {
+        orjson_dumps(dict.as_any()).map(|j| Some(format!("{} @> {}::jsonb", col, pg_literal(&j))))
+    } else if operators != dict.len() {
+        Ok(None)
+    } else {
+        let op: String = op_obj.extract().unwrap_or_default();
+        match op.as_str() {
+            "@>" | "<@" => jsonb_operand(&operand)
+                .map(|j| Some(format!("{} {} {}::jsonb", col, op, pg_literal(&j)))),
+            _ => jsonb_path_condition(&col, &op, &operand),
+        }
+    };
+    match rendered {
+        Ok(Some(cond)) => JsonbOutcome::Condition(cond),
+        _ => JsonbOutcome::Skip,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-entry condition builder (runs in parallel via rayon)
 // ---------------------------------------------------------------------------
 
@@ -188,11 +330,15 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
         FilterValue::Float(f) => {
             process_str_value(&formatted_key, &f.to_string(), &name, &end, _format)
         }
+        FilterValue::Condition(c) => Some(c.clone()),
         FilterValue::Null => None,
     }
 }
 
-/// Handle dict-typed filter values: comparison tokens and JSONB operators.
+/// Handle dict-typed filter values with a comparison token (`{">=": 5}`).
+///
+/// JSONB dicts never reach this function: they are rendered by
+/// [`jsonb_condition`] during extraction.
 fn process_dict_value(
     key: &str,
     entries: &[(String, FilterValue)],
@@ -216,41 +362,7 @@ fn process_dict_value(
         return Some(format!("{} {} {}", key, op, safe_v));
     }
 
-    // JSONB operators
-    if [
-        "->", "->>", "@>", "<@",
-    ]
-    .contains(&op.as_str())
-    {
-        let val_str = v.as_str();
-        if v.is_str() || v.is_int() {
-            // SECURITY: escape string values
-            return Some(format!("{} {} {}", key, op, quote_string(&escape_string(&val_str), true)));
-        } else {
-            return Some(format!("{} {} {}", key, op, val_str));
-        }
-    }
-
-    // Single-key dict for JSONB containment
-    if entries.len() == 1 {
-        // Build JSON representation
-        let val_str = v.as_str();
-        let json_repr = format!("{{\"{}\": {}}}", op, quote_json_value(&val_str));
-        return Some(format!("{} @> {}", key, json_repr));
-    }
-
     None
-}
-
-/// Simple JSON value quoting for JSONB containment.
-fn quote_json_value(val: &str) -> String {
-    if val.parse::<i64>().is_ok() || val.parse::<f64>().is_ok() {
-        val.to_string()
-    } else if val == "true" || val == "false" || val == "null" {
-        val.to_string()
-    } else {
-        format!("\"{}\"", val)
-    }
 }
 
 /// Handle list-typed filter values: operators, BETWEEN, IN, array types.
@@ -440,7 +552,14 @@ pub fn pgsql_filter_conditions(
                 .ok()
                 .flatten()
                 .and_then(|v| v.extract().ok());
-            let value = extract_filter_value(&value_obj);
+            let value = match value_obj.downcast::<PyDict>() {
+                Ok(dict) => match jsonb_condition(&key, dict) {
+                    JsonbOutcome::NotJsonb => extract_filter_value(&value_obj),
+                    JsonbOutcome::Skip => FilterValue::Null,
+                    JsonbOutcome::Condition(cond) => FilterValue::Condition(cond),
+                },
+                Err(_) => extract_filter_value(&value_obj),
+            };
             FilterEntry {
                 key,
                 value,
@@ -504,6 +623,30 @@ fn apply_pg_where_clause(sql: &str, where_cond: &[String]) -> PyResult<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_pg_literal_plain() {
+        assert_eq!(pg_literal("active"), "'active'");
+        assert_eq!(pg_literal("O'Brien"), "'O''Brien'");
+    }
+
+    #[test]
+    fn test_pg_literal_escapes_braces_and_backslashes() {
+        assert_eq!(
+            pg_literal(r#"{"a":"x\"y'z"}"#),
+            r#"E'\x7b"a":"x\\"y''z"\x7d'"#
+        );
+    }
+
+    #[test]
+    fn test_condition_value_passthrough() {
+        let entry = FilterEntry {
+            key: "attrs".to_string(),
+            value: FilterValue::Condition("attrs @> '[]'::jsonb".to_string()),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), Some("attrs @> '[]'::jsonb".to_string()));
+    }
 
     #[test]
     fn test_process_str_null() {
