@@ -115,7 +115,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -123,8 +123,8 @@
       "parallelism_notes": "Exclusive: rebuilds the shared _qs_parsers extension into .venv (make build-rust) and the Cython parsers in place (make build-inplace), which every other task's tests import. No code dependency on other tasks.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-769-pg-ilike-dict-operator.md"
+      "completed_at": "2026-09-24T20:25:25+00:00",
+      "file": "sdd/tasks/completed/TASK-769-pg-ilike-dict-operator.md"
     },
     {
       "id": "TASK-770",
