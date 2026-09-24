@@ -2,22 +2,18 @@
 
 Data Provider for Cassandra.
 """
-from typing import (
-    Any,
-    Union
-)
 from collections import defaultdict
+from typing import Any, Union
+
 from aiohttp import web
+from asyncdb.exceptions import NoDataFound, ProviderError, StatementError
 from datamodel.typedefs import SafeDict
-from asyncdb.exceptions import (
-    StatementError,
-    ProviderError,
-    NoDataFound
-)
-from ..exceptions import DriverError, ParserError, DataNotFound
+
+from ..exceptions import DataNotFound, DriverError, ParserError
 from ..models import QueryModel
 from ..parsers.cql import CQLParser
 from ..qs_parsers import HAS_RUST
+
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from ..qsurl import capabilities as qsurl_caps
@@ -46,7 +42,7 @@ class cassandraProvider(BaseProvider):
         **kwargs
     ):
         """Class Initialization for MS SQL Server Provider."""
-        super(cassandraProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,

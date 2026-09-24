@@ -4,7 +4,9 @@ Basic PostgreSQL Provider (based on asyncpg).
 Default QS database.
 """
 from typing import Any, Union
+
 from aiohttp import web
+
 from ..exceptions import ParserError
 from ..models import QueryModel
 from ..parsers.pgsql import pgSQLParser
@@ -33,7 +35,7 @@ class pgProvider(sqlProvider):
         **kwargs
     ):
         self.is_raw = False
-        super(pgProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,

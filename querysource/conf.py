@@ -1,10 +1,10 @@
 # Import Config Class
-import sys
 import os
+import sys
 from pathlib import Path
+
 from navconfig import BASE_DIR, config
 from navconfig.logging import logging
-
 
 ### Matplotlib Configuration
 logging.getLogger(name='matplotlib').setLevel(logging.WARNING)

@@ -8,7 +8,6 @@ import pytest
 
 from querysource.utils.errors import GENERIC_MESSAGES, build_error_payload
 
-
 # ---------------------------------------------------------------------------
 # Acceptance-criteria tests
 # ---------------------------------------------------------------------------

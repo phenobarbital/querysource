@@ -9,21 +9,15 @@ from collections.abc import Callable
 from typing import Any, Union
 
 from aiohttp import web
+from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 from datamodel.typedefs import SafeDict
-from asyncdb.exceptions import (
-    DriverError,
-    NoDataFound,
-    ProviderError
-)
-from ..exceptions import (
-    DataNotFound,
-    ParserError,
-    QueryException
-)
+
+from ..exceptions import DataNotFound, ParserError, QueryException
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
 from ..qs_parsers import HAS_RUST
 from ..qsurl import capabilities as qsurl_caps
+
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from ..types.validators import is_empty
@@ -105,7 +99,7 @@ class sqlProvider(BaseProvider):
         **kwargs
     ):
         self.is_raw = False
-        super(sqlProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,
@@ -157,7 +151,7 @@ class sqlProvider(BaseProvider):
                 return self
         if self.is_raw is True:
             return self
-        await super(sqlProvider, self).prepare_connection()
+        await super().prepare_connection()
         ## Parse Query:
         try:
             self._query = await self._parser.build_query()
