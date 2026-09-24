@@ -190,10 +190,47 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Wrote `docs/QSURL.md` with all ten required sections (Quick start, Grammar,
+Operators, Pipeline operators, Intermediate representation (IR), Pushdown and residual
+evaluation, Cost guard, Errors, Python API, Limits) plus a short intro. Every example was
+generated from a real run rather than invented: the IR block is the actual
+`querysource.qsurl.parse()` output for the quick-start query; the pushdown REPL example
+is the real `translate.split()` output against `pgProvider.capabilities`; the
+`unsupported`/`cost` error JSON blocks are real `QSUrlError.to_dict()` output; the 400
+envelope example is the real body `QSUrlService`/`AbstractHandler.Error` produces for
+`stores?state='CA':order(name)` (built the same way `tests/handlers/test_qsurl_service.py`
+does, `debug=False`) — `error_id` is random per run and left as one representative value,
+noted implicitly by it not being asserted anywhere. Verified every JSON code block parses
+with `json.loads` and every Python REPL snippet's claimed output matches a fresh run,
+in addition to the `test_docs.py` "every ```qsurl block parses" check. Three ```qsurl```
+blocks (Grammar's keyword-boundary examples, Operators' null/list/text-match examples,
+Pipeline operators' combined example) — all valid queries, no `# error`-marked lines were
+needed since no error-path yielding is documented as a runnable qsurl string (the error
+JSON examples are documented as raw JSON, generated separately, not qsurl source).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+Created `tests/qsurl/test_docs.py` per the blueprint: `test_required_headings` (all ten
+present) and `test_qsurl_examples_parse` (the FILL IN loop — parses every non-empty line
+of every ```qsurl block, treating a `# error`-suffixed line as an expected-`QSUrlError`
+case; none of the current examples use that marker, but the mechanism is implemented and
+tested-capable for future additions).
 
-**Deviations from spec**: none | describe if any
+**Test results**: `pytest tests/qsurl/test_docs.py -q` -> 2 passed. Full regression:
+`pytest tests/qsurl -q` -> 86 passed, 11 skipped (documented Rust-path skips, TASK-769).
+`ruff check tests/qsurl/test_docs.py` clean.
+
+**Deviations from spec**: none.
+
+---
+
+## Feature complete
+
+All 15 tasks of FEAT-152 are now done. TASK-764's blocker (porting the reference Rust
+crate — sandbox denial, "Code from External") was resolved by a privileged operator
+between the two halves of this run; every task blocked on it (TASK-766/767/768/777/778)
+was completed once it landed. Two real, previously-hidden bugs were found and fixed along
+the way, both documented in their discovering task's own Completion Note: a double-quoting
+bug in the TASK-769 PostgreSQL `ILIKE` builders (found via TASK-776's real-pipeline e2e
+test) and a self-shadowing import bug in TASK-765's `querysource/qsurl/__init__.py`
+(found via TASK-766's first real exercise of the public `parse()` API).
