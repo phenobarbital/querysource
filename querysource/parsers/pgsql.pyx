@@ -247,21 +247,17 @@ cdef class pgSQLParser(SQLParser):
                         # behaviour; mirror it here (pg_literal does not strip) so a
                         # pattern is not quoted twice.
                         #
-                        # PINNED INVARIANT (code review, FEAT-152): the module-level
-                        # `quoteString()` in types/validators.pyx that is_valid() calls
-                        # for this branch does NOT escape an interior `'` in its most
-                        # common code path (it wraps the raw value, not the escaped
-                        # `inner` it computes and discards — a separate, pre-existing
-                        # bug in that function, out of this feature's scope, tracked in
-                        # the ledger). This strip-then-requote only stays correct
-                        # because of that: we strip is_valid()'s outer quote pair and
-                        # hand the UNESCAPED inner text to pg_literal, which does its
-                        # own real escaping. If validators.pyx's quoteString is ever
-                        # fixed in isolation to escape before wrapping, the stripped
-                        # value here would already be escaped and pg_literal would
-                        # double-escape it (e.g. a literal `'` would become `''''`).
-                        # Whoever fixes that bug must also revisit this stripping logic.
-                        _v = v[1:-1] if len(v) >= 2 and v[0] == "'" and v[-1] == "'" else v
+                        # is_valid()'s module-level `quoteString()` (types/validators.pyx)
+                        # wraps a plain string in a single-quote pair and doubles any
+                        # embedded `'` (PG-style escaping — ledger issue:48c9b3050a0c,
+                        # fixed). Strip that outer pair AND undo the doubling before
+                        # handing the clean inner text to pg_literal, which does its own
+                        # real escaping from scratch — mirrors how
+                        # querysource/parsers/bigquery.pyx's bq_quote_string() already
+                        # undoes the same PG-style doubling. Using `.replace("''", "'")`
+                        # rather than assuming escaping happened keeps this correct
+                        # against either quoteString() behaviour (pre- or post-fix).
+                        _v = v[1:-1].replace("''", "'") if len(v) >= 2 and v[0] == "'" and v[-1] == "'" else v
                         where_cond.append(f"{key} {op} {pg_literal(_v)}")
                     else:
                         # currently, discard any non-supported comparison token

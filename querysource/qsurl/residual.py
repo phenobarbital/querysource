@@ -20,6 +20,40 @@ _OPS = {
     ">=": operator.ge,
 }
 
+# Ledger issue:2241b8e60919 (code review, FEAT-152): the `regex` leaf runs an
+# attacker-controlled pattern against every row via `str.contains(...,
+# regex=True)`, synchronously, on the handler's event-loop thread — an
+# unbounded ReDoS vector. The spec (sdd/specs/qsurl-parser.spec.md §3 Module
+# 7) mandates this exact pandas call, so the mitigation is additive: reject
+# overly long patterns and the classic "nested quantifier" shape
+# (`(x+)+`, `(x*)+`, ...) that causes catastrophic backtracking in practice,
+# before the pattern ever reaches `str.contains`. This is a best-effort
+# static screen, not a proof of linear-time matching — a pattern-length cap
+# plus this heuristic bounds the most common real-world risk without a new
+# dependency or a signal/thread-based timeout around a vectorised,
+# whole-column pandas call (which cannot be interrupted per-row anyway).
+_MAX_REGEX_PATTERN_LENGTH = 200
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^()]*[+*][^()]*\)[+*]")
+
+
+def _check_regex_safety(pattern: str) -> None:
+    """Reject a `regex` leaf pattern likely to cause catastrophic backtracking.
+
+    Raises:
+        QSUrlError: kind "lower" when the pattern is too long or has the
+            classic nested-quantifier shape (`(x+)+`, `(x*)+`, ...).
+    """
+    if len(pattern) > _MAX_REGEX_PATTERN_LENGTH:
+        raise QSUrlError(
+            "lower",
+            f"regex pattern too long ({len(pattern)} > {_MAX_REGEX_PATTERN_LENGTH} chars)",
+        )
+    if _NESTED_QUANTIFIER_RE.search(pattern):
+        raise QSUrlError(
+            "lower",
+            f"regex pattern `{pattern}` has a nested quantifier that risks catastrophic backtracking",
+        )
+
 
 def _column(df: pd.DataFrame, name: str) -> pd.Series:
     """Return ``df[name]`` or raise ``QSUrlError("lower")`` when it is missing."""
@@ -69,6 +103,7 @@ def _leaf_mask(df: pd.DataFrame, leaf: dict) -> pd.Series:
         return col.astype("string").str.lower().str.endswith(value.lower(), na=False)
 
     if expr == "regex":
+        _check_regex_safety(value)
         try:
             return col.astype("string").str.contains(value, case=True, na=False, regex=True)
         except re.error as err:

@@ -81,3 +81,39 @@ def test_bad_regex_is_lower_error(stores_df):
     with pytest.raises(QSUrlError) as exc:
         residual.evaluate(stores_df, {"and": [leaf]})
     assert exc.value.kind == "lower"
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "(a+)+",
+        "(a*)+",
+        "(a+)*",
+        "(.*)*",
+        "(x+)+$",
+    ],
+)
+def test_nested_quantifier_regex_is_rejected(stores_df, pattern):
+    """Ledger issue:2241b8e60919: reject the classic catastrophic-backtracking
+    shape before it ever reaches ``str.contains``."""
+    leaf = {"column": "city", "expression": "regex", "value": pattern}
+    with pytest.raises(QSUrlError) as exc:
+        residual.evaluate(stores_df, {"and": [leaf]})
+    assert exc.value.kind == "lower"
+    assert "nested quantifier" in exc.value.message
+
+
+def test_overlong_regex_is_rejected(stores_df):
+    """Ledger issue:2241b8e60919: cap pattern length regardless of shape."""
+    leaf = {"column": "city", "expression": "regex", "value": "a" * 201}
+    with pytest.raises(QSUrlError) as exc:
+        residual.evaluate(stores_df, {"and": [leaf]})
+    assert exc.value.kind == "lower"
+    assert "too long" in exc.value.message
+
+
+def test_safe_regex_still_matches(stores_df):
+    """A normal, bounded pattern is unaffected by the new guard."""
+    mask = residual.evaluate(stores_df, {"and": [{"column": "city", "expression": "regex", "value": "^San.*"}]})
+    matched = sorted(stores_df.loc[mask, "store_id"].tolist())
+    assert matched

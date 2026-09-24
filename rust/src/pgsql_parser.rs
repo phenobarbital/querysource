@@ -389,26 +389,25 @@ fn process_dict_value(
     // here (`pg_literal` does not strip) so a pattern is not quoted twice
     // (confirmed via the qsurl end-to-end dry-run tests, TASK-776).
     //
-    // PINNED INVARIANT (code review, FEAT-152): the value reaching this function
-    // was pre-quoted by the *Python* `is_valid()` (types/validators.pyx), not by
-    // this crate's own `quote_string` (validators.rs) — and that Python function
-    // has a separate, pre-existing bug (out of scope, tracked in the ledger): its
-    // common code path wraps the raw value without escaping an interior `'`. This
-    // stripping only stays correct because of that bug — we hand the UNESCAPED
-    // inner text to `pg_literal`, which does its own real escaping. If that
-    // Python bug is ever fixed in isolation, the value handed here would already
-    // be escaped and `pg_literal` would double-escape it. Whoever fixes it must
-    // also revisit this stripping logic (mirrored in pgsql.pyx).
+    // The value reaching this function was pre-quoted by the *Python*
+    // `is_valid()` (types/validators.pyx `quoteString()`), which wraps a plain
+    // string in a single-quote pair and doubles any embedded `'` (PG-style
+    // escaping — ledger issue:48c9b3050a0c, fixed). Strip that outer pair AND
+    // undo the doubling before handing the clean inner text to `pg_literal`,
+    // which does its own real escaping from scratch (mirrored in pgsql.pyx,
+    // which also mirrors bigquery.pyx's `bq_quote_string`). Undoing via
+    // `.replace("''", "'")` rather than assuming escaping happened keeps this
+    // correct against either `quoteString()` behaviour (pre- or post-fix).
     if PG_TEXT_OPERATORS.contains(&op.as_str()) {
         return match v {
             FilterValue::Str(s) => {
                 let bytes = s.as_bytes();
                 let stripped = if bytes.len() >= 2 && bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\'' {
-                    &s[1..s.len() - 1]
+                    s[1..s.len() - 1].replace("''", "'")
                 } else {
-                    s.as_str()
+                    s.clone()
                 };
-                Some(format!("{} {} {}", key, op, pg_literal(stripped)))
+                Some(format!("{} {} {}", key, op, pg_literal(&stripped)))
             }
             _ => None, // non-string values are rejected, never str()-ified
         };

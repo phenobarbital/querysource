@@ -110,20 +110,19 @@ async def test_builders_agree_on_every_case() -> None:
 
 
 def test_pinned_is_valid_prequoting_shape() -> None:
-    """FEAT-152 code review: document the exact (buggy) shape this feature's
-    strip-then-requote logic (pgsql.pyx, rust/src/pgsql_parser.rs) depends on.
+    """FEAT-152 code review: document the shape the ILIKE strip-then-requote
+    logic (pgsql.pyx, rust/src/pgsql_parser.rs) depends on.
 
     ``is_valid()`` (types/validators.pyx, called by abstract.pyx's
     ``_where_element`` during ``set_options()``/``set_where()``, BEFORE
     ``filter_conditions()`` ever runs) wraps a plain string value in a single
-    quote pair WITHOUT escaping an interior ``'`` in its common code path — a
-    separate, pre-existing bug in ``types/validators.pyx`` (out of this
-    feature's scope; filed to the ledger, not fixed here). This test pins that
-    exact shape down: if a future, isolated fix to ``is_valid()``/``quoteString``
-    starts escaping interior quotes before wrapping, THIS test breaks first,
-    flagging that the ILIKE strip-then-requote logic must be revisited too
-    (see the "PINNED INVARIANT" comments at both call sites).
+    quote pair, doubling any interior ``'`` (PG-style escaping — ledger
+    issue:48c9b3050a0c, fixed). The ILIKE builders strip that outer pair and
+    undo the doubling (``.replace("''", "'")``) before handing the clean text
+    to their own real escaper (``pg_literal``), so they stay correct
+    regardless of whether this pre-quoting step itself escapes — see the
+    strip-then-requote comments at both call sites.
     """
     from querysource.types.validators import is_valid
 
-    assert is_valid("name", "%o'brien%", noquote=False) == "'%o'brien%'"
+    assert is_valid("name", "%o'brien%", noquote=False) == "'%o''brien%'"
