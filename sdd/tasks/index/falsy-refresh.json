@@ -54,7 +54,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -64,8 +64,8 @@
       "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/__init__.py); exclusive: runs `make build-inplace` to rebuild querysource/parsers/abstract.pyx",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-746-parser-refresh-paged-coercion.md"
+      "completed_at": "2026-09-24T00:38:35+00:00",
+      "file": "sdd/tasks/completed/TASK-746-parser-refresh-paged-coercion.md"
     },
     {
       "id": "TASK-747",
