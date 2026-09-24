@@ -154,7 +154,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -164,8 +164,8 @@
       "parallelism_notes": "Imports QSUrlError, ResidualPlan and capabilities from TASK-765 (querysource/qsurl/errors.py, plan.py, capabilities.py); pure function, takes capabilities as an argument so it does not need TASK-770.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-771-qsurl-translate-split.md"
+      "completed_at": "2026-09-24T20:30:03+00:00",
+      "file": "sdd/tasks/completed/TASK-771-qsurl-translate-split.md"
     },
     {
       "id": "TASK-772",
