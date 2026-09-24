@@ -11,7 +11,7 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 from asyncdb import AsyncDB
@@ -34,6 +34,9 @@ from ..utils.cache_serialization import serialize_cache_payload
 from ..utils.events import enable_uvloop
 from .connections import Connection
 
+if TYPE_CHECKING:
+    from ..auth.principal import QSPrincipal
+
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
@@ -53,6 +56,7 @@ class AbstractQuery(Connection):
             loop: asyncio.AbstractEventLoop | None = None,
             *,
             tenant: str | None = None,
+            principal: "QSPrincipal | None" = None,
             **kwargs
     ):
         """
@@ -102,6 +106,12 @@ class AbstractQuery(Connection):
         self._executor = ThreadPoolExecutor(max_workers=2)
         # Tenant selector (keyword-only, preserved from Python routing)
         self._tenant_selector = tenant
+        # FEAT-150: identity for programmatic (request-less) PBAC enforcement.
+        if request is not None and principal is not None:
+            raise ValueError(
+                "QS Error: pass either request= or principal=, not both (ambiguous identity)."
+            )
+        self._principal = principal
         # Definition identity and revision for result cache keys (set during load)
         self._definition_identity: Any = None
         self._definition_revision: str | None = None
