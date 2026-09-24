@@ -388,6 +388,17 @@ fn process_dict_value(
     // `quote_string`'s strip-then-requote behaviour (validators.rs); mirror it
     // here (`pg_literal` does not strip) so a pattern is not quoted twice
     // (confirmed via the qsurl end-to-end dry-run tests, TASK-776).
+    //
+    // PINNED INVARIANT (code review, FEAT-152): the value reaching this function
+    // was pre-quoted by the *Python* `is_valid()` (types/validators.pyx), not by
+    // this crate's own `quote_string` (validators.rs) — and that Python function
+    // has a separate, pre-existing bug (out of scope, tracked in the ledger): its
+    // common code path wraps the raw value without escaping an interior `'`. This
+    // stripping only stays correct because of that bug — we hand the UNESCAPED
+    // inner text to `pg_literal`, which does its own real escaping. If that
+    // Python bug is ever fixed in isolation, the value handed here would already
+    // be escaped and `pg_literal` would double-escape it. Whoever fixes it must
+    // also revisit this stripping logic (mirrored in pgsql.pyx).
     if PG_TEXT_OPERATORS.contains(&op.as_str()) {
         return match v {
             FilterValue::Str(s) => {

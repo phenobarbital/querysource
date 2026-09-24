@@ -246,6 +246,21 @@ cdef class pgSQLParser(SQLParser):
                         # tolerates that via Entity.quoteString's strip-then-requote
                         # behaviour; mirror it here (pg_literal does not strip) so a
                         # pattern is not quoted twice.
+                        #
+                        # PINNED INVARIANT (code review, FEAT-152): the module-level
+                        # `quoteString()` in types/validators.pyx that is_valid() calls
+                        # for this branch does NOT escape an interior `'` in its most
+                        # common code path (it wraps the raw value, not the escaped
+                        # `inner` it computes and discards — a separate, pre-existing
+                        # bug in that function, out of this feature's scope, tracked in
+                        # the ledger). This strip-then-requote only stays correct
+                        # because of that: we strip is_valid()'s outer quote pair and
+                        # hand the UNESCAPED inner text to pg_literal, which does its
+                        # own real escaping. If validators.pyx's quoteString is ever
+                        # fixed in isolation to escape before wrapping, the stripped
+                        # value here would already be escaped and pg_literal would
+                        # double-escape it (e.g. a literal `'` would become `''''`).
+                        # Whoever fixes that bug must also revisit this stripping logic.
                         _v = v[1:-1] if len(v) >= 2 and v[0] == "'" and v[-1] == "'" else v
                         where_cond.append(f"{key} {op} {pg_literal(_v)}")
                     else:
