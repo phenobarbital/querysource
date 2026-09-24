@@ -233,7 +233,17 @@ def test_clear(): ...                                # AC-4
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Added `PBACRuntime`, `get_pbac_runtime()`, `clear_pbac_runtime()` and
+`_set_pbac_runtime()` to `querysource/auth/pbac.py` exactly per blueprint.
+Called `_set_pbac_runtime()` in both `setup_pbac()` success branches (reuse,
+just before the existing `return`; fresh bootstrap, right after
+`app["credential_resolver"] = ...`) — never on the three `(None, None, None)`
+failure paths. Wrote `tests/auth/test_pbac_runtime.py` (4 tests, all pass);
+`tests/auth/test_pbac_bootstrap.py` still passes unmodified (11 total).
+`ruff check` on both files was clean after `--fix` resolved 4 pre-existing
+import-order/quoted-annotation findings already present in `pbac.py` before
+this task (verified via `git show HEAD:querysource/auth/pbac.py | ruff
+check -`), which AC-6 required be clean for this file.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
