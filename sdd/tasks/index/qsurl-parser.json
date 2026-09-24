@@ -282,7 +282,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -294,8 +294,8 @@
       "parallelism_notes": "Exclusive: maturin develop into the shared .venv and `uv lock` rewrites uv.lock. Builds rust/qsurl/Cargo.toml from TASK-764, stages into querysource/qsurl/ from TASK-765, and its package-data test checks grammar.lark from TASK-766.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-777-qsurl-build-and-ship.md"
+      "completed_at": "2026-09-24T21:50:27+00:00",
+      "file": "sdd/tasks/completed/TASK-777-qsurl-build-and-ship.md"
     },
     {
       "id": "TASK-778",
