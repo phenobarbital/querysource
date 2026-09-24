@@ -378,6 +378,9 @@ DEFAULT_QUERY_FORMAT = config.get(
     fallback='native'
 )
 
+## qsurl (FEAT-152): rows a pushdown result may have before an in-memory residual plan runs.
+QSURL_MAX_RESIDUAL_ROWS = config.getint("QSURL_MAX_RESIDUAL_ROWS", fallback=50000)
+
 ## Query parameters that must never reach the query parser.
 # Authentication/transport-related params (e.g. ?auth=..., ?apikey=...) get
 # appended to API URLs by upstream gateways/clients and would otherwise be
