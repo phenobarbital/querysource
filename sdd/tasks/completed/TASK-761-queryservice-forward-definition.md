@@ -163,4 +163,34 @@ from querysource.handlers.service import QueryService
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented exactly as blueprinted: `definition=request.get('qs_definition')`
+added to all four `get_source(...)` call sites in `QueryService` — the three
+identical `if query := await self.get_source(...)` occurrences (`query()`,
+`get_columns()`, `columns()`) via a single `replace_all` edit, and the
+`test_slug()` unconditional-assignment site separately. No change needed to
+`AbstractHandler.get_source`, which already forwards `**kwargs` into `QS(...)`.
+
+Tests: `tests/handlers/test_queryservice_definition_forwarding.py` (4/4 pass) —
+`test_query_forwards_definition`, `test_get_columns_and_columns_forward_definition`,
+`test_test_slug_forwards_definition`, `test_legacy_request_forwards_none`. Built
+on the `_make_handler`/`_make_request` pattern from
+`tests/handlers/test_queryservice_pbac_smoke.py` (copied locally, not
+imported, per convention): `get_source` stubbed to return `None` (falsy) for
+`query`/`get_columns`/`columns`, whose branches return/raise via `self.Error`
+without touching `query`/DB state; `test_slug` instead stubs `get_source` to
+raise a local `_StopSentinel`, and the test asserts only on
+`get_source.call_args.kwargs['definition']` under a broad `pytest.raises`,
+since `test_slug`'s `finally: await query.close()` turns an early
+`get_source` failure into an `UnboundLocalError` — the mock still records the
+call before raising, which is all this test needs to prove forwarding.
+
+Regression: `tests/handlers/test_queryservice_pbac_smoke.py` (3/3 pass); full
+`tests/handlers` suite excluding the pre-existing, unrelated
+`test_airtable_oauth.py` collection failure (`ModuleNotFoundError:
+aioresponses`, confirmed present before this change, not a dependency this
+task touches) — 129 passed.
+
+`ruff check --select E9,F63,F7,F82`: clean. Pre-existing `B904`/`DTZ005`
+findings elsewhere in `service.py` (confirmed unrelated to the four edited
+call sites) left untouched, per the Fallback Loop's lint scope.
+
