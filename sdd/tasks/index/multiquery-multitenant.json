@@ -133,7 +133,7 @@
       "feature_id": "FEAT-151",
       "feature": "multiquery-multitenant",
       "spec": "sdd/specs/multiquery-multitenant.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -144,8 +144,8 @@
       "parallelism_notes": "Exclusive: edits tests/tenants/conftest.py, loaded by every tenant test module. Documents columns_definition from TASK-759 (querysource/models.py) and the dispatch from TASK-762; the integration test drives TenantQueryHandler from TASK-762 (querysource/handlers/tenant.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-763-ddl-docs-integration.md"
+      "completed_at": "2026-09-24T01:18:23+00:00",
+      "file": "sdd/tasks/completed/TASK-763-ddl-docs-integration.md"
     }
   ]
 }

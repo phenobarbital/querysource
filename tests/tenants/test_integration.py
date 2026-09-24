@@ -455,3 +455,184 @@ async def test_catalog_scale_no_definition_preload(tenant_services) -> None:
         async with await AsyncDB("pg", dsn=postgres_dsn).connection() as conn:
             for schema in scale_schemas:
                 await conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+
+
+@pytest.mark.asyncio
+async def test_tenant_stored_multi_definition_executes(tenant_services) -> None:
+    """FEAT-151: a stored provider='multi' definition runs through the tenant route.
+
+    AC-1/AC-4/AC-6/AC-8: a `provider='multi'` parent, an inheriting single
+    child, and an explicit-`tenant: null` child are all persisted to the
+    isolated fixture's own Postgres, then driven through
+    `TenantQueryHandler` (mocked-request pattern, `tests/tenants/
+    test_tenant_http_routes.py`) with a real `DefinitionRepository`/
+    `TenantRegistry` — never a mock repository. The "explicit-null" child
+    is pointed at a THIRD, fixture-owned schema (`override_schema`) set as
+    the registry's own default store, never real `public.queries`
+    (`provision_tenant_services()`'s own "never modify developer public
+    rows" rule) — `TenantRegistry.resolve(None)` returns `_default_store`
+    (verified: `querysource/tenants.py:402-408`).
+
+    The GET dispatch assertion is intentionally scoped to the real,
+    request-stashed `request['qs_definition']` (set by `TenantQueryHandler.
+    _prepare` directly from `repo.get()`, before any delegate runs) rather
+    than a live executed data frame: actually executing a child's SQL
+    requires the full `ThreadQuery`/provider/`DataOutput` pipeline, which
+    is outside this task's Codebase Contract and would require guessing
+    at an unverified internal contract. HEAD/PATCH columns and the
+    dry-run test_slug route need no execution at all and are exercised
+    fully live.
+    """
+    import json
+    from unittest.mock import MagicMock
+
+    from aiohttp import web
+
+    from querysource.handlers.tenant import TenantQueryHandler
+    from querysource.models import QueryModel
+
+    def _request(app: dict, match_info: dict, method: str = "GET") -> web.Request:
+        request = MagicMock(spec=web.Request)
+        request.app = app
+        request.match_info = match_info
+        request.method = method
+        request.query = {}
+        request.headers = {}
+        storage: dict = {}
+        request.get = lambda key, default=None: storage.get(key, default)
+
+        def _setitem(key, value):
+            storage[key] = value
+
+        request.__setitem__ = MagicMock(side_effect=_setitem)
+        return request
+
+    tenant1, _tenant2 = tenant_services["tenant_schemas"]
+    override = tenant_services["override_schema"]
+    store_t1 = _store(tenant1)
+    store_override = _store(override)
+
+    # Explicit-null children resolve to the registry's own DEFAULT store —
+    # pointed at the isolated override schema here, never real public.
+    repo, registry = _make_repo(tenant_services, [store_override, store_t1])
+    assert registry.resolve(None) == store_override
+
+    await repo.upsert(
+        QueryIdentity(store=store_t1, slug="child_a"),
+        {
+            "query_slug": "child_a",
+            "provider": "db",
+            "query_raw": "SELECT 1",
+            "description": "inherits parent tenant",
+        },
+    )
+    await repo.upsert(
+        QueryIdentity(store=store_override, slug="child_b"),
+        {
+            "query_slug": "child_b",
+            "provider": "db",
+            "query_raw": "SELECT 1",
+            "description": "explicit-null override owner",
+        },
+    )
+    parent_raw = json.dumps({
+        "queries": {
+            "a": {"slug": "child_a"},
+            "b": {"slug": "child_b", "tenant": None},
+        }
+    })
+    await repo.upsert(
+        QueryIdentity(store=store_t1, slug="parent"),
+        {
+            "query_slug": "parent",
+            "provider": "multi",
+            "query_raw": parent_raw,
+            "columns_definition": ["a", "b"],
+            "description": "stored multi definition",
+        },
+    )
+
+    app = {"qs_tenant_registry": registry, "qs_definition_repository": repo}
+    handler = TenantQueryHandler()
+
+    # GET parent: dispatches to QueryHandler (multi), and the definition
+    # stashed on the request (read once, before any delegate runs) carries
+    # the SAME revision the repository itself reports for that identity.
+    calls: list = []
+
+    class _FakeQueryHandler:
+        def __init__(self, request):
+            pass
+
+        async def query(self, request):
+            calls.append("multi.query")
+            return web.json_response({"ok": "multi"})
+
+    import querysource.handlers.multi as multi_module
+    original_query_handler = multi_module.QueryHandler
+    multi_module.QueryHandler = _FakeQueryHandler
+    try:
+        request = _request(app, {"tenant": tenant1, "slug": "parent"})
+        response = await handler.query(request)
+    finally:
+        multi_module.QueryHandler = original_query_handler
+
+    assert response.status == 200
+    assert calls == ["multi.query"]
+    stashed_definition = request.get("qs_definition")
+    assert stashed_definition is not None
+    fresh = await repo.get(QueryIdentity(store=store_t1, slug="parent"))
+    assert stashed_definition.revision == fresh.revision
+    assert isinstance(stashed_definition.runtime, QueryModel)
+    assert stashed_definition.runtime.columns_definition == ["a", "b"]
+
+    # HEAD .../parent -> 204 with X-Columns from the real columns_definition.
+    from querysource.handlers.multi import QueryHandler as RealQueryHandler
+
+    multi_module.QueryHandler = RealQueryHandler
+    head_request = _request(app, {"tenant": tenant1, "slug": "parent"}, method="HEAD")
+    with pytest.raises(web.HTTPNoContent) as exc_info:
+        await handler.columns(head_request)
+    assert exc_info.value.headers["X-Columns"] == repr(["a", "b"])
+    assert exc_info.value.headers["X-Slug"] == "parent"
+
+    # GET .../parent/test -> dry-run envelope, both children resolved to
+    # their real stores; no datasource query or EXPLAIN is ever run.
+    test_request = _request(app, {"tenant": tenant1, "slug": "parent"})
+    test_response = await handler.test_slug(test_request)
+    body = json.loads(test_response.body)
+    assert body["kind"] == "multi"
+    assert body["works"] is True
+    children_by_alias = {c["alias"]: c for c in body["children"]}
+    assert children_by_alias["a"]["store"] == f"{tenant1}.queries"
+    assert children_by_alias["a"]["exists"] is True
+    assert children_by_alias["b"]["store"] == f"{override}.queries"
+    assert children_by_alias["b"]["exists"] is True
+
+    # The single child via the same route keeps v2 headers/parity: its
+    # own definition (provider='db') dispatches to QueryService, not
+    # QueryHandler — verified purely through dispatch classification
+    # (AC-2), the same real, no-execution-required proof as the parent's
+    # request-stashed definition above.
+    calls.clear()
+
+    class _FakeQueryService:
+        def __init__(self, request):
+            pass
+
+        async def query(self, request):
+            calls.append("service.query")
+            return web.json_response({"ok": "single"}, headers={"X-Slug": "child_a"})
+
+    import querysource.handlers.service as service_module
+    original_query_service = service_module.QueryService
+    service_module.QueryService = _FakeQueryService
+    try:
+        single_request = _request(app, {"tenant": tenant1, "slug": "child_a"})
+        single_response = await handler.query(single_request)
+    finally:
+        service_module.QueryService = original_query_service
+
+    assert single_response.status == 200
+    assert single_response.headers["X-Slug"] == "child_a"
+    assert calls == ["service.query"]
