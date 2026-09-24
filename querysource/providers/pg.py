@@ -8,6 +8,7 @@ from aiohttp import web
 from ..exceptions import ParserError
 from ..models import QueryModel
 from ..parsers.pgsql import pgSQLParser
+from ..qsurl import capabilities as qsurl_caps
 from .sql import sqlProvider
 
 
@@ -19,6 +20,7 @@ class pgProvider(sqlProvider):
     """
 
     __parser__ = pgSQLParser
+    capabilities = sqlProvider.capabilities | {qsurl_caps.TEXT_MATCH}
 
     def __init__(
         self,

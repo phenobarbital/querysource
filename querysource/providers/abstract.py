@@ -16,6 +16,7 @@ from navconfig.logging import logging
 from ..exceptions import DataNotFound, ParserError, QueryException, RawQueryPlaceholderError
 from ..models import QueryModel
 from ..parsers.abstract import AbstractParser
+from ..qsurl import capabilities as qsurl_caps
 from ..types import to_flag
 from ..utils.functions import get_hash
 
@@ -34,6 +35,11 @@ class BaseProvider(ABC):
 
     __parser__: AbstractParser = None
     _parser_options: dict = {}
+
+    #: qsurl capabilities this provider renders natively (querysource/qsurl/capabilities.py).
+    capabilities: frozenset[str] = qsurl_caps.BASE
+    #: False when a residual-only qsurl filter would be a full scan the store must not run.
+    residual_scan: bool = True
 
     replacement: dict = {
         "fields": "*",

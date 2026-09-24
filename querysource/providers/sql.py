@@ -23,6 +23,7 @@ from ..exceptions import (
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
 from ..qs_parsers import HAS_RUST
+from ..qsurl import capabilities as qsurl_caps
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from ..types.validators import is_empty
@@ -46,6 +47,7 @@ class sqlProvider(BaseProvider):
     }
 
     __parser__ = SQLParser
+    capabilities = qsurl_caps.BASE | {qsurl_caps.ALIAS, qsurl_caps.SORT, qsurl_caps.LIMIT, qsurl_caps.OFFSET}
     _PARSER_PLACEHOLDERS = (
         "{where_cond}",
         "{and_cond}",

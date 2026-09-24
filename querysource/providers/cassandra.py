@@ -20,6 +20,7 @@ from ..parsers.cql import CQLParser
 from ..qs_parsers import HAS_RUST
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
+from ..qsurl import capabilities as qsurl_caps
 from .abstract import BaseProvider
 
 
@@ -29,6 +30,10 @@ class cassandraProvider(BaseProvider):
     Querysource Provider for Apache Cassandra (with basic CQL Support).
     """
     __parser__ = CQLParser
+    capabilities = frozenset({
+        qsurl_caps.SELECT, qsurl_caps.FILTER, qsurl_caps.IN_LIST, qsurl_caps.NULL_CHECK, qsurl_caps.LIMIT,
+    })
+    residual_scan = False
 
     def __init__(
         self,
