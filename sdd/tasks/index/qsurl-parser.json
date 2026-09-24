@@ -174,7 +174,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -184,8 +184,8 @@
       "parallelism_notes": "Imports ResidualPlan and QSUrlError from TASK-765 (querysource/qsurl/plan.py, errors.py) and uses the stores_df fixture from tests/qsurl/conftest.py created there.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-772-qsurl-residual-evaluator.md"
+      "completed_at": "2026-09-24T20:31:39+00:00",
+      "file": "sdd/tasks/completed/TASK-772-qsurl-residual-evaluator.md"
     },
     {
       "id": "TASK-773",
