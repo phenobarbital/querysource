@@ -16,7 +16,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,8 @@
       "parallelism_notes": "No dependencies: creates the self-contained crate rust/qsurl/ from the user tarball; touches no existing file. Its maturin module-name string 'querysource.qsurl._qsurl' only names the install location — it is not a use of querysource/qsurl/__init__.py from TASK-765 (cargo test and the example never import Python). cargo builds into the worktree-local rust/qsurl/target, not the shared .venv.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-764-qsurl-rust-crate.md"
+      "completed_at": "2026-09-24T21:17:40+00:00",
+      "file": "sdd/tasks/completed/TASK-764-qsurl-rust-crate.md"
     },
     {
       "id": "TASK-765",
