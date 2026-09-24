@@ -288,7 +288,15 @@ def test_query_access_denied_is_query_exception(): ...   # AC-5
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented `QSPrincipal` exactly per blueprint: `__post_init__` validates
+blank `user_id` (ValueError) and enforces the authz-form shape (no extra
+groups/roles/programs/superuser); `for_authz()` builds the handler-identical
+sessionless identity; `to_userinfo()` returns the two exact shapes (user vs
+authz form), never including `tenant_id`/`channel`. Added `QueryAccessDenied`
+after `QueryNotFound` in `querysource/exceptions.py`, code 404, generic
+default message. Wrote `tests/auth/test_principal.py` (9 tests, all pass).
+`ruff check` clean (fixed one `UP037` quoted-annotation finding). Verified
+no `navigator_auth` import in `principal.py` (AC-6).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
