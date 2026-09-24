@@ -536,7 +536,7 @@ class QS(BaseQuery):
                     f"QS: {err}",
                     exception=err,
                     code=400
-                )
+                ) from err
             except (NoDataFound, DataNotFound) as err:
                 raise DataNotFound(
                     f'{self._qs.__name__!s}: {err}'
@@ -550,7 +550,7 @@ class QS(BaseQuery):
                     "QS unhandler Error",
                     exception=ex,
                     code=500
-                )
+                ) from ex
             finally:
                 try:
                     await self.connection.dispose(
