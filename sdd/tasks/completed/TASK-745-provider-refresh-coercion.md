@@ -232,10 +232,15 @@ Dedicated provider tests are written in TASK-747 (`tests/test_flag_conditions.py
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Applied the Delegation Contract blueprint verbatim: imported `to_flag`
+from `..types`, replaced the `bool(...)` coercion of `refresh` with a
+`try/except ValueError` that logs via `self._logger.warning` (truncated repr)
+and falls back to `False`; `del self._conditions['refresh']` still runs in
+every case. `pytest tests/unit/test_provider_describe_columns.py -q` passes
+(9 passed). `ruff check querysource/providers/abstract.py` shows one
+pre-existing I001 import-sort finding (verified present before this edit via
+`git stash`) — left for `/sdd-done` per style-debt policy.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

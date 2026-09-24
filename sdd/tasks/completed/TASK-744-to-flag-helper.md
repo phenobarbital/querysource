@@ -213,10 +213,13 @@ assert to_flag("false") is False and to_flag("") is True and to_flag(1) is True
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented `to_flag` exactly per blueprint (bool → None → int 1/0 →
+str strip/empty/strtobool → catch-all ValueError). Exported via
+`querysource/types/__init__.py`. `make build-inplace` succeeded (rebuilt all
+Cython extensions incl. `parsers/abstract.pyx`, which also covers TASK-746's
+rebuild). Manual truth-table checks + both validation suites
+(`test_sql_parser_combinations.py`, `test_grouping_sync.py`) pass.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

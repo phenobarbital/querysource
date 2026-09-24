@@ -255,10 +255,12 @@ See the blueprint above; it is the scaffold.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Completed all `# FILL IN:` blocks per the blueprint. All 15 test
+functions (parametrized to 83 cases) in `tests/test_flag_conditions.py` pass,
+plus the sibling suites (`test_grouping_sync.py`,
+`test_sql_parser_combinations.py`) — 188 passed total. `ruff check
+tests/test_flag_conditions.py` is clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
