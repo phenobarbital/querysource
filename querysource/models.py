@@ -65,6 +65,12 @@ class QueryModel(Model):
     filtering: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     ordering: List[str] = Field(required=False, db_type='array', default_factory=list)
     grouping: List[str] = Field(required=False, db_type='array', default_factory=list)
+    columns_definition: List[str] = Field(
+        required=False,
+        db_type='array',
+        default_factory=list,
+        comment='Declared output columns of a multi-query definition (HEAD/PATCH inspection).',
+    )
     qry_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     h_filtering: bool = Field(required=False, default=False, comment="filtering based on Hierarchical rules.")
     ### Query Information:

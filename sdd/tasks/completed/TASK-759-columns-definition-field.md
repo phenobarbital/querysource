@@ -226,4 +226,37 @@ async def test_patch_writes_columns_definition() -> None:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented exactly as blueprinted: `columns_definition: List[str]` (array,
+`default_factory=list`, same comment text) added right after `grouping` on both
+`TenantQueryDefinition` (`tenant_models.py`) and `QueryModel` (`models.py`).
+`DefinitionRepository.create()` and `upsert()` each got the two-line drop
+(`if not persisted.get("columns_definition"): persisted.pop(...)`) immediately
+after the existing "drop None values" line, so an un-migrated store keeps
+accepting writes unless a non-empty value is explicitly declared. `patch()`
+required no change — it already SETs whatever keys are supplied (Q4, generic
+CRUD, verified by reading the method before editing).
+
+Tests: `tests/tenants/test_columns_definition.py` (4/4 pass), including both
+FILL IN bodies — the write-policy test asserts the literal INSERT column list
+for create() *and* upsert()"s absent/present column (4 sub-cases), and the
+patch test asserts `columns_definition` appears in the UPDATE SET clause.
+
+Necessary side-effect on an out-of-task-list file: adding a field with
+`default_factory=list` means `TenantQueryDefinition(**data).to_dict()` now
+always includes `columns_definition`, even for a raw DB row that lacks the
+key — this is exactly the AC-7 "reads as []" behavior. It also changed the
+*persisted* dict `definition_revision()` hashes, breaking
+`tests/tenants/test_tenant_repository_reads.py::
+test_get_returns_detached_runtime_and_revision`, which independently computes
+the expected hash from its own `_base_row()` fixture. Added
+`"columns_definition": []` to that fixture (mirroring the existing `grouping`
+entry) — a one-line, mechanically forced fixture update, not a logic change;
+required because the task's own Validation Commands list this test file.
+No other lines in that file were touched.
+
+`ruff check --select E9,F63,F7,F82` (syntax/undefined-name gate): clean on all
+changed files. Style findings (DTZ001 in test fixtures — copied from the
+existing, already-present pattern in `test_tenant_repository_reads.py`;
+pre-existing on `origin/dev`) are left for `/sdd-done`, per the Fallback Loop's
+lint scope.
+

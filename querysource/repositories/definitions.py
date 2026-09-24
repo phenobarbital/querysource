@@ -301,6 +301,9 @@ class DefinitionRepository:
 
         # Remove None values to let database defaults apply
         persisted = {k: v for k, v in persisted.items() if v is not None}
+        # FEAT-151: an empty declaration never requires the migrated column.
+        if not persisted.get("columns_definition"):
+            persisted.pop("columns_definition", None)
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
@@ -345,6 +348,9 @@ class DefinitionRepository:
 
         # Remove None values to let database defaults apply
         persisted = {k: v for k, v in persisted.items() if v is not None}
+        # FEAT-151: an empty declaration never requires the migrated column.
+        if not persisted.get("columns_definition"):
+            persisted.pop("columns_definition", None)
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
