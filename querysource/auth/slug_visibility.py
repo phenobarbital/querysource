@@ -18,6 +18,7 @@ from ..conf import QS_DESCRIBE_ADMIN_GROUPS, QS_PBAC_ALLOW_SESSIONLESS_AUTHZ
 from ..models import QueryModel
 from ..queries.describe import DescribeGrants
 from ._resource_types import ResourceType
+from .enforcement import build_eval_context, evaluate, resolve_evaluator
 
 logger = logging.getLogger(__name__)
 
@@ -236,48 +237,23 @@ def _evaluator_state(request: web.Request, *, detached: bool = False) -> tuple[b
             cached decision for one tenant's slug must never leak into
             another tenant's identically-named slug).
     """
-    guardian = request.app.get('security')
-    if guardian is None:
-        return (False, None)
-
-    evaluator = request.app.get('policy_evaluator')
-    if evaluator is None:
-        logger.error(
-            "PBAC misconfigured: 'security' is set but 'policy_evaluator' is missing"
-        )
-        return (True, None)
-
-    if detached:
-        import copy
-        detached_evaluator = copy.copy(evaluator)
-        detached_evaluator._cache = {}
-        detached_evaluator._stats = dict(getattr(evaluator, "_stats", {}))
-        return (True, detached_evaluator)
-
-    return (True, evaluator)
+    return resolve_evaluator(request, detached=detached)
 
 
 def _eval_context(request: web.Request, principal: Principal) -> Any:
-    """EvalContext exactly as _enforce_pbac builds it (abstract.py:405-425)."""
-    from navigator_auth.abac.context import EvalContext
-    
+    """EvalContext exactly as _enforce_pbac builds it, via the shared core."""
     if principal.kind == PrincipalKind.AUTHZ:
         # Authorized-but-not-authenticated: synthetic identity, no user
-        return EvalContext(
-            request=request,
-            user=None,
-            userinfo=principal.userinfo,
-            session=None,
+        return build_eval_context(
+            userinfo=principal.userinfo, user=None, session=None, request=request,
         )
-    else:
-        # Regular authenticated user
-        user = principal.userinfo if principal.userinfo else None
-        return EvalContext(
-            request=request,
-            user=user,
-            userinfo=principal.userinfo,
-            session=principal.session,
-        )
+    # Regular authenticated user
+    return build_eval_context(
+        userinfo=principal.userinfo,
+        user=principal.userinfo if principal.userinfo else None,
+        session=principal.session,
+        request=request,
+    )
 
 
 async def filter_visible(
@@ -371,47 +347,22 @@ async def can_access(
         return False
     
     try:
-        from navigator_auth.abac.policies.environment import Environment
-        
         # Build evaluation context
         ctx = _eval_context(request, principal)
-        
+
         # Primary action check
-        primary_result = evaluator.check_access(
-            ctx=ctx,
-            resource_type=ResourceType.SLUG,
-            resource_name=slug,
-            action=primary_action,
-            env=Environment(),
-        )
-        
-        # Await if it's a coroutine
-        if inspect.iscoroutine(primary_result):
-            primary_result = await primary_result
-        
-        # If allowed, return True
-        if primary_result.allowed:
+        primary = await evaluate(evaluator, ctx, ResourceType.SLUG, slug, primary_action)
+        if primary.allowed:
             return True
-        
+
         # If fallback action is provided, try it
         if fallback_action:
-            fallback_result = evaluator.check_access(
-                ctx=ctx,
-                resource_type=ResourceType.SLUG,
-                resource_name=slug,
-                action=fallback_action,
-                env=Environment(),
-            )
-            
-            # Await if it's a coroutine
-            if inspect.iscoroutine(fallback_result):
-                fallback_result = await fallback_result
-            
-            return fallback_result.allowed
-        
+            fallback = await evaluate(evaluator, ctx, ResourceType.SLUG, slug, fallback_action)
+            return fallback.allowed
+
         # Neither primary nor fallback allowed
         return False
-        
+
     except Exception:
         logger.exception("Error in can_access")
         return False
