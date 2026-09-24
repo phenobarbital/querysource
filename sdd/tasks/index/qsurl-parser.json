@@ -235,7 +235,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -249,8 +249,8 @@
       "parallelism_notes": "Calls parse/QSUrlError from TASK-765, reads provider.capabilities/residual_scan from TASK-770, calls translate.split from TASK-771, passes QS(residual=...) from TASK-773 and raises Error(detail=...) from TASK-774.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-775-qsurl-http-handler.md"
+      "completed_at": "2026-09-24T20:43:11+00:00",
+      "file": "sdd/tasks/completed/TASK-775-qsurl-http-handler.md"
     },
     {
       "id": "TASK-776",
