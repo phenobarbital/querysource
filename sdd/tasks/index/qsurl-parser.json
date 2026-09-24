@@ -34,7 +34,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -42,8 +42,8 @@
       "parallelism_notes": "No dependencies: creates querysource/qsurl/{__init__,errors,capabilities,plan}.py and tests/qsurl/{__init__,conftest}.py; back-end imports are lazy so neither the Rust crate nor the Lark fallback is needed.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-765-qsurl-package-core.md"
+      "completed_at": "2026-09-24T20:14:14+00:00",
+      "file": "sdd/tasks/completed/TASK-765-qsurl-package-core.md"
     },
     {
       "id": "TASK-766",
