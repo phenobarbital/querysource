@@ -25,7 +25,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:17:40+00:00",
-      "file": "sdd/tasks/completed/TASK-764-qsurl-rust-crate.md"
+      "file": "sdd/tasks/completed/TASK-764-qsurl-rust-crate.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-765",
@@ -43,7 +44,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:14:14+00:00",
-      "file": "sdd/tasks/completed/TASK-765-qsurl-package-core.md"
+      "file": "sdd/tasks/completed/TASK-765-qsurl-package-core.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-766",
@@ -64,7 +66,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:33:45+00:00",
-      "file": "sdd/tasks/completed/TASK-766-qsurl-lark-fallback.md"
+      "file": "sdd/tasks/completed/TASK-766-qsurl-lark-fallback.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-767",
@@ -85,7 +88,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:37:14+00:00",
-      "file": "sdd/tasks/completed/TASK-767-qsurl-parity-corpus.md"
+      "file": "sdd/tasks/completed/TASK-767-qsurl-parity-corpus.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-768",
@@ -106,7 +110,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:47:40+00:00",
-      "file": "sdd/tasks/completed/TASK-768-qsurl-gbnf-export.md"
+      "file": "sdd/tasks/completed/TASK-768-qsurl-gbnf-export.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-769",
@@ -124,7 +129,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:25:25+00:00",
-      "file": "sdd/tasks/completed/TASK-769-pg-ilike-dict-operator.md"
+      "file": "sdd/tasks/completed/TASK-769-pg-ilike-dict-operator.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-770",
@@ -145,7 +151,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:27:11+00:00",
-      "file": "sdd/tasks/completed/TASK-770-provider-capabilities.md"
+      "file": "sdd/tasks/completed/TASK-770-provider-capabilities.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-771",
@@ -165,7 +172,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:30:03+00:00",
-      "file": "sdd/tasks/completed/TASK-771-qsurl-translate-split.md"
+      "file": "sdd/tasks/completed/TASK-771-qsurl-translate-split.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-772",
@@ -185,7 +193,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:31:39+00:00",
-      "file": "sdd/tasks/completed/TASK-772-qsurl-residual-evaluator.md"
+      "file": "sdd/tasks/completed/TASK-772-qsurl-residual-evaluator.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-773",
@@ -206,7 +215,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:38:48+00:00",
-      "file": "sdd/tasks/completed/TASK-773-qs-residual-stage.md"
+      "file": "sdd/tasks/completed/TASK-773-qs-residual-stage.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-774",
@@ -226,7 +236,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:34:22+00:00",
-      "file": "sdd/tasks/completed/TASK-774-error-envelope-detail.md"
+      "file": "sdd/tasks/completed/TASK-774-error-envelope-detail.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-775",
@@ -250,7 +261,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:43:11+00:00",
-      "file": "sdd/tasks/completed/TASK-775-qsurl-http-handler.md"
+      "file": "sdd/tasks/completed/TASK-775-qsurl-http-handler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-776",
@@ -273,7 +285,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T20:55:32+00:00",
-      "file": "sdd/tasks/completed/TASK-776-qsurl-e2e-dry-run.md"
+      "file": "sdd/tasks/completed/TASK-776-qsurl-e2e-dry-run.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-777",
@@ -295,7 +308,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:50:27+00:00",
-      "file": "sdd/tasks/completed/TASK-777-qsurl-build-and-ship.md"
+      "file": "sdd/tasks/completed/TASK-777-qsurl-build-and-ship.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-778",
@@ -316,7 +330,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
       "completed_at": "2026-09-24T21:53:06+00:00",
-      "file": "sdd/tasks/completed/TASK-778-qsurl-docs.md"
+      "file": "sdd/tasks/completed/TASK-778-qsurl-docs.md",
+      "verification": "verified"
     }
   ]
 }
