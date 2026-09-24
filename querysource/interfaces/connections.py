@@ -484,6 +484,16 @@ class Connection:
                     f'::: Getting Slug {slug} from {store.schema}.{store.table}'
                 )
                 loaded = await repo.get(identity)
+                # FEAT-151 (code review): populate identity/revision on the
+                # calling executor (e.g. MultiQS's own top-level slug via
+                # get_slug()) the same way QS.build_provider()'s repository
+                # path already does, without widening this method's return
+                # contract (still `BaseModel`, every other caller unaffected)
+                # or requiring a second repository read.
+                if hasattr(self, "_definition_identity"):
+                    self._definition_identity = loaded.identity
+                if hasattr(self, "_definition_revision"):
+                    self._definition_revision = loaded.revision
                 return loaded.runtime
             except TenantError as ex:
                 # Owner resolution/lookup failure (unknown tenant, missing

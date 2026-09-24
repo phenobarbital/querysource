@@ -1,7 +1,7 @@
 import json
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiohttp import web
 from pandas import DataFrame
@@ -226,7 +226,7 @@ class QueryHandler(AbstractHandler):
         ``sources`` and ``warnings``. Never builds executors, opens datasource
         connections, or runs EXPLAIN.
         """
-        started = datetime.now()
+        started = datetime.now(timezone.utc)
         definition = request.get('qs_definition')
         if definition is None:
             return self.error(response={'message': 'No stored definition to test.'}, status=400)
@@ -331,7 +331,7 @@ class QueryHandler(AbstractHandler):
             'kind': 'multi',
             'works': works,
             'error': None,
-            'generated': (datetime.now() - started).total_seconds(),
+            'generated': (datetime.now(timezone.utc) - started).total_seconds(),
             'execution': None,
             'tenant': tenant,
             'store': f"{definition.identity.store.schema}.{definition.identity.store.table}",

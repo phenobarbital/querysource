@@ -257,6 +257,9 @@ class MultiQS(BaseQuery):
                 self._definition_identity = preloaded.identity
                 self._definition_revision = preloaded.revision
             else:
+                # get_query_slug (interfaces/connections.py) stashes
+                # _definition_identity/_definition_revision on self before
+                # returning, mirroring the preloaded branch above.
                 query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''

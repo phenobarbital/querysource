@@ -59,9 +59,9 @@ def _base_row(**overrides) -> dict:
         "dwh_driver": None,
         "dwh_info": None,
         "dwh_scheduler": None,
-        "created_at": datetime.datetime(2026, 1, 1, 0, 0, 0),
+        "created_at": datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc),
         "created_by": None,
-        "updated_at": datetime.datetime(2026, 1, 1, 0, 0, 0),
+        "updated_at": datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc),
         "updated_by": None,
     }
     row.update(overrides)
