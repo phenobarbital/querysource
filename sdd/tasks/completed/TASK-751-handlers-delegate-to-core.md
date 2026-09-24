@@ -214,7 +214,34 @@ refactor, **never the test**.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Recorded a green baseline before editing (36 + 16 = 52 tests across the six
+listed validation commands, run separately as listed — running
+`tests/integration/` together with `tests/tenants/` in one invocation hits a
+pre-existing, unrelated `conftest` module-name collision, unrelated to this
+task; each is green run on its own). Replaced the evaluator lookup, `ctx`
+construction and `check_access` call in both `_enforce_pbac` and
+`_enforce_owned_slug` with `resolve_evaluator` / `build_eval_context` /
+`evaluate` from `querysource.auth.enforcement`, keeping every log line, the
+`raise web.HTTPNotFound()` calls, the sessionless-authz branch, the
+missing-name short-circuit and the `userinfo`/`user` selection untouched.
+`grep -c "check_access(" querysource/handlers/abstract.py` → 0 (AC-1). Removed
+the now-unused `copy` and `inspect` top-level imports (ruff F401); left the
+pre-existing, unrelated `B012` finding (`return` inside `finally`, line 86)
+untouched — it predates this task and is out of scope.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**Intentional semantic tightening** (per Key Constraints): previously an
+exception raised by `evaluator.check_access` in `_enforce_pbac` propagated as
+an unhandled 500; `evaluate()` now catches it and returns a deny, so the
+handler now raises `web.HTTPNotFound()` (404) instead. This matches the
+spec's fail-closed rule and is the one intentional behaviour change allowed
+by this task.
+
+All 52 tests across the six pinned suites pass unmodified. Broader regression
+check: `tests/handlers/*.py` (excluding the pre-existing, unrelated
+`test_airtable_oauth.py` collection failure — missing `aioresponses`
+dependency in this worktree, unrelated to PBAC) + `tests/auth/` = 180 passed,
+0 failed. `ruff check querysource/handlers/abstract.py` clean except the
+pre-existing B012 noted above.
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
