@@ -104,6 +104,24 @@ async def test_text_match_pushdown_pg(monkeypatch):
     assert "city ILIKE '%san%'" in sql
 
 
+async def test_text_match_pushdown_pg_with_internal_quote(monkeypatch):
+    """FEAT-152 code review: a genuine internal apostrophe must survive the
+    real is_valid()-then-pg_literal() round trip through set_options()/
+    set_where() (abstract.pyx) without double-quoting or under-escaping —
+    the earlier ``test_ilike_strips_prequoted_value`` unit test only proved
+    the wrapper-stripping mechanics with a quote-free value; this proves the
+    full pipeline against a value that itself needs SQL-literal escaping.
+    """
+    monkeypatch.setattr(pgsql, "HAS_RUST", False)
+    ir = _ir(
+        filter={"and": [{"column": "name", "expression": "contains", "value": "o'brien"}]},
+        requires=["select", "filter", "text_match"],
+    )
+    sql, plan = await _render(ir, pgProvider.capabilities, pgProvider.residual_scan)
+    assert plan.is_empty()
+    assert "name ILIKE '%o''brien%'" in sql
+
+
 async def test_or_filter_is_residual_on_pg():
     ir = _ir(
         filter={
