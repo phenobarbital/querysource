@@ -13,7 +13,12 @@ from aiohttp import web
 from querysource.handlers.abstract import AbstractHandler
 from querysource.repositories import DefinitionRepository
 from querysource.tenant_errors import TenantError
-from querysource.tenants import QueryStore, TenantRegistry
+from querysource.tenants import (
+    LoadedDefinition,
+    QueryIdentity,
+    QueryStore,
+    TenantRegistry,
+)
 
 
 def resolve_request_store(
@@ -165,6 +170,47 @@ class TenantQueryHandler(AbstractHandler):
             raise web.HTTPNotFound(reason="Tenant feature is not configured")
         return repo
 
+    async def _load_definition(
+        self, request: web.Request, store: QueryStore, slug: str
+    ) -> LoadedDefinition:
+        """Read the stored definition once; map owner errors to HTTP.
+
+        Raises:
+            web.HTTPNotFound: ``query_not_found`` / ``tenant_not_available``.
+            web.HTTPBadRequest: ``invalid_tenant``.
+            TenantError: any other code (e.g. 503); callers answer with ``self.error``.
+        """
+        repo = self._repository(request)
+        try:
+            return await repo.get(QueryIdentity(store=store, slug=slug))
+        except TenantError as err:
+            if err.code == 404:
+                raise web.HTTPNotFound(reason=f"Query not found: {slug}") from err
+            if err.code == 400:
+                raise web.HTTPBadRequest(reason=str(err)) from err
+            raise
+
+    @staticmethod
+    def _is_multi(definition: LoadedDefinition) -> bool:
+        """True iff the stored definition is a multi-query (``provider == 'multi'``)."""
+        return getattr(definition.runtime, "provider", None) == "multi"
+
+    async def _prepare(self, request: web.Request) -> tuple[LoadedDefinition, bool]:
+        """Resolve tenant, authorize, load and classify the stored slug.
+
+        Stashes ``request['qs_tenant']`` and ``request['qs_definition']``.
+        """
+        tenant = request.match_info.get("tenant")
+        store = _resolve_or_raise(self._registry(request), tenant)
+        slug = str(request.match_info.get("slug") or "").split(":", 1)[0]
+        request["qs_tenant"] = tenant
+        await self._enforce_owned_slug(
+            request, identity=QueryIdentity(store=store, slug=slug), action="slug:execute"
+        )
+        definition = await self._load_definition(request, store, slug)
+        request["qs_definition"] = definition
+        return definition, self._is_multi(definition)
+
     async def list(self, request: web.Request) -> web.StreamResponse:
         """List selected tenant definitions with management pagination conventions."""
         tenant = request.match_info.get("tenant")
@@ -226,7 +272,7 @@ class TenantQueryHandler(AbstractHandler):
         return self.json_response(response, headers=headers)
 
     async def query(self, request: web.Request) -> web.StreamResponse:
-        """Execute stored single/multi or inline multi under URL owner."""
+        """Execute a stored definition (kind-aware) or an inline multi under URL owner."""
         tenant = request.match_info.get("tenant")
         registry = self._registry(request)
         _resolve_or_raise(registry, tenant)  # validate before delegating
@@ -239,23 +285,32 @@ class TenantQueryHandler(AbstractHandler):
 
         slug = request.match_info.get("slug")
         if slug:
+            try:
+                _definition, is_multi = await self._prepare(request)
+            except TenantError as err:
+                return self.error(response={"message": str(err)}, status=err.code)
+            if is_multi:
+                from .multi import QueryHandler
+
+                return await QueryHandler(request).query(request)
             from .service import QueryService
 
-            handler = QueryService(request)
-            return await handler.query(request)
+            return await QueryService(request).query(request)
         from .multi import QueryHandler
 
         handler = QueryHandler(request)
         return await handler.query(request)
 
     async def columns(self, request: web.Request) -> web.StreamResponse:
-        """Inspect selected definition using existing single/multi semantics."""
-        tenant = request.match_info.get("tenant")
-        registry = self._registry(request)
-        _resolve_or_raise(registry, tenant)
+        """Column inspection: kind-aware multi/single semantics (HEAD and PATCH)."""
+        try:
+            _definition, is_multi = await self._prepare(request)
+        except TenantError as err:
+            return self.error(response={"message": str(err)}, status=err.code)
+        if is_multi:
+            from .multi import QueryHandler
 
-        request["qs_tenant"] = tenant
-
+            return await QueryHandler(request).columns(request)
         from .service import QueryService
 
         handler = QueryService(request)
@@ -264,13 +319,15 @@ class TenantQueryHandler(AbstractHandler):
         return await handler.columns(request)
 
     async def test_slug(self, request: web.Request) -> web.StreamResponse:
-        """Dry-run selected saved definition without executing its data query."""
-        tenant = request.match_info.get("tenant")
-        registry = self._registry(request)
-        _resolve_or_raise(registry, tenant)
+        """Dry-run selected saved definition (kind-aware) without executing its data query."""
+        try:
+            _definition, is_multi = await self._prepare(request)
+        except TenantError as err:
+            return self.error(response={"message": str(err)}, status=err.code)
+        if is_multi:
+            from .multi import QueryHandler
 
-        request["qs_tenant"] = tenant
-
+            return await QueryHandler(request).test_slug(request)
         from .service import QueryService
 
         handler = QueryService(request)
