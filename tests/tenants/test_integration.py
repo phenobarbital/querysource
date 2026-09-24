@@ -157,8 +157,8 @@ async def test_postgres_redis_revision_and_concurrency(tenant_services) -> None:
     # identical slug + identical provider checksum.
     loaded = [await repo.get(ident) for ident in identities]
     keys = {
-        result_cache_key(l.identity, l.revision, "checksum-fixed")
-        for l in loaded
+        result_cache_key(item.identity, item.revision, "checksum-fixed")
+        for item in loaded
     }
     assert len(keys) == len(stores), "cache keys collided across stores"
 

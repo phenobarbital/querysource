@@ -4,7 +4,7 @@ Connections Manager.
 import asyncio
 import random
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -155,7 +155,7 @@ class Connection:
             )
             raise ConnectionError(
                 f"Connection Error: {ex}"
-            )
+            ) from ex
 
     def get_driver(self, driver) -> BaseDriver:
         """Getting a Database Driver from Datasource Drivers.
@@ -547,9 +547,9 @@ class Connection:
         implementation (verified: the prior body ignored it entirely) —
         it remains a compatibility argument only.
         """
-        start = datetime.now()
+        start = datetime.now(timezone.utc)
         obj = await self.get_query_slug(slug, evt=evt, tenant=tenant)
-        exec_time = (datetime.now() - start).total_seconds()
+        exec_time = (datetime.now(timezone.utc) - start).total_seconds()
         self.logger.debug(
             f"Getting Slug, Execution Time: {exec_time:.3f}ms\n"
         )

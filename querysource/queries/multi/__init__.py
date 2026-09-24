@@ -391,11 +391,11 @@ class MultiQS(BaseQuery):
                         if len(parts) > 1:
                             try:
                                 port = int(parts[1])
-                            except ValueError:
+                            except ValueError as exc:
                                 raise DriverError(
                                     f"Query {name!r}: invalid 'worker' address "
                                     f"{worker_addr!r} — port must be an integer."
-                                )
+                                ) from exc
                         else:
                             port = QWORKER_PORT
                         remote_config = RemoteConfig(
@@ -744,7 +744,7 @@ class MultiQS(BaseQuery):
                             oe.step_name = step_name
                         if getattr(oe, "category", None) is None:
                             oe.category = classify_output_error(oe)
-                        logging.error(
+                        self._logger.error(
                             "MultiQS: output destination '%s' failed: %s",
                             step_name,
                             oe,
@@ -754,7 +754,7 @@ class MultiQS(BaseQuery):
                         # Preserve DataNotFound semantics unchanged.
                         raise
                     except Exception as dest_err:
-                        logging.error(
+                        self._logger.error(
                             "MultiQS: output destination '%s' failed: %s",
                             step_name,
                             dest_err,

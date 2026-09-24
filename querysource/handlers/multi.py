@@ -529,13 +529,13 @@ class QueryHandler(AbstractHandler):
                 message="Slug Not Found",
                 exception=snf,
                 code=404
-            )
+            ) from snf
         except ParserError as pe:
             raise self.Error(
                 message="Error parsing Query Slug",
                 exception=pe,
                 code=401
-            )
+            ) from pe
         except OutputError as oe:
             # FEAT-146: MultiQS is the single authoritative Output executor;
             # a raised OutputError means a destination failed. Map its
@@ -579,7 +579,7 @@ class QueryHandler(AbstractHandler):
             # single line here; the full detail is still in the body.
             header_detail = " ".join(str(oe).splitlines())
             err.headers['X-Output-Errors'] = f"{step}: {header_detail}"
-            raise err
+            raise err from oe
         except TenantError as err:
             # Placed BEFORE the broader (QueryException, DriverError) branch
             # since TenantError IS a QueryException subclass — without this,
@@ -601,7 +601,7 @@ class QueryHandler(AbstractHandler):
                 exception=err,
                 stacktrace=trace,
                 code=err.code
-            )
+            ) from err
         except (QueryException, DriverError) as qe:
             trace = traceback.format_exc()
             _remote_queries_on_err = getattr(qs, '_remote_queries', [])
@@ -617,7 +617,7 @@ class QueryHandler(AbstractHandler):
                 exception=qe,
                 stacktrace=trace,
                 code=402
-            )
+            ) from qe
         except Exception as ex:
             trace = traceback.format_exc()
             _remote_queries_on_err = getattr(qs, '_remote_queries', [])
@@ -755,7 +755,7 @@ class QueryHandler(AbstractHandler):
                 message="DataOutput Error",
                 exception=err,
                 code=402
-            )
+            ) from err
         except (QueryException, Exception) as ex:
             raise self.Except(
                 message="Error on Query",
