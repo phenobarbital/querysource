@@ -2,15 +2,15 @@
 
 Models for querysource structure.
 """
-from typing import List, Optional
 from datetime import datetime
-from asyncdb.models import Model, Field
+from typing import List, Optional
+
+from asyncdb.models import Field, Model
 from datamodel.libs.mapping import ClassDict
+
+from .conf import QS_QUERIES_SCHEMA, QS_QUERIES_TABLE
 from .utils.functions import empty_dict
-from .conf import (
-    QS_QUERIES_SCHEMA,
-    QS_QUERIES_TABLE
-)
+
 
 def rigth_now(obj) -> datetime:
     return datetime.now()
