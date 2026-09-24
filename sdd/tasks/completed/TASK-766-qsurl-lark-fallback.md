@@ -338,10 +338,67 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: TASK-764 (Rust crate port) landed since this task was first attempted, so
+`rust/qsurl/src/{parser,ast,ir,lib}.rs` were read directly as the grounding reference
+(cross-checked against the Codebase Contract's grammar/lowering prose). Wrote
+`querysource/qsurl/grammar.lark` (LALR + contextual lexer; no Earley needed) and
+`querysource/qsurl/_fallback.py` (`_ToQuery` transformer building tagged intermediate
+tuples, `_lower`/`_lower_expr`/`_leaf`/`_lower_operand` mirroring `ir.rs` rule for rule,
+`parse`/`requires`). All FILL IN sections completed: the comparison/operand/list/call/
+literal/pipe/sortkey grammar rules and terminals; the `_ToQuery` methods; `_lower` R1-R7;
+`parse`'s R8 duplicate-pipe checks and R10 generic-error mapping; all 17
+`tests/qsurl/test_fallback.py` tests (one per rule R1-R10 plus keyword-boundary,
+whitespace-tolerance and precedence/flattening coverage).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Two real bugs found and fixed via this task's own testing (not blueprint deviations —
+both required for AC1/AC3 to hold at all):**
+1. **Lark terminal disambiguation (`grammar.lark`)**: Lark's lexer resolves same-position
+   terminal ties by *priority* before *match length*, and treats unbounded regexes
+   (`IDENT`'s `*`, `NUMBER`'s `+`) as "theoretically" longer than any bounded pattern
+   regardless of what actually matches at that position — verified empirically (a plain
+   `DATE` vs `NUMBER` alternation without explicit priority tokenized `2024-01-01` as
+   `NUMBER("2024")` + a syntax error on `-01-01`, not the correct `DATE` token). Fixed by
+   giving `DATETIME`/`DATE` explicit priority over `NUMBER`. This same mechanism meant a
+   naive `NULL: "null"` terminal, once given priority to beat `IDENT` on exact `null`,
+   would *also* wrongly beat `IDENT` on the `null` prefix of `nullable` (violating the
+   AC's `nullable=1`/`topic=1`/`distinctive=1` requirement) — fixed by adding an explicit
+   `(?![A-Za-z0-9_])` word-boundary lookahead to every keyword terminal (`NULL`, `TRUE`,
+   `FALSE`, `TOP_KW`, `SKIP_KW`, and the newly-named `SORT_KW`/`DISTINCT_KW`, replacing
+   two inline string literals that had the identical latent bug at pipe-operator-name
+   position), mirroring chumsky's `text::ascii::keyword()` semantics directly. Documented
+   at length in the grammar file's own header comment for the next author.
+2. **`querysource/qsurl/__init__.py` (TASK-765 file)**: `_load_fallback` (originally named
+   `_fallback`) shadowed the `_fallback` submodule it lazily imports — `from . import
+   _fallback` inside a function *named* `_fallback` resolves via `getattr` against this
+   package's own namespace first, finding the already-bound function itself before ever
+   attempting to import `querysource/qsurl/_fallback.py`, so calling the public
+   `querysource.qsurl.parse()` raised `AttributeError: 'function' object has no attribute
+   'parse'`. This was invisible during TASK-765 (the submodule didn't exist yet, so the
+   fallback path was untested end-to-end) and only surfaced once `_fallback.py` existed.
+   Renamed the loader to `_load_fallback` (public API unchanged); regression covered by
+   `python -c "import querysource.qsurl as q; q.parse(...)"` succeeding and by the full
+   `tests/qsurl` suite passing (this function is exercised implicitly whenever `HAS_RUST`
+   is `False`, i.e. every test in this worktree today).
 
-**Deviations from spec**: none | describe if any
+**Byte-parity verification against the real Rust crate** (informal, ahead of TASK-767's
+formal corpus): ran `cargo run --example parse` for the reference example plus 8 more
+queries covering every §3 M3 rule and compared `json.dumps(ir, sort_keys=True,
+separators=(",",":"))` between both back-ends — **9/9 matched byte-for-byte**, including
+the example query, whitespace-tolerance pair, precedence/flattening, null/list/text-op
+leaves, functions/navigation/alias/flipped-comparison, and typed literals. All
+per-Codebase-Contract offset/message assertions (`unknown pipeline operator`, duplicate
+`:top`/`:skip`, the three generic syntax-error offsets 13/4/6, `lower_error_json_has_only_kind_and_message`'s
+exact message) match the reference crate's own test expectations verbatim.
+
+**Test results**: `pytest tests/qsurl/test_fallback.py -q` -> 17 passed. Full regression:
+`pytest tests/qsurl tests/e2e tests/handlers/test_qsurl_service.py
+tests/handlers/test_queryservice_pbac_smoke.py -q` -> 128 passed, 8 skipped (documented
+Rust-path skips, TASK-769; no regression from either fix). `ruff check
+querysource/qsurl/_fallback.py querysource/qsurl/__init__.py tests/qsurl/test_fallback.py`
+clean.
+
+**Deviations from spec**: none for the blueprint's own listed files. Also touched, and
+required for the public `parse()` API to function: `querysource/qsurl/__init__.py`
+(TASK-765 file) — see bug #2 above.
