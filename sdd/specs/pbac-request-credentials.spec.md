@@ -62,7 +62,7 @@ QuerySource who is asking.
 - Per-user datasource credentials on the principal path (`pgDriver.params_for`, FEAT-091). This was rejected in brainstorm Round 1.
 - Any change in ai-parrot. Mapping `PermissionContext` to `QSPrincipal` and passing `record.tenant` belong to a separate ai-parrot follow-up (§8).
 - A tenant-membership check between `principal.tenant_id` and `tenant=` (FEAT-147 L225-226: "No tenant membership check is introduced").
-- A sessionless-authz (`authz:<backend>`) principal form (§8, deferred).
+- Implementing `EvalContext.from_userinfo()` itself. That lands in the navigator-auth repo (`../navigator-auth`) under its own spec, using the contract fixed in §2. FEAT-150 feature-detects it and does not wait for its release.
 - A synthetic `web.Request` or contextvar identity transport. Both were rejected in brainstorm (Options B/C; Round 1).
 - Numeric `org_id` / `client_id` on `QSPrincipal`. Handlers never pass a tenant pair to `check_access` (defaults 1, `abstract.py:443-449`), so the principal path does not either (refinement of the brainstorm description; see §7).
 - MultiQS `sources` entries (the non-query `sources:` list). Handlers do not PBAC-check them today, and this feature keeps parity.
@@ -82,15 +82,37 @@ QuerySource who is asking.
    `channel` are **never** placed into userinfo. They are for logs only. An empty
    `user_id` raises `ValueError` at construction, so a principal never evaluates as
    anonymous.
+
+   **Sessionless form** (resolved Q2): `QSPrincipal.for_authz(backend)` builds exactly
+   the handler's synthetic identity (`handlers/abstract.py:382-386`). That is
+   `user_id=username='authz:<backend>'`, `groups=('authorized', <backend>)` and no
+   roles, programs or superuser, and it is evaluated with `user=None`, as the handler
+   does (`abstract.py:418-421`). `__post_init__` rejects an `authz_backend` principal
+   whose other claims differ from that shape, so the form cannot carry extra
+   privileges. The form is honoured **only** when `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`
+   is true. Otherwise, with PBAC active, it is denied (`QueryAccessDenied`), just as
+   the handler denies a session-less request when the flag is off (`abstract.py:395-403`).
 2. **Evaluation core** (new, `querysource/auth/enforcement.py`):
    - `resolve_evaluator(request, *, detached)` generalizes
      `slug_visibility._evaluator_state`. With a request it reads
      `request.app['security' | 'policy_evaluator']`. Without one it reads the
      process-wide **PBAC runtime handle** that `setup_pbac()` records.
-   - `build_eval_context(...)` uses the real `EvalContext` constructor. When there is
-     no request it passes a neutral stand-in request (`_ServiceRequest`). This is
-     safe because navigator-auth 0.26.0's `check_access` reads only `ctx.userinfo`
-     / `ctx.user` (cache key + `_build_user_context`), never request fields.
+   - `build_eval_context(...)`: with a request it uses the real `EvalContext`
+     constructor (unchanged handler path). Without a request it **prefers
+     `EvalContext.from_userinfo(...)`** when the installed navigator-auth provides it
+     (feature-detected with `hasattr`, resolved Q1). Otherwise, on 0.26.0, it passes a
+     neutral stand-in request (`_ServiceRequest`) to the real constructor. Both are
+     safe because navigator-auth 0.26.0's `check_access` reads only `ctx.userinfo` /
+     `ctx.user` (cache key + `_build_user_context`), never request fields.
+   - **Upstream contract** for the navigator-auth spec (verbatim target):
+     `@classmethod EvalContext.from_userinfo(cls, userinfo: dict, *, user: Any = None,
+     session: Any = None, org_id: Any = None, client_id: Any = None) -> EvalContext`.
+     It builds the same store keys `__init__` sets, with `request=None`,
+     `ip_addr=None`, `method=None`, `referer=None`, `path_qs=None`, `path=None`,
+     `headers={}`, `url=None` and `is_authenticated = user is not None or bool(userinfo)`.
+     `org_id`/`client_id` are resolved through `_resolve_tenant(None, userinfo, org_id,
+     client_id)`, whose header branch must tolerate `request=None` (it already guards
+     `if request and hasattr(request, 'headers')`).
    - `evaluate(...)` runs `check_access` with the `iscoroutine` guard and turns
      evaluator exceptions into a **deny** (fail-closed).
    - `enforce_principal(...)` is the QS entrypoint. It always uses a detached
@@ -200,6 +222,7 @@ class QSPrincipal:
     superuser: bool = False
     tenant_id: str | None = None      # informational only — never routes, never enters userinfo
     channel: str = "library"          # informational only — logs
+    authz_backend: str | None = None  # set only by for_authz(); sessionless-authz form
 
 @dataclass(frozen=True)
 class AccessDecision:
@@ -255,7 +278,8 @@ mq = MultiQS(slug="pipeline", tenant="client_b", principal=principal)
 
       Only identity/claims used by PBAC policies. ``tenant_id`` and ``channel``
       are informational (logs); they never select a store and never enter the
-      evaluation userinfo. Raises ValueError when ``user_id`` is empty/blank.
+      evaluation userinfo. Raises ValueError when ``user_id`` is empty/blank, or when
+      ``authz_backend`` is set and the other claims differ from the for_authz() shape.
       Sequences passed for groups/roles/programs are normalized to tuples of str.
       """
       user_id: str
@@ -266,10 +290,23 @@ mq = MultiQS(slug="pipeline", tenant="client_b", principal=principal)
       superuser: bool = False
       tenant_id: str | None = None
       channel: str = "library"
+      authz_backend: str | None = None
+
+      @classmethod
+      def for_authz(cls, backend: str, *, tenant_id: str | None = None,
+                    channel: str = "library") -> "QSPrincipal":
+          """Sessionless-authz identity, identical to the handler's synthetic one
+          (verified: handlers/abstract.py:382-386): user_id=username='authz:<backend>',
+          groups=('authorized', backend), no roles/programs/superuser. Blank backend → ValueError."""
+
+      @property
+      def is_authz(self) -> bool:
+          """True when authz_backend is set."""
 
       def to_userinfo(self) -> dict[str, Any]:
-          """Return the navigator-auth userinfo dict: username (username or user_id),
-          user_id, groups, roles, programs (lists), superuser (bool). Nothing else."""
+          """User form: username (username or user_id), user_id, groups, roles, programs
+          (lists), superuser (bool). Authz form: exactly {'username', 'groups', 'roles'} as the
+          handler builds it. Nothing else in either form."""
 
       def log_fields(self) -> dict[str, Any]:
           """Return {'principal': user_id, 'principal_tenant': tenant_id, 'channel': channel} for logs."""
@@ -339,8 +376,9 @@ mq = MultiQS(slug="pipeline", tenant="client_b", principal=principal)
 
   def build_eval_context(*, userinfo: dict, user: Any, session: Any,
                          request: web.Request | None = None) -> Any:
-      """navigator_auth EvalContext(request=request or _ServiceRequest(), user=, userinfo=, session=).
-      Lazy-imports navigator-auth."""
+      """request given → EvalContext(request=request, user=, userinfo=, session=) (unchanged).
+      request None → EvalContext.from_userinfo(userinfo, user=, session=) when hasattr(EvalContext,
+      'from_userinfo'), else EvalContext(request=_ServiceRequest(), ...). Lazy-imports navigator-auth."""
 
   async def evaluate(evaluator: Any, ctx: Any, resource_type: Any, resource_name: str,
                      action: str) -> AccessDecision:
@@ -352,7 +390,8 @@ mq = MultiQS(slug="pipeline", tenant="client_b", principal=principal)
                               action: str, *, tenant: str | None = None,
                               logger: logging.Logger | None = None) -> AccessDecision:
       """Principal-path gate. Always detached. PBAC off → allowed (debug log; one warning per
-      process when QS_PBAC_ENABLED is True). Evaluator missing → QueryAccessDenied.
+      process when QS_PBAC_ENABLED is True). Authz-form principal with PBAC active and
+      QS_PBAC_ALLOW_SESSIONLESS_AUTHZ false → QueryAccessDenied; allowed flag → evaluated with user=None. Evaluator missing → QueryAccessDenied.
       Deny → QueryAccessDenied. Logs principal.log_fields(), tenant selector, resource, action,
       decision, matched policy and reason."""
   ```
@@ -448,13 +487,17 @@ mq = MultiQS(slug="pipeline", tenant="client_b", principal=principal)
 | `test_principal_requires_user_id` | M1 | empty/blank `user_id` → `ValueError` |
 | `test_principal_to_userinfo_shape` | M1 | exact key set; `tenant_id`/`channel` absent; username falls back to user_id |
 | `test_principal_normalizes_sequences` | M1 | lists → tuples of str |
+| `test_principal_for_authz_shape` | M1 | `for_authz('ip')` → user_id `authz:ip`, groups `('authorized','ip')`; `to_userinfo()` equals the handler's dict |
+| `test_principal_authz_rejects_extra_claims` | M1 | `authz_backend` with extra groups/roles/programs/superuser → `ValueError`; blank backend → `ValueError` |
 | `test_query_access_denied_is_query_exception` | M1 | subclass of `QueryException`, code 404, generic default message |
 | `test_setup_pbac_records_runtime_bootstrap` | M2 | successful bootstrap → `get_pbac_runtime()` returns guardian/evaluator |
 | `test_setup_pbac_records_runtime_reuse` | M2 | reuse branch records the pre-existing instances |
 | `test_setup_pbac_failure_leaves_runtime_none` | M2 | import/policy failure → runtime stays None |
 | `test_resolve_evaluator_request_and_runtime` | M3 | request path reads app; None path reads runtime; guardian w/o evaluator → `(True, None)` |
 | `test_resolve_evaluator_detached_copy` | M3 | fresh `_cache`, copied `_stats`, app evaluator untouched |
-| `test_build_eval_context_without_request` | M3 | real `EvalContext` built with `_ServiceRequest`; `userinfo` preserved |
+| `test_build_eval_context_without_request` | M3 | real `EvalContext` built with `_ServiceRequest` on 0.26.0; `userinfo` preserved |
+| `test_build_eval_context_prefers_from_userinfo` | M3 | when `EvalContext.from_userinfo` exists (monkeypatched), it is called and `_ServiceRequest` is not built |
+| `test_enforce_principal_authz_flag` | M3 | authz principal: flag off → `QueryAccessDenied`; flag on → evaluated with `user=None` and the handler's userinfo |
 | `test_evaluate_exception_is_deny` | M3 | evaluator raising → `allowed=False` |
 | `test_evaluate_awaits_coroutine` | M3 | async `check_access` result is awaited, not truthy-bypassed |
 | `test_enforce_principal_matrix` | M3 | PBAC off → allowed; missing evaluator → denied; deny → `QueryAccessDenied`; allow → decision |
@@ -505,6 +548,8 @@ def _reset_runtime():
 - [ ] `tenant=` alone selects the store. `principal.tenant_id` never enters userinfo, never selects a store and is never used as `org_id`/`client_id`.
 - [ ] PBAC not configured (no runtime) + principal → no-op with a debug log. With `QS_PBAC_ENABLED=True`, exactly one warning per process.
 - [ ] Guardian registered without an evaluator, or an evaluator exception → deny (fail-closed).
+- [ ] Without a request, `build_eval_context` uses `EvalContext.from_userinfo` when navigator-auth provides it, and `_ServiceRequest` otherwise. Both paths are tested.
+- [ ] `QSPrincipal.for_authz(backend)` yields exactly the handler's synthetic userinfo. It is honoured only when `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ` is true, and denied otherwise when PBAC is active. An authz principal with extra claims cannot be constructed.
 - [ ] Every principal-path check uses a detached evaluator copy, and the app evaluator's `_cache`, `_stats` and TTL are unchanged afterwards.
 - [ ] `QS`/`MultiQS` given both `request=` and `principal=` → `ValueError`.
 - [ ] `MultiQS`: the pipeline slug, every stored child, every file and inline raw children are all checked before any child executes; one deny means none run.
@@ -638,7 +683,7 @@ PolicyEvaluator.check_access(ctx, resource_type, resource_name, action, env=None
 - ~~`QueryAccessDenied`~~: not in `querysource/exceptions.py`.
 - ~~`get_pbac_runtime()` or any module-level evaluator accessor~~: the evaluator lives only on `app['policy_evaluator']` today.
 - ~~Any PBAC check inside `QS` / `MultiQS` / `QueryObject`~~: enforcement is handler-only today.
-- ~~`EvalContext.from_userinfo()` or another request-free constructor in navigator-auth 0.26.0~~.
+- ~~`EvalContext.from_userinfo()` or another request-free constructor in navigator-auth 0.26.0~~. It is planned upstream (§2 contract), so always feature-detect it with `hasattr` and never assume it exists.
 - ~~`querysource/tenants/` package~~: tenancy is `querysource/tenants.py` + `querysource/tenant_errors.py`.
 - ~~A `check_access(..., bypass_cache=...)` argument~~: detaching is the only isolation mechanism (FEAT-147 L227-234).
 - ~~Use of `MultiQS._user_session`~~: stored at `:147`, never read; do not repurpose it.
@@ -687,7 +732,7 @@ Verified against: `a525718`
 - Tests: `pytest-asyncio` (`asyncio_mode = auto`). Mock providers and the repository, following `tests/tenants/test_tenant_policy_preflight.py`. Gate the real-evaluator contract test with `_evaluator_available()` (pattern `tests/policies/test_authorized_policy.py:17`).
 
 ### Known Risks / Gotchas
-- **navigator-auth internals.** The stand-in relies on `EvalContext.__init__` touching only the attributes listed in §6. A navigator-auth upgrade may break it. Mitigation: `test_real_evaluator_contract` plus `test_build_eval_context_without_request`, and §8 asks for an upstream factory.
+- **navigator-auth internals.** The stand-in relies on `EvalContext.__init__` touching only the attributes listed in §6. A navigator-auth upgrade may break it. Mitigation: `test_real_evaluator_contract` plus `test_build_eval_context_without_request`. Once the upstream `from_userinfo` factory is released, it is preferred automatically. A later cleanup can drop `_ServiceRequest` and raise the navigator-auth floor.
 - **Request-derived conditions.** None reach the 0.26.0 Rust engine (`_build_user_context` returns only username, groups and roles, and the env comes from `Environment()`). If a later navigator-auth version adds request-based conditions, they will not match on the principal path. Document this in M7.
 - **Detached = no decision cache** on the principal path. Every check is a fresh evaluation. That is acceptable (in-process Rust, a small number of checks per query) and required for tenant isolation (FEAT-147 L227-234).
 - **Handler refactor regressions.** The 404 mapping, the sessionless-authz synthetic identity (`abstract.py:367-398`), the fail-closed path for a missing evaluator (`:400-406`) and the missing-name short-circuit (`:359-365`) must stay byte-for-byte equivalent in outcome. The existing suites are the pin and must pass unmodified.
@@ -724,9 +769,9 @@ Verified against: `a525718`
 - [x] Singleton lookup mechanics — *Resolved at spec time from research*: module-level runtime handle recorded by `setup_pbac()` in both success branches; never `QuerySource()`.
 - [x] Always detached on the principal path — *Resolved at spec time*: yes; handler paths keep their current shared/detached choice.
 - [x] PBAC enabled but bootstrap failed/absent with principal — *Resolved at spec time*: stays a no-op (brainstorm decision) with one warning per process.
-- [ ] Should navigator-auth gain an `EvalContext.from_userinfo()` factory so both QuerySource's stand-in and ai-parrot's `__new__` hack can be retired? — *Owner: Jesus Lara (navigator-auth)*
-- [ ] Does `QSPrincipal` need a sessionless-authz form (`authz:<backend>` identity with groups `authorized`/backend) for worker-to-QS calls? Deferred; handler-only for now. — *Owner: Jesus Lara*
-- [ ] ai-parrot follow-up: map `PermissionContext` → `QSPrincipal` in `QuerySlugSource`/`MultiQuerySlugSource`, and make `_refresh` pass `record.tenant` as `tenant=` instead of the `build_principal_context` default. — *Owner: ai-parrot maintainers*
+- [x] Should navigator-auth gain an `EvalContext.from_userinfo()` factory? — *Resolved (Jesus Lara, 2026-09-24)*: yes, in the navigator-auth repo (`../navigator-auth`) under its own spec, with the contract in §2. FEAT-150 feature-detects it and falls back to `_ServiceRequest` on 0.26.0.
+- [x] Does `QSPrincipal` need a sessionless-authz form? — *Resolved (Jesus Lara, 2026-09-24)*: yes. `QSPrincipal.for_authz(backend)` mirrors the handler identity and is gated by `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ` (§2 item 1, M1, M3).
+- [x] ai-parrot follow-up — *Resolved (Jesus Lara, 2026-09-24)*: accepted as a separate ai-parrot feature after FEAT-150 ships in QuerySource 5.1.0. It maps `PermissionContext` → `QSPrincipal` in `QuerySlugSource`/`MultiQuerySlugSource`, and makes `_refresh` pass `record.tenant` as `tenant=` instead of the `build_principal_context` default. Out of scope here.
 
 ---
 
@@ -754,7 +799,7 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
   - M1 ∥ M2 run concurrently; M4 ∥ M5 run concurrently after M3.
 - **Shared files**: `querysource/auth/__init__.py` (M1 exports `QSPrincipal`, M2 exports `get_pbac_runtime`), so serialize M1/M2 on that file or let M2 add both exports.
 - **Exclusive resources**: none (no Cython/Rust rebuild, no lockfile or migration).
-- **Cross-feature dependencies**: FEAT-147 (per-tenant-queries) and FEAT-148 (describe-queryslug) are merged on `dev`. No in-flight spec touches these files; FEAT-149 (falsy-refresh) lists `QS.query()` (`qs.py:385,414`) as a dependency it leaves unchanged, so there is no file overlap. Still rebase on `dev` before M5.
+- **Cross-feature dependencies**: FEAT-147 (per-tenant-queries) and FEAT-148 (describe-queryslug) are merged on `dev`. No in-flight spec touches these files; FEAT-149 (falsy-refresh) lists `QS.query()` (`qs.py:385,414`) as a dependency it leaves unchanged, so there is no file overlap. Still rebase on `dev` before M5. **navigator-auth** `EvalContext.from_userinfo` (separate spec in `../navigator-auth`) is a soft dependency: FEAT-150 feature-detects it and does not wait for it.
 
 ---
 
@@ -763,3 +808,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-24 | Jesus Lara / Claude | Initial draft from brainstorm Option A; FEAT-150 reserved; spec-time decisions: existence collapse, `_ServiceRequest` stand-in, `setup_pbac` runtime handle, always-detached principal path. |
+| 0.2 | 2026-09-24 | Jesus Lara / Claude | Resolved the last 3 open questions: upstream `EvalContext.from_userinfo` contract + feature detection; `QSPrincipal.for_authz` sessionless form gated by `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`; ai-parrot follow-up accepted as a separate feature. |
