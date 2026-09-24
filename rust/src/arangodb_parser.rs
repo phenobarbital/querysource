@@ -177,7 +177,7 @@ fn extract_aql_value(py_val: &Bound<'_, PyAny>) -> AqlValue {
         return AqlValue::Str(s);
     }
     // Dict: extract first key-value pair as {operator: value}
-    if let Ok(d) = py_val.downcast::<PyDict>() {
+    if let Ok(d) = py_val.cast::<PyDict>() {
         if let Some((k, v)) = d.iter().next() {
             if let (Ok(op), val) = (k.extract::<String>(), extract_aql_value(&v)) {
                 return AqlValue::Dict {
@@ -189,7 +189,7 @@ fn extract_aql_value(py_val: &Bound<'_, PyAny>) -> AqlValue {
         return AqlValue::None;
     }
     // List
-    if let Ok(list) = py_val.downcast::<PyList>() {
+    if let Ok(list) = py_val.cast::<PyList>() {
         let items: Vec<AqlValue> = list.iter().map(|item| extract_aql_value(&item)).collect();
         return AqlValue::List(items);
     }
@@ -281,7 +281,7 @@ fn extract_search_options(search_dict: &Bound<'_, PyDict>) -> Option<SearchOptio
 
     let mut fields: Vec<(String, String)> = Vec::new();
     if let Ok(Some(fields_dict)) = search_dict.get_item("fields") {
-        if let Ok(d) = fields_dict.downcast::<PyDict>() {
+        if let Ok(d) = fields_dict.cast::<PyDict>() {
             for (k, v) in d.iter() {
                 if let (Ok(key), Ok(val)) = (k.extract::<String>(), v.extract::<String>()) {
                     fields.push((key, val));
@@ -292,7 +292,7 @@ fn extract_search_options(search_dict: &Bound<'_, PyDict>) -> Option<SearchOptio
 
     let mut phrase: Vec<(String, String)> = Vec::new();
     if let Ok(Some(phrase_dict)) = search_dict.get_item("phrase") {
-        if let Ok(d) = phrase_dict.downcast::<PyDict>() {
+        if let Ok(d) = phrase_dict.cast::<PyDict>() {
             for (k, v) in d.iter() {
                 if let (Ok(key), Ok(val)) = (k.extract::<String>(), v.extract::<String>()) {
                     phrase.push((key, val));
@@ -438,7 +438,7 @@ pub fn aql_filter_conditions(
     filter_dict: &Bound<'_, PyDict>,
     cond_definition: &Bound<'_, PyDict>,
     doc_var: &str,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let result = PyList::empty(py);
 
     if filter_dict.is_empty() {

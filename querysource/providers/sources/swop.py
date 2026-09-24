@@ -71,7 +71,8 @@ class swop(graphqlSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"{self.api_name}: {ex}"
+                f"{self.api_name}: {ex}",
+                code=502
             ) from ex
 
     async def convert(self):
@@ -95,5 +96,6 @@ class swop(graphqlSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"{self.api_name}: {ex}"
+                f"{self.api_name}: {ex}",
+                code=502
             ) from ex

@@ -143,7 +143,8 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex
 
     async def daily_forecast(self):
@@ -196,7 +197,8 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex
 
     async def forecast(self):
@@ -249,7 +251,8 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex
 
     async def onecall(self):
@@ -274,7 +277,8 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex
 
     async def pollution(self):
@@ -299,7 +303,8 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex
 
     async def pollution_forecast(self):
@@ -324,5 +329,6 @@ class openweather(restSource):
         except Exception as ex:
             self.logger.exception(ex)
             raise QueryError(
-                f"OpenWeather: {ex}"
+                f"OpenWeather: {ex}",
+                code=502
             ) from ex

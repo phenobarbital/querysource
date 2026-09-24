@@ -28,7 +28,7 @@ struct ParsedField {
 /// Processing is parallelised with rayon.
 #[pyfunction]
 #[pyo3(signature = (fields,))]
-pub fn rethink_process_fields(py: Python, fields: Vec<String>) -> PyResult<PyObject> {
+pub fn rethink_process_fields(py: Python, fields: Vec<String>) -> PyResult<Py<PyAny>> {
     if fields.is_empty() {
         let empty_list = PyList::empty(py);
         let empty_dict = PyDict::new(py);
@@ -98,7 +98,7 @@ struct OrderEntry {
 /// If a single string is given, it is split on comma first.
 #[pyfunction]
 #[pyo3(signature = (ordering,))]
-pub fn rethink_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<PyObject> {
+pub fn rethink_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<Py<PyAny>> {
     if ordering.is_empty() {
         return Ok(py.None());
     }
@@ -179,7 +179,7 @@ pub fn rethink_classify_conditions(
     py: Python,
     filter_dict: &Bound<'_, PyDict>,
     cond_definition: &Bound<'_, PyDict>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let result = PyDict::new(py);
 
     if filter_dict.is_empty() {
@@ -197,8 +197,8 @@ pub fn rethink_classify_conditions(
                 .flatten()
                 .and_then(|v| v.extract().ok());
             let cond_str = cond_type.unwrap_or_default();
-            let is_list = py_val.downcast::<PyList>().is_ok();
-            let is_dict = py_val.downcast::<PyDict>().is_ok();
+            let is_list = py_val.cast::<PyList>().is_ok();
+            let is_dict = py_val.cast::<PyDict>().is_ok();
             Some((key, cond_str, is_list, is_dict))
         })
         .collect();

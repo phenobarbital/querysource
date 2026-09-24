@@ -9,7 +9,7 @@ name = "_qs_parsers"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24" }
+pyo3 = { version = "0.29" }
 rayon = "1.10"
 regex = "1.11"
 once_cell = "1.20"

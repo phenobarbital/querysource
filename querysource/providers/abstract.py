@@ -4,6 +4,7 @@ Abstract Provider for all Datasource objects.
 """
 import asyncio
 import copy
+import re
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -12,11 +13,21 @@ from typing import Any, Union
 from aiohttp import web
 from navconfig.logging import logging
 
-from ..exceptions import DataNotFound, ParserError, QueryException
+from ..exceptions import DataNotFound, ParserError, QueryException, RawQueryPlaceholderError
 from ..models import QueryModel
 from ..parsers.abstract import AbstractParser
 from ..types import to_flag
 from ..utils.functions import get_hash
+
+# Replacement placeholders, same key rule as the Rust safe_format_map (which
+# also substitutes inside quotes, e.g. ``day = '{day}'``).
+_PLACEHOLDER = re.compile(r"\{([A-Za-z0-9_.]+)\}")
+# Why a raw query's leftover placeholders can never be filled.
+RAW_DEFINITION_REASON = (
+    "is_raw=True queries bypass the parser, so placeholders are never replaced; "
+    "remove them from query_raw or set is_raw=False"
+)
+RAW_QUERY_REASON = "no value was supplied for them in the conditions"
 
 
 class BaseProvider(ABC):
@@ -163,6 +174,45 @@ class BaseProvider(ABC):
         return resolve_udf_conditions(
             dict(self._conditions or {}), self._get_cond_definition()
         )
+
+    @staticmethod
+    def find_placeholders(query: object) -> list[str]:
+        """Return the ``{placeholder}`` names left in a SQL statement.
+
+        Uses the same key rule as the Rust ``safe_format_map`` substitution
+        (ASCII alphanumerics, ``_`` and ``.``), quoted or not, so it reports
+        exactly what that substitution would have replaced. Brace literals that
+        are not identifiers (``'{a,b}'::text[]``, JSON ``'{"k": 1}'``) are not
+        reported; a single-element array literal must be written ``ARRAY['a']``.
+
+        Args:
+            query: The statement to inspect; non-strings have no placeholders.
+
+        Returns:
+            Placeholder names in order of first appearance, without duplicates.
+        """
+        if not isinstance(query, str) or '{' not in query:
+            return []
+        return list(dict.fromkeys(_PLACEHOLDER.findall(query)))
+
+    def _check_raw_placeholders(self, query: object, reason: str) -> None:
+        """Raise when a raw (parser-bypassing) query still carries placeholders.
+
+        Args:
+            query: The final statement that would be sent to the datasource.
+            reason: Why the placeholders cannot be filled, appended to the message.
+
+        Raises:
+            RawQueryPlaceholderError: If ``query`` contains ``{placeholder}`` tokens.
+        """
+        placeholders = self.find_placeholders(query)
+        if placeholders:
+            names = ', '.join(f'{{{name}}}' for name in placeholders)
+            label = f"Raw query {self._slug!r}" if self._type == 'slug' else "Raw query"
+            raise RawQueryPlaceholderError(
+                f"{label} has unresolved placeholders {names}: {reason}",
+                placeholders=placeholders,
+            )
 
     def NotFound(self, message: str):
         """Raised when Data not Found.

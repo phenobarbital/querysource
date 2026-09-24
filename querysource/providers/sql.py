@@ -26,7 +26,7 @@ from ..qs_parsers import HAS_RUST
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from ..types.validators import is_empty
-from .abstract import BaseProvider
+from .abstract import RAW_DEFINITION_REASON, RAW_QUERY_REASON, BaseProvider
 
 
 class sqlProvider(BaseProvider):
@@ -116,9 +116,11 @@ class sqlProvider(BaseProvider):
             if self._definition.is_raw is True:
                 self.is_raw = True
                 self._query = self._definition.query_raw
+                self._check_raw_placeholders(self._query, RAW_DEFINITION_REASON)
         elif qstype == 'raw':
             self.is_raw = True  # calling without passing the parser:
             self._query = self.raw_query(self._query)
+            self._check_raw_placeholders(self._query, RAW_QUERY_REASON)
         elif qstype == 'query':
             self._query = query
             self._logger.debug("= Query is:: %s", self._query_preview(self._query))

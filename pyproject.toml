@@ -164,7 +164,8 @@ dev = [
     "pytest-xdist==3.3.1",
     "pytest-assume==2.4.3",
     "ruff>=0.6.0",
-    "maturin>=1.7,<2.0"
+    "maturin>=1.15,<2.0",
+    "aioresponses>=0.7.9",
 ]
 
 [project.scripts]
