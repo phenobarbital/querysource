@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-24T00:47:28+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-24T10:24:09+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -25,7 +25,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T00:53:06+00:00",
-      "file": "sdd/tasks/completed/TASK-757-qs-preloaded-definition.md"
+      "file": "sdd/tasks/completed/TASK-757-qs-preloaded-definition.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-758",
@@ -45,7 +46,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T00:58:25+00:00",
-      "file": "sdd/tasks/completed/TASK-758-multiqs-preloaded-definition.md"
+      "file": "sdd/tasks/completed/TASK-758-multiqs-preloaded-definition.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-759",
@@ -63,7 +65,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T00:56:15+00:00",
-      "file": "sdd/tasks/completed/TASK-759-columns-definition-field.md"
+      "file": "sdd/tasks/completed/TASK-759-columns-definition-field.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-760",
@@ -84,7 +87,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T01:06:19+00:00",
-      "file": "sdd/tasks/completed/TASK-760-multi-handler-columns-dryrun.md"
+      "file": "sdd/tasks/completed/TASK-760-multi-handler-columns-dryrun.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-761",
@@ -104,7 +108,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T01:01:35+00:00",
-      "file": "sdd/tasks/completed/TASK-761-queryservice-forward-definition.md"
+      "file": "sdd/tasks/completed/TASK-761-queryservice-forward-definition.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-762",
@@ -124,7 +129,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T01:12:04+00:00",
-      "file": "sdd/tasks/completed/TASK-762-tenant-kind-aware-dispatch.md"
+      "file": "sdd/tasks/completed/TASK-762-tenant-kind-aware-dispatch.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-763",
@@ -145,7 +151,8 @@
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
       "completed_at": "2026-09-24T01:18:23+00:00",
-      "file": "sdd/tasks/completed/TASK-763-ddl-docs-integration.md"
+      "file": "sdd/tasks/completed/TASK-763-ddl-docs-integration.md",
+      "verification": "verified"
     }
   ]
 }
