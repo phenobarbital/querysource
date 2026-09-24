@@ -82,6 +82,20 @@ class ParserError(QueryException):
     pass
 
 
+class RawQueryPlaceholderError(ParserError):
+    """A raw query still carries ``{placeholder}`` replacements it can never fill.
+
+    Raw queries (``is_raw=True`` definitions, ``QS(raw_query=...)``) bypass the
+    parser, so any placeholder left in them would reach the database verbatim.
+    This is an operational error in the query definition (or a missing
+    condition), reported with code 422 and the offending ``placeholders``.
+    """
+
+    def __init__(self, message: str, placeholders: list[str] | None = None):
+        super().__init__(message, code=422)
+        self.placeholders: list[str] = list(placeholders or [])
+
+
 class OutputError(QueryException):
     """Raised when a MultiQuery Output/destination fails.
 
