@@ -16,14 +16,14 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "exclusive: runs `make build-inplace` (rebuilds shared Cython .so files, incl. querysource/types/validators)",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-24T00:26:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-744-to-flag-helper.md"
     },
@@ -34,7 +34,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -43,7 +43,7 @@
       "parallel": true,
       "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/validators.pyx, exported in querysource/types/__init__.py)",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-24T00:26:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-745-provider-refresh-coercion.md"
     },
@@ -54,7 +54,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -63,7 +63,7 @@
       "parallel": false,
       "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/__init__.py); exclusive: runs `make build-inplace` to rebuild querysource/parsers/abstract.pyx",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-24T00:26:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-746-parser-refresh-paged-coercion.md"
     },
@@ -74,7 +74,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -85,7 +85,7 @@
       "parallel": true,
       "parallelism_notes": "tests to_flag from TASK-744 (querysource/types), BaseProvider.refresh fix from TASK-745 (querysource/providers/abstract.py), parser refresh/paged fix from TASK-746 (querysource/parsers/abstract.pyx)",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-24T00:26:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-747-flag-conditions-tests.md"
     }
