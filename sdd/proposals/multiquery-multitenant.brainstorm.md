@@ -9,7 +9,7 @@ base_branch: dev
 #   auth, cache, scheduler) or an area (sdd-tooling, dev-loop, docs, ci). Unknown values warn, not fail.
 projects: [handlers, multiquery, querysource]
 # tags: free-form kebab-case keywords for organizing specs (e.g. bigquery, cache).
-tags: [multi-tenant, multiquery, tenant-routes, slug-dispatch, dry-run, columns]
+tags: [multi-tenant, multiquery, tenant-routes, slug-dispatch, dry-run, columns-definition]
 ---
 
 # Brainstorm: Unified single/multi dispatch on `/api/v1/{tenant}/queries/{slug}`
@@ -79,7 +79,7 @@ Decisions taken during discovery (Rounds 0–2) are binding for the spec:
   saved child under the tenant (inheritance and explicit `tenant`/`null` overrides as
   MultiQS does at `queries/multi/__init__.py:315-333`), run the ownership preflight,
   and report per-child status. No datasource query runs, no `EXPLAIN`.
-- **Multi columns**: add a `columns` array column to the tenant `queries` table (and
+- **Multi columns**: add a `columns_definition` array column to the tenant `queries` table (and
   the corresponding model field). `HEAD/PATCH {slug}` on a multi definition returns
   that declared list; when it is empty, answer `204` with `X-Message: No Columns
   available` exactly like v3 (`handlers/multi.py:188`). Describing the *resulting*
@@ -116,11 +116,11 @@ new keyword-only `definition: LoadedDefinition | None = None` argument on `QS` a
 loader does the same instead of `get_slug()`. Absent → current behavior (legacy
 callers, scheduler, Python API untouched).
 
-`columns()` uses the same peek: multi → declared `columns` list or 204; single →
+`columns()` uses the same peek: multi → declared `columns_definition` list or 204; single →
 `QueryService.get_columns` / `columns`. `test_slug()` uses the same peek: multi → a new
 validate-only dry-run on `QueryHandler`; single → `QueryService.test_slug`.
 
-The `columns` array is added to `TenantQueryDefinition` (`tenant_models.py:24`) **and**
+The `columns_definition` array is added to `TenantQueryDefinition` (`tenant_models.py:24`) **and**
 `QueryModel` (`models.py:48`, `Meta.strict = True` at `:105` means the runtime model
 rejects unknown keys, so both must declare it), to the documented DDL
 (`docs/PER_TENANT_QUERIES.md:40`) and the test DDL fixture
@@ -138,7 +138,7 @@ rejects unknown keys, so both must declare it), to the documented DDL
 ❌ **Cons:**
 - Touches the query core (`queries/qs.py`, `queries/multi/__init__.py`) and the
   models, not only the handler: larger blast radius than a handler-only fix.
-- Introduces a schema addition (`columns`) that must be rolled out to every tenant
+- Introduces a schema addition (`columns_definition`) that must be rolled out to every tenant
   store before writes that include it can succeed.
 - Two places must agree on the request-key convention (`qs_tenant`, `qs_definition`).
 
@@ -272,7 +272,7 @@ all obtain the right executor from one place.
   "multi" with the scheduler. The trade-off (a JSON multi payload saved under
   `provider='db'` executes as single and fails) is accepted and documented; it is a
   data-quality problem the describe/list surfaces can flag later.
-- The `columns` column is the price of giving `HEAD/PATCH` something meaningful for
+- The `columns_definition` column is the price of giving `HEAD/PATCH` something meaningful for
   a pipeline without executing it. It is additive (`SELECT *` on a store without the
   column just yields the default), and the follow-up "describe the resulting frame"
   can populate it.
@@ -289,7 +289,7 @@ all obtain the right executor from one place.
   does today, but resolved under the URL tenant (parent and inheriting children).
   Output suffixes (`slug:csv`, `?queryformat=`) keep working on both kinds.
 - `HEAD|PATCH /api/v1/{tenant}/queries/{slug}`: single → existing column inspection;
-  multi → `200` with the definition's declared `columns` list, or `204` with
+  multi → `200` with the definition's declared `columns_definition` list, or `204` with
   `X-Message: No Columns available` when the list is empty or absent.
 - `GET|POST /api/v1/{tenant}/queries/{slug}/test`: single → existing dry-run with
   `EXPLAIN`; multi → a validate-only report: the parsed pipeline shape (aliases,
@@ -319,13 +319,13 @@ all obtain the right executor from one place.
    of calling the repository; `_definition_identity` / `_definition_revision` are set
    exactly as they are today so cache keys and ownership logging are unchanged. When
    no definition is supplied, the current loading code path runs untouched.
-5. **Columns** — multi → read `runtime.columns`; empty → the v3 204 response.
+5. **Columns** — multi → read `runtime.columns_definition`; empty → the v3 204 response.
 6. **Dry-run (multi)** — parse `runtime.query_raw`, normalize `sources` the way
    MultiQS does, resolve each saved child's owner (inherit the URL tenant unless the
    child declares `tenant` or `tenant: null`), check existence via the repository and
    ownership via the tenant-isolated PBAC evaluator, and return the report. Files and
    raw inline children are listed but not checked (existing convention).
-7. **Schema/model** — `columns` (array of text, default empty) is declared on
+7. **Schema/model** — `columns_definition` (array of text, default empty) is declared on
    `TenantQueryDefinition` and `QueryModel`, documented in the provisional DDL and
    added to the test fixture DDL. `_TENANT_COLUMNS` picks it up automatically because
    it is derived from the model.
@@ -344,8 +344,8 @@ all obtain the right executor from one place.
 - **Child definitions** may live in a different tenant (`tenant: "other"`) or in the
   legacy store (`tenant: null`); the dry-run resolves each independently and reports
   the resolved owner per child, mirroring execution.
-- **Store without the `columns` column** → reads work (row lacks the key → default
-  `[]`, HEAD returns 204); a write that includes `columns` fails with the existing
+- **Store without the `columns_definition` column** → reads work (row lacks the key → default
+  `[]`, HEAD returns 204); a write that includes `columns_definition` fails with the existing
   `tenant_store_unavailable`/driver error mapping (`repositories/definitions.py:_translate_write_error`).
   Deployment order: model first, DDL second.
 - **Legacy callers and Python API** never pass `definition=`; their behavior is
@@ -369,7 +369,7 @@ all obtain the right executor from one place.
   `LoadedDefinition` and skip the repository read while preserving identity/revision.
 - `multi-definition-dry-run`: validate-only test route for stored MultiQuery
   definitions (children resolution, existence, ownership; no execution).
-- `multi-definition-columns`: `columns` array on tenant definitions, returned by
+- `multi-definition-columns`: `columns_definition` array on tenant definitions, returned by
   HEAD/PATCH for multi definitions (204 when empty).
 
 ### Modified Capabilities
@@ -390,9 +390,9 @@ all obtain the right executor from one place.
 | `querysource/queries/qs.py` | extends | keyword-only `definition` argument; `build_provider()` short-circuit |
 | `querysource/queries/multi/__init__.py` | extends | keyword-only `definition` argument; slug loader short-circuit |
 | `querysource/interfaces/queries.py` | extends | store the supplied definition next to `_tenant_selector` (base for both executors) |
-| `querysource/tenant_models.py`, `querysource/models.py` | extends | `columns: List[str]` array field on both models (strict runtime model) |
+| `querysource/tenant_models.py`, `querysource/models.py` | extends | `columns_definition: List[str]` array field on both models (strict runtime model) |
 | `querysource/repositories/definitions.py` | depends on | `_TENANT_COLUMNS` derives from the model; no code change expected |
-| `docs/PER_TENANT_QUERIES.md`, `tests/tenants/conftest.py` | modifies | DDL gains `columns text[]` |
+| `docs/PER_TENANT_QUERIES.md`, `tests/tenants/conftest.py` | modifies | DDL gains `columns_definition text[]` |
 | `tests/tenants/test_tenant_http_routes.py` | extends | stored-multi dispatch, columns and dry-run cases; regression for single parity |
 | `/api/v2`, `/api/v3`, scheduler, Python API | unchanged | must be covered by regression tests (definition kwarg defaults to `None`) |
 
@@ -512,7 +512,7 @@ class DefinitionRepository:
 _TENANT_COLUMNS: frozenset = frozenset(TenantQueryDefinition(query_slug="__probe__").columns().keys())
 
 # From querysource/tenant_models.py:24
-class TenantQueryDefinition(BaseModel):  # every QueryModel field except program_slug; NO `columns` field today
+class TenantQueryDefinition(BaseModel):  # every QueryModel field except program_slug; NO `columns_definition` field today
     fields: List[str] = Field(required=False, db_type='array', default_factory=list)
     provider: str = Field(required=False, default='db')
     query_raw: str = Field(required=False)
@@ -555,7 +555,7 @@ from querysource.models import QueryModel                                       
 - ~~`QS(definition=...)`~~ / ~~`MultiQS(definition=...)`~~ — no pre-loaded-definition argument exists today; it is the new capability.
 - ~~`request["qs_definition"]`~~ — no such request key today; only `qs_tenant` is set.
 - ~~`LoadedDefinition.is_multi`~~ / ~~`QueryModel.is_multi`~~ / ~~`QueryModel.query_type`~~ — the only marker is `provider == 'multi'`.
-- ~~`columns` column on `{schema}.queries`~~ / ~~`TenantQueryDefinition.columns`~~ / ~~`QueryModel.columns` field~~ — do not exist (note: `QueryModel.columns()` is the `datamodel` *method* returning the field map, `definitions.py:84`; the new field name must not shadow it — see Open Questions).
+- ~~`columns_definition` column on `{schema}.queries`~~ / ~~`TenantQueryDefinition.columns_definition`~~ / ~~`QueryModel.columns_definition`~~ — do not exist yet. Note: `QueryModel.columns()` / `TenantQueryDefinition.columns()` is the `datamodel` *method* returning the field map (`definitions.py:42, 84`), which is why the new field is NOT named `columns`.
 - ~~`DefinitionRepository` per-request cache~~ — every `get()` is one `SELECT`.
 - ~~`BaseQuery.get_slug`~~ in `queries/base.py` — `get_slug` lives on the `Connection` interface (`interfaces/connections.py:526`).
 - ~~`/api/v3/queries` tenant selector~~ — v3 never sets `qs_tenant` (out of scope by decision).
@@ -567,7 +567,7 @@ from querysource.models import QueryModel                                       
 
 - **Internal parallelism**: Two independent foundations, then dependent handler work.
   (1) `definition=` kwarg on `QS`/`MultiQS`/`AbstractQuery` (queries layer) and
-  (2) `columns` field + DDL/docs/fixture (models layer) do not share files. (3) the
+  (2) `columns_definition` field + DDL/docs/fixture (models layer) do not share files. (3) the
   handler dispatch (`tenant.py`, `service.py`, `multi.py` forwarding) depends on (1);
   (4) multi columns + validate-only dry-run (`multi.py`, `tenant.py`) depends on (2)
   and (3) and edits the same handler files as (3).
@@ -591,9 +591,9 @@ from querysource.models import QueryModel                                       
 - [x] Response contract for single slugs on the tenant route? — *Owner: Jesus Lara*: exact v2 (`QueryService`) parity.
 - [x] Is a second definition read acceptable? — *Owner: Jesus Lara*: no; thread the `LoadedDefinition` into `QS`/`MultiQS`.
 - [x] Dry-run semantics for a multi definition? — *Owner: Jesus Lara*: validate without executing (children resolution, existence, ownership, per-child report).
-- [x] Columns semantics for a multi definition? — *Owner: Jesus Lara*: add a `columns` list to `{tenant}.queries`, return it on HEAD/PATCH; 204 like v3 when empty; describing the resulting frame is a follow-up.
-- [ ] Field name: `columns` collides with the `datamodel` `Model.columns()` method used at `repositories/definitions.py:84` and `:42` (`_TENANT_COLUMNS`). Keep `columns` at the DDL level and name the model field differently (e.g. `output_columns` mapped to column `columns`), or pick another DDL name? — *Owner: Jesus Lara*
-- [ ] Should the legacy `public.queries` table also gain the `columns` column, or stay read-only-compatible (reads default to `[]`, writes must not include it)? — *Owner: Jesus Lara*
+- [x] Columns semantics for a multi definition? — *Owner: Jesus Lara*: add a `columns_definition` list to `{tenant}.queries`, return it on HEAD/PATCH; 204 like v3 when empty; describing the resulting frame is a follow-up.
+- [x] Field name: `columns` collides with the `datamodel` `Model.columns()` method used at `repositories/definitions.py:84` and `:42` (`_TENANT_COLUMNS`). — *Owner: Jesus Lara*: name both the DDL column and the model field `columns_definition`; never `columns`.
+- [ ] Should the legacy `public.queries` table also gain the `columns_definition` column, or stay read-only-compatible (reads default to `[]`, writes must not include it)? — *Owner: Jesus Lara*
 - [ ] Dry-run report envelope for multi: reuse `QueryService.test_slug`'s keys (`works`, `generated_at`, ...) with an added `children` list, or a distinct multi-specific shape? — *Owner: Jesus Lara*
 - [ ] `provider='multi'` with non-multi `query_raw`: keep the v3/scheduler fallback to single execution, or reject with 422 on the tenant route only? — *Owner: Jesus Lara*
 - [ ] Should the stashed `LoadedDefinition` request key be shared with the FEAT-148 describe handler (`handlers/describe.py:302-339`) so it also stops re-loading the definition? — *Owner: Jesus Lara*
