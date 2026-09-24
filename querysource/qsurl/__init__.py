@@ -29,8 +29,15 @@ HAS_RUST: bool = _rs is not None
 _warned = False
 
 
-def _fallback():
-    """Import the Lark back-end on first use, warning once per process."""
+def _load_fallback():
+    """Import the Lark back-end on first use, warning once per process.
+
+    Named distinctly from the ``_fallback`` submodule it imports (TASK-766): a
+    module-level function named ``_fallback`` would shadow ``querysource.qsurl._fallback``
+    inside this very function body — ``from . import _fallback`` resolves `getattr`
+    against this package's namespace first, and would find this function itself
+    (already bound) before ever attempting to import the submodule.
+    """
     global _warned  # pylint: disable=global-statement
     from . import _fallback as fb  # lazy: created by TASK-766
     if not _warned:
@@ -56,7 +63,7 @@ def parse(src: str) -> dict:
             return json.loads(_rs.parse(src))
         except ValueError as err:
             raise QSUrlError.from_json(str(err.args[0])) from err
-    return _fallback().parse(src)
+    return _load_fallback().parse(src)
 
 
 def requires(src: str) -> list[str]:
