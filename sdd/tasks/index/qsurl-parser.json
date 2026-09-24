@@ -52,7 +52,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -63,8 +63,8 @@
       "parallelism_notes": "Needs QSUrlError and capabilities.ALL from TASK-765 (querysource/qsurl/errors.py, capabilities.py) to raise errors and order `requires`; cross-checks its output against the example CLI of the crate from TASK-764 (rust/qsurl/Cargo.toml, rust/qsurl/src/parser.rs is the grammar it mirrors).",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-766-qsurl-lark-fallback.md"
+      "completed_at": "2026-09-24T21:33:45+00:00",
+      "file": "sdd/tasks/completed/TASK-766-qsurl-lark-fallback.md"
     },
     {
       "id": "TASK-767",
