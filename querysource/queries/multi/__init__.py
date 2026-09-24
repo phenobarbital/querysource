@@ -28,6 +28,7 @@ from .transformations import (
 
 if TYPE_CHECKING:
     from ...auth.principal import QSPrincipal
+    from ...tenants import LoadedDefinition, QueryStore, TenantRegistry
 
 # FEAT-150: with a principal, these TenantError codes (and SlugNotFound for
 # the parent slug) collapse into QueryAccessDenied so "missing" and "denied"
@@ -114,6 +115,7 @@ class MultiQS(BaseQuery):
             user_session: object | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
             **kwargs
     ):
@@ -123,6 +125,7 @@ class MultiQS(BaseQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             principal=principal,
             **kwargs
         )
@@ -211,6 +214,28 @@ class MultiQS(BaseQuery):
             return normalized
         return []
 
+    @staticmethod
+    def resolve_child_owner(
+        query_cfg: dict,
+        parent_tenant: "str | None",
+        registry: "TenantRegistry",
+    ) -> "tuple[str | None, QueryStore]":
+        """Resolve a saved child's owner selector and store.
+
+        Args:
+            query_cfg: The child's config from the ``queries`` mapping.
+            parent_tenant: The parent MultiQS tenant selector.
+            registry: Tenant registry used to resolve the store.
+
+        Returns:
+            ``(tenant_selector, store)``: an explicit ``tenant`` key wins, including an
+            explicit ``None`` (legacy store); a missing key inherits ``parent_tenant``.
+        """
+        if "tenant" in query_cfg:
+            child_tenant = query_cfg.get("tenant")
+        else:
+            child_tenant = parent_tenant
+        return child_tenant, registry.resolve(child_tenant)
     async def _preflight_principal(self) -> None:
         """With a principal: enforce slug:execute for every stored child slug in self._queries,
         slug:execute for every self._files entry, and raw_query:execute once when any child
@@ -278,14 +303,24 @@ class MultiQS(BaseQuery):
                     self._principal, ResourceType.SLUG, self.slug, "slug:execute",
                     tenant=self._tenant_selector, logger=self._logger,
                 )
-            try:
-                query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
-            except (SlugNotFound, TenantError) as ex:
-                if self._principal is not None and (
-                    isinstance(ex, SlugNotFound) or ex.error_code in _COLLAPSED_OWNER_ERRORS
-                ):
-                    raise QueryAccessDenied() from ex
-                raise
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self.slug:
+                # FEAT-151: reuse the definition the tenant dispatcher loaded.
+                query = preloaded.runtime
+                self._definition_identity = preloaded.identity
+                self._definition_revision = preloaded.revision
+            else:
+                # get_query_slug (interfaces/connections.py) stashes
+                # _definition_identity/_definition_revision on self before
+                # returning, mirroring the preloaded branch above.
+                try:
+                    query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
+                except (SlugNotFound, TenantError) as ex:
+                    if self._principal is not None and (
+                        isinstance(ex, SlugNotFound) or ex.error_code in _COLLAPSED_OWNER_ERRORS
+                    ):
+                        raise QueryAccessDenied() from ex
+                    raise
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -381,13 +416,10 @@ class MultiQS(BaseQuery):
                 # - explicit string (e.g. "tenant2")
                 # - explicit None (explicit-null override)
                 # - missing (inherits parent)
-                if "tenant" in query_cfg:
-                    child_tenant = query_cfg.get("tenant")
-                else:
-                    child_tenant = self._tenant_selector
-
                 try:
-                    child_store = repo.registry.resolve(child_tenant)
+                    _child_tenant, child_store = self.resolve_child_owner(
+                        query_cfg, self._tenant_selector, repo.registry
+                    )
                 except TenantError as ex:
                     if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
                         raise QueryAccessDenied() from ex

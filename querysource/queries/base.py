@@ -16,6 +16,7 @@ from .models import Query, QueryResult
 
 if TYPE_CHECKING:
     from ..auth.principal import QSPrincipal
+    from ..tenants import LoadedDefinition
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -30,6 +31,7 @@ class BaseQuery(AbstractQuery):
             loop: asyncio.AbstractEventLoop | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
             **kwargs
     ):
@@ -42,6 +44,7 @@ class BaseQuery(AbstractQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             principal=principal,
             **kwargs
         )

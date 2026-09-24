@@ -4,7 +4,7 @@ QueryResource.
 Handler to accessing querysource objects from API.
 """
 import contextlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # for aiohttp
@@ -103,12 +103,12 @@ class QueryService(AbstractHandler):
                 raise self.Error(
                     message="Error parsing Query",
                     exception=err
-                )
+                ) from err
             except (ProviderError, DriverError) as err:
                 raise self.Error(
                     message="Connection Error",
                     exception=err
-                )
+                ) from err
             # query columns
             try:
                 output = DataOutput(request, query=query, ctype=queryformat, slug=None, **output_args)
@@ -118,7 +118,7 @@ class QueryService(AbstractHandler):
                     message="DataOutput Error",
                     exception=err,
                     code=402
-                )
+                ) from err
             except web.HTTPException:
                 raise
             except (QueryException, Exception) as ex:
@@ -304,7 +304,10 @@ class QueryService(AbstractHandler):
             # AC-3 "existing legacy tenant conditions must not redirect
             # storage" — behavior is unchanged for every non-tenant route).
             tenant = request.get('qs_tenant')
-            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
+            if query := await self.get_source(
+                request, slug, conditions, driver=args, tenant=tenant,
+                definition=request.get('qs_definition'),
+            ):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -312,7 +315,7 @@ class QueryService(AbstractHandler):
                         message=f"Slug Not Found: {slug}",
                         exception=err,
                         code=400
-                    )
+                    ) from err
                 except TenantError as err:
                     # Preserve the ownership error's own stable machine code
                     # (invalid_tenant=400, tenant_not_available/query_not_found=404,
@@ -324,17 +327,17 @@ class QueryService(AbstractHandler):
                         message=str(err),
                         exception=err,
                         code=err.code
-                    )
+                    ) from err
                 except ParserError as err:
                     raise self.Error(
                         message=f"Error parsing Query Slug {slug}",
                         exception=err
-                    )
+                    ) from err
                 except (ProviderError, DriverError) as err:
                     raise self.Error(
                         message="Connection Error",
                         exception=err
-                    )
+                    ) from err
                 except Exception as ex:
                     raise self.Except(
                         message="Unknown Error on Query",
@@ -385,7 +388,7 @@ class QueryService(AbstractHandler):
                         message="DataOutput Error",
                         exception=err,
                         code=402
-                    )
+                    ) from err
                 except (QueryException, Exception) as ex:
                     raise self.Except(
                         message=f"Error on Query: {slug}",
@@ -401,7 +404,7 @@ class QueryService(AbstractHandler):
             raise self.Error(
                 message='Query Failed',
                 exception=err
-            )
+            ) from err
         except (QueryException, Exception) as ex:
             raise self.Except(
                 message="Uncaught Error on Query",
@@ -435,7 +438,10 @@ class QueryService(AbstractHandler):
         try:
             # Owner-aware execution — see the same comment in query() above.
             tenant = request.get('qs_tenant')
-            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
+            if query := await self.get_source(
+                request, slug, conditions, driver=args, tenant=tenant,
+                definition=request.get('qs_definition'),
+            ):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -577,7 +583,10 @@ class QueryService(AbstractHandler):
         try:
             # Owner-aware execution — see the same comment in query() above.
             tenant = request.get('qs_tenant')
-            if query := await self.get_source(request, slug, conditions, driver=args, tenant=tenant):
+            if query := await self.get_source(
+                request, slug, conditions, driver=args, tenant=tenant,
+                definition=request.get('qs_definition'),
+            ):
                 try:
                     await query.build_provider()
                 except SlugNotFound as err:
@@ -659,7 +668,7 @@ class QueryService(AbstractHandler):
                 description: Query Error
         """
         options = {}
-        started = datetime.now()
+        started = datetime.now(timezone.utc)
         params = self.query_parameters(request)
         args = self.match_parameters(request)
         works = True
@@ -702,7 +711,10 @@ class QueryService(AbstractHandler):
         try:
             # Owner-aware execution — see the same comment in query() above.
             tenant = request.get('qs_tenant')
-            query = await self.get_source(request, slug, conditions, driver=args, tenant=tenant)
+            query = await self.get_source(
+                request, slug, conditions, driver=args, tenant=tenant,
+                definition=request.get('qs_definition'),
+            )
             result, error = await query.dry_run()
             if error:
                 works = False
@@ -716,7 +728,7 @@ class QueryService(AbstractHandler):
             except Exception as err:  # pylint: disable=W0718
                 error = f"Failed Query: {err}"
                 works = False
-            ended = datetime.now()
+            ended = datetime.now(timezone.utc)
             generated_at = (ended - started).total_seconds()
             if queryformat == 'json':
                 result = result.replace('\r\n', ' ')

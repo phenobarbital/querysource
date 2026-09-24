@@ -2,15 +2,15 @@
 
 Models for querysource structure.
 """
-from typing import List, Optional
 from datetime import datetime
-from asyncdb.models import Model, Field
+from typing import List, Optional
+
+from asyncdb.models import Field, Model
 from datamodel.libs.mapping import ClassDict
+
+from .conf import QS_QUERIES_SCHEMA, QS_QUERIES_TABLE
 from .utils.functions import empty_dict
-from .conf import (
-    QS_QUERIES_SCHEMA,
-    QS_QUERIES_TABLE
-)
+
 
 def rigth_now(obj) -> datetime:
     return datetime.now()
@@ -65,6 +65,12 @@ class QueryModel(Model):
     filtering: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     ordering: List[str] = Field(required=False, db_type='array', default_factory=list)
     grouping: List[str] = Field(required=False, db_type='array', default_factory=list)
+    columns_definition: List[str] = Field(
+        required=False,
+        db_type='array',
+        default_factory=list,
+        comment='Declared output columns of a multi-query definition (HEAD/PATCH inspection).',
+    )
     qry_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
     h_filtering: bool = Field(required=False, default=False, comment="filtering based on Hierarchical rules.")
     ### Query Information:

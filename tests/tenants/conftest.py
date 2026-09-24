@@ -27,6 +27,7 @@ _TENANT_TABLE_DDL = (
     "is_cached boolean DEFAULT false, "
     "query_raw text, "
     "description varchar, "
+    "columns_definition text[] DEFAULT '{}'::text[], "
     "updated_at timestamptz DEFAULT now()"
     ")"
 )

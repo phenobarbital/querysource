@@ -296,4 +296,35 @@ def test_legacy_constructor_default_is_none() -> None:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented exactly as blueprinted. `definition: LoadedDefinition | None = None`
+added keyword-only to `AbstractQuery.__init__` (`interfaces/queries.py`), forwarded
+explicitly through `BaseQuery.__init__` and `QS.__init__` (never via `**kwargs`,
+per S3), and stored as `self._preloaded_definition`. `QS.build_provider()`'s slug
+branch now uses the pre-loaded definition when `preloaded.identity.slug ==
+self._query`, else falls back to the existing `repo.get(identity)` path unchanged
+(identity/revision assignment, logging, `objquery = loaded_def.runtime` untouched).
+`LoadedDefinition` is imported under `TYPE_CHECKING` in all three modified modules
+to avoid the `tenants.py` import cycle called out in the contract; the resulting
+quoted local-scope annotation triggers ruff UP037, suppressed with
+`# noqa: UP037` (the codebase has no `from __future__ import annotations`, so
+unquoting would raise `NameError` at every `__init__` call — verified by reasoning
+about PEP 526 evaluation semantics, not by trial and error).
+
+Tests: `tests/tenants/test_preloaded_definition_qs.py` (3/3 pass) including the
+filled-in `test_qs_ignores_mismatched_preloaded_definition` (mismatched-slug
+definition falls back to the repository, called exactly once, and the *repository's*
+definition/revision are the ones recorded — proving the guard, not just that a read
+happened). Regression: `tests/tenants/test_tenant_execution_context.py` (4/4 pass).
+`ruff check` on the four changed/created files: 2 pre-existing `B904` findings in
+`qs.py` (lines ~515/529, in an unrelated except block, confirmed present on
+`origin/dev` before this change) — out of scope, left untouched.
+
+Environment note: this worktree lacked the compiled Cython/Rust extensions
+(`*.cpython-311*.so`, gitignored build artifacts) that `make build-inplace` /
+`make build-rust` produce, so pytest's rootdir-prepend import shadowed the
+site-packages editable install with the uncompiled worktree source and failed
+collection. Copied the already-built `.so` files from the main checkout's
+`querysource/` tree (read-only source, worktree-local destination — no shared
+`.venv` mutation) rather than rebuilding, since no `.pyx`/Rust source was
+touched by this task.
+
