@@ -73,7 +73,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,8 +84,8 @@
       "parallelism_notes": "Generates expected IR by running the example CLI of the crate from TASK-764 (rust/qsurl/examples/parse.rs) and checks _fallback.parse from TASK-766 (querysource/qsurl/_fallback.py) against it.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-767-qsurl-parity-corpus.md"
+      "completed_at": "2026-09-24T21:37:14+00:00",
+      "file": "sdd/tasks/completed/TASK-767-qsurl-parity-corpus.md"
     },
     {
       "id": "TASK-768",
