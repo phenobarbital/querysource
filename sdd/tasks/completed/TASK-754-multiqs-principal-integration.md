@@ -260,7 +260,48 @@ async def test_no_principal_no_enforcement(monkeypatch): ...                    
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Added keyword-only `principal=` to `MultiQS.__init__`, forwarded to
+`super().__init__` (TASK-753's `AbstractQuery` owns storage + the
+request+principal `ValueError`), with a `TYPE_CHECKING` import of
+`QSPrincipal`. In `MultiQS.query()`: the pipeline's own `self.slug` is
+gated with `slug:execute` before `get_slug()`; `SlugNotFound` and
+collapsible `TenantError` codes (`query_not_found`, `tenant_not_available`,
+via the new `_COLLAPSED_OWNER_ERRORS` constant) from `get_slug()` become
+`QueryAccessDenied` when a principal is set. Added
+`_preflight_principal()`, called after pipeline expansion and before the
+`total_sources` guard: it checks `slug:execute` for every stored child
+slug in `self._queries`, `slug:execute` for every `self._files` entry, and
+exactly one `raw_query:execute` when any child carries an inline `query`
+(no slug). In the per-child repo-preflight loop, both
+`repo.registry.resolve(child_tenant)` and `repo.get(ident)` now collapse a
+matching `TenantError` into `QueryAccessDenied` (principal-gated) before
+falling through to the existing `self.Error` wrapping; without a principal,
+behaviour is byte-for-byte unchanged (same `self.Error` message, now
+just also covering `registry.resolve`, which was not wrapped in a
+try/except at all before — a to-string-identical enhancement, not a
+behaviour change, since it only reaches this except when principal-gated
+collapse does not apply).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+**`files` shape decision**: `self._files` is a dict keyed by file name/alias
+(confirmed at the dispatch loop, `for name, file in self._files.items()`
+and `FileSource(name, file, ...)`), so `_preflight_principal` iterates its
+keys and checks `slug:execute` on each key, the same identifying name the
+dispatch loop later uses to construct the `FileSource`.
+
+Wrote `tests/multi/test_multiqs_principal.py` (8 tests covering AC-1
+through AC-6). `ruff check` clean on both files except 3 pre-existing,
+unrelated findings in `multi/__init__.py` (1 `B904`, 2 `LOG015`, verified
+present at HEAD via `git show HEAD:... | ruff check --select B904,LOG015 -`,
+at different line numbers but the same code, out of this task's scope).
+Both pinned suites pass unmodified: `tests/test_multiqs_remote_dispatch.py`
++ `tests/tenants/test_tenant_execution_context.py` = 13 passed (AC-7).
+Broader regression (`tests/handlers/`, `tests/tenants/`, `tests/auth/`,
+`tests/multi/`, `tests/test_qs_principal.py`,
+`tests/test_multiqs_remote_dispatch.py`, `tests/test_abstract_multi.py`,
+`tests/test_abstract_refactor.py`, excluding the pre-existing
+`test_airtable_oauth.py` collection failure): 347 passed, 5 skipped, 3
+failed — the same 3 pre-existing, unrelated sandbox/environment failures
+recorded in TASK-752/753's Completion Notes.
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
