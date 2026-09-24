@@ -136,7 +136,8 @@ class AbstractHandler(BaseHandler):
         message: str = None,
         exception: BaseException = None,
         stacktrace: str = None,
-        code: int = 400
+        code: int = 400,
+        detail: dict | None = None,
     ) -> HTTPException:
         """Error.
 
@@ -155,6 +156,8 @@ class AbstractHandler(BaseHandler):
             stacktrace (str, optional): Pre-captured traceback string.
                 Forwarded to the server log only; never in the client body.
             code (int, optional): HTTP error code. Defaults to 400.
+            detail (dict, optional): client-safe structured error; when given, ``message`` is
+                public in every mode and ``detail`` is emitted as the payload's ``detail``.
         """
         # Map HTTP status code to a formatter category
         if code == 404:
@@ -170,7 +173,8 @@ class AbstractHandler(BaseHandler):
             exception=exception,
             debug=self.debug,
             logger=self.logger,
-            public_message=message if self.debug else None,
+            public_message=message if (self.debug or detail is not None) else None,
+            public_detail=detail,
         )
         args = {
             "reason": payload["error"],
