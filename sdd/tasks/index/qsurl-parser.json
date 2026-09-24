@@ -215,7 +215,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -225,8 +225,8 @@
       "parallelism_notes": "querysource/outputs/output.py imports QSUrlError from TASK-765 (querysource/qsurl/errors.py) to re-raise it; the envelope change itself is independent.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-774-error-envelope-detail.md"
+      "completed_at": "2026-09-24T20:34:22+00:00",
+      "file": "sdd/tasks/completed/TASK-774-error-envelope-detail.md"
     },
     {
       "id": "TASK-775",
