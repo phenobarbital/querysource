@@ -1,0 +1,39 @@
+Decisions taken during discovery (Rounds 0–2) are binding for the spec:
+
+- **Flow**: `type: feature`, `base_branch: dev` (FEAT-147 is unreleased on `dev`).
+- **Dispatch rule**: peek at the stored definition and route by kind. A definition is
+  **multi iff `provider == 'multi'`** (the same predicate the scheduler uses at
+  `querysource/scheduler/scheduler.py:317` and `:415`). `query_raw` sniffing is *not*
+  the discriminator (MultiQS may still fall back internally, see edge cases).
+- **Exact v2 parity for single slugs**: a single-query slug on the tenant route keeps
+  `QueryService` semantics byte-for-byte (headers, Redis cache, 204/404 mapping,
+  `_download`/`_filename`, `queryformat`, `X-Slug`), as today.
+- **No double read**: the definition loaded by the dispatcher must be **threaded into
+  `QS` / `MultiQS`** so `build_provider()` / the MultiQS slug loader do not issue a
+  second `SELECT` for the same identity. Identity and revision must still land on
+  `_definition_identity` / `_definition_revision` (`interfaces/queries.py:104-107`),
+  because result-cache keys and ownership logging depend on them.
+- **Scope of routes**: `GET/POST {slug}` execution, `HEAD/PATCH {slug}` columns and
+  `GET/POST {slug}/test` dry-run all become kind-aware. `/api/v3/queries` stays
+  non-tenant (out of scope).
+- **Multi dry-run**: validate without executing — parse the multi JSON, resolve every
+  saved child under the tenant (inheritance and explicit `tenant`/`null` overrides as
+  MultiQS does at `queries/multi/__init__.py:315-333`), run the ownership preflight,
+  and report per-child status. No datasource query runs, no `EXPLAIN`.
+- **Multi columns**: add a `columns_definition` array column to the tenant `queries` table (and
+  the corresponding model field). `HEAD/PATCH {slug}` on a multi definition returns
+  that declared list; when it is empty, answer `204` with `X-Message: No Columns
+  available` exactly like v3 (`handlers/multi.py:188`). Describing the *resulting*
+  frame is an explicit follow-up, not this feature.
+- Tenant selector never leaks into conditions (FEAT-147 AC-4): keep the
+  `request['qs_tenant']` convention; never merge tenant into params.
+- PBAC: single slugs keep `_enforce_owned_slug` (`handlers/abstract.py:463`); multi
+  definitions keep `_preflight_multiquery` (`handlers/multi.py:27`) plus the
+  owned-slug preflight on real saved children (`handlers/multi.py:103`), with the
+  tenant-isolated evaluator copy.
+- Legacy routes (`/api/v2/...`, `/api/v3/...`) and apps without
+  `app["qs_tenant_registry"]` must be behaviorally unchanged.
+- Conventions: async everywhere, `self.logger`, Google docstrings, strict typing,
+  `ruff` gate, tests under `tests/tenants/`.
+
+---

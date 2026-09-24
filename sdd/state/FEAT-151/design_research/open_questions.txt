@@ -1,0 +1,5 @@
+- [ ] Should the legacy `public.queries` table also gain the `columns_definition` column, or stay read-only-compatible (reads default to `[]`, writes must not include it)? — *Owner: Jesus Lara*
+- [ ] Dry-run report envelope for multi: reuse `QueryService.test_slug`'s keys (`works`, `generated_at`, ...) with an added `children` list, or a distinct multi-specific shape? — *Owner: Jesus Lara*
+- [ ] `provider='multi'` with non-multi `query_raw`: keep the v3/scheduler fallback to single execution, or reject with 422 on the tenant route only? — *Owner: Jesus Lara*
+- [ ] Should the stashed `LoadedDefinition` request key be shared with the FEAT-148 describe handler (`handlers/describe.py:302-339`) so it also stops re-loading the definition? — *Owner: Jesus Lara*
+- [ ] Test strategy: unit tests with the existing MagicMock/monkeypatch pattern only, or also an opt-in integration test (`QS_TEST_POSTGRES_DSN`, `tests/tenants/test_integration.py`) with a real stored multi definition? — *Owner: Jesus Lara*

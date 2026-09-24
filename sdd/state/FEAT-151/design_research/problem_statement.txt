@@ -1,0 +1,31 @@
+FEAT-147 (`sdd/specs/per-tenant-queries.spec.md`, §2 route table, line 184) promises
+that `GET, POST /api/v1/{tenant}/queries/{slug}` is a **"Unified stored single/multi
+execution"** route, and that `HEAD, PATCH` on the same path gives **"Column inspection
+with existing single/multi response semantics"**. The shipped handler does not honor
+that contract.
+
+`TenantQueryHandler.query()` (`querysource/handlers/tenant.py:228-249`) branches on
+the *presence* of a slug, not on the *kind* of stored definition:
+
+- slug present → `QueryService.query()` (single-query `QS` path, `handlers/service.py:134`)
+- no slug → `QueryHandler.query()` (inline MultiQuery, `handlers/multi.py:196`)
+
+A stored **MultiQuery definition** (a row with `provider='multi'` and a JSON
+`query_raw` holding `queries` / `files` / `sources`) addressed by slug under a tenant
+is therefore handed to `QS.build_provider()` (`queries/qs.py:167`), which resolves a
+provider from `provider='multi'` and treats the JSON payload as a single query. The
+request fails, while the exact same definition executes correctly through the
+legacy, non-tenant `/api/v3/queries/{slug}` route (`services.py:244-262`), because
+`QueryHandler` builds a `MultiQS` whose slug loader understands both shapes
+(`queries/multi/__init__.py:216-260`).
+
+The same gap exists on `columns()` (`tenant.py:251-264`) and `test_slug()`
+(`tenant.py:266-277`): both delegate unconditionally to `QueryService`.
+
+**Who is affected**: API consumers of tenant-scoped stored pipelines (the only route
+that is tenant-aware); operators who cannot expose MultiQuery definitions per tenant
+without falling back to the non-isolated v3 route; the FEAT-147 acceptance criterion
+U1 ("new tenant handler executes single/multi queries"), which is currently only
+half true. The tenant HTTP tests (`tests/tenants/test_tenant_http_routes.py:79`)
+exercise the *inline* multi dispatch (no slug) and never a stored multi slug, which
+is why the gap was not caught.
