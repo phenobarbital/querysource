@@ -180,4 +180,64 @@ async def test_tenant_stored_multi_definition_executes(tenant_services) -> None:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented per the blueprint: `_TENANT_TABLE_DDL` in `tests/tenants/
+conftest.py` gains `columns_definition text[] DEFAULT '{}'::text[], ` right
+after `description varchar, ` (verified line, exact insertion point).
+`docs/PER_TENANT_QUERIES.md` gained the `columns_definition TEXT[]` column
+in the DDL block, a new "Legacy store migration (FEAT-151)" subsection with
+the `ALTER TABLE public.queries` statement and the write-policy note, and a
+new "Kind-aware dispatch on the stored-slug routes (FEAT-151)" subsection
+under "### HTTP API routes" covering: the `provider == 'multi'` classifier
+(never `query_raw` sniffing), authorize-before-load, the multi HEAD/PATCH
+columns semantics, the multi dry-run envelope (JSON copied verbatim from
+spec §2), and the documented `provider='db'` + multi-JSON limitation.
+
+`tests/tenants/test_integration.py` gained
+`test_tenant_stored_multi_definition_executes`, driven through the real
+`TenantQueryHandler` (mocked-request pattern from `test_tenant_http_routes.py`)
+against a REAL `DefinitionRepository`/`TenantRegistry` on the fixture's own
+isolated Postgres (`tenant_services`) — never a mock repository. The
+explicit-`tenant: null` child is pointed at the fixture's own
+`override_schema`, set as the registry's `_default_store`
+(`TenantRegistry.resolve(None)` returns `_default_store`, verified:
+`querysource/tenants.py:402-408`), so the test never touches real
+`public.queries` (the fixture's own "never modify developer public rows"
+rule). Assertions: HEAD returns 204 with `X-Columns`/`X-Slug` from the real
+persisted `columns_definition`; the dry-run `GET .../test` returns both
+children resolved to their real stores with `exists=True`; the single child
+via the same route dispatches to `QueryService`, not `QueryHandler` (kind
+classification proof).
+
+Scoped deviation from the blueprint's literal "GET parent -> 200 frame" ask,
+documented in the test's own docstring rather than hidden: the "GET parent"
+assertion proves dispatch (routed to `QueryHandler`) and definition identity
+via `request['qs_definition']` (stashed by the real `_prepare()` directly
+from `repo.get()`, before any delegate runs) matching a fresh
+`repo.get()` call's revision — NOT a live-executed data frame. Actually
+executing a child's SQL requires the full `ThreadQuery`/provider/
+`DataOutput` pipeline (`querysource/queries/multi/__init__.py`'s child
+dispatch loop, `ThreadQuery` at line ~420), which is outside every task's
+Codebase Contract in this feature and was never verified by grep/read —
+writing a stub for it would mean guessing at an unverified internal
+contract (provider return shape, `DataOutput` expectations), which the
+Cardinal Rules ("never guess an import/attribute/method... STOP" ) forbid.
+The HEAD/PATCH and dry-run paths need no execution at all (verified: neither
+`QueryHandler.columns` nor `QueryHandler.test_slug` constructs a `MultiQS`,
+opens a datasource connection, or runs `EXPLAIN` — TASK-760) and are
+exercised fully live against the real fixture.
+
+Validation: `pytest tests/tenants/test_integration.py -q` → 6 skipped
+(the 5 pre-existing plus the new test; `QS_TEST_POSTGRES_DSN`/
+`QS_TEST_REDIS_URL` are not set in this sandbox, so this is the AC-12
+"skips otherwise" branch — the "passes when set" branch could not be
+verified live in this session). `pytest tests/tenants/
+test_tenant_rollout_documentation.py tests/tenants/test_tenant_http_routes.py
+-q` → 9/9 pass. Full `tests/tenants` suite: 115 passed, 6 skipped, no new
+failures against the DDL fixture change (AC-7 "existing suite must not
+break").
+
+`ruff check --select E9,F63,F7,F82`: clean. Full `ruff check` on the two
+changed test files: one pre-existing `E741` (ambiguous variable name `l`,
+in the untouched `test_postgres_redis_revision_and_concurrency`, line 161)
+— unrelated to this task, left untouched.
+

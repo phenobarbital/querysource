@@ -37,6 +37,7 @@ from .base import BaseQuery
 
 if TYPE_CHECKING:
     from ..auth.principal import QSPrincipal
+    from ..tenants import LoadedDefinition
 
 # FEAT-150: with a principal, these TenantError codes collapse into
 # QueryAccessDenied so "missing" and "denied" look identical.
@@ -57,6 +58,7 @@ class QS(BaseQuery):
             loop: asyncio.AbstractEventLoop = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
             **kwargs
     ):
@@ -66,6 +68,7 @@ class QS(BaseQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             principal=principal,
             **kwargs
         )
@@ -198,15 +201,21 @@ class QS(BaseQuery):
             # is the one initialized on QuerySource's singleton (real
             # discovery), never an empty, never-discovered TenantRegistry.
             from querysource.tenants import QueryIdentity
-            repo = await self.get_definition_repository()
-            try:
-                store = repo.registry.resolve(self._tenant_selector)
-                identity = QueryIdentity(store=store, slug=self._query)
-                loaded_def = await repo.get(identity)
-            except TenantError as ex:
-                if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
-                    raise QueryAccessDenied() from ex
-                raise
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self._query:
+                # FEAT-151: the tenant dispatcher already read this definition.
+                loaded_def = preloaded
+                self._logger.debug(f"Using pre-loaded definition for slug={self._query}")
+            else:
+                repo = await self.get_definition_repository()
+                try:
+                    store = repo.registry.resolve(self._tenant_selector)
+                    identity = QueryIdentity(store=store, slug=self._query)
+                    loaded_def = await repo.get(identity)
+                except TenantError as ex:
+                    if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
+                        raise QueryAccessDenied() from ex
+                    raise
             # Store definition identity and revision on the execution object
             self._definition_identity = loaded_def.identity
             self._definition_revision = loaded_def.revision
