@@ -16,7 +16,7 @@ tags: [multi-tenant, multiquery, tenant-routes, slug-dispatch, dry-run, columns-
 
 **Date**: 2026-09-24
 **Author**: Jesus Lara
-**Status**: exploration
+**Status**: accepted
 **Recommended Option**: A
 
 ---
