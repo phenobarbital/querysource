@@ -1,0 +1,93 @@
+{
+  "feature": "falsy-refresh",
+  "feature_id": "FEAT-149",
+  "spec": "sdd/specs/falsy-refresh.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-09-24T00:24:58+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-744",
+      "slug": "to-flag-helper",
+      "title": "Add to_flag flag-coercion helper to querysource.types",
+      "feature_id": "FEAT-149",
+      "feature": "falsy-refresh",
+      "spec": "sdd/specs/falsy-refresh.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "exclusive: runs `make build-inplace` (rebuilds shared Cython .so files, incl. querysource/types/validators)",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-744-to-flag-helper.md"
+    },
+    {
+      "id": "TASK-745",
+      "slug": "provider-refresh-coercion",
+      "title": "Parse refresh in BaseProvider with to_flag",
+      "feature_id": "FEAT-149",
+      "feature": "falsy-refresh",
+      "spec": "sdd/specs/falsy-refresh.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-744"
+      ],
+      "parallel": true,
+      "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/validators.pyx, exported in querysource/types/__init__.py)",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-745-provider-refresh-coercion.md"
+    },
+    {
+      "id": "TASK-746",
+      "slug": "parser-refresh-paged-coercion",
+      "title": "Parse refresh and paged in AbstractParser with to_flag",
+      "feature_id": "FEAT-149",
+      "feature": "falsy-refresh",
+      "spec": "sdd/specs/falsy-refresh.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-744"
+      ],
+      "parallel": false,
+      "parallelism_notes": "imports to_flag created by TASK-744 (querysource/types/__init__.py); exclusive: runs `make build-inplace` to rebuild querysource/parsers/abstract.pyx",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-746-parser-refresh-paged-coercion.md"
+    },
+    {
+      "id": "TASK-747",
+      "slug": "flag-conditions-tests",
+      "title": "Tests for to_flag, provider refresh and parser refresh/paged",
+      "feature_id": "FEAT-149",
+      "feature": "falsy-refresh",
+      "spec": "sdd/specs/falsy-refresh.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-744",
+        "TASK-745",
+        "TASK-746"
+      ],
+      "parallel": true,
+      "parallelism_notes": "tests to_flag from TASK-744 (querysource/types), BaseProvider.refresh fix from TASK-745 (querysource/providers/abstract.py), parser refresh/paged fix from TASK-746 (querysource/parsers/abstract.pyx)",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-747-flag-conditions-tests.md"
+    }
+  ]
+}
