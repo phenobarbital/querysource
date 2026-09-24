@@ -190,7 +190,31 @@ No new test file. The existing describe suites are the behaviour pin.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Recorded a green baseline (22 tests) before editing. `_evaluator_state` now
+returns `resolve_evaluator(request, detached=detached)` directly;
+`_eval_context` delegates to `build_eval_context` with the AUTHZ/regular
+split preserved exactly; `can_access`'s primary/fallback checks now go
+through `await evaluate(...)`, keeping the "allowed on primary, else
+fallback" logic and the outer `try/except -> logger.exception + return
+False` safety net. `filter_visible`'s `filter_resources` batch call was left
+untouched (out of scope — no batch primitive in the core).
+`grep -c "check_access(" querysource/auth/slug_visibility.py` → 0 (AC-1).
+`ruff check` clean (no unused-import cleanup was needed: `inspect` and
+`Environment` are still used by `filter_visible`).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+Both pinned suites pass unmodified: `tests/auth/test_slug_visibility.py` +
+`tests/handlers/test_describe_tenant.py` = 22 passed. Broader regression
+check (`tests/handlers/`, `tests/auth/`, `tests/tenants/`, excluding the
+pre-existing unrelated `test_airtable_oauth.py` collection failure): 265
+passed, 5 skipped, 3 failed — all three failures
+(`test_tenant_bootstrap_lookup.py::test_startup_order_before_scheduler`,
+`test_tenant_http_routes.py::test_route_method_matrix_and_slash_aliases`,
+`test_tenant_http_routes.py::test_legacy_and_management_precedence`) are a
+pre-existing, unrelated sandbox/environment issue: they try to write a
+compiled-template cache to the read-only primary checkout
+(`/home/jesuslara/proyectos/querysource/templates/.compiled`) and hit a
+missing `resources.functions` module — nothing to do with PBAC or
+`slug_visibility.py`, and not in this task's own Validation Commands.
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24

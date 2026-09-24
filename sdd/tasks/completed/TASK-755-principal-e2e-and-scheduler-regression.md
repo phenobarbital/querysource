@@ -210,7 +210,34 @@ See the blueprint blocks: they are the test files themselves.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+The Rust `rs_pep` evaluator IS installed/available in this environment
+(`navigator_auth.abac.policies.evaluator._RS_PEP_AVAILABLE` is True), so
+**the end-to-end suite ran for real, it was not skipped**.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+`tests/integration/test_qs_principal_e2e.py`: real `setup_pbac(app,
+policy_dir=tmp)` with a policy YAML (mirroring `policies/authorized.yaml`'s
+shape) granting group `sales` `slug:execute` on `slug:report_a` only; `QS`
+built with a faked `get_definition_repository` (returns a fake repo/store
+resolving to a `LoadedDefinition`, pattern from
+`tests/tenants/test_tenant_execution_context.py:133-190`) and a faked
+`connection.get_provider` recording its calls. 3 tests: `report_a` reaches
+`get_provider` with `session=None, app=None` (AC-1); `report_b` raises
+`QueryAccessDenied` before `get_provider` is ever called; an authz
+principal (`QSPrincipal.for_authz("ip")`) with
+`QS_PBAC_ALLOW_SESSIONLESS_AUTHZ` patched to `False` is denied without
+`check_access` ever running (AC-2). All 3 pass against the real evaluator.
+
+`tests/scheduler/test_jobs_no_principal.py`: patches
+`querysource.queries.qs.QS` for `scheduled_query_job` and
+`cache_refresh_job`, and `querysource.queries.MultiQS` for
+`scheduled_multiqs_job` (exactly the import sites `tests/test_scheduler_jobs.py`
+already patches), asserting `"principal" not in mock_cls.call_args.kwargs`
+for all three of `jobs.py`'s construction sites (`:87`, `:144`, `:190`).
+3 tests pass — the scheduler stays principal-free.
+
+`tests/test_scheduler_jobs.py` passes unmodified (14 tests, AC-5).
+`ruff check` clean on both new files (AC-6). No production code touched
+(out of scope, per this task).
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
