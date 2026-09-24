@@ -304,4 +304,61 @@ def _loaded(query_raw: str = MULTI_RAW, columns: list | None = None) -> LoadedDe
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented exactly as blueprinted. `definition=request.get('qs_definition')`
+added to the `MultiQS(...)` construction in `query()`. `columns()` rewritten
+verbatim per the blueprint: HEAD with a definition returns 204 +
+`X-Columns`/`X-Slug` (+ `X-Message: No Columns found` when empty); PATCH with
+a definition and non-empty columns returns 200 JSON list; PATCH/legacy (no
+definition, or empty columns without HEAD) falls through to the pre-existing
+`raise self.no_content(...)` unchanged — v3 callers keep byte-identical
+behavior. `test_slug()` added as a new method directly after `columns()`,
+completing every FILL IN in the blueprint:
+
+- `query_raw` parsed with `json.loads`; non-JSON or a dict missing all of
+  `queries`/`files`/`sources` → one warning (exact text from the blueprint)
+  and `payload = {}`, never an error (§8 fallback decision).
+- Each `queries` entry becomes one child: no `slug` key → `kind: 'raw'`, all
+  other fields `None` (no owner check — same convention as the execution
+  preflight's raw/file handling); a saved slug resolves
+  `(child_tenant, store)` via `MultiQS.resolve_child_owner` (TASK-758),
+  `exists` via `repo.get(QueryIdentity(...))` (`TenantError` → `exists=False`,
+  `error=err.error_code`), `allowed` via `_enforce_owned_slug` only when
+  `request.app.get('security')` is not `None` (`web.HTTPNotFound` →
+  `allowed=False`; success → `True`), else `allowed=None`.
+- `sources` populated from `MultiQS._normalize_sources(payload.get('sources',
+  []))`'s dict keys (source-type names), matching the §2 envelope example.
+- `queryformat` resolved from the `:format` slug suffix (still present on
+  `match_info['slug']` per spec §2 — the tenant dispatcher only strips it
+  from the *identity* slug) via `self.format(...)`, mirroring
+  `service.py`'s `test_slug`; `txt`/`plain`/`raw` returns
+  `text/plain` of `json.dumps(payload, indent=2)` (the parsed definition,
+  not the full envelope — per the blueprint's own docstring), default
+  returns the JSON envelope. No `MultiQS`, `ThreadQuery`, datasource
+  connection or `EXPLAIN` is ever constructed (AC-8, S5) — verified by
+  reading every line added; the dry-run only calls `repo.get` and
+  `_enforce_owned_slug`.
+
+Tests: `tests/tenants/test_multi_handler_definition.py` (9/9 pass) — all
+seven blueprinted tests plus two extras
+(`test_columns_head_multi_empty_message`,
+`test_multi_dry_run_missing_child_marks_not_works`) added for the empty-HEAD
+and missing-child branches the blueprint's own FILL IN list implied but
+didn't name individually. `self.error(...)` and `self.Error(...)` raise
+rather than return (verified by running, not guessing), so the "requires
+definition" (400) and "forwards to MultiQS" tests assert via
+`pytest.raises(...)` and inspect the mock's `call_args`/a shared `captured`
+dict rather than a return value — `query()`'s own final `except Exception as
+ex: raise self.Except(...)` wraps any injected stop-exception into
+`HTTPInternalServerError`, which is still sufficient to prove the `MultiQS`
+kwargs were forwarded before it happened.
+
+Regression: `tests/handlers/test_multiquery_pbac_smoke.py` +
+`tests/unit/test_handler_output_status.py` (13/13 pass).
+
+`ruff check --select E9,F63,F7,F82`: clean. Pre-existing `B904` (6, identical
+count to `origin/dev`, all in untouched exception branches) left untouched.
+Two new `DTZ005` findings on the `datetime.now()` calls I added to
+`test_slug` — deliberately mirrors the exact same pre-existing pattern (and
+pre-existing `DTZ005` debt) in `service.py`'s `test_slug`; left for
+`/sdd-done`'s feature-wide style pass per the Fallback Loop's lint scope.
+

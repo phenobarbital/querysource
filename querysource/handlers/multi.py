@@ -1,5 +1,7 @@
+import json
 import time
 import traceback
+from datetime import datetime
 
 from aiohttp import web
 from pandas import DataFrame
@@ -186,12 +188,168 @@ class QueryHandler(AbstractHandler):
                 raise
 
     async def columns(self, request: web.Request) -> web.StreamResponse:
+        """Column inspection for a stored multi definition.
+
+        Uses ``request['qs_definition'].runtime.columns_definition`` when the tenant
+        dispatcher stashed a definition. HEAD answers 204 with ``X-Columns``/``X-Slug``
+        (plus ``X-Message: No Columns found`` when empty). PATCH answers 200 with the
+        list, or the legacy 204 ``No Columns available`` when empty. Without a
+        definition the legacy 204 is returned unchanged (v3 callers).
+        """
+        definition = request.get('qs_definition')
+        columns = list(getattr(definition.runtime, 'columns_definition', None) or []) if definition else []
+        if definition is not None and request.method == 'HEAD':
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Columns': f"{columns!r}",
+                'X-Slug': str(definition.identity.slug),
+            }
+            if not columns:
+                headers['X-Message'] = 'No Columns found'
+            return self.no_content(headers=headers)
+        if columns:
+            return self.json_response(columns, status=200)
         raise self.no_content(
             headers={
                 'Content-Type': 'application/json',
                 'X-Message': 'No Columns available',
             }
         )
+
+    async def test_slug(self, request: web.Request) -> web.StreamResponse:
+        """Validate a stored multi definition without executing it (FEAT-151).
+
+        Requires ``request['qs_definition']`` (set by TenantQueryHandler). Resolves each
+        saved child's owner with ``MultiQS.resolve_child_owner``, checks existence with
+        the definition repository and ownership with ``_enforce_owned_slug``, and returns
+        the single dry-run envelope extended with ``kind``, ``children``, ``files``,
+        ``sources`` and ``warnings``. Never builds executors, opens datasource
+        connections, or runs EXPLAIN.
+        """
+        started = datetime.now()
+        definition = request.get('qs_definition')
+        if definition is None:
+            return self.error(response={'message': 'No stored definition to test.'}, status=400)
+        params = self.query_parameters(request) or {}
+        ignore_query = bool(params.pop('ignore_query', False))
+        args = self.match_parameters(request) or {}
+        _slug_arg = args.get('slug')
+        _format = 'json'
+        if isinstance(_slug_arg, str) and ':' in _slug_arg:
+            try:
+                _, _format = _slug_arg.split(':')
+            except ValueError:
+                pass
+        try:
+            queryformat = self.format(request, params, _format)
+        except ValueError:
+            queryformat = 'json'
+        tenant = request.get('qs_tenant')
+        registry = request.app.get('qs_tenant_registry')
+        repo = request.app.get('qs_definition_repository')
+        security = request.app.get('security')
+        warnings: list = []
+        payload: dict = {}
+
+        raw = getattr(definition.runtime, 'query_raw', None) or ''
+        parsed = None
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except (TypeError, ValueError):
+                parsed = None
+        if isinstance(parsed, dict) and (
+            'queries' in parsed or 'files' in parsed or 'sources' in parsed
+        ):
+            payload = parsed
+        else:
+            warnings.append(
+                "query_raw is not a multi-query payload; MultiQS will fall back to "
+                "single-query mode"
+            )
+            payload = {}
+
+        children: list = []
+        for alias, cfg in (payload.get('queries') or {}).items():
+            if not isinstance(cfg, dict):
+                cfg = {}
+            child_slug = cfg.get('slug')
+            if not child_slug:
+                # Raw inline query child ('query' key, no stored slug) — no
+                # definition to own-check (S5, same convention as the
+                # execution preflight's files/raw handling).
+                children.append({
+                    'alias': alias,
+                    'slug': None,
+                    'kind': 'raw',
+                    'tenant': None,
+                    'store': None,
+                    'exists': None,
+                    'allowed': None,
+                    'error': None,
+                })
+                continue
+            child_tenant, store = MultiQS.resolve_child_owner(cfg, tenant, registry)
+            store_repr = f"{store.schema}.{store.table}" if store is not None else None
+            identity = QueryIdentity(store=store, slug=child_slug)
+            exists = True
+            error = None
+            try:
+                await repo.get(identity)
+            except TenantError as terr:
+                exists = False
+                error = terr.error_code
+            allowed = None
+            if security is not None:
+                try:
+                    await self._enforce_owned_slug(
+                        request, identity=identity, action='slug:execute'
+                    )
+                    allowed = True
+                except web.HTTPNotFound:
+                    allowed = False
+            children.append({
+                'alias': alias,
+                'slug': child_slug,
+                'kind': 'slug',
+                'tenant': child_tenant,
+                'store': store_repr,
+                'exists': exists,
+                'allowed': allowed,
+                'error': error,
+            })
+
+        works = all(c['exists'] is not False and c['allowed'] is not False for c in children)
+
+        sources: list = []
+        for entry in MultiQS._normalize_sources(payload.get('sources', [])):
+            if isinstance(entry, dict):
+                sources.extend(entry.keys())
+
+        resultset = {
+            'slug': definition.identity.slug,
+            'kind': 'multi',
+            'works': works,
+            'error': None,
+            'generated': (datetime.now() - started).total_seconds(),
+            'execution': None,
+            'tenant': tenant,
+            'store': f"{definition.identity.store.schema}.{definition.identity.store.table}",
+            'children': children,
+            'files': sorted((payload.get('files') or {}).keys()),
+            'sources': sources,
+            'warnings': warnings,
+        }
+        if not ignore_query:
+            resultset['conditions'] = params
+            resultset['query'] = payload
+
+        if queryformat in ('txt', 'plain', 'raw'):
+            return self.response(
+                response=json.dumps(payload, indent=2),
+                content_type='text/plain'
+            )
+        return self.json_response(resultset, status=200)
 
     async def query(self, request: web.Request) -> web.StreamResponse:
         total_time = 0
@@ -340,6 +498,7 @@ class QueryHandler(AbstractHandler):
             conditions=data,
             user_session=_user_session,
             tenant=_tenant,
+            definition=request.get('qs_definition'),
         )
         try:
             result, options = await qs.query()

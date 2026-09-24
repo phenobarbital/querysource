@@ -72,7 +72,7 @@
       "feature_id": "FEAT-151",
       "feature": "multiquery-multitenant",
       "spec": "sdd/specs/multiquery-multitenant.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -83,8 +83,8 @@
       "parallelism_notes": "Calls MultiQS(definition=) and MultiQS.resolve_child_owner from TASK-758 (querysource/queries/multi/__init__.py); reads runtime.columns_definition from TASK-759 (querysource/models.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-760-multi-handler-columns-dryrun.md"
+      "completed_at": "2026-09-24T01:06:19+00:00",
+      "file": "sdd/tasks/completed/TASK-760-multi-handler-columns-dryrun.md"
     },
     {
       "id": "TASK-761",
