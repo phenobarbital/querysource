@@ -16,7 +16,7 @@
       "feature_id": "FEAT-149",
       "feature": "falsy-refresh",
       "spec": "sdd/specs/falsy-refresh.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -24,8 +24,8 @@
       "parallelism_notes": "exclusive: runs `make build-inplace` (rebuilds shared Cython .so files, incl. querysource/types/validators)",
       "assigned_to": null,
       "started_at": "2026-09-24T00:26:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-744-to-flag-helper.md"
+      "completed_at": "2026-09-24T00:36:28+00:00",
+      "file": "sdd/tasks/completed/TASK-744-to-flag-helper.md"
     },
     {
       "id": "TASK-745",
