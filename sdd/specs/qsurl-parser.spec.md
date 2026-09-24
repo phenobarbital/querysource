@@ -17,7 +17,7 @@ tags: [qsurl, chumsky, pyo3, url-dialect, htsql, pushdown, lark]
 **Feature ID**: FEAT-152
 **Date**: 2026-09-24
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: next minor release of `querysource` (adds a second native extension)
 **Exploration doc**: `sdd/proposals/qsurl-parser.brainstorm.md` (Recommended Option A) · accepted proposal `sdd/proposals/qsurl-spec.md`
 
