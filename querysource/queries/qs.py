@@ -7,6 +7,7 @@ QS uses "slugs" (named queries) to know which query need to be executed.
 """
 import asyncio
 import hashlib
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 from asyncdb.exceptions import (
@@ -32,6 +33,9 @@ from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_pa
 from ..utils.functions import check_empty
 from .base import BaseQuery
 
+if TYPE_CHECKING:
+    from ..tenants import LoadedDefinition
+
 
 class QS(BaseQuery):
     """
@@ -47,6 +51,7 @@ class QS(BaseQuery):
             loop: asyncio.AbstractEventLoop = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -55,6 +60,7 @@ class QS(BaseQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             **kwargs
         )
         if not conditions:
@@ -171,10 +177,16 @@ class QS(BaseQuery):
             # is the one initialized on QuerySource's singleton (real
             # discovery), never an empty, never-discovered TenantRegistry.
             from querysource.tenants import QueryIdentity
-            repo = await self.get_definition_repository()
-            store = repo.registry.resolve(self._tenant_selector)
-            identity = QueryIdentity(store=store, slug=self._query)
-            loaded_def = await repo.get(identity)
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self._query:
+                # FEAT-151: the tenant dispatcher already read this definition.
+                loaded_def = preloaded
+                self._logger.debug(f"Using pre-loaded definition for slug={self._query}")
+            else:
+                repo = await self.get_definition_repository()
+                store = repo.registry.resolve(self._tenant_selector)
+                identity = QueryIdentity(store=store, slug=self._query)
+                loaded_def = await repo.get(identity)
             # Store definition identity and revision on the execution object
             self._definition_identity = loaded_def.identity
             self._definition_revision = loaded_def.revision

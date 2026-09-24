@@ -16,7 +16,7 @@
       "feature_id": "FEAT-151",
       "feature": "multiquery-multitenant",
       "spec": "sdd/specs/multiquery-multitenant.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,8 @@
       "parallelism_notes": "Root: no in-spec dependency; creates AbstractQuery._preloaded_definition (querysource/interfaces/queries.py) and QS(definition=) (querysource/queries/qs.py) used by TASK-758 and TASK-761.",
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-757-qs-preloaded-definition.md"
+      "completed_at": "2026-09-24T00:53:06+00:00",
+      "file": "sdd/tasks/completed/TASK-757-qs-preloaded-definition.md"
     },
     {
       "id": "TASK-758",

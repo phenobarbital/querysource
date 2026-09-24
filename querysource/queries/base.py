@@ -4,6 +4,7 @@ Base Class for all Query-objects in QuerySource.
 """
 import asyncio
 from abc import abstractmethod
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 from datamodel.exceptions import ValidationError
@@ -12,6 +13,9 @@ from navconfig.logging import logging
 from ..interfaces.queries import AbstractQuery
 from ..outputs.dt import OutputFactory
 from .models import Query, QueryResult
+
+if TYPE_CHECKING:
+    from ..tenants import LoadedDefinition
 
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -26,6 +30,7 @@ class BaseQuery(AbstractQuery):
             loop: asyncio.AbstractEventLoop | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             **kwargs
     ):
         """
@@ -37,6 +42,7 @@ class BaseQuery(AbstractQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             **kwargs
         )
 

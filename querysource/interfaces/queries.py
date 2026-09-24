@@ -11,7 +11,7 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 from asyncdb import AsyncDB
@@ -34,6 +34,9 @@ from ..utils.cache_serialization import serialize_cache_payload
 from ..utils.events import enable_uvloop
 from .connections import Connection
 
+if TYPE_CHECKING:
+    from ..tenants import LoadedDefinition
+
 logging.getLogger('visions.backends').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
@@ -53,10 +56,21 @@ class AbstractQuery(Connection):
             loop: asyncio.AbstractEventLoop | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             **kwargs
     ):
         """
         Initialize the Query Object
+
+        Args:
+            slug: Stored query slug.
+            conditions: Query conditions/params.
+            request: aiohttp Request bound to this query.
+            loop: Event loop to bind this query to.
+            tenant: Tenant selector (schema name) resolved by TenantRegistry.
+            definition: Pre-loaded ``LoadedDefinition`` (FEAT-151). When
+                present and its slug matches, executors reuse it instead of
+                re-reading the definition repository.
         """
         enable_uvloop()
         __name__ = type(self).__name__
@@ -102,6 +116,9 @@ class AbstractQuery(Connection):
         self._executor = ThreadPoolExecutor(max_workers=2)
         # Tenant selector (keyword-only, preserved from Python routing)
         self._tenant_selector = tenant
+        # Pre-loaded stored definition (FEAT-151): when a caller already read the
+        # definition (tenant dispatcher), executors reuse it instead of re-reading.
+        self._preloaded_definition: "LoadedDefinition | None" = definition  # noqa: UP037
         # Definition identity and revision for result cache keys (set during load)
         self._definition_identity: Any = None
         self._definition_revision: str | None = None
