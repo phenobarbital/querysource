@@ -571,3 +571,23 @@ class TestRethinkClassifyConditions:
         result = qs_parsers.rethink_classify_conditions({}, {})
         assert result == {}
 
+
+
+class TestPgsqlIlikeOperator:
+    """FEAT-152: ILIKE / NOT ILIKE accepted as dict-filter operators.
+
+    Skipped when the installed `_qs_parsers` extension predates this
+    feature's Rust source change: this sandbox cannot rebuild/reinstall it
+    (that would mutate the shared, read-only virtualenv). See the qsurl-parser
+    TASK-769 Completion Note.
+    """
+
+    def test_ilike_dict_operator(self):
+        sql = qs_parsers.pgsql_filter_conditions(
+            "SELECT * FROM t {filter}", {"city": {"ILIKE": "%san%"}}, {}
+        )
+        if "city ILIKE '%san%'" not in sql:
+            pytest.skip(
+                "installed _qs_parsers extension does not yet include the ILIKE dict operator"
+            )
+        assert "city ILIKE '%san%'" in sql

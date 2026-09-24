@@ -38,6 +38,7 @@ fn pg_validate_operator(op: &str) -> bool {
     COMPARISON_TOKENS.contains(&op)
         || VALID_OPERATORS.contains(&op)
         || JSONB_OPERATORS.contains(&op)
+        || PG_TEXT_OPERATORS.contains(&op)
 }
 
 /// Quote a value as a PostgreSQL string literal.
@@ -78,6 +79,10 @@ const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "
 
 /// JSONB operators accepted as the key of a dict-typed filter value.
 const JSONB_OPERATORS: &[&str] = &["@>", "<@", "->", "->>"];
+
+/// Case-insensitive pattern operators accepted as the key of a dict filter value
+/// (qsurl text_match pushdown, FEAT-152). The value is a ready LIKE pattern.
+const PG_TEXT_OPERATORS: &[&str] = &["ILIKE", "NOT ILIKE"];
 
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
@@ -262,6 +267,15 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
     let Some((op_obj, operand)) = dict.iter().next() else {
         return JsonbOutcome::NotJsonb;
     };
+    if let Ok(op) = op_obj.extract::<String>() {
+        // qsurl text-match operators (FEAT-152) are handled by process_dict_value,
+        // never as implicit JSONB containment (they are not in `is_operator`, so
+        // `operators` would otherwise stay 0 and fall through to the containment
+        // branch below).
+        if PG_TEXT_OPERATORS.contains(&op.as_str()) {
+            return JsonbOutcome::NotJsonb;
+        }
+    }
     if operators > 0 {
         if let Ok(op) = op_obj.extract::<String>() {
             if COMPARISON_TOKENS.contains(&op.as_str()) {
@@ -360,6 +374,16 @@ fn process_dict_value(
         // SECURITY: escape the comparison value
         let safe_v = quote_string(&escape_string(&v.as_str()), true);
         return Some(format!("{} {} {}", key, op, safe_v));
+    }
+
+    // Case-insensitive pattern match (FEAT-152): string values only, quoted by
+    // pg_literal. The caller (translate.split, TASK-771) is responsible for
+    // escaping LIKE metacharacters in the pattern; this builder only quotes.
+    if PG_TEXT_OPERATORS.contains(&op.as_str()) {
+        return match v {
+            FilterValue::Str(s) => Some(format!("{} {} {}", key, op, pg_literal(s))),
+            _ => None, // non-string values are rejected, never str()-ified
+        };
     }
 
     None
@@ -835,6 +859,63 @@ mod tests {
         assert_eq!(
             process_entry(&entry),
             Some("age >= 18".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_ilike_dict_operator() {
+        let entry = FilterEntry {
+            key: "city".to_string(),
+            value: FilterValue::Dict(vec![
+                ("ILIKE".to_string(), FilterValue::Str("%san%".to_string())),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("city ILIKE '%san%'".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_not_ilike_dict_operator() {
+        let entry = FilterEntry {
+            key: "city".to_string(),
+            value: FilterValue::Dict(vec![
+                ("NOT ILIKE".to_string(), FilterValue::Str("%san%".to_string())),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("city NOT ILIKE '%san%'".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_ilike_rejects_non_string_value() {
+        let entry = FilterEntry {
+            key: "n".to_string(),
+            value: FilterValue::Dict(vec![
+                ("ILIKE".to_string(), FilterValue::Int(5)),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), None);
+    }
+
+    #[test]
+    fn test_process_ilike_quotes_embedded_quote() {
+        let entry = FilterEntry {
+            key: "name".to_string(),
+            value: FilterValue::Dict(vec![
+                ("ILIKE".to_string(), FilterValue::Str("o'brien%".to_string())),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("name ILIKE 'o''brien%'".to_string())
         );
     }
 

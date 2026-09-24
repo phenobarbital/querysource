@@ -26,6 +26,8 @@ except ImportError:
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 # JSONB operators accepted as the key of a dict-typed filter value.
 JSONB_OPERATORS = ('@>', '<@', '->', '->>',)
+# Case-insensitive pattern operators for dict filter values (qsurl text_match, FEAT-152).
+PG_TEXT_OPERATORS = ('ILIKE', 'NOT ILIKE',)
 
 
 cdef str pg_literal(str value):
@@ -140,6 +142,11 @@ cdef tuple jsonb_condition(str col, dict value):
         1 for k in value if k in COMPARISON_TOKENS or k in JSONB_OPERATORS
     )
     op, operand = next(iter(value.items()))
+    if op in PG_TEXT_OPERATORS:
+        # qsurl text-match operators (FEAT-152) are handled by the caller's dict
+        # branch, never as implicit JSONB containment (they are not counted by
+        # `operators`, so this would otherwise fall through to that branch).
+        return (False, None)
     if operators and op in COMPARISON_TOKENS:
         return (False, None)
     try:
@@ -226,6 +233,11 @@ cdef class pgSQLParser(SQLParser):
                         # SECURITY: Escape the comparison value
                         safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
                         where_cond.append(f"{key} {op} {safe_v}")
+                    elif op in PG_TEXT_OPERATORS and isinstance(v, str):
+                        # Case-insensitive pattern match (qsurl text_match, FEAT-152).
+                        # The pattern arrives ready (metacharacters already escaped by
+                        # translate.split); this builder only quotes it.
+                        where_cond.append(f"{key} {op} {pg_literal(v)}")
                     else:
                         # currently, discard any non-supported comparison token
                         continue
