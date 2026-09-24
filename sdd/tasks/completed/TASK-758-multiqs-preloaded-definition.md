@@ -269,4 +269,34 @@ def test_multiqs_without_definition_unchanged() -> None:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented exactly as blueprinted. `definition: LoadedDefinition | None = None`
+added keyword-only to `MultiQS.__init__` and forwarded to `super().__init__`
+(the `_preloaded_definition` attribute itself comes from TASK-757's
+`AbstractQuery`). The top-level slug loader now checks
+`preloaded.identity.slug == self.slug` before calling `get_slug()`; when it
+matches, `query = preloaded.runtime` and both `_definition_identity` /
+`_definition_revision` are set — `get_slug()` is skipped entirely, otherwise
+behavior is byte-for-byte unchanged. `resolve_child_owner` was added as a
+`@staticmethod` directly after `_normalize_sources` exactly as specified
+(inherit / explicit-string / explicit-`None` rule), and the preflight loop's
+inline tenant-resolution block (lines ~319-324 pre-edit) now calls it,
+producing the same `(child_tenant, child_store)` tuple it computed inline
+before — verified by the unchanged regression suite. `TYPE_CHECKING` imports
+added for `LoadedDefinition`, `QueryStore`, `TenantRegistry` from `...tenants`
+(module-relative, matching the existing lazy `from querysource.tenants import
+QueryIdentity` pattern already in `query()`).
+
+Tests: `tests/tenants/test_preloaded_definition_multiqs.py` (3/3 pass),
+including the filled-in
+`test_multiqs_uses_preloaded_definition_and_records_identity` — halts
+`query()` right after the loader by stubbing `get_definition_repository` to
+raise a local `_StopSentinel` (no DB/datasource access), then asserts
+`_queries`, `_definition_identity`, `_definition_revision`. Regression:
+`tests/tenants/test_tenant_child_execution.py` +
+`tests/test_multiqs_slug_sources_normalize.py` (11/11 pass); full
+`tests/tenants` suite (98 passed, 5 skipped, no new failures).
+
+`ruff check --select E9,F63,F7,F82`: clean. Pre-existing `B904`/`LOG015`
+findings elsewhere in the file (confirmed present on `origin/dev`, far from
+the edited lines) left untouched, per the Fallback Loop's lint scope.
+

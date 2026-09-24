@@ -34,7 +34,7 @@
       "feature_id": "FEAT-151",
       "feature": "multiquery-multitenant",
       "spec": "sdd/specs/multiquery-multitenant.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -44,8 +44,8 @@
       "parallelism_notes": "Needs AbstractQuery._preloaded_definition and BaseQuery definition forwarding from TASK-757 (querysource/interfaces/queries.py, querysource/queries/base.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T00:49:04+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-758-multiqs-preloaded-definition.md"
+      "completed_at": "2026-09-24T00:58:25+00:00",
+      "file": "sdd/tasks/completed/TASK-758-multiqs-preloaded-definition.md"
     },
     {
       "id": "TASK-759",

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from importlib import import_module
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
 
@@ -24,6 +24,9 @@ from .sources.executors import RemoteConfig
 from .transformations import (
     GoogleMaps,
 )
+
+if TYPE_CHECKING:
+    from ...tenants import LoadedDefinition, QueryStore, TenantRegistry
 
 # Best-effort data-vs-infra classification for MultiQuery Output/destination
 # failures (FEAT-146). Deliberately small and centralized so it can be
@@ -105,6 +108,7 @@ class MultiQS(BaseQuery):
             user_session: object | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -113,6 +117,7 @@ class MultiQS(BaseQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
             **kwargs
         )
         # creates the Result Queue:
@@ -200,6 +205,29 @@ class MultiQS(BaseQuery):
             return normalized
         return []
 
+    @staticmethod
+    def resolve_child_owner(
+        query_cfg: dict,
+        parent_tenant: "str | None",
+        registry: "TenantRegistry",
+    ) -> "tuple[str | None, QueryStore]":
+        """Resolve a saved child's owner selector and store.
+
+        Args:
+            query_cfg: The child's config from the ``queries`` mapping.
+            parent_tenant: The parent MultiQS tenant selector.
+            registry: Tenant registry used to resolve the store.
+
+        Returns:
+            ``(tenant_selector, store)``: an explicit ``tenant`` key wins, including an
+            explicit ``None`` (legacy store); a missing key inherits ``parent_tenant``.
+        """
+        if "tenant" in query_cfg:
+            child_tenant = query_cfg.get("tenant")
+        else:
+            child_tenant = parent_tenant
+        return child_tenant, registry.resolve(child_tenant)
+
     async def query(self):
         """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
         import copy
@@ -222,7 +250,14 @@ class MultiQS(BaseQuery):
             # was built for, so a stored pipeline saved under a tenant
             # schema was never found (or worse, a same-named legacy
             # pipeline executed instead).
-            query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self.slug:
+                # FEAT-151: reuse the definition the tenant dispatcher loaded.
+                query = preloaded.runtime
+                self._definition_identity = preloaded.identity
+                self._definition_revision = preloaded.revision
+            else:
+                query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -316,12 +351,9 @@ class MultiQS(BaseQuery):
                 # - explicit string (e.g. "tenant2")
                 # - explicit None (explicit-null override)
                 # - missing (inherits parent)
-                if "tenant" in query_cfg:
-                    child_tenant = query_cfg.get("tenant")
-                else:
-                    child_tenant = self._tenant_selector
-
-                child_store = repo.registry.resolve(child_tenant)
+                _child_tenant, child_store = self.resolve_child_owner(
+                    query_cfg, self._tenant_selector, repo.registry
+                )
                 resolved_stores[name] = child_store
 
                 # Preflight policy check: verify the definition exists in the resolved store
