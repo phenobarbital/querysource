@@ -246,10 +246,36 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Generated `tests/qsurl/corpus.json` (17 cases, all required ids from spec §4 plus
+the 3 `lowering_errors_*` sub-cases) by running `cargo run --manifest-path rust/qsurl/Cargo.toml
+--example parse -- "<input>"` for every case via a throwaway generator script (never
+hand-written) and capturing stdout (compact-reserialized with `sort_keys=True`) or stderr
+(the error JSON) verbatim — deleted the generator after use, per its own scratch-only
+docstring. `eight_kb_url` uses `"s?" + "&".join(f"c{i}={i}" for i in range(940))` = 8241
+bytes (>8KB, deterministic). Wrote `tests/qsurl/test_parity.py` (`test_lark_matches_corpus`,
+always run; `test_rust_matches_corpus`, skipped when `HAS_RUST` is False) and
+`tests/qsurl/test_perf.py` (`@pytest.mark.perf`; `_median_ms` warms up once then times 50
+runs; both `test_rust_8kb_under_1ms` — skipped, no Rust extension installed — and
+`test_lark_8kb_under_100ms`).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Results**: `pytest tests/qsurl/test_parity.py -q` -> 1 passed, 1 skipped (Rust half
+skipped: no installed `_qsurl` extension, same shared-environment constraint documented in
+TASK-764/769/775's Completion Notes — cannot `make build-rust` without mutating the shared
+`.venv`). `pytest tests/qsurl/test_perf.py -m perf -q` -> 1 passed (Lark, median 41.0ms for
+the 8KB URL, well under the 100ms budget), 1 skipped (Rust). No corpus-level divergence
+between the Lark fallback (TASK-766) and the Rust crate (TASK-764) was found — every valid
+case's `ir_json` (captured from the real Rust CLI) matched `_fallback.parse()`'s compact
+output exactly on the first run, and every error case's `(kind, offset, message)` matched
+too (`message_match: "exact"` for custom/lower errors, `"prefix"` for the one generic
+syntax error case, `syntax_error_offset`, whose Lark `expected` token-name list legitimately
+differs from chumsky's own labels — matching rule 10's documented exception). Full
+regression: `pytest tests/qsurl tests/e2e tests/handlers/test_qsurl_service.py
+tests/handlers/test_queryservice_pbac_smoke.py -q` -> 130 passed, 10 skipped. `ruff check
+tests/qsurl/test_parity.py tests/qsurl/test_perf.py` clean (one `I001` import-sort finding
+on my own new file, fixed directly — not pre-existing debt). No test in this task imports
+`pandas` or touches the network (confirmed by inspection: only `json`, `statistics`, `time`,
+`pytest`, and `querysource.qsurl` imports).
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none — no divergence was found requiring a TASK-766/764 follow-up.
