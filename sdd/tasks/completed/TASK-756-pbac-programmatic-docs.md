@@ -162,7 +162,26 @@ No new tests. The validation command re-checks that the documented public type s
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Created `docs/PBAC_PROGRAMMATIC.md` with every outline section filled in:
+when to use it, `QSPrincipal` (user form + `for_authz`), running
+`QS`/`MultiQS(..., principal=...)`, the decision table (copied verbatim
+from spec §2), the missing-vs-denied existence collapse, `tenant=` vs
+`principal.tenant_id` (logs only), trusted-service credentials, an Operator
+notes section (detached evaluator/no decision cache, request-derived
+conditions cannot match, `EvalContext.from_userinfo` feature detection,
+the once-per-process warning, scheduler unchanged,
+`QS_PBAC_ALLOW_SESSIONLESS_AUTHZ` gate), and an ai-parrot
+`PermissionContext` → `QSPrincipal` mapping example marked as the
+integrator's own responsibility. Added the "Programmatic callers and
+PBAC" subsection to `docs/PER_TENANT_QUERIES.md` at the end of "## Python
+and HTTP API" (before "## Discovery and allowlist"), linking to the new
+page.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
+AC-2 verified: `python -c "from querysource.auth import QSPrincipal,
+get_pbac_runtime; from querysource.exceptions import QueryAccessDenied"`
+resolves cleanly. Validation command `pytest tests/auth/test_principal.py -q`
+passes (9 tests) — the documented public type still behaves as documented.
+No code changes (out of scope for this task).
+
+**Completed by**: sdd-worker (Sonnet)
+**Date**: 2026-09-24
