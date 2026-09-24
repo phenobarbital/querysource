@@ -432,7 +432,8 @@ class Connection:
                 ) from ex
         else:
             raise QueryError(
-                f'Invalid Datasource type {source.driver_type} for {name}'
+                f'Invalid Datasource type {source.driver_type} for {name}',
+                code=500
             )
 
     async def get_definition_repository(self) -> "DefinitionRepository":

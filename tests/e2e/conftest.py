@@ -18,6 +18,7 @@ from __future__ import annotations
 import pytest
 
 import querysource.parsers.abstract as parser_abstract
+from querysource.connections import QueryConnection
 from querysource.models import QueryModel
 from querysource.queries.base import BaseQuery
 from querysource.tenant_errors import TenantError
@@ -95,6 +96,19 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> type[_FakeRedis]:
     """Keep parser condition handling off the network."""
     monkeypatch.setattr(parser_abstract, "AsyncDB", _FakeRedis)
     return _FakeRedis
+
+
+@pytest.fixture(autouse=True)
+def real_provider_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Undo instance-level fakes other suites leave on the ``QueryConnection`` singleton.
+
+    Some unit tests assign ``qs.connection.get_provider = fake`` on the shared
+    singleton; the e2e suite must resolve real providers regardless of order.
+    """
+    state = vars(QueryConnection(lazy=True))
+    for name in ("get_provider", "default_driver", "datasource"):
+        if name in state:
+            monkeypatch.delitem(state, name)
 
 
 @pytest.fixture

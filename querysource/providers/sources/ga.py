@@ -220,7 +220,8 @@ class ga(restSource):
         except Exception as err:
             logging.exception(err)
             raise QueryError(
-                str(err)
+                str(err),
+                code=502
             ) from err
 
     async def pivot_report(self):

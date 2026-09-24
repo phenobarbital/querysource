@@ -147,7 +147,8 @@ class rethinkProvider(BaseProvider):
             ) from exc
         except (ParserError, TypeError) as exc:
             raise QueryError(
-                f"Error parsing Query: {exc}"
+                f"Error parsing Query: {exc}",
+                code=400
             ) from exc
         except (RuntimeError, ParserError) as err:
             print(err, type(err))

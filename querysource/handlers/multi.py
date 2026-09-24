@@ -534,7 +534,7 @@ class QueryHandler(AbstractHandler):
             raise self.Error(
                 message="Error parsing Query Slug",
                 exception=pe,
-                code=401
+                code=400
             ) from pe
         except OutputError as oe:
             # FEAT-146: MultiQS is the single authoritative Output executor;

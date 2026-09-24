@@ -71,11 +71,6 @@ async def test_no_principal_never_calls_core(monkeypatch):
     monkeypatch.setattr(enforcement, "enforce_principal", mock)
 
     qs = QS(raw_query="SELECT 1", tenant="client_a")
-    # Pre-existing, unrelated bug: the 'raw' build_provider branch logs
-    # self._driver, which QS.__init__ never sets for the 'raw' type (only
-    # 'query' and 'driver' do). Out of this task's scope to fix; route
-    # around it so this test can assert the no-principal path.
-    qs._driver = None
     await qs.build_provider()
 
     mock.assert_not_awaited()
@@ -163,12 +158,6 @@ async def test_store_unavailable_not_collapsed(principal, allow):
 async def test_non_slug_checks_raw_query(principal, allow, kwargs):
     qs = QS(tenant="client_a", principal=principal, **kwargs)
     qs.connection.get_provider = _fake_get_provider
-    if qs._type == "raw":
-        # Pre-existing, unrelated bug: the 'raw' build_provider branch logs
-        # self._driver, which QS.__init__ never sets for the 'raw' type
-        # (only 'query' and 'driver' do). Out of this task's scope to fix;
-        # route around it so this test can assert the PBAC gate ran.
-        qs._driver = None
 
     await qs.build_provider()
 

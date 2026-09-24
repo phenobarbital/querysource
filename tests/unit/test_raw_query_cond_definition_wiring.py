@@ -46,10 +46,13 @@ from querysource.models import QueryModel  # noqa: E402
 
 
 def _slug_definition(query_raw: str, cond_definition: dict | None = None) -> QueryModel:
+    # is_raw stays False: these tests call raw_query()/get_raw_query() directly
+    # on a template with placeholders, and an is_raw=True definition carrying
+    # placeholders is rejected at construction (RawQueryPlaceholderError).
     return QueryModel(
         query_slug='test_slug',
         query_raw=query_raw,
-        is_raw=True,
+        is_raw=False,
         cond_definition=cond_definition or {},
     )
 

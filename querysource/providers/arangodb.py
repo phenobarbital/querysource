@@ -136,7 +136,8 @@ class arangodbProvider(BaseProvider):
             ) from exc
         except (ParserError, TypeError) as exc:
             raise QueryError(
-                f"Error parsing AQL Query: {exc}"
+                f"Error parsing AQL Query: {exc}",
+                code=400
             ) from exc
         except (ProviderError, DriverError) as err:
             raise DriverError(

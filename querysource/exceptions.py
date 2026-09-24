@@ -4,16 +4,21 @@
 
 
 class QueryException(Exception):
-    """Base class for other exceptions."""
+    """Base class for other exceptions.
 
-    code: int = 0
+    Handlers answer with ``code`` as the HTTP status, so it is never 0: a
+    missing (or 0) ``code`` falls back to the class's ``default_code``.
+    """
 
-    def __init__(self, message: str, code: int = 0, **kwargs):
+    default_code: int = 500
+    code: int = 500
+
+    def __init__(self, message: str, code: int | None = None, **kwargs):
         super().__init__(message)
         self.stacktrace = kwargs.get('stacktrace', None)
         self.message = message
         self.args = kwargs
-        self.code = int(code)
+        self.code = int(code) if code else self.default_code
 
     def __repr__(self):
         return f"{self.message}, code: {self.code}"
@@ -38,15 +43,15 @@ class SlugNotFound(QueryException):
 
 
 class EmptySentence(QueryException):
-    pass
+    default_code = 400
 
 
 class QueryError(QueryException):
-    pass
+    """Query could not be built or run (500 unless a 4xx/502 is passed)."""
 
 
 class DataNotFound(QueryException):
-    pass
+    default_code = 404
 
 
 class QueryNotFound(QueryException):
@@ -79,7 +84,7 @@ class CacheException(QueryException):
 
 
 class ParserError(QueryException):
-    pass
+    default_code = 400
 
 
 class RawQueryPlaceholderError(ParserError):
@@ -109,7 +114,7 @@ class OutputError(QueryException):
     def __init__(
         self,
         message: str = "",
-        code: int = 0,
+        code: int | None = None,
         *,
         step_name: str = None,
         category: str = None,
