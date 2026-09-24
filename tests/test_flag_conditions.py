@@ -106,3 +106,4 @@ async def test_parser_paged_unrecognized_no_raise(caplog):
 async def test_parser_paged_empty_is_true():
     parser = _make_parser(paged="", page=3)
     await parser.set_options()
+    assert parser.is_paged() is True

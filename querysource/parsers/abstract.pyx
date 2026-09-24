@@ -121,6 +121,14 @@ cdef class AbstractParser:
     cpdef str query(self):
         return self.query_parsed
 
+    cpdef bint is_paged(self):
+        """Return whether pagination was requested (parsed ``paged`` condition).
+
+        Returns:
+            bool: the coerced ``paged`` flag (see FEAT-149 ``to_flag`` truth table).
+        """
+        return self._paged
+
     async def get_query(self):
         return await self.build_query()
 

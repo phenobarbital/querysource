@@ -93,7 +93,10 @@ cpdef object to_flag(object value):
         text = value.strip()
         if text == '':
             return True
-        return strtobool(text)
+        try:
+            return strtobool(text)
+        except ValueError:
+            raise ValueError(f"invalid flag value: {value!r:.64}") from None
     raise ValueError(f"invalid flag value: {value!r:.64}")
 
 cpdef list field_components(str field):
