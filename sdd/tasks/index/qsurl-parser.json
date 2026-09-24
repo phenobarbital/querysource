@@ -133,7 +133,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -144,8 +144,8 @@
       "parallelism_notes": "Imports querysource.qsurl.capabilities constants from TASK-765; pgProvider may declare text_match only once TASK-769 adds the ILIKE dict operator to rust/src/pgsql_parser.rs and pgsql.pyx.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-770-provider-capabilities.md"
+      "completed_at": "2026-09-24T20:27:11+00:00",
+      "file": "sdd/tasks/completed/TASK-770-provider-capabilities.md"
     },
     {
       "id": "TASK-771",
