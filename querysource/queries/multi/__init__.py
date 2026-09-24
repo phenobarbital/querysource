@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from importlib import import_module
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
 
@@ -12,6 +12,7 @@ from ...exceptions import (
     DriverError,
     OutputError,
     ParserError,
+    QueryAccessDenied,
     QueryException,
     SlugNotFound,
 )
@@ -24,6 +25,15 @@ from .sources.executors import RemoteConfig
 from .transformations import (
     GoogleMaps,
 )
+
+if TYPE_CHECKING:
+    from ...auth.principal import QSPrincipal
+    from ...tenants import LoadedDefinition, QueryStore, TenantRegistry
+
+# FEAT-150: with a principal, these TenantError codes (and SlugNotFound for
+# the parent slug) collapse into QueryAccessDenied so "missing" and "denied"
+# look identical.
+_COLLAPSED_OWNER_ERRORS = frozenset({"query_not_found", "tenant_not_available"})
 
 # Best-effort data-vs-infra classification for MultiQuery Output/destination
 # failures (FEAT-146). Deliberately small and centralized so it can be
@@ -105,6 +115,8 @@ class MultiQS(BaseQuery):
             user_session: object | None = None,
             *,
             tenant: str | None = None,
+            definition: "LoadedDefinition | None" = None,
+            principal: "QSPrincipal | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -113,6 +125,8 @@ class MultiQS(BaseQuery):
             request=request,
             loop=loop,
             tenant=tenant,
+            definition=definition,
+            principal=principal,
             **kwargs
         )
         # creates the Result Queue:
@@ -200,6 +214,66 @@ class MultiQS(BaseQuery):
             return normalized
         return []
 
+    @staticmethod
+    def resolve_child_owner(
+        query_cfg: dict,
+        parent_tenant: "str | None",
+        registry: "TenantRegistry",
+    ) -> "tuple[str | None, QueryStore]":
+        """Resolve a saved child's owner selector and store.
+
+        Args:
+            query_cfg: The child's config from the ``queries`` mapping.
+            parent_tenant: The parent MultiQS tenant selector.
+            registry: Tenant registry used to resolve the store.
+
+        Returns:
+            ``(tenant_selector, store)``: an explicit ``tenant`` key wins, including an
+            explicit ``None`` (legacy store); a missing key inherits ``parent_tenant``.
+        """
+        if "tenant" in query_cfg:
+            child_tenant = query_cfg.get("tenant")
+        else:
+            child_tenant = parent_tenant
+        return child_tenant, registry.resolve(child_tenant)
+    async def _preflight_principal(self) -> None:
+        """With a principal: enforce slug:execute for every stored child slug in self._queries,
+        slug:execute for every self._files entry, and raw_query:execute once when any child
+        carries an inline 'query'. Any deny raises QueryAccessDenied before any child runs.
+        No-op when self._principal is None.
+        """
+        if self._principal is None:
+            return
+        from ...auth._resource_types import ResourceType
+        from ...auth.enforcement import enforce_principal
+
+        has_raw_child = False
+        for query_cfg in (self._queries or {}).values():
+            child_slug = query_cfg.get("slug")
+            if child_slug:
+                await enforce_principal(
+                    self._principal, ResourceType.SLUG, child_slug, "slug:execute",
+                    tenant=self._tenant_selector, logger=self._logger,
+                )
+            elif "query" in query_cfg:
+                has_raw_child = True
+
+        # self._files is a dict keyed by file name/alias (see the dispatch
+        # loop's `for name, file in self._files.items()`); the key is the
+        # file's identifying name, checked the same way handlers check a
+        # slug name.
+        for file_name in (self._files or {}):
+            await enforce_principal(
+                self._principal, ResourceType.SLUG, file_name, "slug:execute",
+                tenant=self._tenant_selector, logger=self._logger,
+            )
+
+        if has_raw_child:
+            await enforce_principal(
+                self._principal, ResourceType.RAW_QUERY, "raw_query", "raw_query:execute",
+                tenant=self._tenant_selector, logger=self._logger,
+            )
+
     async def query(self):
         """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
         import copy
@@ -222,7 +296,31 @@ class MultiQS(BaseQuery):
             # was built for, so a stored pipeline saved under a tenant
             # schema was never found (or worse, a same-named legacy
             # pipeline executed instead).
-            query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
+            if self._principal is not None:
+                from ...auth._resource_types import ResourceType
+                from ...auth.enforcement import enforce_principal
+                await enforce_principal(
+                    self._principal, ResourceType.SLUG, self.slug, "slug:execute",
+                    tenant=self._tenant_selector, logger=self._logger,
+                )
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self.slug:
+                # FEAT-151: reuse the definition the tenant dispatcher loaded.
+                query = preloaded.runtime
+                self._definition_identity = preloaded.identity
+                self._definition_revision = preloaded.revision
+            else:
+                # get_query_slug (interfaces/connections.py) stashes
+                # _definition_identity/_definition_revision on self before
+                # returning, mirroring the preloaded branch above.
+                try:
+                    query = await self.get_slug(slug=self.slug, tenant=self._tenant_selector)
+                except (SlugNotFound, TenantError) as ex:
+                    if self._principal is not None and (
+                        isinstance(ex, SlugNotFound) or ex.error_code in _COLLAPSED_OWNER_ERRORS
+                    ):
+                        raise QueryAccessDenied() from ex
+                    raise
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -262,6 +360,8 @@ class MultiQS(BaseQuery):
                 if isinstance(self._conditions, dict):
                     self._conditions.clear()
                 self._options = {}
+
+        await self._preflight_principal()
 
         # Cheap request-shape guardrail runs before any DB-backed preflight
         # work: a request with too many sources must fail fast on a local
@@ -316,18 +416,30 @@ class MultiQS(BaseQuery):
                 # - explicit string (e.g. "tenant2")
                 # - explicit None (explicit-null override)
                 # - missing (inherits parent)
-                if "tenant" in query_cfg:
-                    child_tenant = query_cfg.get("tenant")
-                else:
-                    child_tenant = self._tenant_selector
-
-                child_store = repo.registry.resolve(child_tenant)
+                try:
+                    _child_tenant, child_store = self.resolve_child_owner(
+                        query_cfg, self._tenant_selector, repo.registry
+                    )
+                except TenantError as ex:
+                    if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
+                        raise QueryAccessDenied() from ex
+                    raise self.Error(
+                        message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
+                        exception=ex
+                    ) from ex
                 resolved_stores[name] = child_store
 
                 # Preflight policy check: verify the definition exists in the resolved store
                 try:
                     ident = QueryIdentity(store=child_store, slug=child_slug)
                     await repo.get(ident)
+                except TenantError as ex:
+                    if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
+                        raise QueryAccessDenied() from ex
+                    raise self.Error(
+                        message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
+                        exception=ex
+                    ) from ex
                 except Exception as ex:
                     raise self.Error(
                         message=f"Preflight policy check failed for query {name!r} (slug={child_slug!r}): {ex}",
@@ -356,11 +468,11 @@ class MultiQS(BaseQuery):
                         if len(parts) > 1:
                             try:
                                 port = int(parts[1])
-                            except ValueError:
+                            except ValueError as err:
                                 raise DriverError(
                                     f"Query {name!r}: invalid 'worker' address "
                                     f"{worker_addr!r} — port must be an integer."
-                                )
+                                ) from err
                         else:
                             port = QWORKER_PORT
                         remote_config = RemoteConfig(
@@ -709,7 +821,7 @@ class MultiQS(BaseQuery):
                             oe.step_name = step_name
                         if getattr(oe, "category", None) is None:
                             oe.category = classify_output_error(oe)
-                        logging.error(
+                        self._logger.error(
                             "MultiQS: output destination '%s' failed: %s",
                             step_name,
                             oe,
@@ -719,7 +831,7 @@ class MultiQS(BaseQuery):
                         # Preserve DataNotFound semantics unchanged.
                         raise
                     except Exception as dest_err:
-                        logging.error(
+                        self._logger.error(
                             "MultiQS: output destination '%s' failed: %s",
                             step_name,
                             dest_err,

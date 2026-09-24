@@ -13,6 +13,12 @@ source:
   summary_oneline: <≤120 chars>
 overall_confidence: high | medium | low
 base_branch: dev
+# projects: parts of the codebase this doc concerns: `querysource` or a subsystem
+#   (providers, parsers, rust-parsers, outputs, multiquery, handlers, datasources,
+#   auth, cache, scheduler) or an area (sdd-tooling, dev-loop, docs, ci). Unknown values warn, not fail.
+projects: []
+# tags: free-form kebab-case keywords for organizing specs (e.g. bigquery, cache).
+tags: []
 research_state: sdd/state/FEAT-XXX/
 created: YYYY-MM-DD
 updated: YYYY-MM-DD

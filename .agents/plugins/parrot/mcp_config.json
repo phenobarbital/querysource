@@ -1,0 +1,84 @@
+{
+  "mcpServers": {
+    "parrot-bounded-source": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "bounded-source",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-browsing": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "browsing",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-database-query": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "database-query",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-memory": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "memory",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-querysource": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "querysource",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-scraping": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "scraping",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-sdd-coder": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "sdd-coder",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "parrot-targeted-writer": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/parrot",
+      "args": [
+        "mcp-local",
+        "targeted-writer",
+        "--config",
+        "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
+    }
+  }
+}

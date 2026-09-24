@@ -12,7 +12,7 @@ import asyncio
 from navconfig.logging import logging
 from asyncdb import AsyncDB
 from . import QS_FILTERS, QS_VARIABLES
-from ..types import strtobool, is_boolean
+from ..types import to_flag
 from ..models import QueryObject, QueryModel
 from ..exceptions import EmptySentence
 from ..conf import REDIS_URL
@@ -121,6 +121,14 @@ cdef class AbstractParser:
     cpdef str query(self):
         return self.query_parsed
 
+    cpdef bint is_paged(self):
+        """Return whether pagination was requested (parsed ``paged`` condition).
+
+        Returns:
+            bool: the coerced ``paged`` flag (see FEAT-149 ``to_flag`` truth table).
+        """
+        return self._paged
+
     async def get_query(self):
         return await self.build_query()
 
@@ -175,14 +183,17 @@ cdef class AbstractParser:
                 self._slug = None
 
     cdef void _query_refresh_sync(self):
-        cdef object refresh
+        cdef object refresh = None
         try:
             refresh = self.conditions.pop('refresh', False)
-            if isinstance(refresh, bool):
-                self.refresh = refresh
-            else:
-                self.refresh = strtobool(str(refresh))
-        except (KeyError, AttributeError, ValueError):
+            self.refresh = to_flag(refresh)
+        except (KeyError, AttributeError):
+            self.refresh = False
+        except ValueError:
+            self.logger.warning(
+                "Unrecognized 'refresh' condition value %s; treating as False",
+                repr(refresh)[:64]
+            )
             self.refresh = False
 
     cdef void _query_fields_sync(self):
@@ -209,13 +220,14 @@ cdef class AbstractParser:
             self._offset = 0
         try:
             paged = self.conditions.pop('paged', False)
-            if is_boolean(paged):
-                self._paged = paged
-            elif isinstance(paged, str):
-                self._paged = strtobool(paged)
-            else:
-                self._paged = False
+            self._paged = to_flag(paged)
         except (KeyError, AttributeError):
+            self._paged = False
+        except ValueError:
+            self.logger.warning(
+                "Unrecognized 'paged' condition value %s; treating as False",
+                repr(paged)[:64]
+            )
             self._paged = False
         try:
             self._page_ = self.conditions.pop('page', 0)

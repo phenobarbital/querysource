@@ -61,6 +61,44 @@ cpdef object strtobool(str val):
             f"invalid truth value for {val}"
         )
 
+cpdef object to_flag(object value):
+    """Coerce a flag-style condition value (e.g. ``refresh``, ``paged``) to bool.
+
+    Truth table (FEAT-149): ``bool`` passes through; ``None`` is False; int ``1``/``0``
+    are True/False; strings are stripped, an empty string is True (flag style), and
+    otherwise follow :func:`strtobool`.
+
+    Args:
+        value: raw condition value (str from HTTP, bool/int/None from JSON or Python).
+
+    Returns:
+        bool: the coerced flag.
+
+    Raises:
+        ValueError: for unrecognized strings, bytes/bytearray, numbers other than
+            int 0/1, and any other type.
+    """
+    cdef str text
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, int):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        raise ValueError(f"invalid flag value: {value!r:.64}")
+    if isinstance(value, str):
+        text = value.strip()
+        if text == '':
+            return True
+        try:
+            return strtobool(text)
+        except ValueError:
+            raise ValueError(f"invalid flag value: {value!r:.64}") from None
+    raise ValueError(f"invalid flag value: {value!r:.64}")
+
 cpdef list field_components(str field):
     try:
         return re.findall(eval_field, field)

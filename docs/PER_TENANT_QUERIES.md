@@ -45,10 +45,23 @@ CREATE TABLE "{schema}".queries (
     is_cached BOOLEAN DEFAULT false,
     query_raw TEXT,
     description VARCHAR,
+    columns_definition TEXT[] DEFAULT '{}'::text[],
     program_id INTEGER DEFAULT 1,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+### Legacy store migration (FEAT-151)
+
+Deploy the code first, then run on the legacy store:
+
+```sql
+ALTER TABLE public.queries ADD COLUMN IF NOT EXISTS columns_definition TEXT[] DEFAULT '{}'::text[];
+```
+
+Reads on a store without the column return an empty list. Writes omit an empty
+`columns_definition`, so un-migrated stores keep accepting writes; a non-empty value
+requires the column.
 
 **Grants required**:
 - SELECT for read operations
@@ -111,6 +124,68 @@ below.
 | `PATCH /api/v1/management/queries/{slug}` with `{"tenant": "..."}` in the body | `QueryManager.patch` | Update mutable fields of the selected owner's definition |
 | `DELETE /api/v1/management/queries/{slug}?tenant={tenant}` | `QueryManager.delete` | Delete the selected owner's definition |
 
+### Kind-aware dispatch on the stored-slug routes (FEAT-151)
+
+`GET|POST /api/v1/{tenant}/queries/{slug}`, `HEAD|PATCH .../{slug}`, and
+`GET|POST .../{slug}/test` all read the stored definition **once**
+(`TenantQueryHandler._prepare`) and classify it as **multi iff
+`runtime.provider == 'multi'`** — the same predicate the scheduler uses.
+`query_raw` is never sniffed. Multi definitions execute through
+`QueryHandler`/`MultiQS`; every other provider keeps exact v2 parity through
+`QueryService`/`QS` (headers, Redis cache, 204/404 mapping,
+`_download`/`_filename`, `queryformat`, `X-Slug`).
+
+Authorization (`_enforce_owned_slug`, action `slug:execute`) runs **before**
+the definition is loaded, for both kinds — an unauthorized caller cannot
+distinguish an existing slug from a missing one; both answer 404.
+
+**Limitation**: a `provider='multi'` row whose `query_raw` is not multi JSON
+still dispatches to `QueryHandler`, which falls back to single-query mode
+(v3 and scheduler parity). Conversely, a JSON multi payload saved under
+`provider='db'` is treated as an ordinary single query — `provider` is the
+only discriminator, by design.
+
+#### Multi columns (`HEAD`/`PATCH`)
+
+For a multi definition, column inspection answers from the declared
+`columns_definition` array (never `attributes.columns`, which is a
+single-query-only fallback):
+
+- `HEAD`: `204` with `X-Columns`/`X-Slug` headers, plus
+  `X-Message: No Columns found` when the array is empty.
+- `PATCH`: `200` with the JSON list when non-empty, else `204` with
+  `X-Message: No Columns available`.
+
+Without a stored definition on the request (legacy `/api/v3` callers), the
+existing `204 No Columns available` response is unchanged.
+
+#### Multi dry-run (`GET|POST .../{slug}/test`)
+
+Validates a stored multi definition — resolving every saved child's owner
+and existence — without executing any datasource query or `EXPLAIN`. The
+JSON envelope extends the single dry-run shape with `kind`, `children`,
+`files`, `sources`, and `warnings`:
+
+```json
+{
+  "slug": "<slug>", "kind": "multi", "works": true, "error": null,
+  "generated": 0.012, "execution": null,
+  "tenant": "<url tenant or null>", "store": "<schema>.<table>",
+  "children": [
+    {"alias": "a", "slug": "child_a", "kind": "slug", "tenant": "<resolved>", "store": "<schema>.<table>",
+     "exists": true, "allowed": true, "error": null},
+    {"alias": "r", "slug": null, "kind": "raw", "tenant": null, "store": null,
+     "exists": null, "allowed": null, "error": null}
+  ],
+  "files": ["f1"], "sources": ["sharepoint"], "warnings": [],
+  "conditions": {}, "query": {"queries": {"...": "..."}}
+}
+```
+
+`conditions` / `query` are omitted when `ignore_query` is set, mirroring the
+single envelope. The single envelope itself (`/queries/{slug}/test` for a
+non-multi definition) is unchanged — it never gains a `kind` key.
+
 ### Selector matrix
 
 | Input | Resolution |
@@ -136,6 +211,11 @@ result, error = await QS(slug="legacy_report", tenant="public").query()
 # HTTP equivalent
 # GET /api/v1/public/queries/legacy_report
 ```
+
+### Programmatic callers and PBAC
+
+Library callers that run a slug on behalf of a user pass `principal=QSPrincipal(...)`;
+`tenant=` still selects the store. See [PBAC_PROGRAMMATIC.md](PBAC_PROGRAMMATIC.md).
 
 ## Discovery and allowlist
 

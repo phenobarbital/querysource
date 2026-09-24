@@ -5,7 +5,8 @@ import pytest
 from aiohttp import web
 
 from querysource.handlers.tenant import TenantQueryHandler
-from querysource.tenants import QueryStore, TenantRegistry
+from querysource.models import QueryModel
+from querysource.tenants import LoadedDefinition, QueryStore, TenantRegistry
 
 
 def _mock_registry() -> TenantRegistry:
@@ -20,6 +21,16 @@ def _mock_registry() -> TenantRegistry:
     registry._stores = (store,)
     registry._default_store = store
     return registry
+
+
+class _FakeRepo:
+    """FEAT-151: definition repository stub — every slug resolves to a
+    single-query (provider='db') definition, so TASK-762's dispatcher keeps
+    routing these regression tests through QueryService exactly as before."""
+
+    async def get(self, identity):
+        runtime = QueryModel(query_slug=identity.slug, program_slug=identity.store.schema, provider="db")
+        return LoadedDefinition(identity=identity, runtime=runtime, revision="rev-test")
 
 
 def _mock_request(app: dict, match_info: dict, method: str = "GET", query: dict | None = None) -> web.Request:
@@ -79,7 +90,7 @@ async def test_route_method_matrix_and_slash_aliases() -> None:
 async def test_single_multi_inline_dispatch(monkeypatch) -> None:
     """single multi inline dispatch."""
     registry = _mock_registry()
-    app = {"qs_tenant_registry": registry, "qs_definition_repository": object()}
+    app = {"qs_tenant_registry": registry, "qs_definition_repository": _FakeRepo()}
 
     dispatched = {}
 
@@ -162,7 +173,7 @@ async def test_legacy_and_management_precedence() -> None:
 async def test_columns_test_and_output_suffixes(monkeypatch) -> None:
     """columns test and output suffixes."""
     registry = _mock_registry()
-    app = {"qs_tenant_registry": registry, "qs_definition_repository": object()}
+    app = {"qs_tenant_registry": registry, "qs_definition_repository": _FakeRepo()}
 
     calls = []
 

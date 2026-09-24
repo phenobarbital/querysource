@@ -55,6 +55,7 @@ cdef class AbstractParser:
     cpdef dict get_query_filters(self)
     cpdef object where_cond(self, dict where)
     cpdef str query(self)
+    cpdef bint is_paged(self)
     cpdef str filtering_options(self, str sentence)
     cdef object _get_function_replacement(self, object function, str key, object val)
     cdef object _merge_conditions_and_filters(self, dict conditions)

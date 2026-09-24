@@ -1,0 +1,82 @@
+**Option A** is recommended because:
+
+- It is the only option that satisfies both binding decisions at once: **exact v2
+  parity for single slugs** (Option B breaks it) and **no caller-declared kind**
+  (Option C). Option D solves a different problem and still needs A's dispatch.
+- The extra cost is not an extra query: the peek replaces the read `QS`/`MultiQS`
+  would perform anyway, provided the `LoadedDefinition` is threaded through. The
+  trade-off is a small, additive change in the query core (a keyword-only argument
+  defaulting to `None`), which is what Round 2b explicitly chose over a per-request
+  memo or a duplicate read.
+- Using `provider == 'multi'` as the sole discriminator keeps one definition of
+  "multi" with the scheduler. The trade-off (a JSON multi payload saved under
+  `provider='db'` executes as single and fails) is accepted and documented; it is a
+  data-quality problem the describe/list surfaces can flag later.
+- The `columns_definition` column is the price of giving `HEAD/PATCH` something meaningful for
+  a pipeline without executing it. It is additive (`SELECT *` on a store without the
+  column just yields the default), and the follow-up "describe the resulting frame"
+  can populate it.
+
+---
+
+The tenant handler resolves the store (`_resolve_or_raise`), loads the definition
+**once** through `DefinitionRepository.get(QueryIdentity(store, slug))`
+(`repositories/definitions.py:161`), and dispatches on `loaded.runtime.provider`:
+
+- `provider == 'multi'` → `QueryHandler` (MultiQuery path)
+- anything else → `QueryService` (single path)
+
+The `LoadedDefinition` is stashed on the request (e.g. `request['qs_definition']`,
+alongside the existing `request['qs_tenant']`) and forwarded by both delegates into a
+new keyword-only `definition: LoadedDefinition | None = None` argument on `QS` and
+`MultiQS`. When present, `QS.build_provider()` skips `repo.get()` and uses
+`definition.runtime`, `definition.identity`, `definition.revision`; the MultiQS slug
+loader does the same instead of `get_slug()`. Absent → current behavior (legacy
+callers, scheduler, Python API untouched).
+
+`columns()` uses the same peek: multi → declared `columns_definition` list or 204; single →
+`QueryService.get_columns` / `columns`. `test_slug()` uses the same peek: multi → a new
+validate-only dry-run on `QueryHandler`; single → `QueryService.test_slug`.
+
+The `columns_definition` array is added to `TenantQueryDefinition` (`tenant_models.py:24`) **and**
+`QueryModel` (`models.py:48`, `Meta.strict = True` at `:105` means the runtime model
+rejects unknown keys, so both must declare it), to the documented DDL
+(`docs/PER_TENANT_QUERIES.md:40`) and the test DDL fixture
+(`tests/tenants/conftest.py:22`).
+
+✅ **Pros:**
+- Honors the spec contract literally; single slugs keep exact v2 parity.
+- One definition read per request (the peek *is* the read QS/MultiQS would do).
+- Discriminator identical to the scheduler's → one definition of "multi" across the
+  codebase.
+- Legacy routes and Python API are unaffected: the new kwarg defaults to `None`.
+- The stashed `LoadedDefinition` gives the describe handler (FEAT-148) a reusable
+  hook later.
+
+❌ **Cons:**
+- Touches the query core (`queries/qs.py`, `queries/multi/__init__.py`) and the
+  models, not only the handler: larger blast radius than a handler-only fix.
+- Introduces a schema addition (`columns_definition`) that must be rolled out to every tenant
+  store before writes that include it can succeed.
+- Two places must agree on the request-key convention (`qs_tenant`, `qs_definition`).
+
+📊 **Effort:** Medium
+
+📦 **Libraries / Tools:**
+| Package | Purpose | Notes |
+|---|---|---|
+| `aiohttp` | handlers, request-scoped storage | already a dependency |
+| `asyncdb` (`pg`) | `DefinitionRepository` reads | already a dependency |
+| `datamodel` | `TenantQueryDefinition` / `QueryModel` field | Cython validator: no `X \| None` / `list[X]` syntax in `tenant_models.py` (see module docstring) |
+| `pytest`, `pytest-asyncio` | unit + opt-in integration tests | existing |
+
+🔗 **Existing Code to Reuse:**
+- `querysource/handlers/tenant.py:127` `_resolve_or_raise` — store resolution and 400/404 mapping.
+- `querysource/handlers/tenant.py:162` `_repository` — app-published `DefinitionRepository`.
+- `querysource/repositories/definitions.py:161` `DefinitionRepository.get` — the single read.
+- `querysource/queries/qs.py:167-186` — slug branch of `build_provider()` to short-circuit.
+- `querysource/queries/multi/__init__.py:216-260` — MultiQS slug loader to short-circuit.
+- `querysource/queries/multi/__init__.py:285-333` — child tenant resolution + repo preflight (basis for the validate-only dry-run).
+- `querysource/handlers/multi.py:27` / `:103` — PBAC preflights to reuse in the dry-run.
+- `querysource/handlers/multi.py:188` — 204 "No Columns available" response.
+- `querysource/scheduler/scheduler.py:317` — canonical `provider == "multi"` predicate.

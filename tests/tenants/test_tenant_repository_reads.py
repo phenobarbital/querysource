@@ -42,6 +42,7 @@ def _base_row(**overrides) -> dict:
         "filtering": {},
         "ordering": [],
         "grouping": [],
+        "columns_definition": [],
         "qry_options": {},
         "h_filtering": False,
         "query_raw": "SELECT 1",
