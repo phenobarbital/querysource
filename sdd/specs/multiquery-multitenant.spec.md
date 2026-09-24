@@ -17,7 +17,7 @@ tags: [multi-tenant, multiquery, tenant-routes, slug-dispatch, dry-run, columns-
 **Feature ID**: FEAT-151
 **Date**: 2026-09-24
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.1.0
 **Brainstorm**: `sdd/proposals/multiquery-multitenant.brainstorm.md` (accepted, Option A)
 
@@ -795,7 +795,7 @@ No new dependencies.
 - [x] `provider='multi'` with non-multi `query_raw`? — *Resolved at spec time (user)*: keep the fallback (route to `QueryHandler`, `MultiQS` single-query mode, dry-run warning).
 - [x] Test strategy? — *Resolved at spec time (author default, not re-asked)*: unit tests with the existing MagicMock/monkeypatch pattern plus one opt-in integration test gated by `tenant_services`.
 - [ ] Q3: Should the FEAT-148 describe handler (`handlers/describe.py:302-315`) reuse `request['qs_definition']` and stop re-loading the definition (and fix its `tenant=store.tenant` call)? Suggested: separate follow-up, not in this feature. — *Owner: Jesus Lara*
-- [ ] Q4: Should `columns_definition` become writable through the management CRUD (`handlers/manager.py`) in this feature, or only via SQL until the "describe the resulting frame" follow-up populates it? Default: readable everywhere, writable through existing generic CRUD because `_TENANT_COLUMNS` is model-derived; no dedicated endpoint. — *Owner: Jesus Lara*
+- [ ] Q4: Should `columns_definition` become writable through the management CRUD (`handlers/manager.py`) in this feature, or only via SQL until the "describe the resulting frame" follow-up populates it? Default: readable everywhere, writable through existing generic CRUD because `_TENANT_COLUMNS` is model-derived; no dedicated endpoint. — *Owner: Jesus Lara*: Yes, become writable.
 - [ ] Q5 (design research S4, escalated): `QueryHandler._preflight_multiquery_owned` authorizes every *inline* child against the parent's store (`multi.py:171-175`) while `MultiQS` executes a child with an explicit `tenant` from that child's store (`multi/__init__.py:315-324`). Fix it in this feature by making the preflight consume `(slug, store)` pairs from `MultiQS.resolve_child_owner`, or open a separate FEAT-147 follow-up? — *Owner: Jesus Lara*
 
 ---

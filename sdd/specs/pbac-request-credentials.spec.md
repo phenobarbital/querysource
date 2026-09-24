@@ -557,7 +557,7 @@ def _reset_runtime():
 - [ ] `_enforce_pbac`, `_enforce_owned_slug`, `slug_visibility._evaluator_state` / `_eval_context` / `can_access` delegate to `querysource/auth/enforcement.py`; neither `querysource/handlers/abstract.py` nor `querysource/auth/slug_visibility.py` calls `check_access(` directly any more (`grep -c "check_access(" <file>` → 0 for both). (`filter_resources` in `slug_visibility.filter_visible` and `handlers/multi.py` is out of scope.)
 - [ ] Existing PBAC suites pass unmodified: `pytest tests/handlers tests/auth tests/tenants tests/policies tests/scheduler tests/multi -q`.
 - [ ] New tests from §4 pass: `pytest tests/auth/test_principal.py tests/auth/test_enforcement.py tests/auth/test_pbac_runtime.py tests/queries/test_qs_principal.py tests/multi/test_multiqs_principal.py -q`.
-- [ ] navigator-auth imports stay lazy (no top-level import in `enforcement.py`/`principal.py`); importing `querysource.auth` with `QS_PBAC_ENABLED=False` imports no `navigator_auth.abac` module.
+- [ ] navigator-auth imports stay lazy: no module-level `navigator_auth` import in `enforcement.py`/`principal.py`, and no new one anywhere. (`querysource/auth/_resource_types.py` already imports `navigator_auth.abac.policies.resources` at module load. That is pre-existing and unchanged.)
 - [ ] `ruff check` clean on all changed paths.
 - [ ] `docs/PBAC_PROGRAMMATIC.md` written and linked from `docs/PER_TENANT_QUERIES.md`.
 - [ ] No breaking change to any existing public signature (new kwargs are keyword-only with default `None`).
@@ -809,3 +809,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 |---|---|---|---|
 | 0.1 | 2026-09-24 | Jesus Lara / Claude | Initial draft from brainstorm Option A; FEAT-150 reserved; spec-time decisions: existence collapse, `_ServiceRequest` stand-in, `setup_pbac` runtime handle, always-detached principal path. |
 | 0.2 | 2026-09-24 | Jesus Lara / Claude | Resolved the last 3 open questions: upstream `EvalContext.from_userinfo` contract + feature detection; `QSPrincipal.for_authz` sessionless form gated by `QS_PBAC_ALLOW_SESSIONLESS_AUTHZ`; ai-parrot follow-up accepted as a separate feature. |
+| 0.3 | 2026-09-24 | Jesus Lara / Claude | `/sdd-task`: corrected the lazy-import AC. `_resource_types.py` already imports navigator-auth at module load, so the criterion is now "no new module-level import". |
