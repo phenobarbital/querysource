@@ -131,7 +131,7 @@ fn extract_es_value(py_val: &Bound<'_, PyAny>) -> EsValue {
         return EsValue::Str(s);
     }
     // Dict: extract first key-value pair
-    if let Ok(d) = py_val.downcast::<PyDict>() {
+    if let Ok(d) = py_val.cast::<PyDict>() {
         if let Some((k, v)) = d.iter().next() {
             if let (Ok(op), val) = (k.extract::<String>(), extract_es_value(&v)) {
                 return EsValue::Dict {
@@ -143,7 +143,7 @@ fn extract_es_value(py_val: &Bound<'_, PyAny>) -> EsValue {
         return EsValue::None;
     }
     // List
-    if let Ok(list) = py_val.downcast::<PyList>() {
+    if let Ok(list) = py_val.cast::<PyList>() {
         let items: Vec<EsValue> = list.iter().map(|item| extract_es_value(&item)).collect();
         // Check if first item is an operator string (e.g., [">", 10])
         if let Some(EsValue::Str(ref first)) = items.first() {
@@ -297,13 +297,12 @@ fn process_es_entry(entry: &EsFilterEntry) -> Option<EsCondition> {
 // Phase 3: Convert back to Python dicts (serial, holds GIL)
 // ---------------------------------------------------------------------------
 
-fn es_value_to_py(py: Python, val: &EsValue) -> PyObject {
+fn es_value_to_py(py: Python, val: &EsValue) -> Py<PyAny> {
     match val {
         EsValue::Str(s) => s.into_pyobject(py).unwrap().into_any().unbind(),
         EsValue::Int(i) => i.into_pyobject(py).unwrap().into_any().unbind(),
         EsValue::Float(f) => f.into_pyobject(py).unwrap().into_any().unbind(),
-        #[allow(deprecated)]
-        EsValue::Bool(b) => b.to_object(py),
+        EsValue::Bool(b) => b.into_pyobject(py).unwrap().to_owned().into_any().unbind(),
         EsValue::None => py.None(),
         EsValue::List(items) => {
             let list = PyList::new(py, items.iter().map(|v| es_value_to_py(py, v))).unwrap();
@@ -325,7 +324,7 @@ fn es_value_to_py(py: Python, val: &EsValue) -> PyObject {
 /// Build an ES bool query dict from conditions.
 ///
 /// Returns: {"must": [...], "must_not": [...], "filter": [...]}
-fn conditions_to_py(py: Python, conditions: &[EsCondition]) -> PyObject {
+fn conditions_to_py(py: Python, conditions: &[EsCondition]) -> Py<PyAny> {
     let must = PyList::empty(py);
     let must_not = PyList::empty(py);
     let filter = PyList::empty(py);
@@ -372,7 +371,7 @@ fn conditions_to_py(py: Python, conditions: &[EsCondition]) -> PyObject {
             EsCondition::Terms(field, items) => {
                 let clause = PyDict::new(py);
                 let inner = PyDict::new(py);
-                let py_items: Vec<PyObject> =
+                let py_items: Vec<Py<PyAny>> =
                     items.iter().map(|v| es_value_to_py(py, v)).collect();
                 let list = PyList::new(py, &py_items).unwrap();
                 inner.set_item(field.as_str(), list).unwrap();
@@ -382,7 +381,7 @@ fn conditions_to_py(py: Python, conditions: &[EsCondition]) -> PyObject {
             EsCondition::MustNotTerms(field, items) => {
                 let clause = PyDict::new(py);
                 let inner = PyDict::new(py);
-                let py_items: Vec<PyObject> =
+                let py_items: Vec<Py<PyAny>> =
                     items.iter().map(|v| es_value_to_py(py, v)).collect();
                 let list = PyList::new(py, &py_items).unwrap();
                 inner.set_item(field.as_str(), list).unwrap();
@@ -429,7 +428,7 @@ pub fn es_filter_conditions(
     py: Python,
     filter_dict: &Bound<'_, PyDict>,
     cond_definition: &Bound<'_, PyDict>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let result = PyDict::new(py);
 
     if filter_dict.is_empty() {
@@ -454,7 +453,7 @@ pub fn es_filter_conditions(
 /// Returns list of field names for _source filtering, or None if empty.
 #[pyfunction]
 #[pyo3(signature = (fields))]
-pub fn es_process_fields(py: Python, fields: Vec<String>) -> PyResult<PyObject> {
+pub fn es_process_fields(py: Python, fields: Vec<String>) -> PyResult<Py<PyAny>> {
     if fields.is_empty() {
         return Ok(py.None());
     }
@@ -470,7 +469,7 @@ pub fn es_process_fields(py: Python, fields: Vec<String>) -> PyResult<PyObject> 
 /// Returns None if empty.
 #[pyfunction]
 #[pyo3(signature = (ordering))]
-pub fn es_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<PyObject> {
+pub fn es_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<Py<PyAny>> {
     if ordering.is_empty() {
         return Ok(py.None());
     }

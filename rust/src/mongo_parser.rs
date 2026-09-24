@@ -141,7 +141,7 @@ fn extract_mongo_value(py_val: &Bound<'_, PyAny>) -> MongoValue {
         return MongoValue::Str(s);
     }
     // Dict: extract first key-value pair
-    if let Ok(d) = py_val.downcast::<PyDict>() {
+    if let Ok(d) = py_val.cast::<PyDict>() {
         if let Some((k, v)) = d.iter().next() {
             if let (Ok(op), val) = (k.extract::<String>(), extract_mongo_value(&v)) {
                 return MongoValue::Dict {
@@ -153,7 +153,7 @@ fn extract_mongo_value(py_val: &Bound<'_, PyAny>) -> MongoValue {
         return MongoValue::None;
     }
     // List
-    if let Ok(list) = py_val.downcast::<PyList>() {
+    if let Ok(list) = py_val.cast::<PyList>() {
         let items: Vec<MongoValue> = list.iter().map(|item| extract_mongo_value(&item)).collect();
         // Check if first item is a MongoDB operator string
         if let Some(MongoValue::Str(ref first)) = items.first() {
@@ -286,13 +286,12 @@ fn process_mongo_entry(entry: &MongoFilterEntry) -> Option<MongoCondition> {
 // Phase 3: Convert back to Python dict (serial, holds GIL)
 // ---------------------------------------------------------------------------
 
-fn mongo_value_to_py(py: Python, val: &MongoValue) -> PyObject {
+fn mongo_value_to_py(py: Python, val: &MongoValue) -> Py<PyAny> {
     match val {
         MongoValue::Str(s) => s.into_pyobject(py).unwrap().into_any().unbind(),
         MongoValue::Int(i) => i.into_pyobject(py).unwrap().into_any().unbind(),
         MongoValue::Float(f) => f.into_pyobject(py).unwrap().into_any().unbind(),
-        #[allow(deprecated)]
-        MongoValue::Bool(b) => b.to_object(py),
+        MongoValue::Bool(b) => b.into_pyobject(py).unwrap().to_owned().into_any().unbind(),
         MongoValue::None => py.None(),
         MongoValue::List(items) => {
             let list = PyList::new(py, items.iter().map(|v| mongo_value_to_py(py, v))).unwrap();
@@ -337,7 +336,7 @@ fn condition_to_py(py: Python, cond: &MongoCondition, result: &Bound<'_, PyDict>
             result.set_item(field, inner).unwrap();
         }
         MongoCondition::InList(field, op, items) => {
-            let py_items: Vec<PyObject> = items.iter().map(|v| mongo_value_to_py(py, v)).collect();
+            let py_items: Vec<Py<PyAny>> = items.iter().map(|v| mongo_value_to_py(py, v)).collect();
             let list = PyList::new(py, &py_items).unwrap();
             let inner = PyDict::new(py);
             inner.set_item(op, list).unwrap();
@@ -361,7 +360,7 @@ pub fn mongo_filter_conditions(
     py: Python,
     filter_dict: &Bound<'_, PyDict>,
     cond_definition: &Bound<'_, PyDict>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let result = PyDict::new(py);
 
     if filter_dict.is_empty() {
@@ -391,7 +390,7 @@ pub fn mongo_filter_conditions(
 /// Returns None if no fields.
 #[pyfunction]
 #[pyo3(signature = (fields))]
-pub fn mongo_process_fields(py: Python, fields: Vec<String>) -> PyResult<PyObject> {
+pub fn mongo_process_fields(py: Python, fields: Vec<String>) -> PyResult<Py<PyAny>> {
     if fields.is_empty() {
         return Ok(py.None());
     }
@@ -416,7 +415,7 @@ pub fn mongo_process_fields(py: Python, fields: Vec<String>) -> PyResult<PyObjec
 /// Returns None if empty.
 #[pyfunction]
 #[pyo3(signature = (ordering))]
-pub fn mongo_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<PyObject> {
+pub fn mongo_process_ordering(py: Python, ordering: Vec<String>) -> PyResult<Py<PyAny>> {
     if ordering.is_empty() {
         return Ok(py.None());
     }

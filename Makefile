@@ -34,7 +34,7 @@ venv:
 install:
 	uv sync --frozen --no-dev --extra analytics --extra vectors
 	uv pip install navigator-api[uvloop,locale]
-	uv pip install "maturin>=1.7,<2.0"
+	uv pip install "maturin>=1.15,<2.0"
 	$(MAKE) build-rust
 	@echo "Production dependencies installed. Use 'make develop' for development setup."
 

@@ -111,7 +111,7 @@ fn extract_filter_value(obj: &Bound<'_, pyo3::types::PyAny>) -> FilterValue {
     if let Ok(s) = obj.extract::<String>() {
         return FilterValue::Str(s);
     }
-    if let Ok(dict) = obj.downcast::<PyDict>() {
+    if let Ok(dict) = obj.cast::<PyDict>() {
         let entries: Vec<(String, FilterValue)> = dict
             .iter()
             .filter_map(|(k, v)| {

@@ -234,7 +234,7 @@ pub fn filter_conditions(
         };
 
         // Handle different value types
-        if let Ok(dict_val) = value_obj.downcast::<PyDict>() {
+        if let Ok(dict_val) = value_obj.cast::<PyDict>() {
             // Dict value → comparison operator + value
             if let Some((op_obj, v_obj)) = dict_val.iter().next() {
                 let op: String = op_obj.extract()?;

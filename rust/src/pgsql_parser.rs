@@ -144,7 +144,7 @@ fn extract_filter_value(obj: &Bound<'_, pyo3::types::PyAny>) -> FilterValue {
     if let Ok(s) = obj.extract::<String>() {
         return FilterValue::Str(s);
     }
-    if let Ok(dict) = obj.downcast::<PyDict>() {
+    if let Ok(dict) = obj.cast::<PyDict>() {
         let entries: Vec<(String, FilterValue)> = dict
             .iter()
             .filter_map(|(k, v)| {
@@ -206,7 +206,7 @@ fn jsonb_operand(obj: &Bound<'_, PyAny>) -> PyResult<String> {
 /// their JSON text, e.g. `true`, `1`); `->` compares the JSONB value. A
 /// `None` value renders `IS NULL`. Several paths are AND-ed.
 fn jsonb_path_condition(col: &str, op: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let Ok(paths) = operand.downcast::<PyDict>() else {
+    let Ok(paths) = operand.cast::<PyDict>() else {
         return Ok(None);
     };
     if paths.is_empty() {
@@ -552,7 +552,7 @@ pub fn pgsql_filter_conditions(
                 .ok()
                 .flatten()
                 .and_then(|v| v.extract().ok());
-            let value = match value_obj.downcast::<PyDict>() {
+            let value = match value_obj.cast::<PyDict>() {
                 Ok(dict) => match jsonb_condition(&key, dict) {
                     JsonbOutcome::NotJsonb => extract_filter_value(&value_obj),
                     JsonbOutcome::Skip => FilterValue::Null,
