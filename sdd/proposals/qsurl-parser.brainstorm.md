@@ -106,6 +106,14 @@ get one front-end that compiles to the existing execution path.
   `dtolnay/rust-toolchain@stable`. The existing crate is `edition = "2021"`.
 - **Performance**: parsing must be negligible next to query execution
   (sub-millisecond for typical URLs, ~8 KB practical URL ceiling).
+- **Decisions fixed in discovery** (see Open Questions): text operators
+  are case-insensitive everywhere; `functions`/`navigation` → 400
+  `unsupported` in phase 1; residual reads are bounded by
+  `QSURL_MAX_RESIDUAL_ROWS` and the provider `residual_scan` flag; the FFI
+  returns a JSON string; 400 bodies use the `AbstractHandler.Error`
+  envelope; the crate is `edition = "2024"` with `rust-version = "1.88"`;
+  datetime literals travel as ISO strings; the GBNF exporter ships with
+  this feature.
 
 ---
 
@@ -316,10 +324,11 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
 - A valid query returns the same payload the legacy slug route would return
   for the equivalent conditions: same writers, same `DataNotFound` → 204,
   same PBAC 404 on deny.
-- Any grammar or lowering error returns **400** with a JSON body that is the
-  parser's error object verbatim: `kind` (`parse` | `lower`), `offset`,
-  `message`, `found`, `expected`, `pointer` (query with a `^` under the
-  offset). Unknown pipeline operators list the valid ones
+- Any grammar, lowering, capability or cost error returns **400** through
+  the standard `AbstractHandler.Error` envelope, carrying the error object
+  intact in its detail field: `kind` (`parse` | `lower` | `unsupported` |
+  `cost`), `offset`, `message`, `found`, `expected`, `pointer` (query with
+  a `^` under the offset). Unknown pipeline operators list the valid ones
   (`:sort, :top, :limit, :skip, :offset, :distinct`).
 - Capabilities the executing driver does not support are still honoured
   (applied in memory); the response is correct, only slower. Capabilities
@@ -333,7 +342,8 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
 
 1. **Crate `rust/qsurl/`** (`ast.rs`, `parser.rs`, `ir.rs`, `python.rs`,
    `examples/parse.rs`, `Cargo.toml` with `crate-type = ["cdylib","rlib"]`,
-   `python = ["dep:pyo3"]`; `pyproject.toml` with
+   `python = ["dep:pyo3"]`, `edition = "2024"`, `rust-version = "1.88"`;
+   `pyproject.toml` with
    `module-name = "querysource.qsurl._qsurl"`, `features = ["python", "pyo3/extension-module"]`).
    `parse_to_json(&str) -> Result<String, Error>` is the FFI surface;
    `python.rs` exposes `parse(src) -> str` (JSON IR) and
@@ -361,16 +371,31 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
      conjuncts that are single leaves with `==`/`!=`/`<`/`<=`/`>`/`>=`
      → `{col: v}` / `{col: {op: v}}` / `col!`; list with `==`/`!=` →
      `{col: [..]}` / `{"col!": [..]}` (`in_list`); `is_null`/`not_null` →
-     `'null'`/`'!null'` (`null_check`); `startswith` → `col~` only when the
-     driver declares `text_match` (today: PostgreSQL only); `fields` →
-     `conditions['fields']` (alias as `col AS alias` only where the driver
-     declares `alias`); `sort` → `ordering` (`"col"`/`"col DESC"`,
-     `sql.pyx:292-306`); `limit`/`offset` → `_limit`/`_offset`
-     (`abstract.pyx:206-232`). Everything else — any `or`/`not` subtree,
-     `contains`, `not_contains`, `endswith`, `regex`, sort/limit/offset when
-     not declared, alias when not declared, `distinct` — goes to the
-     residual. If the filter root is `or`, nothing is pushed down and the
-     whole tree is residual (see cost-guard open question).
+     `'null'`/`'!null'` (`null_check`); `startswith`/`contains`/`endswith`
+     → `col~` (`ILIKE 'x%'`) plus two new PostgreSQL key suffixes
+     (`ILIKE '%x%'`, `ILIKE '%x'`) only when the driver declares
+     `text_match` (PostgreSQL, after extending `pgsql_filter_conditions`
+     in `rust/src/pgsql_parser.rs` and its Cython fallback in `pgsql.pyx`);
+     `fields` → `conditions['fields']`, with `col AS alias` where the driver
+     declares `alias` (SQL providers; the alias identifier goes through the
+     existing `field_components` / Rust `process_fields` validation);
+     `sort` → `ordering` (`"col"`/`"col DESC"`, `sql.pyx:292-306`);
+     `limit`/`offset` → `_limit`/`_offset` (`abstract.pyx:206-232`).
+     Everything else — any `or`/`not` subtree, `not_contains`, `regex`,
+     text ops / sort / limit / offset / alias when not declared, `distinct`
+     — goes to the residual. `functions` and `navigation` are declared by
+     no provider in phase 1 → 400 `kind: "unsupported"`. If the filter root
+     is `or`, nothing is pushed down and the whole tree is residual,
+     subject to the cost guard below.
+   - **Cost guard** — `QSURL_MAX_RESIDUAL_ROWS` (navconfig setting in
+     `querysource/conf.py`, default 50000): when a residual exists and the
+     pushdown result has more rows than the cap → 400 `kind: "cost"` before
+     the residual runs. A provider may declare `residual_scan = False`
+     (Cassandra); on such a provider a residual filter with no pushed-down
+     leaf → 400 `kind: "cost"` before any query is executed.
+   - `gbnf.py` — `to_gbnf()` converts `grammar.lark` to GBNF so the same
+     closed grammar can be handed to constrained-decoding backends; a test
+     validates every valid corpus input against the exported GBNF.
    - `residual.py` — `apply(df, residual) -> df`: evaluates the boolean tree
      over a pandas DataFrame using `build_condition` for leaves and
      `&`/`|`/`~` composition for nodes, then sort, offset, limit, distinct.
@@ -378,11 +403,12 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
    (`querysource/providers/abstract.py:33`) with a minimal default
    (`select, filter, in_list, null_check`); `sqlProvider`
    (`querysource/providers/sql.py:32`) adds `sort, limit, offset`;
-   `pgProvider` (`querysource/providers/pg.py`) adds `text_match` (startswith
-   via `col~`) and `alias`; `cassandraProvider`
+   `sqlProvider` also declares `alias` (`col AS alias`); `pgProvider`
+   (`querysource/providers/pg.py`) adds full `text_match` (startswith,
+   contains, endswith via `ILIKE`); `cassandraProvider`
    (`querysource/providers/cassandra.py`) restricts to `select, filter,
-   in_list, null_check, limit`; other providers inherit the default until
-   audited. `QS` reads `self._qs.capabilities` after `build_provider()`.
+   in_list, null_check, limit` and sets `residual_scan = False`; other
+   providers inherit the default (`residual_scan = True`) until audited. `QS` reads `self._qs.capabilities` after `build_provider()`.
 4. **`QS` residual stage**: `QS.__init__` accepts a `residual` kwarg (kept in
    `self._residual`); `QS.query()` (`querysource/queries/qs.py:428-596`)
    applies `residual.apply` to the result — after cache deserialisation on
@@ -430,8 +456,17 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
 - **Typed literals**: unquoted `2024-01-01` → `dtype: date`, quoted stays
   string; pushdown emits the string value and lets the column type cast;
   the residual stage compares with `pd.to_datetime` when `dtype` is set.
-- **Root `or`** → full residual; large tables on non-indexed engines can
-  become a full scan (cost guard: open question).
+- **Root `or`** → full residual; the cost guard applies:
+  `QSURL_MAX_RESIDUAL_ROWS` exceeded → 400 `kind: "cost"`, and providers
+  with `residual_scan = False` (Cassandra) reject a residual with no
+  pushed-down leaf before executing.
+- **Text operators** are case-insensitive on every engine (`ILIKE` on
+  PostgreSQL, `case=False` in the residual); `=~` regex is always residual.
+- **Datetime with timezone** (`...T10:30:00Z`, `+02:00`): the ISO string
+  is pushed down as-is; the residual normalises both sides with
+  `pd.to_datetime(utc=True)`.
+- **Alias on non-SQL providers** → residual `df.rename` (materialises a
+  DataFrame even without a filter residual).
 - **Slug not found / PBAC deny** → identical to legacy (404), evaluated
   *before* parsing side effects reach the database.
 - **Empty after residual** → `DataNotFound` → 204, consistent with today.
@@ -458,7 +493,13 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
   per-driver overrides.
 - `qs-residual-stage`: in-memory filter/sort/window stage in `QS.query()`.
 - `qsurl-http-route`: `GET /api/v1/services/qsurl/{path:.*}` (+ `?q=`) with
-  PBAC and structured 400 errors.
+  PBAC and structured 400 errors (`kind`: `parse` | `lower` | `unsupported`
+  | `cost`) inside the existing `AbstractHandler.Error` envelope.
+- `qsurl-cost-guard`: `QSURL_MAX_RESIDUAL_ROWS` cap plus the provider
+  `residual_scan` flag.
+- `qsurl-gbnf-export`: `to_gbnf()` derived from the versioned `grammar.lark`.
+- `pg-text-match-pushdown`: `contains`/`endswith` key suffixes in the
+  PostgreSQL filter builder (Rust + Cython fallback).
 
 ### Modified Capabilities
 - none (legacy `/api/v2/services/queries/{slug}` untouched).
@@ -479,8 +520,10 @@ served through `QueryHandler` (`querysource/handlers/multi.py`).
 | `pyproject.toml` | modifies | `lark` direct dependency; `package-data` for `querysource.qsurl` |
 | `Makefile` | modifies | `build-rust` / `stage-rust` for two manifests |
 | `.github/workflows/release.yml` | modifies | build + extract second `.so` in `CIBW_BEFORE_BUILD` |
-| `tests/qsurl/`, `tests/handlers/`, `tests/e2e/` | adds | parity corpus, translation, residual, handler, dry-run e2e |
-| `docs/` | adds | dialect reference (grammar, operator table, error contract) |
+| `rust/src/pgsql_parser.rs`, `querysource/parsers/pgsql.pyx` | extends | new key suffixes for `ILIKE '%x%'` / `ILIKE '%x'` (contains / endswith pushdown) |
+| `querysource/conf.py` | extends | `QSURL_MAX_RESIDUAL_ROWS` setting |
+| `tests/qsurl/`, `tests/handlers/`, `tests/e2e/`, `tests/test_rust_parsers.py` | adds | parity corpus, translation, residual, cost guard, GBNF, handler, dry-run e2e, PG suffix tests |
+| `docs/` | adds | dialect reference (grammar, operator table, error contract, GBNF usage) |
 
 No breaking changes. New runtime dependency: `lark`. New build dependency:
 none (maturin already present). Deployment: wheels gain a second extension.
@@ -760,12 +803,12 @@ from querysource.queries.multi.operators.filter import Filter   # querysource/qu
 - [x] Residual execution — *Owner: Jesus Lara*: new dataframe post-filter stage in `QS.query()` reusing `types/dt/filters.py`.
 - [x] Capability declaration — *Owner: Jesus Lara*: `capabilities` class attribute on `BaseProvider` with per-driver overrides.
 - [x] Route shape — *Owner: Jesus Lara*: new route `/api/v1/services/qsurl/{path:.*}` plus `?q=` on that route; legacy `/api/v2/services/queries/{slug}` untouched.
-- [ ] Cost guard for residual-only filters (root `or`, or any residual on partition-keyed stores such as Cassandra): reject with 400, cap with a `QSURL_MAX_RESIDUAL_ROWS` setting, or allow silently in phase 1? — *Owner: Jesus Lara*
-- [ ] `functions` (`lower(name)`, `year(opened)`) and `navigation` (dotted paths): confirm phase 1 returns 400 `kind: "unsupported"` for both, with no driver declaring them. — *Owner: Jesus Lara*
-- [ ] Text-operator semantics: `contains`/`startswith`/`endswith` case-insensitive everywhere (dataframe uses `case=False`, PG uses `ILIKE`) — confirm as the contract, and whether `endswith`/`contains` should get a PG pushdown (`ILIKE '%x'` / `ILIKE '%x%'`) in this feature or later. — *Owner: Jesus Lara*
-- [ ] Alias pushdown: emit `col AS alias` in `fields` for SQL dialects (subject to the Rust `process_fields` identifier validation) or keep alias always residual (rename after fetch)? — *Owner: Jesus Lara*
-- [ ] FFI shape: keep the reference `parse() -> str` (JSON) + `json.loads` in the wrapper, or return a Python `dict` from Rust (needs `pythonize` or manual conversion)? Default proposal: JSON string. — *Owner: Jesus Lara*
-- [ ] HTTP 400 body: raw parser error object at the top level (proposal §5) or wrapped in the `AbstractHandler.Error` envelope? — *Owner: Jesus Lara*
-- [ ] Rust `rust-version` / edition for `rust/qsurl/`: keep the reference `edition = "2024"` (needs ≥1.85, let-chains need ≥1.88) or align with the existing crate's 2021? CI uses `stable`. — *Owner: Jesus Lara*
-- [ ] Datetime literals with timezone (`2024-01-01T10:30:00Z`): pass the ISO string to the driver as-is, or normalise via `cond_definition` types? — *Owner: Jesus Lara*
-- [ ] Should the parity corpus also be exported as GBNF/Lark artefacts for constrained decoding in this feature, or is that a follow-up? — *Owner: Jesus Lara*
+- [x] Cost guard for residual-only filters (root `or`, or any residual on partition-keyed stores such as Cassandra) — *Owner: Jesus Lara*: configurable cap `QSURL_MAX_RESIDUAL_ROWS` (navconfig, `querysource/conf.py`, default 50000): when the pushdown result exceeds the cap before the residual is applied → 400 `kind: "cost"`. Additionally a provider may declare `residual_scan = False` (Cassandra); on such a provider a residual filter with no pushed-down leaf → 400 `kind: "cost"` before executing anything.
+- [x] `functions` (`lower(name)`, `year(opened)`) and `navigation` (dotted paths) — *Owner: Jesus Lara*: grammar unchanged (parser accepts them, IR marks them in `requires`); no provider declares them in phase 1, so translation returns 400 `kind: "unsupported"` naming the capability. Phase 2 enables them without touching the grammar.
+- [x] Text-operator semantics — *Owner: Jesus Lara*: `~` contains, `^=` startswith, `$=` endswith are **case-insensitive on every engine** (contract). PostgreSQL pushes down all three: the PG builder (`rust/src/pgsql_parser.rs` `pgsql_filter_conditions` + the Cython fallback in `pgsql.pyx`) gains key suffixes for `ILIKE '%x%'` and `ILIKE '%x'` next to the existing `col~` → `ILIKE 'x%'`, so `pgProvider` declares full `text_match`. `=~` regex stays residual.
+- [x] Alias pushdown — *Owner: Jesus Lara*: SQL providers declare `alias` and emit `col AS alias` in `fields` (alias identifier validated through `field_components` / Rust `process_fields`); non-SQL providers keep alias residual (`df.rename` after fetch).
+- [x] FFI shape — *Owner: Jesus Lara*: keep the reference `_qsurl.parse(src) -> str` (JSON) and `json.loads` in the Python wrapper; no `pythonize`; parity corpus compares the JSON bytes.
+- [x] HTTP 400 body — *Owner: Jesus Lara*: use the existing `AbstractHandler.Error` envelope; the parser/lowering/unsupported/cost object (`kind`, `offset`, `message`, `found`, `expected`, `pointer`) travels intact inside the envelope's detail field.
+- [x] Rust edition / MSRV for `rust/qsurl/` — *Owner: Jesus Lara*: keep the reference `edition = "2024"` (let-chains) and declare `rust-version = "1.88"` in `Cargo.toml`; CI uses `dtolnay/rust-toolchain@stable`.
+- [x] Datetime literals with timezone — *Owner: Jesus Lara*: pushdown emits the ISO string as-is and lets the column type cast (PG `timestamptz`); the residual stage compares with `pd.to_datetime(..., utc=True)` when `dtype` is `date`/`datetime`. No new dependency.
+- [x] GBNF export for constrained decoding — *Owner: Jesus Lara*: **included in this feature**: `querysource/qsurl/gbnf.py` converts `grammar.lark` to GBNF, exposed as `querysource.qsurl.to_gbnf()` and shipped/tested alongside the grammar (a test validates the exported GBNF against the parity corpus' valid inputs).
