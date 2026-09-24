@@ -76,6 +76,22 @@ async def test_ilike_rendering(path: str, filter_: dict, expected: str | None) -
     assert _where_body(sql) == expected
 
 
+@pytest.mark.parametrize("path", PATHS)
+async def test_ilike_strips_prequoted_value(path: str) -> None:
+    """FEAT-152/TASK-776: ``is_valid()`` (abstract.pyx ``_where_element``, run during
+    ``set_options()``/``set_where()`` in the real QS pipeline BEFORE ``filter_conditions()``
+    ever executes) wraps non-numeric string filter values in a single-quote pair when
+    ``noquote=False`` (the pgSQLParser default) — so by the time a real end-to-end query
+    reaches this builder, the pattern already carries one quote layer. Both builders must
+    strip it (matching how the COMPARISON_TOKENS branch above tolerates the same
+    pre-quoting via ``Entity.quoteString``'s strip-then-requote behaviour) rather than
+    quoting it a second time. Discovered via ``tests/e2e/test_qsurl_dry_run.py``
+    (TASK-776), where the unstripped builder rendered ``city ILIKE '''%san%'''``.
+    """
+    sql = await _render(path, {"city": {"ILIKE": "'%san%'"}})
+    assert _where_body(sql) == "city ILIKE '%san%'"
+
+
 async def test_builders_agree_on_every_case() -> None:
     if not RUST_AVAILABLE:
         pytest.skip(

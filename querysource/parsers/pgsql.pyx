@@ -237,7 +237,17 @@ cdef class pgSQLParser(SQLParser):
                         # Case-insensitive pattern match (qsurl text_match, FEAT-152).
                         # The pattern arrives ready (metacharacters already escaped by
                         # translate.split); this builder only quotes it.
-                        where_cond.append(f"{key} {op} {pg_literal(v)}")
+                        #
+                        # is_valid() (abstract.pyx _where_element, run during
+                        # set_options()/set_where() BEFORE filter_conditions() ever
+                        # executes) already wraps every non-numeric string filter
+                        # value in a single-quote pair when noquote=False (the
+                        # pgSQLParser default). The COMPARISON_TOKENS branch above
+                        # tolerates that via Entity.quoteString's strip-then-requote
+                        # behaviour; mirror it here (pg_literal does not strip) so a
+                        # pattern is not quoted twice.
+                        _v = v[1:-1] if len(v) >= 2 and v[0] == "'" and v[-1] == "'" else v
+                        where_cond.append(f"{key} {op} {pg_literal(_v)}")
                     else:
                         # currently, discard any non-supported comparison token
                         continue

@@ -379,9 +379,26 @@ fn process_dict_value(
     // Case-insensitive pattern match (FEAT-152): string values only, quoted by
     // pg_literal. The caller (translate.split, TASK-771) is responsible for
     // escaping LIKE metacharacters in the pattern; this builder only quotes.
+    //
+    // The Python-side `is_valid()` pre-processing (abstract.pyx `_where_element`,
+    // run during `set_options()`/`set_where()` BEFORE `pgsql_filter_conditions`
+    // is ever called from `filter_conditions()`) already wraps every non-numeric
+    // string filter value in a single-quote pair when `noquote=False` (the
+    // pgSQLParser default). The COMPARISON_TOKENS branch above tolerates that via
+    // `quote_string`'s strip-then-requote behaviour (validators.rs); mirror it
+    // here (`pg_literal` does not strip) so a pattern is not quoted twice
+    // (confirmed via the qsurl end-to-end dry-run tests, TASK-776).
     if PG_TEXT_OPERATORS.contains(&op.as_str()) {
         return match v {
-            FilterValue::Str(s) => Some(format!("{} {} {}", key, op, pg_literal(s))),
+            FilterValue::Str(s) => {
+                let bytes = s.as_bytes();
+                let stripped = if bytes.len() >= 2 && bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\'' {
+                    &s[1..s.len() - 1]
+                } else {
+                    s.as_str()
+                };
+                Some(format!("{} {} {}", key, op, pg_literal(stripped)))
+            }
             _ => None, // non-string values are rejected, never str()-ified
         };
     }
