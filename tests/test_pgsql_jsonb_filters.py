@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import pytest
 import sqlglot
+from sqlglot import exp
 
 from querysource.models import QueryObject
 from querysource.parsers import pgsql
@@ -93,6 +94,26 @@ def _where(sql: str) -> Optional[str]:
         {"attrs": {"->": {"meta": {"k": 1}}}},
         """attrs -> 'meta' = E'\\x7b"k":1\\x7d'::jsonb""",
     ),
+    # @>| any-of: each item is a containment operand, the checks are OR-ed
+    (
+        {"courses": {"@>|": [[{"course": "Pilates Studio"}], [{"course": "Pilates Mat"}]]}},
+        """(courses @> E'[\\x7b"course":"Pilates Studio"\\x7d]'::jsonb"""
+        """ OR courses @> E'[\\x7b"course":"Pilates Mat"\\x7d]'::jsonb)""",
+    ),
+    (
+        {"attrs": {"@>|": [{"status": "active"}, {"status": "pending"}]}},
+        """(attrs @> E'\\x7b"status":"active"\\x7d'::jsonb"""
+        """ OR attrs @> E'\\x7b"status":"pending"\\x7d'::jsonb)""",
+    ),
+    (
+        {"attrs": {"@>|": ['{"a": 1}', {"b": 2}]}},
+        """(attrs @> E'\\x7b"a":1\\x7d'::jsonb OR attrs @> E'\\x7b"b":2\\x7d'::jsonb)""",
+    ),
+    ({"tags": {"@>|": [["x"]]}}, """tags @> '["x"]'::jsonb"""),
+    # key suffixes carry no meaning for JSONB filters and are stripped
+    ({"attrs|": {"status": "active"}}, """attrs @> E'\\x7b"status":"active"\\x7d'::jsonb"""),
+    ({"attrs!": {"@>": ["x"]}}, """attrs @> '["x"]'::jsonb"""),
+    ({"attrs|": {"->>": {"status": "active"}}}, "attrs ->> 'status' = 'active'"),
 ])
 async def test_jsonb_condition(path: str, filter_: dict, expected: str) -> None:
     assert _where(await _render(path, filter_)) == expected
@@ -116,6 +137,11 @@ async def test_jsonb_values_are_escaped(path: str) -> None:
     {"attrs": {"->>": "status"}},  # ->> needs a {path: value} mapping
     {"attrs": {"->": {}}},  # empty mapping
     {"attrs;drop": {"status": "x"}},  # unsafe column identifier
+    {"attrs;drop|": {"status": "x"}},  # unsafe identifier behind a suffix
+    {"attrs": {"@>|": {"a": 1}}},  # @>| needs a list of operands
+    {"attrs": {"@>|": []}},  # empty list
+    {"attrs": {"@>|": '[{"a": 1}]'}},  # JSON text is not a list of operands
+    {"attrs": {"@>|": [{"a": 1}, "not json"]}},  # one invalid item drops all
 ])
 async def test_invalid_jsonb_filters_are_dropped(path: str, filter_: dict) -> None:
     assert _where(await _render(path, filter_)) is None
@@ -158,3 +184,30 @@ async def test_build_query_survives_format_passes(use_rust: bool, monkeypatch) -
     assert "LIMIT 10" in sql
     assert "{" not in sql and "}" not in sql
     sqlglot.parse_one(sql, read="postgres")
+
+
+@pytest.mark.parametrize("use_rust", [
+    pytest.param(
+        True, marks=pytest.mark.skipif(not pgsql.HAS_RUST, reason="qs_parsers not built")
+    ),
+    False,
+])
+async def test_build_query_any_of_is_grouped(use_rust: bool, monkeypatch) -> None:
+    """``@>|`` stays parenthesized next to the other AND-ed conditions."""
+    monkeypatch.setattr(pgsql, "HAS_RUST", use_rust)
+    filter_ = {
+        "country": "United States",
+        "graduation_details": {"@>|": [[{"course": "Pilates Studio"}], [{"course": "Pilates Mat"}]]},
+    }
+    sql = await _make_parser(SQL, filter_).build_query(querylimit=10)
+    assert (
+        """(graduation_details @> E'[\\x7b"course":"Pilates Studio"\\x7d]'::jsonb"""
+        """ OR graduation_details @> E'[\\x7b"course":"Pilates Mat"\\x7d]'::jsonb)"""
+    ) in sql
+    assert "country='United States' AND (" in sql
+    assert "{" not in sql and "}" not in sql
+    tree = sqlglot.parse_one(sql, read="postgres")
+    where = tree.args["where"].this
+    assert isinstance(where, exp.And)
+    assert isinstance(where.right, exp.Paren)
+    assert isinstance(where.right.this, exp.Or)
