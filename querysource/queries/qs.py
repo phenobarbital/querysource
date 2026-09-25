@@ -39,6 +39,7 @@ from .base import BaseQuery
 
 if TYPE_CHECKING:
     from ..auth.principal import QSPrincipal
+    from ..qsurl.plan import ResidualPlan
     from ..tenants import LoadedDefinition
 
 # FEAT-150: with a principal, these TenantError codes collapse into
@@ -62,6 +63,7 @@ class QS(BaseQuery):
             tenant: str | None = None,
             definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
+            residual: "ResidualPlan | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -81,6 +83,7 @@ class QS(BaseQuery):
         self._query: str = None
         self._type: str = ''
         self.is_cached: bool = False
+        self._residual: ResidualPlan | None = residual
         self._dwh = kwargs.pop('dwh', None)
         if 'dwh' in conditions:
             self._dwh = conditions.pop('dwh')
@@ -122,6 +125,32 @@ class QS(BaseQuery):
 
     def __repr__(self) -> str:
         return f'<QS: {self._type}:"{self._query}" >'
+
+    def _apply_residual(self, result):
+        """Return ``result`` with ``self._residual`` applied (untouched when there is no plan).
+
+        Raises:
+            QSUrlError: kind "cost" when ``len(result)`` exceeds ``QSURL_MAX_RESIDUAL_ROWS``
+                (checked before any DataFrame is built); kind "lower" from ``residual.apply``.
+            DataNotFound: when the plan leaves zero rows.
+        """
+        if self._residual is None or self._residual.is_empty():
+            return result
+        from .. import conf  # read at call time: tests monkeypatch conf.QSURL_MAX_RESIDUAL_ROWS
+        from ..qsurl import residual
+        from ..qsurl.errors import QSUrlError
+        n = len(result)
+        if n > conf.QSURL_MAX_RESIDUAL_ROWS:
+            raise QSUrlError(
+                "cost",
+                f"residual stage over {n} rows exceeds "
+                f"QSURL_MAX_RESIDUAL_ROWS={conf.QSURL_MAX_RESIDUAL_ROWS}; push down a narrower filter",
+            )
+        out = residual.apply(result, self._residual)
+        if not len(out):
+            raise DataNotFound("qsurl: empty result after residual filter")
+        self._logger.debug("qsurl residual applied: %s rows in", len(result))
+        return out
 
     @staticmethod
     def _query_preview(query: object, max_chars: int = 220) -> str:
@@ -502,7 +531,7 @@ class QS(BaseQuery):
                     )
                     # fall through to provider fetch below
                 else:
-                    self._result = result
+                    self._result = self._apply_residual(result)
                     return await self._output_format(self._result, error)  # pylint: disable=W0150
         # getting data directly from provider instead:
         self._logger.debug('= Query from PROVIDER =')
@@ -590,6 +619,7 @@ class QS(BaseQuery):
                     self.save_cache(cache_key, result)
                 except Exception:
                     pass
+            self._result = self._apply_residual(self._result)
             ## returning data:
             return await self._output_format(
                 self._result, error

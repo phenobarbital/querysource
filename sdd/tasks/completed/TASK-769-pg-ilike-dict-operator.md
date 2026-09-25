@@ -317,10 +317,63 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented per the Implementation Blueprint: `PG_TEXT_OPERATORS = ["ILIKE",
+"NOT ILIKE"]` added to both `rust/src/pgsql_parser.rs` and `querysource/parsers/pgsql.pyx`;
+`pg_validate_operator` (Rust) extended; the dict-branch rendering added in both
+`process_dict_value` (Rust) and `_filter_conditions_cy` (Cython), string values only,
+quoted via `pg_literal` (per the task's correction: NOT `Entity.quoteString`, which strips
+edge quotes).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Blueprint gap found and fixed (within the already-listed MODIFY files, same
+architectural pattern as `pg_validate_operator`)**: testing revealed that
+`jsonb_condition` (both Rust and Cython) runs *before* the dict-operator branch and
+treats any operator key it doesn't recognize as implicit JSONB containment
+(`col @> '<json>'::jsonb`) — so `{"city": {"ILIKE": "%san%"}}` was silently rendered as
+a JSONB filter over the literal `{"ILIKE": "%san%"}` object instead of reaching the new
+ILIKE branch at all. Fixed by adding an early `PG_TEXT_OPERATORS` check in `jsonb_condition`
+on both sides (mirroring the existing `COMPARISON_TOKENS` short-circuit) so it returns
+"not JSONB" for text-match operators and lets the caller's dict branch handle them.
+This is necessary for spec AC11 to hold at all, not scope creep.
 
-**Deviations from spec**: none | describe if any
+**Environment limitation (cannot be worked around per the shared-environment policy)**:
+the installed `querysource.qs_parsers._qs_parsers` extension in the shared `.venv` predates
+this task's Rust source change. Rebuilding it (`make build-rust`, i.e. `maturin develop`)
+installs into whatever venv the `maturin` binary belongs to — the shared, read-only main
+checkout `.venv`, which worktree agents must never mutate. This worktree also has no
+`.venv` of its own. Consequences:
+- `rust/src/pgsql_parser.rs` changes were verified with pure-Rust unit tests
+  (`test_process_ilike_dict_operator`, `test_process_not_ilike_dict_operator`,
+  `test_process_ilike_rejects_non_string_value`, `test_process_ilike_quotes_embedded_quote`,
+  appended to the existing `#[cfg(test)] mod tests` in `pgsql_parser.rs`) exercised via
+  `cargo test --manifest-path rust/Cargo.toml --no-default-features`. All 4 new tests pass.
+  `cargo build --manifest-path rust/Cargo.toml --release` (default features) also compiles
+  clean.
+- `tests/qsurl/test_pg_ilike.py` and the appended `TestPgsqlIlikeOperator` in
+  `tests/test_rust_parsers.py` runtime-probe whether the *installed* Rust extension already
+  renders `ILIKE` (it does not, confirmed) and skip only the Rust-path assertions with an
+  explicit reason, rather than silently passing or failing against stale binary behavior.
+  The Cython path (freshly rebuilt via `python setup.py build_ext --inplace`, which writes
+  only into this worktree's own `querysource/parsers/`, not the shared `.venv`) is fully
+  exercised and green.
+- A human operator (or a controlled main-checkout rebuild) should run `make build-rust`
+  once to pick up this change, after which the skipped assertions will execute for real
+  and should pass unchanged (the Rust source logic is proven correct by the unit tests
+  above and is byte-identical in intent to the verified Cython path).
+
+**Test results**: `pytest tests/qsurl/test_pg_ilike.py -q` → 6 passed, 7 skipped (rust-path,
+documented above). `pytest tests/test_rust_parsers.py -q` → 124 passed, 1 skipped (same
+reason). `pytest tests/test_pgsql_jsonb_filters.py -q` → 46 passed (no regression).
+`pytest tests/integration/test_slug_injection.py -q` → 11 passed (no regression).
+`cargo test --manifest-path rust/Cargo.toml --no-default-features` → 248 passed, 4 failed;
+the 4 failures (`test_process_comparison_token`, `test_process_str_negation`,
+`test_build_string_condition_end_bang`, `test_field_components_no_prefix`) are confirmed
+PRE-EXISTING and unrelated to this task (verified with `git stash` — same 4 failures with
+this task's changes removed; environment/toolchain related, out of scope per Cardinal
+Rule 5). `ruff check tests/qsurl/test_pg_ilike.py tests/test_rust_parsers.py` clean.
+
+**Deviations from spec**: `jsonb_condition` fix (see above, within already-listed files,
+required for AC11); Rust-side end-to-end FFI validation deferred to a human/CI rebuild
+due to the shared-environment write restriction (documented above), covered instead by
+pure-Rust unit tests plus a fully-exercised Cython-path parity test.

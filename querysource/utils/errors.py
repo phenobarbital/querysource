@@ -48,6 +48,7 @@ def build_error_payload(
     debug: bool = False,
     logger: Optional[logging.Logger] = None,
     public_message: Optional[str] = None,
+    public_detail: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Build a client-safe error payload.
 
@@ -69,6 +70,8 @@ def build_error_payload(
             the module-level ``logging.getLogger(__name__)`` logger.
         public_message: If supplied, overrides the generic message from
             ``GENERIC_MESSAGES`` in the public ``"error"`` field.
+        public_detail: Caller-asserted client-safe structured object. When given it is
+            emitted as ``payload["detail"]`` in every mode (``trace`` stays debug-only).
 
     Note:
         When ``exception`` is a ``querysource.exceptions.OutputError`` and no
@@ -147,5 +150,7 @@ def build_error_payload(
     if debug:
         payload["detail"] = detail
         payload["trace"] = trace
+    if public_detail is not None:
+        payload["detail"] = public_detail
 
     return payload

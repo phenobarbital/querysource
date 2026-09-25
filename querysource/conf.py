@@ -1,10 +1,10 @@
 # Import Config Class
-import sys
 import os
+import sys
 from pathlib import Path
+
 from navconfig import BASE_DIR, config
 from navconfig.logging import logging
-
 
 ### Matplotlib Configuration
 logging.getLogger(name='matplotlib').setLevel(logging.WARNING)
@@ -377,6 +377,9 @@ DEFAULT_QUERY_FORMAT = config.get(
     'DEFAULT_QUERY_FORMAT',
     fallback='native'
 )
+
+## qsurl (FEAT-152): rows a pushdown result may have before an in-memory residual plan runs.
+QSURL_MAX_RESIDUAL_ROWS = config.getint("QSURL_MAX_RESIDUAL_ROWS", fallback=50000)
 
 ## Query parameters that must never reach the query parser.
 # Authentication/transport-related params (e.g. ?auth=..., ?apikey=...) get

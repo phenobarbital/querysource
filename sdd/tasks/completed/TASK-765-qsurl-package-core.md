@@ -459,10 +459,19 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented `querysource/qsurl/{__init__,errors,capabilities,plan}.py` and
+`tests/qsurl/{__init__,conftest,test_core}.py` exactly per the Implementation Blueprint.
+All FILL IN sections completed: `capabilities.validate` raises `ValueError` naming
+unknown tokens; `QSUrlError.__init__` validates `kind` against `ERROR_KINDS`;
+`QSUrlError.from_json`/`to_dict` implemented with the exact key order; `__init__.parse`
+maps only the Rust binding's `ValueError` to `QSUrlError.from_json`; `stores_df` fixture
+has 8 rows covering mixed-case names, a None city, an empty-string city, and both `Z`
+and `+02:00` datetime offsets; `test_core.py` bodies filled in per the Test Specification.
+`pytest tests/qsurl/test_core.py -q` → 6 passed. `ruff check querysource/qsurl tests/qsurl`
+clean (after removing one unnecessary quoted type annotation, `UP037`, auto-fixable).
+Verified `python -c "import querysource.qsurl as q; print(q.HAS_RUST)"` → `False` (no
+extension, no `_fallback.py` yet) and `QSURL_FORCE_FALLBACK=1` also forces `HAS_RUST=False`.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

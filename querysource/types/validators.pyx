@@ -173,7 +173,17 @@ cdef str quoteString(object value):
         elif v.startswith('"'): # is double quoted
             return v.replace('"', "'")
         else:
-            return "'{}'".format(v)
+            # Ledger issue:48c9b3050a0c (code review, FEAT-152): this used to
+            # return `v` (the raw, unescaped value) instead of `inner` (the
+            # same value with every embedded single quote doubled, already
+            # computed above) — a plain string containing a `'` was wrapped
+            # without escaping it, producing an unterminated/broken SQL
+            # string literal. Callers that pre-quote a value before their own
+            # dedicated escaper runs (e.g. querysource/parsers/pgsql.pyx's
+            # PG_TEXT_OPERATORS branch, rust/src/pgsql_parser.rs) strip this
+            # wrapper and then undo `''`-doubling before re-escaping, so they
+            # tolerate this fix; see the "PINNED INVARIANT" comments there.
+            return "'{}'".format(inner)
     else:
         return v
 

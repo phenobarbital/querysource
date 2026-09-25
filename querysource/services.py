@@ -21,6 +21,7 @@ from navigator.types import WebApp
 from .datasources.handlers import DatasourceDrivers, DatasourceView
 from .handlers import (
     LoggingService,
+    QSUrlService,
     QueryDescribe,
     QueryExecutor,
     QueryHandler,
@@ -187,6 +188,11 @@ class QuerySource(metaclass=Singleton):
         routes.append(r)
         # get columns but via HEAD:
         r = self.app.router.add_head('/api/v2/services/queries/{slug}', qs.get_columns)
+        routes.append(r)
+
+        ## qsurl (FEAT-152): HTSQL-style URL dialect, whole query in the path or <slug>?q=<rest>
+        qsurl = QSUrlService()
+        r = self.app.router.add_get('/api/v1/services/qsurl/{path:.*}', qsurl.query, allow_head=False)
         routes.append(r)
 
         ### Query Executor:

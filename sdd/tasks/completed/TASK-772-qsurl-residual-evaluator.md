@@ -258,10 +258,17 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented `querysource/qsurl/residual.py` (`_column`, `_utc`, `_leaf_mask`,
+`evaluate`, `apply`) exactly per the Implementation Blueprint, filling in every table row
+and the seven-step `apply` order. `tests/qsurl/test_residual.py` created with 10 tests:
+the AC13 no-eval grep, empty-plan passthrough, the four parametrized leaf-semantics cases
+(case-insensitive `startswith`, `is_null` on both `None` and `""`, literal-not-regex
+`contains`, UTC-aware datetime comparison), a full apply-order test combining all seven
+steps in one plan (filter -> sort -> project -> distinct -> offset -> limit -> rename,
+hand-traced and verified), list round-trip, unknown-column error, and bad-regex error.
+`pytest tests/qsurl/test_residual.py -q` -> 10 passed. `ruff check querysource/qsurl/residual.py
+tests/qsurl/test_residual.py` clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none.

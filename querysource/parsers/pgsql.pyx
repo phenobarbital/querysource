@@ -30,6 +30,8 @@ JSONB_OPERATORS = ('@>', '<@', '@>|', '->', '->>',)
 # Key suffixes (negation, overlap, ...) carry no meaning for JSONB filters
 # and are stripped from the column name.
 JSONB_KEY_SUFFIXES = '|!~#@:'
+# Case-insensitive pattern operators for dict filter values (qsurl text_match, FEAT-152).
+PG_TEXT_OPERATORS = ('ILIKE', 'NOT ILIKE',)
 
 
 cdef str pg_literal(str value):
@@ -173,6 +175,11 @@ cdef tuple jsonb_condition(str col, dict value):
         1 for k in value if k in COMPARISON_TOKENS or k in JSONB_OPERATORS
     )
     op, operand = next(iter(value.items()))
+    if op in PG_TEXT_OPERATORS:
+        # qsurl text-match operators (FEAT-152) are handled by the caller's dict
+        # branch, never as implicit JSONB containment (they are not counted by
+        # `operators`, so this would otherwise fall through to that branch).
+        return (False, None)
     if operators and op in COMPARISON_TOKENS:
         return (False, None)
     try:
@@ -261,6 +268,32 @@ cdef class pgSQLParser(SQLParser):
                         # SECURITY: Escape the comparison value
                         safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
                         where_cond.append(f"{key} {op} {safe_v}")
+                    elif op in PG_TEXT_OPERATORS and isinstance(v, str):
+                        # Case-insensitive pattern match (qsurl text_match, FEAT-152).
+                        # The pattern arrives ready (metacharacters already escaped by
+                        # translate.split); this builder only quotes it.
+                        #
+                        # is_valid() (abstract.pyx _where_element, run during
+                        # set_options()/set_where() BEFORE filter_conditions() ever
+                        # executes) already wraps every non-numeric string filter
+                        # value in a single-quote pair when noquote=False (the
+                        # pgSQLParser default). The COMPARISON_TOKENS branch above
+                        # tolerates that via Entity.quoteString's strip-then-requote
+                        # behaviour; mirror it here (pg_literal does not strip) so a
+                        # pattern is not quoted twice.
+                        #
+                        # is_valid()'s module-level `quoteString()` (types/validators.pyx)
+                        # wraps a plain string in a single-quote pair and doubles any
+                        # embedded `'` (PG-style escaping — ledger issue:48c9b3050a0c,
+                        # fixed). Strip that outer pair AND undo the doubling before
+                        # handing the clean inner text to pg_literal, which does its own
+                        # real escaping from scratch — mirrors how
+                        # querysource/parsers/bigquery.pyx's bq_quote_string() already
+                        # undoes the same PG-style doubling. Using `.replace("''", "'")`
+                        # rather than assuming escaping happened keeps this correct
+                        # against either quoteString() behaviour (pre- or post-fix).
+                        _v = v[1:-1].replace("''", "'") if len(v) >= 2 and v[0] == "'" and v[-1] == "'" else v
+                        where_cond.append(f"{key} {op} {pg_literal(_v)}")
                     else:
                         # currently, discard any non-supported comparison token
                         continue

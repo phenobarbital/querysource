@@ -312,10 +312,16 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented `querysource/qsurl/translate.py` (`IDENT_RE`, `like_escape`,
+`_leaf_pushdown`, `_split_filter`, `_referenced_columns`, `split`) exactly per the
+Implementation Blueprint, filling in every `# FILL IN:`. Order followed: rule 1
+(unsupported guard) → rule 2 (identifier guard over fields/aliases/sort keys/filter
+columns) → rule 3 (filter split) → rule 5 (sort) → rule 6 (window) → rule 7 (distinct)
+→ rule 4 (fields/aliases/projection, decided last since alias pushdown needs to know
+whether the plan is otherwise empty) → rule 8 (cost guard). `tests/qsurl/test_translate.py`
+created with one test per table row/rule (22 tests). `pytest tests/qsurl/test_translate.py -q`
+→ 22 passed. `ruff check querysource/qsurl/translate.py tests/qsurl/test_translate.py` clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none.

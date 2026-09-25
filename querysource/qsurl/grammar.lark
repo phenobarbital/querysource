@@ -1,0 +1,81 @@
+// qsurl grammar v1 — mirrors rust/qsurl/src/parser.rs (phase 1). Parser: LALR (contextual lexer).
+// Any change here MUST be mirrored in the Rust crate and covered by tests/qsurl/corpus.json.
+//
+// LALR was sufficient for the whole grammar; no Earley fallback was needed. The one
+// LALR-sensitive spot is `operand`: `call` (IDENT "(" ...) and `path` (IDENT ("." IDENT)*)
+// both start with a bare IDENT — resolved by ordinary LALR(1) lookahead (the token AFTER
+// the IDENT decides: "(" -> call, "." or anything else -> path), no grammar ambiguity.
+// `list` ("(" literal ("," literal)* ")") is only reachable from `operand`, never from the
+// boolean-grouping `atom` ("(" expr ")"), so `(1,2)` (list) and `(a=1)` (grouped expr) never
+// collide: they occur in disjoint syntactic positions the parser tracks separately.
+//
+// Keyword terminals (NULL/TRUE/FALSE/TOP_KW/SKIP_KW/SORT_KW/DISTINCT_KW) use an explicit
+// `(?![A-Za-z0-9_])` word-boundary lookahead so `nullable=1`/`topic=1`/`distinctive=1` tokenize
+// as IDENT, mirroring chumsky's `text::ascii::keyword()`. This is load-bearing, not cosmetic:
+// Lark's lexer resolves same-position terminal ties by priority BEFORE match length, and ranks
+// unbounded regexes (IDENT's `*`, NUMBER's `+`) as "theoretically" longer than any bounded
+// pattern regardless of the actual matched text — so a same-priority match on the literal
+// keyword text alone (without the lookahead) would let e.g. NULL beat IDENT on "null" but
+// (with a naive un-lookahead pattern) also wrongly beat it on the "null" prefix of "nullable".
+// The lookahead removes the false match entirely, so priority only ever decides genuine ties
+// (the bare keyword itself, e.g. exact "null"). The same theoretical-vs-actual-length quirk is
+// why DATETIME/DATE are given priority over NUMBER below (a bounded `\d\d\d\d-\d\d-\d\d` loses
+// to an unbounded `-?\d+(\.\d+)?` on Lark's default resolution otherwise, even though the date
+// pattern matches strictly more characters for a date-shaped input) — verified empirically.
+
+start: prefix? SLUG selection? filter? pipe*
+
+prefix: "/queries/" | "queries/" | "/"
+selection: "{" field ("," field)* ","? "}"
+field: path (":as" "(" IDENT ")")?
+path: IDENT ("." IDENT)*
+filter: "?" expr
+
+?expr: or_expr
+?or_expr: and_expr ("|" and_expr)*
+?and_expr: unary ("&" unary)*
+?unary: "!" unary -> not_expr
+      | atom
+?atom: "(" expr ")"
+     | comparison
+
+comparison: operand (CMP operand)?
+
+?operand: list
+        | literal
+        | call
+        | path
+
+list: "(" literal ("," literal)* ")"
+call: IDENT "(" [operand ("," operand)*] ")"
+
+literal: NULL | TRUE | FALSE | DATETIME | DATE | NUMBER | STRING
+
+pipe: ":" (sort_pipe | top_pipe | skip_pipe | distinct_pipe | unknown_pipe)
+sort_pipe: SORT_KW "(" sort_key ("," sort_key)* ")"
+top_pipe: TOP_KW "(" INT ")"
+skip_pipe: SKIP_KW "(" INT ")"
+distinct_pipe: DISTINCT_KW
+unknown_pipe: IDENT ("(" /[^)]+/ ")")?
+sort_key: SORT_DIR? path
+SORT_DIR: "-" | "+"
+
+SORT_KW.2: /sort(?![A-Za-z0-9_])/
+DISTINCT_KW.2: /distinct(?![A-Za-z0-9_])/
+TOP_KW.2: /(top|limit)(?![A-Za-z0-9_])/
+SKIP_KW.2: /(skip|offset)(?![A-Za-z0-9_])/
+
+SLUG: /[A-Za-z0-9_-]+/
+IDENT: /[A-Za-z_][A-Za-z0-9_]*/
+CMP: "==" | "!=" | "!~" | "<=" | ">=" | "=~" | "^=" | "$=" | "<" | ">" | "=" | "~"
+NULL.2: /null(?![A-Za-z0-9_])/
+TRUE.2: /true(?![A-Za-z0-9_])/
+FALSE.2: /false(?![A-Za-z0-9_])/
+DATETIME.3: /\d\d\d\d-\d\d-\d\dT\d\d:\d\d(:\d\d)?(Z|[+-]\d\d:\d\d)?/
+DATE.2: /\d\d\d\d-\d\d-\d\d/
+NUMBER: /-?\d+(\.\d+)?/
+INT: /\d+/
+STRING: /'([^']|'')*'/ | /"([^"]|\\")*"/
+
+%import common.WS
+%ignore WS
