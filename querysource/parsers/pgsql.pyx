@@ -25,7 +25,11 @@ except ImportError:
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 # JSONB operators accepted as the key of a dict-typed filter value.
-JSONB_OPERATORS = ('@>', '<@', '->', '->>',)
+# ``@>|`` is the any-of form: a list of containment operands OR-ed together.
+JSONB_OPERATORS = ('@>', '<@', '@>|', '->', '->>',)
+# Key suffixes (negation, overlap, ...) carry no meaning for JSONB filters
+# and are stripped from the column name.
+JSONB_KEY_SUFFIXES = '|!~#@:'
 
 
 cdef str pg_literal(str value):
@@ -79,6 +83,31 @@ cdef str jsonb_operand(object value):
     return jsonb_dumps(value)
 
 
+cdef str jsonb_any_of_condition(str col, object operand):
+    """Render ``{"@>|": [a, b, ...]}`` as OR-ed containment checks.
+
+    Each item is a containment operand (dict, list, scalar or JSON text) and
+    renders ``col @> '<json>'::jsonb``; the checks are OR-ed. This is the
+    "any of" counterpart of ``@>``, whose array form is conjunctive.
+
+    Args:
+        col: safe column identifier.
+        operand: list of containment operands.
+
+    Returns:
+        The condition, or None when the operand is not a non-empty list.
+    """
+    cdef list parts
+    if not isinstance(operand, (list, tuple)) or not operand:
+        return None
+    parts = [
+        f"{col} @> {pg_literal(jsonb_operand(item))}::jsonb" for item in operand
+    ]
+    if len(parts) == 1:
+        return parts[0]
+    return '(' + ' OR '.join(parts) + ')'
+
+
 cdef str jsonb_path_condition(str col, str op, object operand):
     """Render ``{"->>": {"path": value}}`` / ``{"->": {...}}`` as comparisons.
 
@@ -121,12 +150,15 @@ cdef tuple jsonb_condition(str col, dict value):
       ``col @> '<json>'::jsonb``.
     * ``{"@>": operand}`` / ``{"<@": operand}``: explicit containment; the
       operand is a dict/list/scalar or a JSON text string.
+    * ``{"@>|": [operand, ...]}``: any-of containment, the checks are OR-ed.
     * ``{"->>": {...}}`` / ``{"->": {...}}``: key comparisons.
     * A first key that is a comparison token is left to the caller; dicts
       mixing operator and plain keys are dropped.
 
+    Key suffixes such as ``|`` or ``!`` are stripped from ``col``.
+
     Args:
-        col: safe column identifier.
+        col: safe column identifier, possibly carrying a key suffix.
         value: the filter value.
 
     Returns:
@@ -136,6 +168,7 @@ cdef tuple jsonb_condition(str col, dict value):
     cdef int operators
     if not value:
         return (False, None)
+    col = col.rstrip(JSONB_KEY_SUFFIXES)
     operators = sum(
         1 for k in value if k in COMPARISON_TOKENS or k in JSONB_OPERATORS
     )
@@ -149,6 +182,8 @@ cdef tuple jsonb_condition(str col, dict value):
             return (True, None)
         if op in ('@>', '<@'):
             return (True, f"{col} {op} {pg_literal(jsonb_operand(operand))}::jsonb")
+        if op == '@>|':
+            return (True, jsonb_any_of_condition(col, operand))
         return (True, jsonb_path_condition(col, op, operand))
     except (orjson.JSONDecodeError, orjson.JSONEncodeError, TypeError, ValueError):
         return (True, None)
