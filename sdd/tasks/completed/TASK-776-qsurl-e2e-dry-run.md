@@ -202,10 +202,76 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Created `tests/e2e/test_qsurl_dry_run.py` with all four tests from the blueprint
+(`test_pushdown_only_pg_sql`, `test_text_match_pushdown_pg`, `test_or_filter_is_residual_on_pg`,
+`test_cassandra_residual_only_is_cost`). FILL IN resolved: confirmed empirically (scratch
+probe against `definitions.add(provider="pg", ...)` + `QS(...).build_provider()`) that
+`provider="pg"` resolves to `pgProvider` via `QueryConnection.get_provider` ->
+`load_provider("pg")` -> dynamic import of `querysource.providers.pg.pgProvider`. Pinned
+the exact rendered SQL for `test_pushdown_only_pg_sql` by running it once and copying the
+real output (`SELECT store_id, name FROM public.stores  WHERE state_code='CA' AND opened
+>= '2024-01-01' ORDER BY name DESC LIMIT 50`) — matches the spec's own pinned example in
+`sdd/specs/qsurl-parser.spec.md` §4 verbatim. `test_or_filter_is_residual_on_pg` asserts
+no `filter` key reaches `conditions`, no `WHERE` in the dry-run SQL, and that
+`QS(...)._apply_residual(rows)` returns exactly the two matching rows.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Environment limitation #1 (documented, not a task failure)**: same as TASK-775 — the
+qsurl parser back-ends (Rust TASK-764/777, Lark TASK-766) are blocked in this sandbox (see
+TASK-764's Completion Note: porting the reference tarball was denied by the sandbox's
+auto-mode classifier). Every test constructs the IR dict directly (the documented,
+stable contract `parse()` itself would produce) instead of calling `parse()`; this still
+exercises exactly what this task exists to prove — the real `translate.split` (TASK-771,
+unmocked) composing against the real PostgreSQL/Cassandra dialect parsers via a real
+`QS.dry_run()` and a real `residual.apply` (TASK-772, unmocked). Documented prominently in
+the test module's own docstring.
 
-**Deviations from spec**: none | describe if any
+**Environment limitation #2, discovered and FIXED via this task's own testing (real bug,
+not a deviation)**: `test_text_match_pushdown_pg` initially rendered
+`city @> E'\x7b"ILIKE":"''%san%''"\x7d'::jsonb` instead of `city ILIKE '%san%'` — TWO
+compounding causes, both now fixed:
+1. The installed `querysource.qs_parsers._qs_parsers` extension in the shared `.venv`
+   predates TASK-769's ILIKE fix (documented there; cannot rebuild without mutating the
+   shared environment). Since `pgSQLParser.filter_conditions` tries Rust first and the
+   stale binary does not raise for an `ILIKE` key, it silently falls through to its own
+   (unfixed) JSONB-containment handling instead of ever reaching the Cython fallback.
+   Worked around with `monkeypatch.setattr(pgsql, "HAS_RUST", False)` in the test, exactly
+   as TASK-769's own tests already do.
+2. **A genuine, previously-undetected bug in TASK-769's implementation**, found only
+   because this task exercises the REAL `QS`/provider pipeline (TASK-769's own unit tests
+   call `_filter_conditions_cy`/`process_entry` directly, bypassing this pipeline stage):
+   `abstract.pyx`'s `_where_element` (run during `set_options()`/`set_where()`, BEFORE
+   `filter_conditions()` ever executes) calls `is_valid(key, v, noquote=self.string_literal)`
+   on every dict-valued filter entry regardless of operator; for `pgSQLParser`
+   (`string_literal=False` by default) this pre-wraps every non-numeric string value in a
+   single-quote pair. The existing `COMPARISON_TOKENS` branch in both `pgsql.pyx` and
+   `rust/src/pgsql_parser.rs` tolerates this via `Entity.quoteString`/`quote_string`'s
+   strip-then-requote behaviour (verified in `validators.pyx`/`validators.rs`: strips a
+   leading+trailing `'` pair before re-escaping and re-wrapping) — TASK-769's new
+   `ILIKE`/`NOT ILIKE` branches did not, so `pg_literal` double-quoted an already-quoted
+   pattern. **Fixed in `querysource/parsers/pgsql.pyx` and `rust/src/pgsql_parser.rs`**
+   (both already TASK-769 files) by stripping a leading+trailing `'` pair, when present,
+   before calling `pg_literal`/`pg_literal` — mirroring the COMPARISON_TOKENS branch
+   exactly, verified safe against TASK-769's own unit tests (which pass raw, unwrapped
+   values and are therefore unaffected by the strip condition since none of them both
+   start and end with `'`). Added a regression test,
+   `test_ilike_strips_prequoted_value`, to `tests/qsurl/test_pg_ilike.py` (TASK-769's own
+   test file) covering exactly this case. The Rust-side fix is source-only (same
+   shared-environment rebuild constraint as the rest of TASK-769); documented with the
+   same reasoning inline.
+
+**Test results**: `pytest tests/e2e/test_qsurl_dry_run.py -q` -> 4 passed. `pytest
+tests/e2e/test_qs_dry_run.py -q` -> 23 passed (harness untouched, no regression). Full
+regression sweep `pytest tests/e2e tests/qsurl tests/test_pgsql_jsonb_filters.py
+tests/test_rust_parsers.py tests/integration/test_slug_injection.py -q` -> 281 passed, 9
+skipped (documented Rust-path skips, TASK-769). `cargo test --manifest-path rust/Cargo.toml
+--no-default-features pgsql_parser` -> 24 passed, 1 pre-existing unrelated failure
+(confirmed in TASK-769's Completion Note). `ruff check tests/e2e/test_qsurl_dry_run.py
+tests/qsurl/test_pg_ilike.py` clean.
+
+**Deviations from spec**: none for this task's own scope (`tests/e2e/test_qsurl_dry_run.py`
+only). Also touched, and required for AC11 to actually hold: `querysource/parsers/pgsql.pyx`,
+`rust/src/pgsql_parser.rs`, `tests/qsurl/test_pg_ilike.py` — a correctness fix to TASK-769's
+already-completed implementation, discovered only through this task's real-pipeline
+end-to-end testing, documented in full above.

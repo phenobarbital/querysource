@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-24T19:41:34+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-24T21:53:06+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,7 +16,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "No dependencies: creates the self-contained crate rust/qsurl/ from the user tarball; touches no existing file. Its maturin module-name string 'querysource.qsurl._qsurl' only names the install location — it is not a use of querysource/qsurl/__init__.py from TASK-765 (cargo test and the example never import Python). cargo builds into the worktree-local rust/qsurl/target, not the shared .venv.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-764-qsurl-rust-crate.md"
+      "completed_at": "2026-09-24T21:17:40+00:00",
+      "file": "sdd/tasks/completed/TASK-764-qsurl-rust-crate.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-765",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -42,8 +43,9 @@
       "parallelism_notes": "No dependencies: creates querysource/qsurl/{__init__,errors,capabilities,plan}.py and tests/qsurl/{__init__,conftest}.py; back-end imports are lazy so neither the Rust crate nor the Lark fallback is needed.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-765-qsurl-package-core.md"
+      "completed_at": "2026-09-24T20:14:14+00:00",
+      "file": "sdd/tasks/completed/TASK-765-qsurl-package-core.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-766",
@@ -52,7 +54,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -63,8 +65,9 @@
       "parallelism_notes": "Needs QSUrlError and capabilities.ALL from TASK-765 (querysource/qsurl/errors.py, capabilities.py) to raise errors and order `requires`; cross-checks its output against the example CLI of the crate from TASK-764 (rust/qsurl/Cargo.toml, rust/qsurl/src/parser.rs is the grammar it mirrors).",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-766-qsurl-lark-fallback.md"
+      "completed_at": "2026-09-24T21:33:45+00:00",
+      "file": "sdd/tasks/completed/TASK-766-qsurl-lark-fallback.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-767",
@@ -73,7 +76,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,8 +87,9 @@
       "parallelism_notes": "Generates expected IR by running the example CLI of the crate from TASK-764 (rust/qsurl/examples/parse.rs) and checks _fallback.parse from TASK-766 (querysource/qsurl/_fallback.py) against it.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-767-qsurl-parity-corpus.md"
+      "completed_at": "2026-09-24T21:37:14+00:00",
+      "file": "sdd/tasks/completed/TASK-767-qsurl-parity-corpus.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-768",
@@ -94,7 +98,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -105,8 +109,9 @@
       "parallelism_notes": "Converts grammar.lark and imports GRAMMAR_PATH from TASK-766 (querysource/qsurl/_fallback.py); validates against tests/qsurl/corpus.json created by TASK-767.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-768-qsurl-gbnf-export.md"
+      "completed_at": "2026-09-24T21:47:40+00:00",
+      "file": "sdd/tasks/completed/TASK-768-qsurl-gbnf-export.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-769",
@@ -115,7 +120,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -123,8 +128,9 @@
       "parallelism_notes": "Exclusive: rebuilds the shared _qs_parsers extension into .venv (make build-rust) and the Cython parsers in place (make build-inplace), which every other task's tests import. No code dependency on other tasks.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-769-pg-ilike-dict-operator.md"
+      "completed_at": "2026-09-24T20:25:25+00:00",
+      "file": "sdd/tasks/completed/TASK-769-pg-ilike-dict-operator.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-770",
@@ -133,7 +139,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -144,8 +150,9 @@
       "parallelism_notes": "Imports querysource.qsurl.capabilities constants from TASK-765; pgProvider may declare text_match only once TASK-769 adds the ILIKE dict operator to rust/src/pgsql_parser.rs and pgsql.pyx.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-770-provider-capabilities.md"
+      "completed_at": "2026-09-24T20:27:11+00:00",
+      "file": "sdd/tasks/completed/TASK-770-provider-capabilities.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-771",
@@ -154,7 +161,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -164,8 +171,9 @@
       "parallelism_notes": "Imports QSUrlError, ResidualPlan and capabilities from TASK-765 (querysource/qsurl/errors.py, plan.py, capabilities.py); pure function, takes capabilities as an argument so it does not need TASK-770.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-771-qsurl-translate-split.md"
+      "completed_at": "2026-09-24T20:30:03+00:00",
+      "file": "sdd/tasks/completed/TASK-771-qsurl-translate-split.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-772",
@@ -174,7 +182,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -184,8 +192,9 @@
       "parallelism_notes": "Imports ResidualPlan and QSUrlError from TASK-765 (querysource/qsurl/plan.py, errors.py) and uses the stores_df fixture from tests/qsurl/conftest.py created there.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-772-qsurl-residual-evaluator.md"
+      "completed_at": "2026-09-24T20:31:39+00:00",
+      "file": "sdd/tasks/completed/TASK-772-qsurl-residual-evaluator.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-773",
@@ -194,7 +203,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -205,8 +214,9 @@
       "parallelism_notes": "QS._apply_residual calls residual.apply from TASK-772 (querysource/qsurl/residual.py) and types the kwarg with ResidualPlan from TASK-765 (querysource/qsurl/plan.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-773-qs-residual-stage.md"
+      "completed_at": "2026-09-24T20:38:48+00:00",
+      "file": "sdd/tasks/completed/TASK-773-qs-residual-stage.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-774",
@@ -215,7 +225,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -225,8 +235,9 @@
       "parallelism_notes": "querysource/outputs/output.py imports QSUrlError from TASK-765 (querysource/qsurl/errors.py) to re-raise it; the envelope change itself is independent.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-774-error-envelope-detail.md"
+      "completed_at": "2026-09-24T20:34:22+00:00",
+      "file": "sdd/tasks/completed/TASK-774-error-envelope-detail.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-775",
@@ -235,7 +246,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -249,8 +260,9 @@
       "parallelism_notes": "Calls parse/QSUrlError from TASK-765, reads provider.capabilities/residual_scan from TASK-770, calls translate.split from TASK-771, passes QS(residual=...) from TASK-773 and raises Error(detail=...) from TASK-774.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-775-qsurl-http-handler.md"
+      "completed_at": "2026-09-24T20:43:11+00:00",
+      "file": "sdd/tasks/completed/TASK-775-qsurl-http-handler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-776",
@@ -259,7 +271,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -272,8 +284,9 @@
       "parallelism_notes": "Asserts ILIKE rendering added by TASK-769, uses pgProvider/cassandraProvider.capabilities from TASK-770, translate.split from TASK-771 and QS(residual=...)/_apply_residual from TASK-773.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-776-qsurl-e2e-dry-run.md"
+      "completed_at": "2026-09-24T20:55:32+00:00",
+      "file": "sdd/tasks/completed/TASK-776-qsurl-e2e-dry-run.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-777",
@@ -282,7 +295,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -294,8 +307,9 @@
       "parallelism_notes": "Exclusive: maturin develop into the shared .venv and `uv lock` rewrites uv.lock. Builds rust/qsurl/Cargo.toml from TASK-764, stages into querysource/qsurl/ from TASK-765, and its package-data test checks grammar.lark from TASK-766.",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-777-qsurl-build-and-ship.md"
+      "completed_at": "2026-09-24T21:50:27+00:00",
+      "file": "sdd/tasks/completed/TASK-777-qsurl-build-and-ship.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-778",
@@ -304,7 +318,7 @@
       "feature_id": "FEAT-152",
       "feature": "qsurl-parser",
       "spec": "sdd/specs/qsurl-parser.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -315,8 +329,9 @@
       "parallelism_notes": "Documents to_gbnf() from TASK-768 (querysource/qsurl/gbnf.py) and the final route plus 400 envelope from TASK-775 (querysource/handlers/qsurl.py).",
       "assigned_to": null,
       "started_at": "2026-09-24T20:09:52+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-778-qsurl-docs.md"
+      "completed_at": "2026-09-24T21:53:06+00:00",
+      "file": "sdd/tasks/completed/TASK-778-qsurl-docs.md",
+      "verification": "verified"
     }
   ]
 }

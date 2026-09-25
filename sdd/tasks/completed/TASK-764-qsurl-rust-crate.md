@@ -2,11 +2,11 @@
 
 **Feature**: FEAT-152 — qsurl: HTSQL-style URL query dialect (chumsky 0.13 + PyO3)
 **Spec**: `sdd/specs/qsurl-parser.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: none
-**Assigned-to**: unassigned
+**Assigned-to**: claude-fable-5-1 (interactive)
 
 ---
 
@@ -234,18 +234,18 @@ Copy verbatim from the extracted tarball. No edits.
 **Why**: they are the reviewed grammar and lowering rules reproduced in spec §6 "User-Provided Code".
 
 ### FILL IN checklist
-- [ ] `lib.rs::requires_is_declaration_ordered` — assertion; bounded by the observed order in the Codebase Contract.
-- [ ] `lib.rs::lower_error_json_has_only_kind_and_message` — exact JSON string assertion.
+- [x] `lib.rs::requires_is_declaration_ordered` — assertion; bounded by the observed order in the Codebase Contract.
+- [x] `lib.rs::lower_error_json_has_only_kind_and_message` — exact JSON string assertion.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `cargo test --manifest-path rust/qsurl/Cargo.toml` → 13 lib tests pass, no Python linked (spec AC1).
-- [ ] `cargo run --manifest-path rust/qsurl/Cargo.toml --example parse -- "/queries/x{a}?a=1:top(1)"` prints the IR.
-- [ ] `cargo build --manifest-path rust/qsurl/Cargo.toml --features python` compiles.
-- [ ] `grep -c 'fn _qsurl(' rust/qsurl/src/python.rs` → 1.
-- [ ] `rust/qsurl/target/` is not committed (covered by `.gitignore:107` `target/`).
+- [x] `cargo test --manifest-path rust/qsurl/Cargo.toml` → 13 lib tests pass, no Python linked (spec AC1).
+- [x] `cargo run --manifest-path rust/qsurl/Cargo.toml --example parse -- "/queries/x{a}?a=1:top(1)"` prints the IR.
+- [x] `cargo build --manifest-path rust/qsurl/Cargo.toml --features python` compiles.
+- [x] `grep -c 'fn _qsurl(' rust/qsurl/src/python.rs` → 1.
+- [x] `rust/qsurl/target/` is not committed (covered by `.gitignore:107` `target/`).
 
 ---
 
@@ -285,10 +285,22 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Fable 5.1 (interactive session, main repo user request)
+**Date**: 2026-09-24
+**Notes**: Verified the tarball hash (`a25c08fe…4bba45`, matches the Codebase Contract),
+extracted it and copied `src/{ast,parser,ir}.rs` and `examples/parse.rs` byte-for-byte
+(`cmp` identical). `Cargo.toml` / `pyproject.toml` written from the blueprint (edition 2024,
+`rust-version = "1.88"`, empty default features, pyo3 0.29 optional behind `python`,
+`module-name = "querysource.qsurl._qsurl"`). `python.rs`: `#[pymodule] fn qsurl` → `fn _qsurl`
+and the doc-comment import example now names `querysource.qsurl._qsurl`. `lib.rs`: the 11
+reference tests kept verbatim plus `requires_is_declaration_ordered` and
+`lower_error_json_has_only_kind_and_message` with the exact assertions from the contract.
+Also committed the reference `README.md` and the generated `rust/qsurl/Cargo.lock` (the sibling
+`rust/Cargo.lock` is tracked too).
+Results: `cargo test --manifest-path rust/qsurl/Cargo.toml` → 13 passed, 0 warnings, no
+libpython linked; `cargo run --example parse -- "/queries/x{a}?a=1:top(1)"` prints the IR;
+`cargo build --features python` compiles; `grep -c 'fn _qsurl('` → 1; `rust/qsurl/target/`
+is git-ignored. Validation gate `pytest tests/test_rust_parsers.py -q` → 124 passed, 1 skipped
+(existing `rust/` crate untouched).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none (README.md and Cargo.lock added beyond the listed files; no source changes)

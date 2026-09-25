@@ -233,10 +233,70 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented `querysource/qsurl/gbnf.py` by walking `Lark(grammar_source,
+parser="lalr").rules`/`.terminals` (never re-parsing the `.lark` text by hand, per the
+blueprint): `_RegexToGbnf` (a small recursive-descent transpiler for the exact regex
+subset the grammar's terminals use — literals, `\d`, `[...]`/`[^...]` classes, `(...)`/
+`(?:...)` groups, `|` alternation, `?`/`*`/`+` quantifiers) converts each terminal;
+`_rule_name` slugifies Lark's generated rule names to GBNF-legal `[a-z0-9-]+`; `to_gbnf`
+groups `.rules` by origin and emits one alternation per non-terminal, with `root ::= ws
+query ws` / `ws ::= [ \t]*` prepended.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Two design decisions beyond the literal blueprint, both required for AC16 to hold and
+documented at length in the source** (not scope creep — the blueprint's own FILL IN for
+`_terminal_to_gbnf` explicitly anticipates unsupported-construct handling, and the
+GBNF-vs-CFG semantic gap they close is inherent to *any* correct GBNF export of this
+grammar, not specific to my implementation choices):
+1. **`(?!...)` negative lookahead has no GBNF equivalent** (used by every keyword
+   terminal — `NULL`/`TRUE`/`FALSE`/`TOP_KW`/`SKIP_KW`/`SORT_KW`/`DISTINCT_KW` — for the
+   TASK-766 word-boundary fix). Rather than raising `ValueError` (which would make
+   `to_gbnf()` unconditionally fail), the lookahead is dropped: the emitted GBNF accepts
+   a strict superset of the real language at word boundaries only (e.g. it cannot
+   distinguish `sort` followed by a letter from bare `sort`) — acceptable for constrained
+   decoding, whose job is keeping generation inside valid *shapes*, not exactly
+   replicating the parser's own rejection boundary; the real parsers (TASK-764/766)
+   remain authoritative.
+2. **Lark expands every `grammar.lark` `(body)*`/`(body)+` into a synthetic
+   `__foo_star_N` origin encoded as LEFT recursion** (`rule ::= body | rule body`) —
+   meaningless for a GBNF/LLM-decoding consumer and unmatchable by the test-local
+   backtracking-free matcher below. `_detect_star_bodies` recognises this exact
+   two-alternative shape and inlines it at every use site as GBNF's native `(...)+`
+   instead of emitting a separate rule. A **third, initially-missed** consequence of
+   this substitution: Lark's `%ignore WS` tolerates whitespace between *every* adjacent
+   token pair, including at a repetition boundary (e.g. the space before the second
+   pipe's `:` in `":sort(x) : top(5)"`) — found via the `decoded_whitespace` corpus case
+   failing — fixed by emitting `(body) (ws (body))*` (a leading occurrence, then
+   zero-or-more further occurrences each separated by `ws`) instead of a bare `(body)+`.
+3. **`unknown_pipe` is grammatically unconstrained in `grammar.lark` by design** (it
+   exists solely so the Lark *parser* can capture any identifier for TASK-766's R8 error
+   message — not part of the qsurl *language*). Any GBNF alternative reaching
+   `unknown_pipe` is dropped, so the exported `pipe` rule only admits the six real pipe
+   operators — this is exactly what `test_gbnf_rejects_unknown_pipe` requires, and
+   without it the GBNF would (correctly, per the raw grammar) accept `:order(...)` as
+   syntactically valid, which is not the intent of a *constrained-decoding* export.
 
-**Deviations from spec**: none | describe if any
+`tests/qsurl/test_gbnf.py`'s `_GbnfMatcher`/`_GbnfExprParser` implement the FILL IN
+in-test matcher: quantifiers (`?`/`*`/`+`) are matched with an iterative greedy loop,
+never recursively per repetition, so the `eight_kb_url` corpus case's 900+ repeated
+`&`-joined conditions cost one pass over the repeated body rather than one stack frame
+per repetition (matches ~191ms, well within pytest's default timeout, no
+`sys.setrecursionlimit` adjustment needed — grammar *structure* nesting is small and
+input-size-independent). One further real bug found and fixed via this same test: the
+matcher's own `\t`/`\n`/... escape decoding inside `[...]` classes initially treated
+`\t` as the *literal letter* `t` rather than an actual tab byte, causing the `ws` rule
+(`[ \t]*`) to wrongly consume any `t` character — fixed in `_char_in_class`'s escape
+table (test-only code, not `gbnf.py`).
+
+**Test results**: `pytest tests/qsurl/test_gbnf.py -q` -> 3 passed (`to_gbnf()` accepts
+every valid corpus input including `eight_kb_url`; rejects the unknown-pipe input;
+every emitted rule name is GBNF-legal). Full regression: `pytest tests/qsurl tests/e2e
+tests/handlers/test_qsurl_service.py tests/handlers/test_queryservice_pbac_smoke.py -q`
+-> 133 passed, 10 skipped (documented Rust-path skips, TASK-769). `ruff check
+querysource/qsurl/gbnf.py tests/qsurl/test_gbnf.py` clean. No new dependency added
+(only `lark`, `re`, `collections.OrderedDict`, `pathlib.Path`, stdlib `logging`).
+
+**Deviations from spec**: none for the blueprint's own listed files — no change to
+`grammar.lark` was needed (the three decisions above are export-time choices in
+`gbnf.py`, not grammar-level changes).

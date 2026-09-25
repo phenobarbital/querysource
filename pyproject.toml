@@ -193,6 +193,7 @@ include = ["querysource", "querysource.*"]
 [tool.setuptools.package-data]
 querysource = ["py.typed"]
 "querysource.qs_parsers" = ["*.so", "*.pyd"]
+"querysource.qsurl" = ["*.so", "*.pyd", "*.lark"]
 
 # Exclude Cython-generated intermediate sources from the wheel.
 # These .c/.cpp files are build artifacts (the compiled .so already ships)

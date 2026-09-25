@@ -258,10 +258,39 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Added `QSURL_MAX_RESIDUAL_ROWS = config.getint("QSURL_MAX_RESIDUAL_ROWS",
+fallback=50000)` to `querysource/conf.py` above `EXCLUDED_QUERY_PARAMETERS`. Added the
+keyword-only `residual: "ResidualPlan | None" = None` parameter to `QS.__init__`
+(`ResidualPlan` imported under `TYPE_CHECKING`) and `self._residual: ResidualPlan | None
+= residual` right after `self.is_cached`; `residual` is a named parameter, never
+forwarded to `super().__init__(**kwargs)`, so it never reaches `self.kwargs`. Added
+`_apply_residual` after `__repr__`, filling in both FILL INs (cost check before any
+DataFrame is built; `DataNotFound` on an empty result after `residual.apply`). Wired
+both call sites exactly as specified: `self._result = self._apply_residual(result)`
+inside the cache-hit `else:` clause, and `self._result = self._apply_residual(self._result)`
+after the `## Saving into Cache:` block (so the cache still stores pushdown-only rows)
+and before `## returning data:`. Created `tests/qsurl/test_qs_residual.py` with a
+`_FakeProvider`/`_FakeConnection` pair (query()/refresh()/accepts()/checksum(),
+in_cache()/from_cache()/dispose()) and all 6 tests (provider path, cache-hit path via a
+JSON-encoded cache payload decoded through the real `DefaultEncoder`, cost guard via
+`monkeypatch.setattr(conf, "QSURL_MAX_RESIDUAL_ROWS", 3)`, empty-after-residual raising
+`DataNotFound`, no-plan no-op, and `residual` absent from `.kwargs`). Two small,
+verified fixes needed for the fakes to exercise real `QS.query()` control flow (not
+blueprint deviations, just test scaffolding): `qs._conn = None` (the `finally:` block
+dereferences it) and `qs.result_cache_key = lambda _: "test-cache-key"` (the real
+`result_cache_key` needs a loaded `QueryIdentity`, out of scope for a fake provider that
+skips `build_provider()`). `ruff`'s `UP037` correctly flagged the blueprint's quoted
+attribute annotation `self._residual: "ResidualPlan | None"` as unnecessary — verified
+empirically that Python does not evaluate annotations on dotted (attribute) assignment
+targets at runtime (only simple-name/parameter annotations are), unlike the quoted
+`principal: "QSPrincipal | None"` *parameter* default already in this file which does need
+quoting; removed the quotes to keep `ruff check` clean. `pytest tests/qsurl/test_qs_residual.py
+tests/e2e/test_qs_dry_run.py -q` → 29 passed (no regression). `ruff check
+querysource/queries/qs.py querysource/conf.py tests/qsurl/test_qs_residual.py` reports one
+pre-existing `I001` on `conf.py`'s unrelated top-of-file import block (confirmed via `git
+stash` identical before/after); `ruff check --select E9,F63,F7,F82` clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: cosmetic only — removed the blueprint's quotes around the
+`self._residual` attribute annotation (see above); no signature, path or behavior change.

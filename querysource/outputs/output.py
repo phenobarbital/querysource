@@ -14,6 +14,7 @@ from ..exceptions import (
 )
 from ..interfaces.queries import AbstractQuery
 from ..ownership_logging import implicit_artifact_name
+from ..qsurl.errors import QSUrlError
 from ..utils.errors import build_error_payload
 from .writers import (
     BokehWriter,
@@ -234,6 +235,8 @@ class DataOutput:
             ### Return data on Output:
             try:
                 await writer.get_result()
+            except QSUrlError:
+                raise  # FEAT-152: the qsurl handler answers 400 with the structured detail
             except (NoDataFound, DataNotFound) as err:
                 _msg = f"{err!s}" if DEBUG else "Data not found"
                 headers = {

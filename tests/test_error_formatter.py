@@ -8,7 +8,6 @@ import pytest
 
 from querysource.utils.errors import GENERIC_MESSAGES, build_error_payload
 
-
 # ---------------------------------------------------------------------------
 # Acceptance-criteria tests
 # ---------------------------------------------------------------------------
@@ -192,3 +191,17 @@ def test_build_payload_sanitizes_db_message(db_column_error):
     assert "apikey" not in str(payload)
     assert "trace" not in payload
     assert payload["error"] == GENERIC_MESSAGES["query_error"]
+
+
+def test_public_detail_survives_production():
+    """FEAT-152: a caller-asserted client-safe detail is emitted with debug=False; trace is not."""
+    payload = build_error_payload(
+        category="query_error", status=400, public_detail={"kind": "parse", "offset": 3}
+    )
+    assert payload["detail"] == {"kind": "parse", "offset": 3}
+    assert "trace" not in payload
+
+
+def test_public_detail_absent_keeps_minimal_payload():
+    payload = build_error_payload(category="query_error", status=400, public_detail=None)
+    assert set(payload) == {"error", "status", "error_id"}

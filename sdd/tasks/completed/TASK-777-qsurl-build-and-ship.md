@@ -258,10 +258,53 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: `Makefile`: `build-rust` now also runs `$(MATURIN) develop --release
+--manifest-path rust/qsurl/Cargo.toml`; `stage-rust` appended the identical-shape qsurl
+staging block (tabs preserved, verified with `cat -A` and `make -n stage-rust`).
+`.github/workflows/release.yml`: `CIBW_BEFORE_BUILD` now builds+extracts `_qsurl` from
+`{project}/rust/qsurl` into `{project}/querysource/qsurl/` right after the existing
+`_qs_parsers` block, mirroring it exactly (verified the edited YAML still parses with
+`yaml.safe_load`). `pyproject.toml`: added `"querysource.qsurl" = ["*.so", "*.pyd",
+"*.lark"]` under `[tool.setuptools.package-data]`, right after the `qs_parsers` entry;
+confirmed `lark>=1.3.1` was indeed already a committed direct dependency (line 119, no
+edit needed there). Created `tests/qsurl/test_wheel_layout.py` (grammar-is-package-data,
+Rust-extension-exposes-parse/requires — skipped, no extension built — and
+package-data-declared-in-pyproject, parsed with `tomllib`).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**FILL IN checklist resolved**:
+- `.gitignore` coverage: already covers `querysource/qsurl/*.so` via the existing global
+  `*.so` pattern (`.gitignore:21`) — no edit needed, confirmed by inspection before
+  editing anything else.
+- `uv.lock` diff review: **`uv.lock` is itself gitignored in this repository**
+  (`.gitignore:52` and `:274`, both active, uncommented) — a genuine, surprising finding
+  (most `uv`-managed projects commit their lock file; this one deliberately does not).
+  There is therefore nothing to regenerate-and-commit: `lark` is already a direct
+  dependency in `pyproject.toml`, and any local `uv lock` run by a developer produces a
+  file git will never track. Did not run `uv lock` (no committable outcome, and running
+  it would touch nothing this task's file table lists).
+- Two test bodies: written per the blueprint (see above).
 
-**Deviations from spec**: none | describe if any
+**Environment limitation (documented, consistent with TASK-764/769/775/776/778's own
+notes)**: `make build-rust` cannot run in this worktree — confirmed empirically
+(`.venv/bin/maturin: No existe el archivo o el directorio`, exit 127): the Makefile's
+`MATURIN := .venv/bin/maturin` is a path relative to the invoking working directory, this
+worktree carries no local `.venv` (a bare git worktree sharing the *interpreter* via
+`PATH` but not a `.venv` directory of its own), and pointing it at the shared main
+checkout's `.venv` would install into a shared, read-only-enforced environment worktree
+agents must never mutate. AC2 (`HAS_RUST` True after `make build-rust`) and AC17's
+runtime half (`make stage-rust` leaves `querysource/qsurl/_qsurl*.so`) could not be
+executed here as a result — the file-level changes that make both commands *correct*
+once run by a privileged operator (or CI) are complete and were verified statically
+(`make -n stage-rust` dry-run, `cat -A` tab check, YAML parse) instead.
+
+**Test results**: `pytest tests/qsurl/test_wheel_layout.py -q` -> 2 passed, 1 skipped (no
+Rust extension installed, same shared-environment constraint). Full regression: `pytest
+tests/qsurl -q` -> 84 passed, 11 skipped. `ruff check tests/qsurl/test_wheel_layout.py`
+clean.
+
+**Deviations from spec**: `uv.lock` was not touched (see above — it is gitignored, so
+"regenerate and commit" has no committable outcome); `make build-rust`/`make stage-rust`
+were not executed (shared-environment constraint, documented above) — both are
+environment findings, not implementation deviations from the blueprint's file changes.

@@ -295,10 +295,33 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (Claude Sonnet 5, sequential fallback loop)
+**Date**: 2026-09-24
+**Notes**: Implemented exactly per the Implementation Blueprint: `build_error_payload`
+gained `public_detail: Optional[dict] = None`, documented, and emits `payload["detail"]
+= public_detail` in every mode when given (after the existing debug-only block, so it
+can override it). `AbstractHandler.Error` gained `detail: dict | None = None`,
+documented; disambiguated the correct one of the three `public_message=message if
+self.debug else None,` occurrences (confirmed by context: the one at the-then line 173,
+now 176, preceded by `debug=self.debug,` / `logger=self.logger,` inside `Error`, distinct
+from the ones in `NotFound` and `Except`) and changed it to `public_message=message if
+(self.debug or detail is not None) else None,` plus `public_detail=detail,`.
+`DataOutput.response` gained `except QSUrlError: raise` as the first except clause after
+`await writer.get_result()` (before the existing `except (DriverError, QueryException)`
+which would otherwise swallow it, since `QSUrlError` is a `QueryException` subclass) plus
+the `from ..qsurl.errors import QSUrlError` import. Appended
+`test_public_detail_survives_production` / `test_public_detail_absent_keeps_minimal_payload`
+to `tests/test_error_formatter.py`; created `tests/qsurl/test_error_envelope.py` with the
+given `test_error_with_detail_is_400_with_detail` plus the two FILL IN tests
+(`test_error_without_detail_unchanged_in_production`, `test_dataoutput_reraises_qsurlerror`
+— the latter via `monkeypatch.setitem(output_module.WRITERS, "json", _StubWriter)` with a
+minimal writer stub whose `get_result()` raises `QSUrlError`, per the blueprint's guidance).
+`pytest tests/test_error_formatter.py tests/test_feat102_error_redaction.py -q` → 38
+passed (no regression; note: `-p no:logging` disables the `caplog` fixture these suites
+use — do not pass that flag to this file). `pytest tests/qsurl/test_error_envelope.py -q`
+→ 4 passed. `ruff check --select E9,F63,F7,F82` clean on every touched file; full
+`ruff check` reports 2 pre-existing findings (a `B012` in `abstract.py` on an unrelated
+line, an `I001` import-sort finding in `test_error_formatter.py`) — confirmed via `git
+stash` to be identical before and after this task's changes.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none.
