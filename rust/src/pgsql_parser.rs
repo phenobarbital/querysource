@@ -6,7 +6,7 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyString};
+use pyo3::types::{PyAny, PyDict, PyList, PyString};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
@@ -77,7 +77,12 @@ const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
 const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "IS"];
 
 /// JSONB operators accepted as the key of a dict-typed filter value.
-const JSONB_OPERATORS: &[&str] = &["@>", "<@", "->", "->>"];
+/// `@>|` is the any-of form: a list of containment operands OR-ed together.
+const JSONB_OPERATORS: &[&str] = &["@>", "<@", "@>|", "->", "->>"];
+
+/// Key suffixes (negation, overlap, ...) carry no meaning for JSONB filters
+/// and are stripped from the column name.
+const JSONB_KEY_SUFFIXES: &[char] = &['|', '!', '~', '#', '@', ':'];
 
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
@@ -200,6 +205,30 @@ fn jsonb_operand(obj: &Bound<'_, PyAny>) -> PyResult<String> {
     orjson_dumps(obj)
 }
 
+/// Render `{"@>|": [a, b, ...]}` as OR-ed containment checks.
+///
+/// Each item is a containment operand (dict, list, scalar or JSON text) and
+/// renders `col @> '<json>'::jsonb`; the checks are OR-ed. This is the
+/// "any of" counterpart of `@>`, whose array form is conjunctive. Returns
+/// `None` when the operand is not a non-empty list.
+fn jsonb_any_of_condition(col: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let Ok(items) = operand.cast::<PyList>() else {
+        return Ok(None);
+    };
+    if items.is_empty() {
+        return Ok(None);
+    }
+    let mut parts: Vec<String> = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        parts.push(format!("{} @> {}::jsonb", col, pg_literal(&jsonb_operand(&item)?)));
+    }
+    if parts.len() == 1 {
+        Ok(parts.pop())
+    } else {
+        Ok(Some(format!("({})", parts.join(" OR "))))
+    }
+}
+
 /// Render `{"->>": {"path": value, ...}}` / `{"->": {...}}` as key comparisons.
 ///
 /// `->>` compares the text of the key (non-string values are compared by
@@ -245,10 +274,14 @@ fn jsonb_path_condition(col: &str, op: &str, operand: &Bound<'_, PyAny>) -> PyRe
 ///   `col @> '<json>'::jsonb`.
 /// * `{"@>": operand}` / `{"<@": operand}`: explicit containment; the
 ///   operand is a dict/list/scalar or a JSON text string.
+/// * `{"@>|": [operand, ...]}`: any-of containment, the checks are OR-ed
+///   (see [`jsonb_any_of_condition`]).
 /// * `{"->>": {...}}` / `{"->": {...}}`: key comparisons (see
 ///   [`jsonb_path_condition`]).
 /// * A first key that is a comparison token is left to the generic path;
 ///   dicts mixing operator and plain keys are dropped.
+///
+/// Key suffixes such as `|` or `!` are stripped from the column name.
 fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
     if dict.is_empty() {
         return JsonbOutcome::NotJsonb;
@@ -269,8 +302,8 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
             }
         }
     }
-    // SECURITY: the column must be a safe identifier.
-    let Some(col) = pg_safe_identifier_key(key) else {
+    // SECURITY: the column must be a safe identifier (suffixes stripped).
+    let Some(col) = pg_safe_identifier_key(key.trim_end_matches(JSONB_KEY_SUFFIXES)) else {
         return JsonbOutcome::Skip;
     };
     let rendered = if operators == 0 {
@@ -282,6 +315,7 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
         match op.as_str() {
             "@>" | "<@" => jsonb_operand(&operand)
                 .map(|j| Some(format!("{} {} {}::jsonb", col, op, pg_literal(&j)))),
+            "@>|" => jsonb_any_of_condition(&col, &operand),
             _ => jsonb_path_condition(&col, &op, &operand),
         }
     };
