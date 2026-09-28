@@ -152,7 +152,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -164,8 +164,8 @@
       "parallelism_notes": "Ports split_filters from TASK-783; extends Planner/build_plan_core in rust/src/pgsql_unnest.rs created by TASK-785 (same file, and lib.rs line added by TASK-785); exclusive for maturin rebuild. Runs TASK-779's frozen tests/test_pgsql_jsonb_unnest_regression.py as a validation command.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-786-rust-unnest-filters-plan.md"
+      "completed_at": "2026-09-28T22:41:49+00:00",
+      "file": "sdd/tasks/completed/TASK-786-rust-unnest-filters-plan.md"
     },
     {
       "id": "TASK-787",
