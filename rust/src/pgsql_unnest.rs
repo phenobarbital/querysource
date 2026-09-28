@@ -9,6 +9,7 @@ use once_cell::sync::Lazy;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBool, PyDict, PyFloat, PyList, PyString};
+use pyo3::IntoPyObjectExt;
 use regex::Regex;
 
 pub(crate) const ARRAY_ALIAS: &str = "_qs_e0";
@@ -859,9 +860,47 @@ impl Planner {
     }
 }
 
-/// Format a float like Python `repr(float)` for the common finite cases.
+/// Format a float exactly like Python `repr(float)` (`str(float)`).
 pub(crate) fn float_repr(value: f64) -> String {
-    format!("{:?}", value)
+    if value.is_nan() {
+        return "nan".to_string();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "inf" } else { "-inf" }.to_string();
+    }
+    if value == 0.0 {
+        return if value.is_sign_negative() { "-0.0" } else { "0.0" }.to_string();
+    }
+    let sci = format!("{:e}", value.abs());
+    let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
+    let exp: i32 = exponent.parse().unwrap_or(0);
+    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let sign = if value < 0.0 { "-" } else { "" };
+    if (-4..16).contains(&exp) {
+        if exp >= 0 {
+            let int_len = exp as usize + 1;
+            if digits.len() <= int_len {
+                format!("{}{}{}.0", sign, digits, "0".repeat(int_len - digits.len()))
+            } else {
+                format!("{}{}.{}", sign, &digits[..int_len], &digits[int_len..])
+            }
+        } else {
+            format!("{}0.{}{}", sign, "0".repeat((-exp - 1) as usize), digits)
+        }
+    } else {
+        let mantissa = if digits.len() == 1 {
+            digits.clone()
+        } else {
+            format!("{}.{}", &digits[..1], &digits[1..])
+        };
+        format!(
+            "{}{}e{}{:02}",
+            sign,
+            mantissa,
+            if exp < 0 { "-" } else { "+" },
+            exp.abs()
+        )
+    }
 }
 
 fn having_value(key: &str, value: &UValue) -> Result<String, String> {
@@ -902,7 +941,7 @@ pub(crate) struct Plan {
     pub row_filter: Vec<RowEntry>,
 }
 
-/// Port of `unnest_plan` WITHOUT element filters: every filter key -> `RowEntry::Original`.
+/// Port of `unnest_plan` (select/group/order/having plus element filters and pre-filters).
 pub(crate) fn build_plan_core(
     fields: &[String],
     grouping: &[String],
@@ -979,16 +1018,13 @@ pub(crate) fn build_plan_core(
             having_sql.extend(planner.having_condition(key, value)?);
         }
     }
-    let row_filter = filter
-        .iter()
-        .map(|(k, _)| RowEntry::Original(k.clone()))
-        .collect();
+    let (element_where, row_filter) = split_filters_core(&mut planner, filter)?;
     Ok(Some(Plan {
         select,
         group_by,
         order_by,
         having: having_sql,
-        element_where: Vec::new(),
+        element_where,
         lateral: planner.lateral(),
         row_filter,
     }))
@@ -1037,6 +1073,266 @@ pub fn pgsql_unnest_wrap(inner_sql: &str, plan: &Bound<'_, PyDict>) -> PyResult<
         .extract()
         .map_err(|_| invalid())?;
     Ok(wrap_sql(inner_sql, &select, &lateral, &element_where))
+}
+
+pub(crate) const FILTER_OPERATORS: &[&str] = &["=", ">=", "<=", "<>", "!=", "<", ">"];
+
+/// Mirrors `_unquote` (jsonb_unnest.pyx / pgsql.pyx:282-285).
+pub(crate) fn unquote(value: &str) -> String {
+    if value.len() >= 2 && value.starts_with('\'') && value.ends_with('\'') {
+        value[1..value.len() - 1].replace("''", "'")
+    } else {
+        value.to_string()
+    }
+}
+
+/// Mirrors `_filter_literal`.
+pub(crate) fn filter_literal(value: &UValue, key: &str) -> Result<String, String> {
+    match value {
+        UValue::Str(s) => Ok(pg_literal(&unquote(s))),
+        UValue::Bool(b) => Ok(pg_literal(if *b { "true" } else { "false" })),
+        UValue::Int(i) => Ok(pg_literal(&i.to_string())),
+        UValue::Float(f) => Ok(pg_literal(&float_repr(*f))),
+        _ => Err(format!("jsonb_unnest: invalid filter value for '{}'", key)),
+    }
+}
+
+fn is_null_text(value: &str) -> bool {
+    value == "null" || value == "NULL"
+}
+
+/// Mirrors `_prefilter_document`: nested object from `keys` ending in the unquoted value.
+fn prefilter_document(keys: &[String], value: &str) -> UValue {
+    let mut document = UValue::Str(unquote(value));
+    for key in keys.iter().rev() {
+        document = UValue::Dict(vec![(key.clone(), document)]);
+    }
+    document
+}
+
+/// Mirrors `_element_condition`.
+fn element_condition(
+    sql: &str,
+    key: &str,
+    negated: bool,
+    value: &UValue,
+) -> Result<Vec<String>, String> {
+    let invalid = || format!("jsonb_unnest: invalid filter value for '{}'", key);
+    match value {
+        UValue::None => {
+            return Ok(vec![if negated {
+                format!("{} IS NOT NULL", sql)
+            } else {
+                format!("{} IS NULL", sql)
+            }])
+        }
+        UValue::Str(s) if is_null_text(s) => {
+            return Ok(vec![if negated {
+                format!("{} IS NOT NULL", sql)
+            } else {
+                format!("{} IS NULL", sql)
+            }])
+        }
+        UValue::Dict(entries) => {
+            if entries.is_empty() {
+                return Err(invalid());
+            }
+            let mut conditions = Vec::new();
+            for (op, operand) in entries {
+                if !FILTER_OPERATORS.contains(&op.as_str()) {
+                    return Err(format!(
+                        "jsonb_unnest: invalid filter operator '{}' for '{}'",
+                        op, key
+                    ));
+                }
+                conditions.push(format!("{} {} {}", sql, op, filter_literal(operand, key)?));
+            }
+            return Ok(conditions);
+        }
+        UValue::List(items) => {
+            if items.is_empty() {
+                return Err(invalid());
+            }
+            let literals: Result<Vec<String>, String> =
+                items.iter().map(|item| filter_literal(item, key)).collect();
+            let literals = literals?.join(", ");
+            return Ok(vec![if negated {
+                format!("{} NOT IN ({})", sql, literals)
+            } else {
+                format!("{} IN ({})", sql, literals)
+            }]);
+        }
+        _ => {}
+    }
+    let literal = filter_literal(value, key)?;
+    Ok(vec![if negated {
+        format!("{} <> {}", sql, literal)
+    } else {
+        format!("{} = {}", sql, literal)
+    }])
+}
+
+/// Mirrors `split_filters`: returns (element_where, row_filter entries).
+pub(crate) fn split_filters_core(
+    planner: &mut Planner,
+    filter: &[(String, UValue)],
+) -> Result<(Vec<String>, Vec<RowEntry>), String> {
+    let mut element_where: Vec<String> = Vec::new();
+    let mut row_filter: Vec<RowEntry> = Vec::new();
+    let mut prefilters: Vec<(Ref, UValue)> = Vec::new();
+    for (key, value) in filter {
+        let negated = key.ends_with('!');
+        let base = if negated { &key[..key.len() - 1] } else { key.as_str() };
+        let mut found: Option<Ref> = None;
+        let mut from_alias = false;
+        if base.contains("[].") {
+            found = Some(parse_ref(base)?);
+        } else if let Some(alias) = planner.cfg.alias(base).map(|a| a.to_string()) {
+            if let Expr::Ref(r) = parse_expr(&alias)? {
+                if !r.keys.is_empty() {
+                    found = Some(r);
+                    from_alias = true;
+                }
+            }
+        }
+        let r = match found {
+            Some(r) => r,
+            None => {
+                row_filter.push(RowEntry::Original(key.clone()));
+                continue;
+            }
+        };
+        planner.track(&Expr::Ref(r.clone()), key, from_alias)?;
+        let sql = render_ref(&r, planner.safe_cast_for(&r.column), None);
+        element_where.extend(element_condition(&sql, key, negated, value)?);
+        let prefilter_on = planner
+            .cfg
+            .column(&r.column)
+            .map(|c| c.prefilter)
+            .unwrap_or(false);
+        if !prefilter_on || r.cast.is_some() || negated {
+            continue;
+        }
+        match value {
+            UValue::Str(s) if !is_null_text(s) => {
+                prefilters.push((
+                    r.clone(),
+                    UValue::Dict(vec![(
+                        "@>".to_string(),
+                        UValue::List(vec![prefilter_document(&r.keys, s)]),
+                    )]),
+                ));
+            }
+            UValue::List(items)
+                if !items.is_empty() && items.iter().all(|i| matches!(i, UValue::Str(_))) =>
+            {
+                let docs: Vec<UValue> = items
+                    .iter()
+                    .map(|item| match item {
+                        UValue::Str(s) => UValue::List(vec![prefilter_document(&r.keys, s)]),
+                        _ => UValue::None,
+                    })
+                    .collect();
+                prefilters.push((
+                    r.clone(),
+                    UValue::Dict(vec![("@>|".to_string(), UValue::List(docs))]),
+                ));
+            }
+            _ => {}
+        }
+    }
+    for (r, condition) in prefilters {
+        let mut suffix = "|".to_string();
+        loop {
+            let candidate = format!("{}{}", r.column, suffix);
+            let taken = row_filter.iter().any(|entry| match entry {
+                RowEntry::Original(k) => *k == candidate,
+                RowEntry::Prefilter(k, _) => *k == candidate,
+            });
+            if !taken {
+                row_filter.push(RowEntry::Prefilter(candidate, condition.clone()));
+                break;
+            }
+            suffix.push('|');
+        }
+    }
+    Ok((element_where, row_filter))
+}
+
+/// Convert a `UValue` into a Python object (used for planner-built pre-filters).
+fn to_py<'py>(py: Python<'py>, value: &UValue) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        UValue::None | UValue::Other => Ok(py.None().into_bound(py)),
+        UValue::Bool(b) => b.into_bound_py_any(py),
+        UValue::Int(i) => i.into_bound_py_any(py),
+        UValue::Float(f) => f.into_bound_py_any(py),
+        UValue::Str(s) => s.as_str().into_bound_py_any(py),
+        UValue::List(items) => {
+            let converted: PyResult<Vec<Bound<'py, PyAny>>> =
+                items.iter().map(|item| to_py(py, item)).collect();
+            Ok(PyList::new(py, converted?)?.into_any())
+        }
+        UValue::Dict(entries) => {
+            let dict = PyDict::new(py);
+            for (k, v) in entries {
+                dict.set_item(k, to_py(py, v)?)?;
+            }
+            Ok(dict.into_any())
+        }
+    }
+}
+
+/// Python entry point: build the JSONB-unnest plan (FEAT-153) or return None.
+#[pyfunction]
+#[pyo3(signature = (fields, grouping, ordering, filter_dict, having, config))]
+pub fn pgsql_unnest_plan<'py>(
+    py: Python<'py>,
+    fields: Vec<String>,
+    grouping: Vec<String>,
+    ordering: Vec<String>,
+    filter_dict: &Bound<'py, PyDict>,
+    having: &Bound<'py, PyAny>,
+    config: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let filter: Vec<(String, UValue)> = filter_dict
+        .iter()
+        .filter_map(|(k, v)| k.extract::<String>().ok().map(|key| (key, from_py(&v))))
+        .collect();
+    let plan = build_plan_core(
+        &fields,
+        &grouping,
+        &ordering,
+        &filter,
+        &from_py(having),
+        &from_py(config),
+    )
+    .map_err(PyValueError::new_err)?;
+    let plan = match plan {
+        Some(plan) => plan,
+        None => return Ok(None),
+    };
+    let result = PyDict::new(py);
+    result.set_item("select", PyList::new(py, &plan.select)?)?;
+    result.set_item("group_by", PyList::new(py, &plan.group_by)?)?;
+    result.set_item("order_by", PyList::new(py, &plan.order_by)?)?;
+    result.set_item("having", PyList::new(py, &plan.having)?)?;
+    result.set_item("element_where", PyList::new(py, &plan.element_where)?)?;
+    result.set_item("lateral", &plan.lateral)?;
+    let row_filter = PyDict::new(py);
+    for entry in &plan.row_filter {
+        match entry {
+            RowEntry::Original(key) => {
+                if let Some(original) = filter_dict.get_item(key)? {
+                    row_filter.set_item(key, original)?;
+                }
+            }
+            RowEntry::Prefilter(key, value) => {
+                row_filter.set_item(key, to_py(py, value)?)?;
+            }
+        }
+    }
+    result.set_item("row_filter", row_filter)?;
+    Ok(Some(result))
 }
 
 #[cfg(test)]
@@ -1440,5 +1736,257 @@ mod tests {
             wrap_sql("SELECT 1", &s(&["a AS \"a\""]), "CROSS JOIN LATERAL x", &s(&["p", "q"])),
             "SELECT a AS \"a\" FROM (SELECT 1) AS _qs_src CROSS JOIN LATERAL x WHERE p AND q"
         );
+    }
+
+    fn planner_for(cfg: UValue) -> Planner {
+        Planner::new(validate_config(&cfg).unwrap())
+    }
+
+    fn filt(entries: Vec<(&str, UValue)>) -> Vec<(String, UValue)> {
+        entries.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+    }
+
+    fn where_of(filter: Vec<(&str, UValue)>, cfg: UValue) -> Result<(Vec<String>, Vec<RowEntry>), String> {
+        split_filters_core(&mut planner_for(cfg), &filt(filter))
+    }
+
+    fn st(v: &str) -> UValue {
+        UValue::Str(v.to_string())
+    }
+
+    fn prefilter_cfg() -> UValue {
+        d(vec![("columns", d(vec![("graduation_details", d(vec![("prefilter", UValue::Bool(true))]))]))])
+    }
+
+    #[test]
+    fn test_element_filter_prequoted() {
+        let (w, rows) = where_of(
+            vec![
+                ("graduation_details[].course", st("'Pilates Studio'")),
+                ("licensee", st("'Asia'")),
+            ],
+            UValue::Dict(vec![]),
+        )
+        .unwrap();
+        assert_eq!(w, vec!["(_qs_e0.elem ->> 'course') = 'Pilates Studio'".to_string()]);
+        assert_eq!(rows, vec![RowEntry::Original("licensee".into())]);
+    }
+
+    #[test]
+    fn test_cast_comparison_and_multi_op() {
+        let (w, _) = where_of(
+            vec![("graduation_details[].course_date::date", d(vec![(">=", st("'2025-01-01'"))]))],
+            UValue::None,
+        )
+        .unwrap();
+        assert_eq!(w, vec!["((_qs_e0.elem ->> 'course_date')::date) >= '2025-01-01'".to_string()]);
+        let (w, _) = where_of(
+            vec![("graduation_details[].points!", d(vec![(">=", UValue::Int(5)), ("<", UValue::Int(10))]))],
+            UValue::None,
+        )
+        .unwrap();
+        assert_eq!(
+            w,
+            vec![
+                "(_qs_e0.elem ->> 'points') >= '5'".to_string(),
+                "(_qs_e0.elem ->> 'points') < '10'".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_negation_list_null() {
+        let (w, _) = where_of(
+            vec![
+                ("graduation_details[].course!", st("'A'")),
+                ("graduation_details[].category", UValue::List(vec![st("'X'"), st("'Y'")])),
+                ("graduation_details[].level!", UValue::List(vec![st("'1'"), st("'2'")])),
+                ("graduation_details[].note", st("null")),
+                ("graduation_details[].other!", UValue::None),
+            ],
+            UValue::None,
+        )
+        .unwrap();
+        assert_eq!(
+            w,
+            vec![
+                "(_qs_e0.elem ->> 'course') <> 'A'".to_string(),
+                "(_qs_e0.elem ->> 'category') IN ('X', 'Y')".to_string(),
+                "(_qs_e0.elem ->> 'level') NOT IN ('1', '2')".to_string(),
+                "(_qs_e0.elem ->> 'note') IS NULL".to_string(),
+                "(_qs_e0.elem ->> 'other') IS NOT NULL".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_number_bool_and_literal_safety() {
+        let (w, _) = where_of(
+            vec![
+                ("graduation_details[].n", UValue::Int(5)),
+                ("graduation_details[].f", UValue::Float(1.5)),
+                ("graduation_details[].b", UValue::Bool(true)),
+                ("graduation_details[].d", st("CURRENT_DATE")),
+                ("graduation_details[].x", st("'x'' OR 1=1 --'")),
+                ("graduation_details[].y", st("a{b}")),
+            ],
+            UValue::None,
+        )
+        .unwrap();
+        assert_eq!(
+            w,
+            vec![
+                "(_qs_e0.elem ->> 'n') = '5'".to_string(),
+                "(_qs_e0.elem ->> 'f') = '1.5'".to_string(),
+                "(_qs_e0.elem ->> 'b') = 'true'".to_string(),
+                "(_qs_e0.elem ->> 'd') = 'CURRENT_DATE'".to_string(),
+                "(_qs_e0.elem ->> 'x') = 'x'' OR 1=1 --'".to_string(),
+                "(_qs_e0.elem ->> 'y') = E'a\\x7bb\\x7d'".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_float_repr_matches_python() {
+        assert_eq!(float_repr(1.5), "1.5");
+        assert_eq!(float_repr(5.0), "5.0");
+        assert_eq!(float_repr(10.5), "10.5");
+        assert_eq!(float_repr(0.0001), "0.0001");
+        assert_eq!(float_repr(0.00001), "1e-05");
+        assert_eq!(float_repr(1e15), "1000000000000000.0");
+        assert_eq!(float_repr(1e16), "1e+16");
+        assert_eq!(float_repr(1.2345e21), "1.2345e+21");
+        assert_eq!(float_repr(-2.5), "-2.5");
+        assert_eq!(float_repr(123456.789), "123456.789");
+    }
+
+    #[test]
+    fn test_invalid_filter_values_and_operator() {
+        let key = "graduation_details[].k";
+        let msg = "jsonb_unnest: invalid filter value for 'graduation_details[].k'";
+        for value in [
+            UValue::List(vec![d(vec![("a", UValue::Int(1))])]),
+            UValue::List(vec![]),
+            UValue::List(vec![UValue::List(vec![st("x")])]),
+            d(vec![]),
+            UValue::Other,
+        ] {
+            assert_eq!(where_of(vec![(key, value)], UValue::None).unwrap_err(), msg);
+        }
+        assert_eq!(
+            where_of(vec![(key, d(vec![("@>", st("x"))]))], UValue::None).unwrap_err(),
+            "jsonb_unnest: invalid filter operator '@>' for 'graduation_details[].k'"
+        );
+    }
+
+    #[test]
+    fn test_path_key_suffix_errors_and_arrays() {
+        for key in ["graduation_details[].k|", "graduation_details[].k#", "graduation_details[].k@"] {
+            assert_eq!(
+                where_of(vec![(key, st("x"))], UValue::None).unwrap_err(),
+                format!("jsonb_unnest: invalid reference '{}'", key)
+            );
+        }
+        let mut p = planner_for(UValue::None);
+        p.array_column = Some("graduation_details".to_string());
+        assert_eq!(
+            split_filters_core(&mut p, &filt(vec![("other[].k", st("x"))])).unwrap_err(),
+            "jsonb_unnest: more than one array column ('graduation_details', 'other')"
+        );
+    }
+
+    #[test]
+    fn test_row_filters_untouched_and_order() {
+        let (w, rows) = where_of(
+            vec![
+                ("attrs", d(vec![("@>", d(vec![("status", st("active"))]))])),
+                ("tags::text[]", st("x")),
+                ("status!", st("'z'")),
+            ],
+            UValue::None,
+        )
+        .unwrap();
+        assert!(w.is_empty());
+        assert_eq!(
+            rows,
+            vec![
+                RowEntry::Original("attrs".into()),
+                RowEntry::Original("tags::text[]".into()),
+                RowEntry::Original("status!".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_prefilter_opt_in_in_nested_and_suffix() {
+        let (w, rows) = where_of(
+            vec![
+                ("graduation_details", d(vec![("@>", UValue::List(vec![d(vec![("z", UValue::Int(1))])]))])),
+                ("graduation_details[].course", UValue::List(vec![st("'A'"), st("'B'")])),
+                ("graduation_details[].meta.level", st("'1'")),
+            ],
+            prefilter_cfg(),
+        )
+        .unwrap();
+        assert_eq!(w.len(), 2);
+        assert_eq!(rows[0], RowEntry::Original("graduation_details".into()));
+        assert_eq!(
+            rows[1],
+            RowEntry::Prefilter(
+                "graduation_details|".into(),
+                d(vec![(
+                    "@>|",
+                    UValue::List(vec![
+                        UValue::List(vec![d(vec![("course", st("A"))])]),
+                        UValue::List(vec![d(vec![("course", st("B"))])]),
+                    ])
+                )])
+            )
+        );
+        assert_eq!(
+            rows[2],
+            RowEntry::Prefilter(
+                "graduation_details||".into(),
+                d(vec![(
+                    "@>",
+                    UValue::List(vec![d(vec![("meta", d(vec![("level", st("1"))]))])])
+                )])
+            )
+        );
+    }
+
+    #[test]
+    fn test_prefilter_defaults_off_and_skips() {
+        let (_, rows) = where_of(vec![("graduation_details[].course", st("'A'"))], UValue::None).unwrap();
+        assert!(rows.is_empty());
+        let (w, rows) = where_of(
+            vec![
+                ("graduation_details[].a::text", st("'x'")),
+                ("graduation_details[].b!", st("'x'")),
+                ("graduation_details[].c", d(vec![(">=", st("'x'"))])),
+                ("graduation_details[].d", st("null")),
+                ("graduation_details[].e", UValue::List(vec![UValue::Int(1), UValue::Int(2)])),
+            ],
+            prefilter_cfg(),
+        )
+        .unwrap();
+        assert!(rows.is_empty());
+        assert!(w.len() >= 5);
+    }
+
+    #[test]
+    fn test_plan_filter_only_path_yields_lateral() {
+        let p = build_plan_core(
+            &s(&["licensee"]),
+            &[],
+            &[],
+            &filt(vec![("graduation_details[].course", st("'A'"))]),
+            &UValue::None,
+            &UValue::None,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(p.lateral.contains("jsonb_array_elements"));
+        assert_eq!(p.element_where, vec!["(_qs_e0.elem ->> 'course') = 'A'".to_string()]);
     }
 }
