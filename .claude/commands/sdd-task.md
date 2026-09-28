@@ -14,7 +14,13 @@ Decompose an approved Feature Specification into atomic, assignable implementati
 ## Usage
 ```
 /sdd-task sdd/specs/<feature-name>.spec.md
+/sdd-task sdd/specs/<feature-name>.spec.md --from-issue <issue-id>
 ```
+
+`--from-issue <issue-id>` (FEAT-566, optional): seed one generated task from
+an open ledger issue (`wikitoolkit ledger ready` / `/sdd-next`'s "Ready
+ledger issues" section) instead of writing its Context/Scope from scratch.
+Promotion is always explicit — no ledger issue is ever auto-promoted.
 
 ## Guardrails
 - Only decompose specs with `status: approved`.
