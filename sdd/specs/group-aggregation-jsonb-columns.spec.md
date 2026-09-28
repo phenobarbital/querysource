@@ -10,7 +10,7 @@ tags: [postgres, jsonb, aggregation, group-by, unnest]
 **Feature ID**: FEAT-153
 **Date**: 2026-09-28
 **Author**: Jesus Lara (with Claude)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 **Brainstorm**: `sdd/proposals/group-aggregation-jsonb-columns.brainstorm.md` (accepted, Option A)
 
@@ -851,8 +851,8 @@ Verified against: `5830325`
 - [x] Rust parity — *Resolved in brainstorm*: port the planner to Rust too (Rust fast path + Cython fallback, identical-output tests)
 - [x] Non-strict slug restrictions — *Resolved in brainstorm*: grammar validation always; if the slug declares `jsonb_unnest.columns`, only those arrays may be unnested; with no declaration any grammar-valid identifier is allowed
 - [x] Minimum PostgreSQL version — *Resolved in brainstorm*: PG 12+ in all deployments (v1 still uses only 9.4+ features; jsonpath stays available later)
-- [ ] Q1: `safe_cast` cannot reject well-shaped impossible dates (`2025-02-30`) on Postgres 12–15. Is the documented limitation acceptable, or should a follow-up add `pg_input_is_valid` when the server is ≥ 16? Non-blocking; v1 ships with the documented limitation. — *Owner: Jesus Lara*
-- [ ] Q2: the containment pre-filter was changed from automatic (brainstorm) to opt-in per column (`prefilter: true`), because `@>` is JSON-type-sensitive and could drop rows whose key is numeric. Confirm the opt-in default. Non-blocking; the spec defaults to opt-in. — *Owner: Jesus Lara*
+- [x] Q1: `safe_cast` cannot reject well-shaped impossible dates (`2025-02-30`) on Postgres 12–15. Is the documented limitation acceptable, or should a follow-up add `pg_input_is_valid` when the server is ≥ 16? Non-blocking; v1 ships with the documented limitation. — *Owner: Jesus Lara*: documented limitation.
+- [x] Q2: the containment pre-filter was changed from automatic (brainstorm) to opt-in per column (`prefilter: true`), because `@>` is JSON-type-sensitive and could drop rows whose key is numeric. Confirm the opt-in default. Non-blocking; the spec defaults to opt-in. — *Owner: Jesus Lara*: opt-in
 
 ---
 
