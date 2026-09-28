@@ -110,7 +110,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -122,8 +122,8 @@
       "parallelism_notes": "Imports unnest_plan/unnest_wrap (complete with filters) from TASK-783's jsonb_unnest.pyx; reads self.having declared by TASK-781 (abstract.pxd); must pass TASK-779's frozen tests/test_pgsql_jsonb_unnest_regression.py; exclusive for `make build-inplace`.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-784-pgsql-unnest-integration.md"
+      "completed_at": "2026-09-28T22:36:12+00:00",
+      "file": "sdd/tasks/completed/TASK-784-pgsql-unnest-integration.md"
     },
     {
       "id": "TASK-785",
