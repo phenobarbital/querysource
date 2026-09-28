@@ -6,6 +6,7 @@ See:
 https://github.com/phenobarbital/querysource/
 """
 import ast
+import sys
 from os import path
 from setuptools import setup, Extension
 from Cython.Build import cythonize
@@ -33,125 +34,148 @@ except Exception:
                     break
 
 COMPILE_ARGS = ["-O3"]
+# Python's own CFLAGS carry -g; strip the DWARF debug info (~80% of each .so)
+# from release builds. GNU ld only — macOS/Windows linkers reject this flag.
+LINK_ARGS = ["-Wl,--strip-all"] if sys.platform.startswith("linux") else []
 
 extensions = [
     Extension(
         name='querysource.parsers.abstract',
         sources=['querysource/parsers/abstract.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.parser',
         sources=['querysource/parsers/parser.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.sql',
         sources=['querysource/parsers/sql.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.pgsql',
         sources=['querysource/parsers/pgsql.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.sqlserver',
         sources=['querysource/parsers/sqlserver.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.sosql',
         sources=['querysource/parsers/sosql.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.bigquery',
         sources=['querysource/parsers/bigquery.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.cql',
         sources=['querysource/parsers/cql.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.influx',
         sources=['querysource/parsers/influx.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.mongo',
         sources=['querysource/parsers/mongo.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.rethink',
         sources=['querysource/parsers/rethink.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.arangodb',
         sources=['querysource/parsers/arangodb.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.elastic',
         sources=['querysource/parsers/elastic.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.iceberg',
         sources=['querysource/parsers/iceberg.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.parsers.deltatbl',
         sources=['querysource/parsers/deltatbl.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c"
     ),
     Extension(
         name='querysource.utils.parseqs',
         sources=['querysource/utils/parseqs.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c++"
     ),
     Extension(
         name='querysource.types.typedefs',
         sources=['querysource/types/typedefs.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
     ),
     Extension(
         name='querysource.types.validators',
         sources=['querysource/types/validators.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c++"
     ),
     Extension(
         name='querysource.types.converters',
         sources=['querysource/types/converters.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c++"
     ),
     Extension(
         name='querysource.utils.functions',
         sources=['querysource/utils/functions.pyx'],
         extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
         language="c++"
     )
 ]
