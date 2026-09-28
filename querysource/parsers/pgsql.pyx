@@ -11,8 +11,9 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import orjson
 from datamodel.typedefs import NullDefault, SafeDict
-from ..exceptions import EmptySentence
-from ..types.validators import Entity, field_components, is_integer, is_camel_case
+from ..exceptions import EmptySentence, ParserError
+from .jsonb_unnest import is_plan_candidate, unnest_plan, unnest_wrap
+from ..types.validators import Entity, field_components, is_integer, is_camel_case, is_valid
 from .sql cimport SQLParser
 
 # Try to import Rust extension for accelerated parsing
@@ -32,6 +33,8 @@ JSONB_OPERATORS = ('@>', '<@', '@>|', '->', '->>',)
 JSONB_KEY_SUFFIXES = '|!~#@:'
 # Case-insensitive pattern operators for dict filter values (qsurl text_match, FEAT-152).
 PG_TEXT_OPERATORS = ('ILIKE', 'NOT ILIKE',)
+# Structural placeholders blanked in the inner query of a JSONB-unnest plan (FEAT-153).
+STRUCTURAL_PLACEHOLDERS = ('{grouping}', '{group_by}', '{order_by}', '{ordering}', '{offset}', '{limit}')
 
 
 cdef str pg_literal(str value):
@@ -455,6 +458,59 @@ cdef class pgSQLParser(SQLParser):
             _sql = _sql.format_map(SafeDict(filter=''))
         return _sql
 
+    async def _where_element(self, key: str, value: object, connection: object) -> tuple:
+        """Preserve all element-filter comparisons before unnest planning."""
+        if isinstance(key, str) and isinstance(value, dict):
+            config = (self.attributes or {}).get('jsonb_unnest')
+            aliases = config.get('aliases') if isinstance(config, dict) else None
+            expression = aliases.get(key.rstrip('!')) if isinstance(aliases, dict) else None
+            if '[].' in key or (isinstance(expression, str) and '[].' in expression):
+                return key, {
+                    op: is_valid(key, operand, noquote=self.string_literal)
+                    for op, operand in value.items()
+                }
+        return await super()._where_element(key, value, connection)
+
+    def _unnest_plan(self):
+        """Return the JSONB-unnest plan (FEAT-153) or None when the query does not use it.
+
+        Rust fast path when available; a Rust ``ValueError`` is a validation verdict and is
+        re-raised as ``ParserError`` without fallback. Any other Rust error falls back to Cython.
+
+        Raises:
+            ParserError: invalid path/alias/config/having (HTTP 400).
+        """
+        having = self.having if self.having is not None else {}
+        config = (self.attributes or {}).get('jsonb_unnest') or {}
+        fields = list(self.fields or [])
+        grouping = list(self.grouping or [])
+        ordering = list(self.ordering or [])
+        _filter = self.filter or {}
+        if not is_plan_candidate(fields, grouping, ordering, _filter, having, config):
+            return None
+        if HAS_RUST and hasattr(_rs, 'pgsql_unnest_plan'):
+            try:
+                return _rs.pgsql_unnest_plan(fields, grouping, ordering, _filter, having, config)
+            except ValueError as exc:
+                raise ParserError(str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 - any non-validation Rust failure falls back
+                self.logger.warning(f"jsonb_unnest: Rust planner failed, using Cython: {exc}")
+        try:
+            return unnest_plan(fields, grouping, ordering, _filter, having, config)
+        except ValueError as exc:
+            raise ParserError(str(exc)) from exc
+
+    def _unnest_wrap(self, str inner_sql, dict plan) -> str:
+        """Blank the structural placeholders of ``inner_sql`` and wrap it per ``plan``."""
+        for placeholder in STRUCTURAL_PLACEHOLDERS:
+            inner_sql = inner_sql.replace(placeholder, '')
+        if HAS_RUST and hasattr(_rs, 'pgsql_unnest_wrap'):
+            try:
+                return _rs.pgsql_unnest_wrap(inner_sql, plan)
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning(f"jsonb_unnest: Rust wrap failed, using Cython: {exc}")
+        return unnest_wrap(inner_sql, plan)
+
     async def build_query(self, querylimit: int = None, offset: int = None):
         """
         build_query.
@@ -473,6 +529,14 @@ cdef class pgSQLParser(SQLParser):
             sql = sql.format_map(
                 SafeDict(table=self.tablename)
             )
+        plan = self._unnest_plan()
+        if plan is not None:
+            if self._add_fields:
+                raise ParserError("jsonb_unnest: add_fields is not supported with aggregation")
+            self.fields = []
+            self.grouping = []
+            self.ordering = []
+            self.filter = plan['row_filter']
         sql = await self.process_fields(sql)
         # add query options
         ## TODO: Function FILTERS (called in threads)
@@ -497,8 +561,18 @@ cdef class pgSQLParser(SQLParser):
         sql = self.filtering_options(sql)
         # processing filter options
         sql = await self.filter_conditions(sql)
+        if plan is not None:
+            if self.ordering:
+                self.logger.warning(
+                    f"jsonb_unnest: discarding ordering added by query filters: {self.ordering}"
+                )
+            sql = self._unnest_wrap(sql, plan)
+            self.grouping = list(plan['group_by'])
+            self.ordering = list(plan['order_by'])
         # processing conditions
         sql = await self.group_by(sql)
+        if plan is not None and plan['having']:
+            sql = f"{sql} HAVING {' AND '.join(plan['having'])}"
         if self.ordering:
             sql = await self.order_by(sql)
         if querylimit:

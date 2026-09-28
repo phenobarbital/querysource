@@ -9,6 +9,7 @@
 .parrot/mcp-toolkits.yaml
 .parrot/tool-guards.json
 .parrot/wiki.local.json
+.parrot/ledger/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

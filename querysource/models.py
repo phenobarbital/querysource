@@ -31,6 +31,7 @@ class QueryObject(ClassDict):
     fields: list = Field(default=to_field_list, default_factory=list)
     ordering: Optional[list]
     group_by: Optional[list]
+    having: Optional[dict]
     qry_options: Optional[dict]
     ## filter
     filter: Optional[dict]

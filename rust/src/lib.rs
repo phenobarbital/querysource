@@ -15,6 +15,7 @@ mod mongo_parser;
 mod mssql_parser;
 mod parseqs;
 mod pgsql_parser;
+mod pgsql_unnest;
 mod rethink_parser;
 mod safe_dict;
 mod soql_parser;
@@ -65,6 +66,8 @@ fn _qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // -- PgSQL Parser --
     m.add_function(wrap_pyfunction!(pgsql_parser::pgsql_filter_conditions, m)?)?;
+    m.add_function(wrap_pyfunction!(pgsql_unnest::pgsql_unnest_wrap, m)?)?;
+    m.add_function(wrap_pyfunction!(pgsql_unnest::pgsql_unnest_plan, m)?)?;
 
     // -- MSSQL Parser --
     m.add_function(wrap_pyfunction!(mssql_parser::mssql_filter_conditions, m)?)?;
