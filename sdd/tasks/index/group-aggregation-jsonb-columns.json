@@ -70,7 +70,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -80,8 +80,8 @@
       "parallelism_notes": "Needs parse_expr/validate_config/is_plan_candidate from TASK-780 and modifies the same file querysource/parsers/jsonb_unnest.pyx; exclusive for `make build-inplace`.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-782-jsonb-unnest-plan-rendering.md"
+      "completed_at": "2026-09-28T22:33:34+00:00",
+      "file": "sdd/tasks/completed/TASK-782-jsonb-unnest-plan-rendering.md"
     },
     {
       "id": "TASK-783",
