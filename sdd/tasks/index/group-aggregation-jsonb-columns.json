@@ -16,7 +16,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -24,8 +24,8 @@
       "parallelism_notes": "No dependencies: captures CURRENT build_query output before TASK-784 lands; test-only file, no build step.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-779-jsonb-unnest-regression-fixtures.md"
+      "completed_at": "2026-09-28T22:29:07+00:00",
+      "file": "sdd/tasks/completed/TASK-779-jsonb-unnest-regression-fixtures.md"
     },
     {
       "id": "TASK-780",
