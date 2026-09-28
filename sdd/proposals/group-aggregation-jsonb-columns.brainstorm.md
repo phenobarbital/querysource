@@ -16,7 +16,7 @@ tags: [postgres, jsonb, aggregation, group-by, unnest]
 
 **Date**: 2026-09-28
 **Author**: Jesus Lara (with Claude)
-**Status**: exploration
+**Status**: accepted
 **Recommended Option**: A
 
 ---
