@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -255,10 +255,8 @@ reachable Redis (`_parser_conditions`); run where that suite already runs.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:31:12+00:00
+**Notes**: having declared object; 5 tests + grouping_sync + regression pass.
 
 **Deviations from spec**: `having` declared `object` (spec skeleton said `dict`) so non-mapping input reaches the planner and raises `ParserError`.
