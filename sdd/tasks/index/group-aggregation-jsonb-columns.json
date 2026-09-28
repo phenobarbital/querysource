@@ -34,7 +34,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -42,8 +42,8 @@
       "parallelism_notes": "Exclusive: adds a Cython extension (setup.py) and runs `make build-inplace`.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-780-jsonb-unnest-grammar.md"
+      "completed_at": "2026-09-28T22:30:27+00:00",
+      "file": "sdd/tasks/completed/TASK-780-jsonb-unnest-grammar.md"
     },
     {
       "id": "TASK-781",
