@@ -181,3 +181,16 @@ async def test_error_message_identical_on_both_paths(case, monkeypatch):
     with pytest.raises(ParserError) as cy_err:
         await _parser(case).build_query()
     assert rust_err.value.message == cy_err.value.message
+
+
+@pytest.mark.parametrize("case", [
+    (["licensee", "count(*) as n"], [], [], {}, {"n": {">": 2**70}}, {}),
+    (["g[].k"], [], [], {"g[].k": 2**70}, {}, {}),
+    (["g[].k"], [], [], {}, {}, {"columns": {"a\n": {}}}),
+])
+def test_edge_error_parity(case):
+    with pytest.raises(ValueError) as rust_err:
+        pgsql._rs.pgsql_unnest_plan(*case)
+    with pytest.raises(ValueError) as cy_err:
+        ju.unnest_plan(*case)
+    assert str(rust_err.value) == str(cy_err.value)

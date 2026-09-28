@@ -25,9 +25,9 @@ EMPTY_POLICIES = ('exclude', 'include')
 
 _IDENT = r'[A-Za-z_][A-Za-z0-9_]{0,62}'
 _KEY = r'[A-Za-z0-9_-]{1,128}'
-IDENT_RE = re.compile(rf'^{_IDENT}$')
+IDENT_RE = re.compile(rf'^{_IDENT}\Z')
 REF_RE = re.compile(
-    rf'^(?P<col>{_IDENT})(?:\[\]\.(?P<keys>{_KEY}(?:\.{_KEY})*))?(?:\s*::\s*(?P<cast>[A-Za-z]+))?$'
+    rf'^(?P<col>{_IDENT})(?:\[\]\.(?P<keys>{_KEY}(?:\.{_KEY})*))?(?:\s*::\s*(?P<cast>[A-Za-z]+))?\Z'
 )
 
 
@@ -92,11 +92,11 @@ class Item:
         self.nulls = nulls
 
 
-_FUNC_RE = re.compile(r'^(?P<func>[A-Za-z]+)\s*\(\s*(?P<body>.*?)\s*\)$', re.DOTALL)
+_FUNC_RE = re.compile(r'^(?P<func>[A-Za-z]+)\s*\(\s*(?P<body>.*?)\s*\)\Z', re.DOTALL)
 _DISTINCT_RE = re.compile(r'^distinct\s+(?P<rest>.+)$', re.IGNORECASE | re.DOTALL)
 _AS_RE = re.compile(r'\s+as\s+', re.IGNORECASE)
 _ORDER_RE = re.compile(
-    r'^(?P<body>.+?)(?:\s+(?P<dir>asc|desc))?(?:\s+nulls\s+(?P<nulls>first|last))?$',
+    r'^(?P<body>.+?)(?:\s+(?P<dir>asc|desc))?(?:\s+nulls\s+(?P<nulls>first|last))?\Z',
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -536,6 +536,8 @@ def _having_value(key: str, value) -> str:
     if isinstance(value, bool):
         raise ValueError(f"jsonb_unnest: invalid having value for '{key}'")
     if isinstance(value, int):
+        if not -2**63 <= value < 2**63:
+            raise ValueError(f"jsonb_unnest: invalid having value for '{key}'")
         return str(value)
     if isinstance(value, float):
         if not math.isfinite(value):
@@ -631,6 +633,8 @@ def _filter_literal(value, key: str) -> str:
         return _pg_literal(_unquote(value))
     if isinstance(value, bool):
         return _pg_literal('true' if value else 'false')
+    if isinstance(value, int) and not -2**63 <= value < 2**63:
+        raise ValueError(f"jsonb_unnest: invalid filter value for '{key}'")
     if isinstance(value, (int, float)):
         return _pg_literal(str(value))
     raise ValueError(f"jsonb_unnest: invalid filter value for '{key}'")
