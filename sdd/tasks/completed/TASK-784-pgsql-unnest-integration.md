@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-779, TASK-781, TASK-783
@@ -334,10 +334,8 @@ See the test block above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:36:12+00:00
+**Notes**: Hooks A/B/C + _unnest_plan/_unnest_wrap; 15 e2e tests; regression, jsonb_filters, rust_parsers, grouping_sync all pass (378 total). Ordering added by QS filters is discarded with a warning in plan mode. Verified spec example also under Rust group_by/limiting (HAS_RUST=True, planner falls to Cython until Rust fns exist).
 
 **Deviations from spec**: QS-filter-added ordering is discarded (with a warning) in plan mode.

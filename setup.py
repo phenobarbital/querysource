@@ -8,14 +8,16 @@ https://github.com/phenobarbital/querysource/
 import ast
 import sys
 from os import path
-from setuptools import setup, Extension
+
 from Cython.Build import cythonize
+from setuptools import Extension, setup
+
 
 def get_path(filename):
     return path.join(path.dirname(path.abspath(__file__)), filename)
 
 def readme():
-    with open(get_path('README.md'), 'r', encoding='utf-8') as rd:
+    with open(get_path('README.md'), encoding='utf-8') as rd:
         return rd.read()
 
 # Try to get version from setuptools_scm first, fall back to manual parsing
@@ -24,7 +26,7 @@ try:
     __version__ = get_version()
 except Exception:
     version = get_path('querysource/version.py')
-    with open(version, 'r', encoding='utf-8') as meta:
+    with open(version, encoding='utf-8') as meta:
         t = compile(meta.read(), version, 'exec', ast.PyCF_ONLY_AST)
         for node in (n for n in t.body if isinstance(n, ast.Assign)):
             if len(node.targets) == 1:
@@ -63,6 +65,13 @@ extensions = [
     Extension(
         name='querysource.parsers.pgsql',
         sources=['querysource/parsers/pgsql.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
+        language="c"
+    ),
+    Extension(
+        name='querysource.parsers.jsonb_unnest',
+        sources=['querysource/parsers/jsonb_unnest.pyx'],
         extra_compile_args=COMPILE_ARGS,
         extra_link_args=LINK_ARGS,
         language="c"

@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-784
@@ -228,10 +228,8 @@ The module above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:43:56+00:00
+**Notes**: DB RUN DID NOT HAPPEN: no QS_TEST_POSTGRES_DSN and no local postgres binaries in this environment. Module skips cleanly (18 skipped). Every query the test renders was checked offline on Rust and Cython paths and parses with sqlglot; expected counts derive from the fixture by hand (see test). AC12 therefore still needs a run against an isolated PG 12+ database by an operator.
 
 **Deviations from spec**: none

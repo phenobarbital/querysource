@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: L (4-8h)
 **Depends-on**: TASK-780
@@ -373,10 +373,8 @@ See the test block above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:33:34+00:00
+**Notes**: Rendering, planner, having, wrap; 106 tests with 780. Extra: having keys also resolve config aliases that are aggregates (fallback before parse_expr); TASK-785 must mirror. Float having values render via Python repr.
 
 **Deviations from spec**: safe_cast numeric regex uses `[.]` instead of `\.` (equivalent; avoids an `E''` literal).

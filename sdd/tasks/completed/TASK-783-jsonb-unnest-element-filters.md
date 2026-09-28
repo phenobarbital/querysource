@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-782
@@ -267,10 +267,8 @@ See the test block above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:34:37+00:00
+**Notes**: split_filters runs after select/group/order/having tracking (so 'first array column' order = select,group,order,having,filter). Empty dict value -> invalid filter value; alias-path filter keys supported. 131 unnest tests pass.
 
 **Deviations from spec**: none
