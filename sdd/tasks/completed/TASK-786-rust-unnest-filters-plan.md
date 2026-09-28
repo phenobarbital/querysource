@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-779, TASK-783, TASK-785
@@ -258,10 +258,8 @@ Rust `#[cfg(test)]` cases above; Python parity is TASK-787.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:41:49+00:00
+**Notes**: 29 cargo unnest tests pass; wheel built + staged locally; hasattr(_rs,'pgsql_unnest_plan') True; regression/rust_parsers/filters/unnest suites pass on Rust path. float_repr reimplements Python repr exactly (replaced the {:?} approximation from TASK-785, also used by having values). Same 4 pre-existing cargo failures as baseline.
 
 **Deviations from spec**: `having`/`config` typed `&Bound<PyAny>` (spec skeleton said `&Bound<PyDict>`) so non-mapping input yields the Cython-identical ValueError.

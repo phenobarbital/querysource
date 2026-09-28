@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: low
 **Estimated effort**: S (< 2h)
 **Depends-on**: TASK-784
@@ -158,10 +158,8 @@ Documentation task — no new tests.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:45:35+00:00
+**Notes**: All SQL blocks are real Cython-path parser output generated with a throwaway script (PYTHONPATH=<worktree> python render_examples.py; env vars SITE_ROOT/DBUSER/PG_USER dummies). Sample result rows in the quick example are illustrative and marked as such. Note: non-plan raw-SQL fields (e.g. 'a;drop') remain pass-through as before, by design (spec).
 
 **Deviations from spec**: none

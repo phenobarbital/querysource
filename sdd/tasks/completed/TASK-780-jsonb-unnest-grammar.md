@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: none
@@ -450,10 +450,8 @@ See the test block above (to be completed per its FILL IN).
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:30:27+00:00
+**Notes**: Implemented grammar, validate_config, is_plan_candidate; 59 tests. Deviation (per task): keys exclude spaces.
 
 **Deviations from spec**: keys exclude spaces (see Implementation Notes).

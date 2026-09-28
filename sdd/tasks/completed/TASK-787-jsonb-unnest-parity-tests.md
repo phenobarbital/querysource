@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: S (< 2h)
 **Depends-on**: TASK-784, TASK-786
@@ -227,10 +227,8 @@ The module above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:42:55+00:00
+**Notes**: 22 valid + 31 error cases; plan/key-order/wrap/build_query/error parity all pass first run (156 passed, 1 skipped = non-candidate wrap). Falsy config [] is normalised by the parser so it is excluded from parser-level tests. Note: a pre-existing Rust/Cython difference for non-plan numeric filters (x=1 vs x='1') is unrelated to this feature and was avoided in the non-plan case.
 
 **Deviations from spec**: parity tests in their own file (spec §3 M4 listed them in `test_pgsql_jsonb_unnest.py`).

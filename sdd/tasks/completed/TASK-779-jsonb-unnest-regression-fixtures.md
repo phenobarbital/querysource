@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -234,10 +234,8 @@ The module above is the test. Minimum: 10 case shapes × 2 paths.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:29:07+00:00
+**Notes**: 12 cases x 2 paths captured from unmodified parser (Rust HAS_RUST true, Cython). Rust/Cython differ today for comparison_dict (frozen as-is). Env note: tests need SITE_ROOT=<worktree> + dummy DBUSER/PG_USER env and locally built ext (python setup.py build_ext --inplace).
 
 **Deviations from spec**: none

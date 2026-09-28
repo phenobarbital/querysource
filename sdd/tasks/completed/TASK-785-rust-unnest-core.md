@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-153 — Group & Aggregate by JSONB Array Elements (PostgreSQL)
 **Spec**: `sdd/specs/group-aggregation-jsonb-columns.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: L (4-8h)
 **Depends-on**: TASK-782
@@ -362,10 +362,8 @@ Rust `#[cfg(test)]` module above. Python-level parity is TASK-787.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-28T22:40:08+00:00
+**Notes**: 18 new cargo unit tests pass (needs LD_LIBRARY_PATH=<uv python>/lib for cargo test --no-default-features). 4 PRE-EXISTING cargo failures unrelated to this feature (bigquery_parser::test_process_str_negation, pgsql_parser::test_process_comparison_token, sql_parser::test_build_string_condition_end_bang, validators::test_field_components_no_prefix) - confirmed on baseline via stash. Did NOT run make build-rust (maturin develop would mutate the shared venv); instead built the wheel with maturin build into worktree target/ and staged the .so into worktree querysource/qs_parsers/ (gitignored). pgsql_unnest_plan not registered yet (TASK-786). Float having values use Rust {:?} which matches Python repr for finite common values.
 
 **Deviations from spec**: `pgsql_unnest_plan` registration deferred to TASK-786 (avoids exposing a filter-less planner).
