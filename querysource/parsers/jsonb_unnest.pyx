@@ -593,14 +593,15 @@ def unnest_plan(fields, grouping, ordering, filter, having, config):
             raise ValueError('jsonb_unnest: having requires an aggregate')
         for key, value in having.items():
             having_sql.extend(planner.having_condition(key, value))
+    element_where, row_filter = split_filters(planner, filter or {})
     return {
         'select': select,
         'group_by': group_by,
         'order_by': order_by,
         'having': having_sql,
-        'element_where': [],
+        'element_where': element_where,
         'lateral': planner.lateral(),
-        'row_filter': dict(filter or {}),
+        'row_filter': row_filter,
     }
 
 
@@ -612,3 +613,101 @@ def unnest_wrap(inner_sql: str, plan: dict) -> str:
     if plan['element_where']:
         sql = f"{sql} WHERE {' AND '.join(plan['element_where'])}"
     return sql
+
+
+FILTER_OPERATORS = ('=', '>=', '<=', '<>', '!=', '<', '>')
+
+
+def _unquote(value: str) -> str:
+    """Undo ``is_valid``/``quoteString`` quoting (mirrors pgsql.pyx:282-285)."""
+    if len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+        return value[1:-1].replace("''", "'")
+    return value
+
+
+def _filter_literal(value, key: str) -> str:
+    """Render one element-filter value as a text literal (see Implementation Notes)."""
+    if isinstance(value, str):
+        return _pg_literal(_unquote(value))
+    if isinstance(value, bool):
+        return _pg_literal('true' if value else 'false')
+    if isinstance(value, (int, float)):
+        return _pg_literal(str(value))
+    raise ValueError(f"jsonb_unnest: invalid filter value for '{key}'")
+
+
+def _prefilter_document(keys: tuple, value: str) -> dict:
+    """Build the nested JSON object for ``keys`` ending in ``value``."""
+    document = _unquote(value)
+    for key in reversed(keys):
+        document = {key: document}
+    return document
+
+
+def _element_condition(sql: str, key: str, negated: bool, value) -> list:
+    """Render the outer-WHERE conditions for one element filter entry."""
+    if value is None or (isinstance(value, str) and value in ('null', 'NULL')):
+        return [f'{sql} IS NOT NULL' if negated else f'{sql} IS NULL']
+    if isinstance(value, dict):
+        if not value:
+            raise ValueError(f"jsonb_unnest: invalid filter value for '{key}'")
+        conditions = []
+        for op, operand in value.items():
+            if op not in FILTER_OPERATORS:
+                raise ValueError(f"jsonb_unnest: invalid filter operator '{op}' for '{key}'")
+            conditions.append(f'{sql} {op} {_filter_literal(operand, key)}')
+        return conditions
+    if isinstance(value, list):
+        if not value:
+            raise ValueError(f"jsonb_unnest: invalid filter value for '{key}'")
+        literals = ', '.join(_filter_literal(item, key) for item in value)
+        return [f'{sql} NOT IN ({literals})' if negated else f'{sql} IN ({literals})']
+    literal = _filter_literal(value, key)
+    return [f'{sql} <> {literal}' if negated else f'{sql} = {literal}']
+
+
+def split_filters(planner, filter) -> tuple:
+    """Split ``filter`` into ``(element_where: list[str], row_filter: dict)``.
+
+    Raises:
+        ValueError: reference/strict/array errors via ``planner.track``; invalid value/operator.
+    """
+    element_where = []
+    row_filter = {}
+    prefilters = []
+    columns = planner.cfg['columns']
+    for key, value in filter.items():
+        if not isinstance(key, str):
+            row_filter[key] = value
+            continue
+        negated = key.endswith('!')
+        base = key[:-1] if negated else key
+        ref = None
+        from_alias = False
+        if '[].' in base:
+            ref = parse_ref(base)
+        elif base in planner.aliases:
+            aliased = parse_expr(planner.aliases[base])
+            if aliased.kind == 'ref' and aliased.arg.keys:
+                ref = aliased.arg
+                from_alias = True
+        if ref is None:
+            row_filter[key] = value
+            continue
+        planner.track(Expr('ref', arg=ref), key, from_alias)
+        sql = render_ref(ref, planner.safe_cast_for(ref.column))
+        element_where.extend(_element_condition(sql, key, negated, value))
+        if columns is None or ref.column not in columns or not columns[ref.column]['prefilter']:
+            continue
+        if ref.cast is not None or negated:
+            continue
+        if isinstance(value, str) and value not in ('null', 'NULL'):
+            prefilters.append((ref, {'@>': [_prefilter_document(ref.keys, value)]}))
+        elif isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+            prefilters.append((ref, {'@>|': [[_prefilter_document(ref.keys, item)] for item in value]}))
+    for ref, condition in prefilters:
+        suffix = '|'
+        while f'{ref.column}{suffix}' in row_filter:
+            suffix += '|'
+        row_filter[f'{ref.column}{suffix}'] = condition
+    return element_where, row_filter
