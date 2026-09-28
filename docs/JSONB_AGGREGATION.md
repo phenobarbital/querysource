@@ -118,7 +118,7 @@ Implicit casts:
 - a row column without a cast is used as is.
 
 ```sql
--- fields: ["year(graduation_details[].course_date) as year", "count(*)"], group_by: ["year(graduation_details[].course_date)"]
+-- fields: ["year(graduation_details[].course_date) as year", "count(*)"], group_by: ["year(graduation_details[].course_date)"], ordering: ["year"]
 SELECT (date_trunc('year', ((_qs_e0.elem ->> 'course_date')::date))::date) AS "year", count(*) AS "count" FROM (SELECT * FROM students) AS _qs_src CROSS JOIN LATERAL jsonb_array_elements(CASE jsonb_typeof(_qs_src.graduation_details) WHEN 'array' THEN _qs_src.graduation_details ELSE '[]'::jsonb END) AS _qs_e0(elem) GROUP BY (date_trunc('year', ((_qs_e0.elem ->> 'course_date')::date))::date) ORDER BY "year"
 ```
 
@@ -243,6 +243,8 @@ A `having`-only request (no array column) renders no lateral join.
   `(expr | alias) [ASC|DESC] [NULLS FIRST|LAST]`.
 - `group_by` entries render the full expression (a select alias is replaced by its
   expression).
+- `group_by` must name grouping expressions, not aggregate aliases (`group_by: ["n"]` where `n` is `count(*)` yields invalid SQL).
+- Bucketing a `timestamptz` path depends on the session `TimeZone`.
 - `LIMIT` / `OFFSET` apply to the **groups** (the outer query), never inside `_qs_src`.
 
 ```sql
@@ -278,7 +280,7 @@ error:
 | Key | Meaning |
 |---|---|
 | `columns` | When present, the **only** array columns a request may unnest (an undeclared column is an error). Per column: `empty` (`exclude` default / `include`), `safe_cast` (default: the top-level value), `prefilter` (default `false`). |
-| `aliases` | `name → expression` (any expression of the grammar). Usable as bare names in `fields`, `grouping`, `ordering`, `having` and filter keys. An alias wins over a real column of the same name. |
+| `aliases` | `name → expression` (any expression of the grammar). Usable as bare names in `fields`, `grouping`, `ordering` and `having`, and as filter keys **only when the alias expands to a path** (an alias of a bucket or aggregate is not a valid filter key). An alias expands only when the whole entry is the bare name: inside a function (`count(distinct course)`) `course` is the row column. An alias wins over a real column of the same name. |
 | `strict` | `true`: raw path tokens in the request are rejected; only aliases may introduce paths. |
 | `safe_cast` | `true`: regex-guarded casts for every path (see below). |
 
@@ -330,15 +332,15 @@ cast of a path is wrapped in a regex guard and bad values become NULL:
 | `date`, `timestamp`, `timestamptz` | `^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]` |
 | `int`, `integer`, `bigint` | `^-?[0-9]+$` |
 | `numeric`, `float` | `^-?[0-9]+([.][0-9]+)?$` |
-| `boolean` | `^(true|false)$` |
+| `boolean` | `^(true\|false)$` |
 | `text` | never guarded |
 
 The guard also applies to the implicit casts (buckets, `sum`/`avg`), and to element
-filters on casted paths. The regexes are brace-free on purpose so later placeholder
+filters on casted paths. The guards accept only the **canonical** form: valid but unusual spellings (`TRUE`, `t`, `+5`, `.5`, `1e5`, `NaN`) also become NULL. The regexes are brace-free on purpose so later placeholder
 substitution passes cannot break the SQL.
 
 **Known limit:** a well-shaped but impossible date (`2025-02-30`) passes the guard and
-still raises at query time on PostgreSQL 12–15. `pg_input_is_valid` (PostgreSQL 16+) is
+still raises at query time (on every PostgreSQL version). `pg_input_is_valid` (PostgreSQL 16+) is
 deliberately not used because the floor is PG 12.
 
 ## Pre-filter (opt-in)
