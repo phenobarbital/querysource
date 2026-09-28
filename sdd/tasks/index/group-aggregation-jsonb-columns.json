@@ -132,7 +132,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -142,8 +142,8 @@
       "parallelism_notes": "Ports the reference behaviour of TASK-782 (unnest_plan/unnest_wrap in jsonb_unnest.pyx and golden strings in tests/test_jsonb_unnest_plan.py); exclusive for `make build-rust` + `make stage-rust`.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-785-rust-unnest-core.md"
+      "completed_at": "2026-09-28T22:40:08+00:00",
+      "file": "sdd/tasks/completed/TASK-785-rust-unnest-core.md"
     },
     {
       "id": "TASK-786",
