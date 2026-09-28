@@ -95,7 +95,7 @@ async def test_single_multi_inline_dispatch(monkeypatch) -> None:
     dispatched = {}
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -104,7 +104,7 @@ async def test_single_multi_inline_dispatch(monkeypatch) -> None:
             return web.json_response({"ok": "single"})
 
     class _FakeQueryHandler:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -178,7 +178,7 @@ async def test_columns_test_and_output_suffixes(monkeypatch) -> None:
     calls = []
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def get_columns(self, request):
@@ -242,3 +242,35 @@ async def test_tenant_feature_not_configured_returns_404() -> None:
     request = _mock_request(app={}, match_info={"tenant": "tenant1", "slug": "s"})
     with pytest.raises(web.HTTPNotFound):
         await handler.query(request)
+
+
+@pytest.mark.asyncio
+async def test_queries_schema_slug_alias_resolution() -> None:
+    """/api/v1/queries/{schema}/{slug} aliases the tenant route without
+    shadowing the legacy /api/v1/queries/{slug}/describe|columns routes."""
+    from aiohttp.test_utils import make_mocked_request
+
+    from querysource import services
+
+    importlib.reload(services)
+    qs = services.QuerySource(lazy=True)
+    app = web.Application()
+    qs.setup(app)
+
+    async def _resolve(method: str, path: str):
+        return await app.router.resolve(make_mocked_request(method, path))
+
+    for method in ("GET", "POST", "HEAD", "PATCH"):
+        match = await _resolve(method, "/api/v1/queries/public/lowes_stores")
+        assert match.http_exception is None
+        assert match.route.resource.canonical == "/api/v1/queries/{tenant}/{slug}"
+        assert dict(match) == {"tenant": "public", "slug": "lowes_stores"}
+
+    match = await _resolve("GET", "/api/v1/queries/public/lowes_stores/test")
+    assert match.route.resource.canonical == "/api/v1/queries/{tenant}/{slug}/test"
+
+    # Legacy two-segment routes keep precedence over the alias.
+    match = await _resolve("GET", "/api/v1/queries/lowes_stores/describe")
+    assert match.route.resource.canonical == "/api/v1/queries/{slug}/describe"
+    match = await _resolve("GET", "/api/v1/queries/lowes_stores/columns")
+    assert match.route.resource.canonical == "/api/v1/queries/{slug}/columns"

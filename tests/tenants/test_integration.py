@@ -561,7 +561,7 @@ async def test_tenant_stored_multi_definition_executes(tenant_services) -> None:
     calls: list = []
 
     class _FakeQueryHandler:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -617,7 +617,7 @@ async def test_tenant_stored_multi_definition_executes(tenant_services) -> None:
     calls.clear()
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):

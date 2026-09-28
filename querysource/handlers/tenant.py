@@ -292,13 +292,13 @@ class TenantQueryHandler(AbstractHandler):
             if is_multi:
                 from .multi import QueryHandler
 
-                return await QueryHandler(request).query(request)
+                return await QueryHandler().query(request)
             from .service import QueryService
 
-            return await QueryService(request).query(request)
+            return await QueryService().query(request)
         from .multi import QueryHandler
 
-        handler = QueryHandler(request)
+        handler = QueryHandler()
         return await handler.query(request)
 
     async def columns(self, request: web.Request) -> web.StreamResponse:
@@ -310,10 +310,10 @@ class TenantQueryHandler(AbstractHandler):
         if is_multi:
             from .multi import QueryHandler
 
-            return await QueryHandler(request).columns(request)
+            return await QueryHandler().columns(request)
         from .service import QueryService
 
-        handler = QueryService(request)
+        handler = QueryService()
         if request.method == "HEAD":
             return await handler.get_columns(request)
         return await handler.columns(request)
@@ -327,8 +327,8 @@ class TenantQueryHandler(AbstractHandler):
         if is_multi:
             from .multi import QueryHandler
 
-            return await QueryHandler(request).test_slug(request)
+            return await QueryHandler().test_slug(request)
         from .service import QueryService
 
-        handler = QueryService(request)
+        handler = QueryService()
         return await handler.test_slug(request)
