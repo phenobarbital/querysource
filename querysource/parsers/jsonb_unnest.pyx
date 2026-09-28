@@ -8,6 +8,7 @@ Cython fallback of the ``_qs_parsers`` Rust fast path (``pgsql_unnest_plan`` /
 ``pgsql_unnest_wrap``). Both implementations must produce identical output and
 identical ``ValueError`` messages.
 """
+import math
 import re
 
 ALLOWED_CASTS = (
@@ -320,3 +321,294 @@ def is_plan_candidate(fields, grouping, ordering, filter, having, config) -> boo
     except Exception:  # noqa: BLE001 - detection must never raise
         return False
     return False
+
+
+SAFE_CAST_PATTERNS = {
+    'date': '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]',
+    'timestamp': '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]',
+    'timestamptz': '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]',
+    'int': '^-?[0-9]+$',
+    'integer': '^-?[0-9]+$',
+    'bigint': '^-?[0-9]+$',
+    'numeric': '^-?[0-9]+([.][0-9]+)?$',
+    'float': '^-?[0-9]+([.][0-9]+)?$',
+    'boolean': '^(true|false)$',
+}
+HAVING_OPERATORS = ('=', '>=', '<=', '<>', '!=', '<', '>')
+
+
+def render_ref(ref: Ref, safe_cast: bool = False, implicit_cast: str | None = None) -> str:
+    """Render a reference per the rendering table.
+
+    Args:
+        ref: parsed reference.
+        safe_cast: guard the cast with SAFE_CAST_PATTERNS (path refs only).
+        implicit_cast: cast applied to a path ref that has none (buckets → 'date', sum/avg → 'numeric').
+
+    Returns:
+        The SQL text of the reference.
+    """
+    cdef str text
+    cdef str cast
+    cdef str pattern
+    cdef list literals
+    if not ref.keys:
+        if ref.cast:
+            return f'({SOURCE_ALIAS}.{ref.column}::{ref.cast})'
+        return f'{SOURCE_ALIAS}.{ref.column}'
+    literals = [_pg_literal(key) for key in ref.keys]
+    if len(literals) == 1:
+        text = f'({ARRAY_ALIAS}.elem ->> {literals[0]})'
+    else:
+        inner = ' -> '.join(literals[:-1])
+        text = f'({ARRAY_ALIAS}.elem -> {inner} ->> {literals[-1]})'
+    cast = ref.cast or implicit_cast
+    if not cast:
+        return text
+    pattern = SAFE_CAST_PATTERNS.get(cast) if safe_cast else None
+    if pattern is not None:
+        return f'(CASE WHEN {text} ~ {_pg_literal(pattern)} THEN {text}::{cast} END)'
+    return f'({text}::{cast})'
+
+
+def render_expr(expr: Expr, safe_cast_for) -> str:
+    """Render an expression; ``safe_cast_for(column) -> bool`` resolves the effective safe_cast."""
+    kind = expr.kind
+    if kind == 'count_star':
+        return 'count(*)'
+    if kind == 'ref':
+        return render_ref(expr.arg, safe_cast_for(expr.arg.column))
+    if kind == 'bucket':
+        arg_sql = render_ref(expr.arg, safe_cast_for(expr.arg.column), 'date')
+        return f"(date_trunc('{expr.func}', {arg_sql})::date)"
+    # aggregate
+    arg = expr.arg
+    if isinstance(arg, Expr):
+        arg_sql = render_expr(arg, safe_cast_for)
+    else:
+        implicit = 'numeric' if expr.func in ('sum', 'avg') else None
+        arg_sql = render_ref(arg, safe_cast_for(arg.column), implicit)
+    if expr.distinct:
+        return f'{expr.func}(DISTINCT {arg_sql})'
+    return f'{expr.func}({arg_sql})'
+
+
+def _ref_name(ref: Ref) -> str:
+    return ref.keys[-1] if ref.keys else ref.column
+
+
+def default_alias(expr: Expr) -> str:
+    """Default output alias: last key / column, ``<unit>_<name>``, ``count``, ``<func>_<name>``."""
+    kind = expr.kind
+    if kind == 'count_star':
+        return 'count'
+    if kind == 'ref':
+        return _ref_name(expr.arg)
+    if kind == 'bucket':
+        return f'{expr.func}_{_ref_name(expr.arg)}'
+    arg = expr.arg
+    if isinstance(arg, Expr):
+        return f'{expr.func}_{arg.func}_{_ref_name(arg.arg)}'
+    return f'{expr.func}_{_ref_name(arg)}'
+
+
+def _path_refs(expr: Expr) -> list:
+    """Return every path reference contained in ``expr`` in traversal order."""
+    kind = expr.kind
+    if kind == 'count_star':
+        return []
+    arg = expr.arg
+    if isinstance(arg, Expr):
+        return _path_refs(arg)
+    return [arg] if arg.keys else []
+
+
+class _Planner:
+    """Accumulates array-column, alias and strict-mode state while building one plan."""
+
+    def __init__(self, cfg: dict) -> None:
+        self.cfg = cfg
+        self.aliases = cfg['aliases']
+        self.array_column = None  # first path column seen
+        self.select_aliases = {}  # alias -> Expr
+        self.select_sql = {}  # alias -> rendered expression
+
+    def resolve(self, expr: Expr, text: str):
+        """Expand a bare config alias (precedence: select alias > config alias > parse).
+
+        Returns:
+            ``(expr, alias_name)`` where ``alias_name`` is the config alias that was expanded, or None.
+        """
+        if (
+            expr.kind == 'ref' and not expr.arg.keys and expr.arg.cast is None
+            and expr.arg.column in self.aliases
+        ):
+            name = expr.arg.column
+            expanded = parse_expr(self.aliases[name])
+            self.track(expanded, text, True)
+            return expanded, name
+        self.track(expr, text, False)
+        return expr, None
+
+    def track(self, expr: Expr, text: str, from_alias: bool) -> None:
+        """Register every path column in ``expr``; enforce single column, columns allowlist, strict."""
+        for ref in _path_refs(expr):
+            if self.cfg['strict'] and not from_alias:
+                raise ValueError(f"jsonb_unnest: raw path '{text}' not allowed in strict mode")
+            column = ref.column
+            if self.array_column is None:
+                columns = self.cfg['columns']
+                if columns is not None and column not in columns:
+                    raise ValueError(f"jsonb_unnest: array column '{column}' is not declared in columns")
+                self.array_column = column
+            elif column != self.array_column:
+                raise ValueError(
+                    f"jsonb_unnest: more than one array column ('{self.array_column}', '{column}')"
+                )
+
+    def safe_cast_for(self, column: str) -> bool:
+        """Effective safe_cast for ``column`` (column value, else top-level)."""
+        columns = self.cfg['columns']
+        if columns is not None and column in columns:
+            value = columns[column]['safe_cast']
+            if value is not None:
+                return value
+        return self.cfg['safe_cast']
+
+    def lateral(self) -> str:
+        """Render the lateral clause (or '' without an array column)."""
+        column = self.array_column
+        if column is None:
+            return ''
+        columns = self.cfg['columns']
+        empty = 'exclude'
+        if columns is not None and column in columns:
+            empty = columns[column]['empty']
+        source = f'{SOURCE_ALIAS}.{column}'
+        call = (
+            f"jsonb_array_elements(CASE jsonb_typeof({source}) WHEN 'array' THEN {source} "
+            f"ELSE '[]'::jsonb END) AS {ARRAY_ALIAS}(elem)"
+        )
+        if empty == 'include':
+            return f'LEFT JOIN LATERAL {call} ON true'
+        return f'CROSS JOIN LATERAL {call}'
+
+    def render(self, expr: Expr) -> str:
+        """Render ``expr`` with this plan's effective safe_cast rules."""
+        return render_expr(expr, self.safe_cast_for)
+
+    def add_select(self, select: list, expr: Expr, alias: str) -> None:
+        """Append ``<expr> AS "<alias>"`` rejecting duplicate output aliases."""
+        if alias in self.select_aliases:
+            raise ValueError(f"jsonb_unnest: duplicate output alias '{alias}'")
+        sql = self.render(expr)
+        self.select_aliases[alias] = expr
+        self.select_sql[alias] = sql
+        select.append(f'{sql} AS "{alias}"')
+
+    def having_condition(self, key: str, value) -> list:
+        """Render the conditions of one ``having`` entry."""
+        if key in self.select_aliases and self.select_aliases[key].is_aggregate:
+            sql = self.select_sql[key]
+        else:
+            if key in self.aliases:
+                expr = parse_expr(self.aliases[key])
+                self.track(expr, key, True)
+            else:
+                expr = parse_expr(key)
+                self.track(expr, key, False)
+            if not expr.is_aggregate:
+                raise ValueError(f"jsonb_unnest: unknown having key '{key}'")
+            sql = self.render(expr)
+        if isinstance(value, dict):
+            pairs = list(value.items())
+        else:
+            pairs = [('=', value)]
+        conditions = []
+        for op, operand in pairs:
+            if op not in HAVING_OPERATORS:
+                raise ValueError(f"jsonb_unnest: invalid having operator '{op}'")
+            conditions.append(f'{sql} {op} {_having_value(key, operand)}')
+        return conditions
+
+
+def _having_value(key: str, value) -> str:
+    if isinstance(value, bool):
+        raise ValueError(f"jsonb_unnest: invalid having value for '{key}'")
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"jsonb_unnest: invalid having value for '{key}'")
+        return repr(value)
+    if isinstance(value, str):
+        return _pg_literal(value)
+    raise ValueError(f"jsonb_unnest: invalid having value for '{key}'")
+
+
+def unnest_plan(fields, grouping, ordering, filter, having, config):
+    """Build the UnnestPlan dict, or return None when ``is_plan_candidate`` is False.
+
+    Raises:
+        ValueError: any rule in Implementation Notes (exact messages).
+    """
+    if not is_plan_candidate(fields, grouping, ordering, filter, having, config):
+        return None
+    planner = _Planner(validate_config(config))
+    select = []
+    for text in (fields or []):
+        item = parse_select_item(text)
+        expr, alias_name = planner.resolve(item.expr, text)
+        planner.add_select(select, expr, item.alias or alias_name or default_alias(expr))
+    group_by = []
+    for text in (grouping or []):
+        stripped = text.strip()
+        if IDENT_RE.match(stripped) and stripped in planner.select_sql:
+            group_by.append(planner.select_sql[stripped])
+            continue
+        expr, alias_name = planner.resolve(parse_expr(stripped), text)
+        group_by.append(planner.render(expr))
+        if not fields:
+            planner.add_select(select, expr, alias_name or default_alias(expr))
+    if not fields:
+        planner.add_select(select, Expr('count_star', func='count'), 'count')
+    order_by = []
+    for text in (ordering or []):
+        item = parse_order_item(text)
+        if item.name is not None and item.name in planner.select_sql:
+            rendered = f'"{item.name}"'
+        else:
+            expr, _ = planner.resolve(item.expr, text)
+            rendered = planner.render(expr)
+        if item.direction:
+            rendered = f'{rendered} {item.direction}'
+        if item.nulls:
+            rendered = f'{rendered} NULLS {item.nulls}'
+        order_by.append(rendered)
+    having_sql = []
+    if having:
+        if not isinstance(having, dict):
+            raise ValueError('jsonb_unnest: having must be a mapping')
+        if not any(expr.is_aggregate for expr in planner.select_aliases.values()):
+            raise ValueError('jsonb_unnest: having requires an aggregate')
+        for key, value in having.items():
+            having_sql.extend(planner.having_condition(key, value))
+    return {
+        'select': select,
+        'group_by': group_by,
+        'order_by': order_by,
+        'having': having_sql,
+        'element_where': [],
+        'lateral': planner.lateral(),
+        'row_filter': dict(filter or {}),
+    }
+
+
+def unnest_wrap(inner_sql: str, plan: dict) -> str:
+    """Wrap ``inner_sql`` (placeholders already blanked by the caller) per Implementation Notes."""
+    sql = f"SELECT {', '.join(plan['select'])} FROM ({inner_sql.strip()}) AS {SOURCE_ALIAS}"
+    if plan['lateral']:
+        sql = f"{sql} {plan['lateral']}"
+    if plan['element_where']:
+        sql = f"{sql} WHERE {' AND '.join(plan['element_where'])}"
+    return sql
