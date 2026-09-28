@@ -127,8 +127,10 @@ SELECT (date_trunc('year', ((_qs_e0.elem ->> 'course_date')::date))::date) AS "y
 SELECT _qs_src.licensee AS "licensee", sum(((_qs_e0.elem ->> 'points')::numeric)) AS "sum_points", avg(((_qs_e0.elem ->> 'points')::int)) AS "mean" FROM (SELECT * FROM students) AS _qs_src CROSS JOIN LATERAL jsonb_array_elements(CASE jsonb_typeof(_qs_src.graduation_details) WHEN 'array' THEN _qs_src.graduation_details ELSE '[]'::jsonb END) AS _qs_e0(elem) GROUP BY _qs_src.licensee
 ```
 
-**Output aliases** are always double-quoted. An explicit `as <ident>` wins. Default
-aliases:
+**Output aliases** are always double-quoted and must fit PostgreSQL's 63-byte
+identifier limit. If a default alias is longer, provide a shorter `as <ident>`;
+the planner rejects it rather than letting PostgreSQL truncate it. An explicit
+`as <ident>` wins. Default aliases:
 
 | Expression | Default alias |
 |---|---|
@@ -196,9 +198,8 @@ Values are **always literals**. Pre-quoted strings coming from the request pipel
 unquoted and re-quoted, numbers and booleans become text literals (`'5'`, `'true'`;
 PostgreSQL coerces the literal for a casted path), and braces are escaped. A value that
 looks like SQL (`CURRENT_DATE`, a function call) stays a string literal: SQL functions
-are not supported as element-filter values. A comparison dict carries **one** operator by
-the time the planner sees it, because the upstream filter pass consumes one pair per key
-(`having` keeps several).
+are not supported as element-filter values. Every operator in an element comparison
+dict is preserved during request preprocessing and combined with `AND`.
 
 ```sql
 -- filter: {"graduation_details[].course!": "Pilates Mat", "graduation_details[].category": ["Comprehensive", "Mat"], "graduation_details[].level": {">=": 3}, "graduation_details[].note": null}

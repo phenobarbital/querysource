@@ -13,7 +13,7 @@ import orjson
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from .jsonb_unnest import is_plan_candidate, unnest_plan, unnest_wrap
-from ..types.validators import Entity, field_components, is_integer, is_camel_case
+from ..types.validators import Entity, field_components, is_integer, is_camel_case, is_valid
 from .sql cimport SQLParser
 
 # Try to import Rust extension for accelerated parsing
@@ -457,6 +457,19 @@ cdef class pgSQLParser(SQLParser):
         if '{filter}' in _sql:
             _sql = _sql.format_map(SafeDict(filter=''))
         return _sql
+
+    async def _where_element(self, key: str, value: object, connection: object) -> tuple:
+        """Preserve all element-filter comparisons before unnest planning."""
+        if isinstance(key, str) and isinstance(value, dict):
+            config = (self.attributes or {}).get('jsonb_unnest')
+            aliases = config.get('aliases') if isinstance(config, dict) else None
+            expression = aliases.get(key.rstrip('!')) if isinstance(aliases, dict) else None
+            if '[].' in key or (isinstance(expression, str) and '[].' in expression):
+                return key, {
+                    op: is_valid(key, operand, noquote=self.string_literal)
+                    for op, operand in value.items()
+                }
+        return await super()._where_element(key, value, connection)
 
     def _unnest_plan(self):
         """Return the JSONB-unnest plan (FEAT-153) or None when the query does not use it.

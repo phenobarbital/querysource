@@ -499,6 +499,10 @@ class _Planner:
 
     def add_select(self, select: list, expr: Expr, alias: str) -> None:
         """Append ``<expr> AS "<alias>"`` rejecting duplicate output aliases."""
+        if len(alias.encode('utf-8')) > 63:
+            raise ValueError(
+                f"jsonb_unnest: output alias '{alias}' exceeds 63 bytes; use a shorter AS alias"
+            )
         if alias in self.select_aliases:
             raise ValueError(f"jsonb_unnest: duplicate output alias '{alias}'")
         sql = self.render(expr)
@@ -609,7 +613,10 @@ def unnest_plan(fields, grouping, ordering, filter, having, config):
 
 def unnest_wrap(inner_sql: str, plan: dict) -> str:
     """Wrap ``inner_sql`` (placeholders already blanked by the caller) per Implementation Notes."""
-    sql = f"SELECT {', '.join(plan['select'])} FROM ({inner_sql.strip()}) AS {SOURCE_ALIAS}"
+    inner_sql = inner_sql.strip()
+    if inner_sql.endswith(';'):
+        inner_sql = inner_sql[:-1].rstrip()
+    sql = f"SELECT {', '.join(plan['select'])} FROM ({inner_sql}) AS {SOURCE_ALIAS}"
     if plan['lateral']:
         sql = f"{sql} {plan['lateral']}"
     if plan['element_where']:

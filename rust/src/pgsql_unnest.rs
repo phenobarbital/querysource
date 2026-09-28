@@ -807,6 +807,12 @@ impl Planner {
         expr: Expr,
         alias: &str,
     ) -> Result<(), String> {
+        if alias.len() > 63 {
+            return Err(format!(
+                "jsonb_unnest: output alias '{}' exceeds 63 bytes; use a shorter AS alias",
+                alias
+            ));
+        }
         if self.select_aliases.iter().any(|(n, _)| n == alias) {
             return Err(format!("jsonb_unnest: duplicate output alias '{}'", alias));
         }
@@ -1037,6 +1043,8 @@ pub(crate) fn wrap_sql(
     lateral: &str,
     element_where: &[String],
 ) -> String {
+    let inner_sql = inner_sql.trim();
+    let inner_sql = inner_sql.strip_suffix(';').unwrap_or(inner_sql).trim_end();
     let mut sql = format!(
         "SELECT {} FROM ({}) AS {}",
         select.join(", "),
