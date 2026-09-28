@@ -174,7 +174,7 @@
       "feature_id": "FEAT-153",
       "feature": "group-aggregation-jsonb-columns",
       "spec": "sdd/specs/group-aggregation-jsonb-columns.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -185,8 +185,8 @@
       "parallelism_notes": "Calls _rs.pgsql_unnest_plan registered by TASK-786 and pgSQLParser._unnest_plan/build_query hooks from TASK-784; test-only.",
       "assigned_to": null,
       "started_at": "2026-09-28T22:26:42+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-787-jsonb-unnest-parity-tests.md"
+      "completed_at": "2026-09-28T22:42:55+00:00",
+      "file": "sdd/tasks/completed/TASK-787-jsonb-unnest-parity-tests.md"
     },
     {
       "id": "TASK-788",
