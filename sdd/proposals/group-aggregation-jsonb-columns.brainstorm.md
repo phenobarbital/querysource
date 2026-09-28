@@ -170,8 +170,12 @@ The **slug-side declaration** lives in `QueryModel.attributes`, e.g.
   filters must be removed from `self.filter` **before** the Rust or Cython
   filter builders run. Otherwise the FEAT-103 check silently drops them
   (`[` is not an identifier character).
+- Rust parity (decided): the planner is written twice, in Rust
+  (`rust/src/pgsql_parser.rs`) and in Cython as the fallback, like the `@>|`
+  work. That is about twice the rendering code, and it needs parametrised
+  `use_rust` tests to keep both outputs identical.
 
-📊 **Effort:** Medium
+📊 **Effort:** Medium–High (Rust + Cython parity)
 
 📦 **Libraries / Tools:**
 | Package | Purpose | Notes |
@@ -385,6 +389,20 @@ Slug-side declaration, in `QueryModel.attributes`:
 With this declaration, requests can use `group_by: ["course"]`, and
 `strict: true` rejects any request path not covered by `aliases`.
 
+Slug-side options:
+
+- **`columns`**: when declared, requests may only unnest the listed array
+  columns, even when `strict` is not set.
+- **No `jsonb_unnest` at all**: any array column that passes the grammar is
+  accepted.
+- **`safe_cast: true`** (per column or global): bad values become `NULL`
+  instead of failing the query.
+
+Aggregate filtering (`HAVING`) uses a new `having` condition, keyed by the
+alias of a metric or group key, with the same comparison-dict form as
+filters. For example, `"having": {"graduates": {">": 5}}` renders
+`HAVING count(DISTINCT student_uid) > 5`.
+
 Row-level filters are unchanged. `{"graduation_details": {"@>":
 [{"course": "Pilates Studio"}]}}` still means "students holding a Pilates
 Studio diploma". The path-keyed form means "only the Pilates Studio
@@ -406,10 +424,17 @@ elements".
    - alias,
    - scope (group key, metric, element filter, order key).
 
-   Anything outside the grammar or allowlists raises a clear parser error.
-   It does not silently drop the token. This differs deliberately from
-   invalid JSONB filters, which *are* dropped, and the difference needs a
-   decision (see Open Questions).
+   Anything outside the grammar or allowlists **raises a clear parser
+   error**, which the handler returns as a 4xx. This includes:
+   - an unknown function or cast,
+   - a path outside a strict slug's `aliases`,
+   - an array column outside the declared `columns`,
+   - more than one array column,
+   - a `having` key that is not a known alias.
+
+   The token is never dropped silently. This deliberately differs from
+   invalid JSONB filters (which stay dropped, unchanged), because a dropped
+   group key or metric would silently return a different aggregation.
 3. **Extract.** It removes path-keyed entries from `self.filter`, and path
    tokens from `fields` / `grouping` / `ordering`, so the existing Rust and
    Cython builders only see what they already understand. It adds the derived
@@ -419,7 +444,13 @@ elements".
    SQL without grouping, ordering or limit.
 5. **Render outer.** Wrap the inner SQL, add one LATERAL join per array
    column, then add the element `WHERE`, the `SELECT` list (group keys,
-   metrics), `GROUP BY`, `ORDER BY` and `LIMIT` / `OFFSET`.
+   metrics), `GROUP BY`, `HAVING`, `ORDER BY` and `LIMIT` / `OFFSET`. Time
+   buckets use a closed set of helpers, rendered as
+   `date_trunc('<unit>', <path>)`: `year`, `quarter`, `month`, `week`, `day`.
+   There is no `date_trunc` passthrough.
+   Planning and rendering live in `rust/src/pgsql_parser.rs` (fast path) with
+   a Cython fallback in `pgsql.pyx`, mirroring the `pgsql_filter_conditions`
+   pattern.
 6. **Finalize.** The existing `format_map` / `safe_substitute` passes run on
    the final SQL. All braces in JSON literals are `pg_literal`-escaped, as the
    `@>` work already guarantees (`test_build_query_survives_format_passes`).
@@ -436,9 +467,16 @@ elements".
   `CASE jsonb_typeof(col) WHEN 'array' THEN col ELSE '[]'::jsonb END` so a
   single malformed row does not fail the query.
 - **Bad casts.** A cast failure on dirty data, e.g. `'2025-13-40'::date`,
-  surfaces as a DB error. See Open Questions for a safe-cast option.
-- **Multiple array columns.** Two different arrays produce a cross product of
-  their elements. Reject in v1 unless the slug explicitly allows it.
+  surfaces as a DB error by default. With the slug's `safe_cast: true`, casts
+  are guarded, e.g.
+  `CASE WHEN v ~ '^\d{4}-\d{2}-\d{2}' THEN v::date END` for dates and a
+  numeric regex for `int` / `numeric`, so bad values become `NULL`.
+  A regex match can still fail on impossible dates such as `2025-02-30`.
+  The spec should decide whether to tighten the guard or document the
+  limitation.
+- **Multiple array columns.** Rejected in v1 with a parser error, because two
+  different arrays produce a cross product of their elements. Repeating the
+  same array column in several paths is fine: it uses one LATERAL join.
 - **Aggregates without group keys.** Allowed, e.g. a total diploma count.
 - **Group keys without aggregates.** Allowed; this is a distinct listing.
 - **Slugs whose `query_raw` has its own `GROUP BY` or `LIMIT`.** The inner
@@ -448,9 +486,14 @@ elements".
 - **Cache keys.** Conditions already feed the cache key, and the new tokens
   live inside existing condition fields, so no cache change is expected.
   Verify in the spec.
-- **Rust fast path failure.** `pgsql_filter_conditions` falls back to Cython
-  on exception (`pgsql.pyx:206-214`). The planner runs before both, so the
-  behaviour is identical on either path.
+- **Rust fast path failure.** Follow the `pgsql_filter_conditions` pattern
+  (`pgsql.pyx:206-214`): on an unexpected Rust exception, fall back to the
+  Cython planner. **Validation errors** are the exception: they must raise
+  the same parser error on both paths and must not trigger a fallback that
+  could render differently. Parametrised `use_rust` tests assert that both
+  paths produce identical SQL.
+- **`having` without aggregation.** A `having` condition with no group keys
+  and no metrics raises a parser error.
 
 ---
 
@@ -480,16 +523,20 @@ elements".
 |---|---|---|
 | `querysource/parsers/pgsql.pyx` (`pgSQLParser.build_query`) | modifies | new planner stage; runs only when path tokens or declaration present |
 | `querysource/parsers/sql.pyx` (`group_by`, `order_by`, `limiting`) | depends on | reused on outer SQL; no change expected |
-| `rust/src/pgsql_parser.rs`, `rust/src/sql_parser.rs` | depends on / maybe modifies | planner strips path tokens before the Rust calls; a Rust port of the planner is optional (open question) |
+| `rust/src/pgsql_parser.rs` | modifies | Rust implementation of the planner + outer-query renderer (fast path); exposed via `_qs_parsers` |
+| `rust/src/sql_parser.rs` | depends on | `group_by` / `process_fields` only receive stripped inputs |
+| `querysource/models.py` `QueryObject` | extends | new `having` condition key |
 | `querysource/parsers/abstract.pyx` | depends on | `_query_fields_sync`, `_grouping_sync` supply inputs |
 | `querysource/models.py` `QueryModel.attributes` | extends (data only) | new `jsonb_unnest` key; no schema migration |
 | Output writers / destinations | none | flat rows |
 | `querysource/qsurl/` (FEAT-152) | future | could expose group/aggregate capability later; out of scope |
 | Docs | extends | document the syntax next to the JSONB filter docs |
 
-No breaking changes and no new dependencies. The Cython rebuild is needed
-(`make build-inplace`), plus `make build-rust` and stage-rust only if the
-Rust planner is ported.
+No breaking changes and no new dependencies. Both rebuilds are needed:
+`make build-inplace` (Cython), and `make build-rust` followed by
+stage-rust (the source-tree `.so` is what Python loads). PostgreSQL 12+ is
+the deployment floor. v1 only uses 9.4+ features, but jsonpath (Option D)
+remains available for a later renderer.
 
 ---
 
@@ -608,8 +655,10 @@ from querysource.queries.multi.operators.GroupBy import GroupBy  # tests/test_ca
 - **Internal parallelism**: Limited. The path grammar/validator, the
   element-filter rendering and the slug-declaration parsing can be written in
   parallel as pure units. All of them converge on `pgSQLParser.build_query`
-  in `pgsql.pyx`, and the outer-query rendering depends on the grammar. An
-  optional Rust port would be a separable follow-up task.
+  in `pgsql.pyx`, and the outer-query rendering depends on the grammar. The
+  Rust port (`rust/src/pgsql_parser.rs`) can run in parallel with the Cython
+  implementation once the grammar and golden-SQL fixtures are fixed, because
+  both must match the same expected strings.
 - **Cross-feature independence**: `pgsql.pyx` and `rust/src/pgsql_parser.rs`
   were just touched by the JSONB filter work (`8936386`). The qsurl feature
   (FEAT-152, merged) also routes through `pgsql.pyx` text operators. No known
@@ -631,11 +680,11 @@ from querysource.queries.multi.operators.GroupBy import GroupBy  # tests/test_ca
 - [x] Syntax — *Owner: Jesus Lara*: path strings (`col[].key`)
 - [x] Slug shapes — *Owner: Jesus Lara*: any pg slug, via subquery wrap
 - [x] Empty/NULL arrays — *Owner: Jesus Lara*: excluded by default, opt-in NULL group
-- [ ] Invalid path tokens: raise a parser error (recommended; they are explicit opt-in syntax) or drop silently like invalid JSONB filters? — *Owner: Jesus Lara*
-- [ ] Is `HAVING` (e.g. `having: {"graduates": {">": 5}}`) in v1 or a follow-up? — *Owner: Jesus Lara*
-- [ ] Time-bucket syntax: `year(path)` / `month(path)` helpers (recommended) or `date_trunc('month', path)` passthrough? — *Owner: Jesus Lara*
-- [ ] Cast failures on dirty data: fail the query (default) or offer safe-cast (`CASE WHEN … ~ regex THEN …::date END`)? — *Owner: Jesus Lara*
-- [ ] Multiple distinct array columns in one query: reject in v1 (recommended) or allow the cross product with a slug opt-in? — *Owner: Jesus Lara*
-- [ ] Rust parity: Cython-only planner (Rust fast paths only receive stripped inputs), or also port the planner to `rust/src/pgsql_parser.rs`? — *Owner: Jesus Lara*
-- [ ] Should non-strict slugs still restrict request paths to columns the slug exposes (e.g. `columns_definition`), or is grammar validation enough? — *Owner: Jesus Lara*
-- [ ] Minimum PostgreSQL version in deployments (matters only if Option D's jsonpath is revisited). — *Owner: Jesus Lara*
+- [x] Invalid path tokens — *Owner: Jesus Lara*: raise a parser error (4xx); never drop silently. Invalid JSONB filters keep their current drop behaviour.
+- [x] `HAVING` scope — *Owner: Jesus Lara*: in v1, as a `having` condition keyed by metric/group alias with comparison-dict values
+- [x] Time-bucket syntax — *Owner: Jesus Lara*: helper functions `year` / `quarter` / `month` / `week` / `day` (path) rendered as `date_trunc`; no passthrough
+- [x] Cast failures on dirty data — *Owner: Jesus Lara*: fail by default; slug opt-in `safe_cast: true` renders regex-guarded casts (bad values become NULL)
+- [x] Multiple distinct array columns — *Owner: Jesus Lara*: rejected in v1 with a parser error
+- [x] Rust parity — *Owner: Jesus Lara*: port the planner to `rust/src/pgsql_parser.rs` too (Rust fast path + Cython fallback, identical-output tests)
+- [x] Non-strict slug restrictions — *Owner: Jesus Lara*: grammar validation always; if the slug declares `jsonb_unnest.columns`, only those arrays may be unnested; with no declaration any grammar-valid identifier is allowed
+- [x] Minimum PostgreSQL version — *Owner: Jesus Lara*: PG 12+ in all deployments (v1 still uses only 9.4+ features; jsonpath stays available later)
