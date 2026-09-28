@@ -60,7 +60,7 @@ class sqlProvider(BaseProvider):
     _PARSER_CONDITION_KEYS = frozenset({
         "where_cond", "and_cond", "filter", "conditions",
         "fields", "add_fields", "distinct",
-        "group_by", "grouping", "order_by", "ordering",
+        "group_by", "grouping", "having", "order_by", "ordering",
         "querylimit", "_limit", "_offset", "paged", "page",
         "filter_options", "qry_options",
         "tablename", "schema", "database",

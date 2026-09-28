@@ -19,6 +19,7 @@ cdef class AbstractParser:
     cdef public list fields
     cdef public list ordering
     cdef public list grouping
+    cdef public object having
     cdef public str program_slug
     cdef public bint refresh
     cdef public str tablename
@@ -70,6 +71,7 @@ cdef class AbstractParser:
     cdef void _query_limit_sync(self)
     cdef void _offset_pagination_sync(self)
     cdef void _grouping_sync(self)
+    cdef void _having_sync(self)
     cdef void _ordering_sync(self)
     cdef void _filter_options_sync(self)
     cdef void _query_filter_sync(self)
