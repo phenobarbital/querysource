@@ -68,6 +68,13 @@ extensions = [
         language="c"
     ),
     Extension(
+        name='querysource.parsers.jsonb_unnest',
+        sources=['querysource/parsers/jsonb_unnest.pyx'],
+        extra_compile_args=COMPILE_ARGS,
+        extra_link_args=LINK_ARGS,
+        language="c"
+    ),
+    Extension(
         name='querysource.parsers.sqlserver',
         sources=['querysource/parsers/sqlserver.pyx'],
         extra_compile_args=COMPILE_ARGS,
