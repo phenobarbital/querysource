@@ -404,6 +404,27 @@ class QuerySource(metaclass=Singleton):
             "/api/v1/{tenant}/queries/{slug}/test", th.test_slug
         )
         routes.append(r)
+        # Alias: /api/v1/queries/{schema}/{slug} → same tenant handler.
+        # Registered after the legacy /api/v1/queries/{slug}/describe|columns
+        # routes (same static prefix), so those keep precedence.
+        r = self.app.router.add_get(
+            "/api/v1/queries/{tenant}/{slug}", th.query, allow_head=False
+        )
+        routes.append(r)
+        r = self.app.router.add_post("/api/v1/queries/{tenant}/{slug}", th.query)
+        routes.append(r)
+        r = self.app.router.add_head("/api/v1/queries/{tenant}/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_patch("/api/v1/queries/{tenant}/{slug}", th.columns)
+        routes.append(r)
+        r = self.app.router.add_get(
+            "/api/v1/queries/{tenant}/{slug}/test", th.test_slug
+        )
+        routes.append(r)
+        r = self.app.router.add_post(
+            "/api/v1/queries/{tenant}/{slug}/test", th.test_slug
+        )
+        routes.append(r)
 
         ### Startup Event for QuerySource:
         self.app.on_startup.append(

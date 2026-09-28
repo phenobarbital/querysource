@@ -75,7 +75,7 @@ async def test_stored_multi_slug_dispatches_to_query_handler(monkeypatch):
     calls = []
 
     class _FakeQueryHandler:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -103,7 +103,7 @@ async def test_stored_single_slug_dispatches_to_query_service(monkeypatch):
     calls = []
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -151,7 +151,7 @@ async def test_authorization_precedes_definition_load(monkeypatch):
 @pytest.mark.asyncio
 async def test_one_repository_read_per_request(monkeypatch):
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -201,11 +201,11 @@ async def test_missing_slug_returns_404_before_dispatch(monkeypatch):
     dispatched = []
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             dispatched.append("service")
 
     class _FakeQueryHandler:
-        def __init__(self, request):
+        def __init__(self):
             dispatched.append("multi")
 
     monkeypatch.setattr("querysource.handlers.service.QueryService", _FakeQueryService)
@@ -255,7 +255,7 @@ async def test_slug_format_suffix_stripped_before_peek(monkeypatch):
     calls = []
 
     class _FakeQueryService:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def query(self, request):
@@ -280,7 +280,7 @@ async def test_multi_columns_and_test_route_dispatch(monkeypatch):
     calls = []
 
     class _FakeQueryHandler:
-        def __init__(self, request):
+        def __init__(self):
             pass
 
         async def columns(self, request):
