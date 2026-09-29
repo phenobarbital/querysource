@@ -8,10 +8,8 @@ from aiohttp import web
 
 # from reportlab.lib.pagesizes import letter, A4
 # from reportlab.platypus import SimpleDocTemplate, Paragraph
-
 from ...conf import PDF_RENDER_WORKERS
 from .report import ReportWriter
-
 
 _EXECUTOR: Optional[ThreadPoolExecutor] = None
 
