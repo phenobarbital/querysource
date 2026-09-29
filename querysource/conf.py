@@ -280,6 +280,9 @@ JIRA_CERT = config.get('JIRA_CERT')
 HTTPCLIENT_MAX_SEMAPHORE = config.getint("HTTPCLIENT_MAX_SEMAPHORE", fallback=5)
 HTTPCLIENT_MAX_WORKERS = config.getint("HTTPCLIENT_MAX_WORKERS", fallback=1)
 
+## PDF rendering (WeasyPrint) worker pool -- bounds concurrent PDF renders:
+PDF_RENDER_WORKERS = config.getint("PDF_RENDER_WORKERS", fallback=4)
+
 ## MultiQS thread guardrails:
 MULTIQS_MAX_CONCURRENT_THREADS = config.getint(
     "MULTIQS_MAX_CONCURRENT_THREADS",
