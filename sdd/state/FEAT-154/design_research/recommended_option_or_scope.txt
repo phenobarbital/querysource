@@ -1,0 +1,57 @@
+## 3. Probable Scope
+
+### What's New
+
+- **Lazy writer registry**: `WRITERS` values become `"module:ClassName"` specs, for example
+  `'pdf': '.writers.pdf:PDFWriter'`. A small resolver imports the class on first lookup and
+  caches it back into the mapping. Values that are already classes are returned as they are,
+  which keeps the `monkeypatch.setitem` tests working.
+
+### What Changes
+
+- **`querysource/outputs/output.py`**: drop the top-level `from .writers import (...)`. Build
+  `WRITERS` from specs, and resolve through the helper in `DataOutput.response`, keeping the
+  json fallback for unknown keys. *Evidence*: F002, F007
+- **`querysource/outputs/writers/__init__.py`**: replace the eager imports with a PEP 562
+  `__getattr__` and a name→module map, so `from querysource.outputs.writers import X` still
+  works. Keep `__all__` and the commented-out writers as they are. *Evidence*: F001
+- **`querysource/outputs/__init__.py`**: expose `DataOutput` through a PEP 562 `__getattr__`,
+  so that importing `querysource.outputs.dt` from `queries/base.py` stops loading `output.py`.
+  *Evidence*: F006
+- **`querysource/outputs/writers/pdf.py::PDFWriter.get_response`**: import `weasyprint.HTML`
+  inside the method and run `write_pdf` with `await asyncio.to_thread(...)`, so it no longer
+  blocks the event loop. *Evidence*: F004
+- **Tests**: add a regression test that fails if importing `querysource.queries.qs` or
+  `querysource.outputs.output` puts `weasyprint` into `sys.modules`. Run it in a subprocess
+  for isolation. Add registry tests for lazy resolution, caching, class override and the
+  unknown-format fallback. *Evidence*: F005, F007
+
+### What's Untouched (Non-Goals)
+
+- The WeasyPrint dependency stays in `[project].dependencies` (`pyproject.toml:111`). No
+  packaging change (user decision U2).
+- Other import-time costs such as asyncdb/BigQuery (~0.5 s) and pandas (~0.2 s) are
+  separate. They could get a follow-up.
+- `describe.py` / `eda.py` / `clustering.py` / `profiling.py` stay disabled and keep their
+  imports as they are.
+- Output destinations (`querysource/outputs/destinations/`) and the `outputs.dt` factory
+  internals.
+
+### Patterns to Follow
+
+- Defer heavy imports to the call site, the way `bokeh.py` L37-41, `plotly.py` L79-80 and
+  `report.py` L10-13 already do. *Evidence*: F003
+- There is already lazy-import precedent in the repo: `querysource/queries/multi/destinations/__init__.py:37`
+  imports `AbstractDestination` inside a function (`# noqa: PLC0415`). *Evidence*: F006
+
+### Integration Risks
+
+- **Import errors show up later**: a broken writer now fails on its first request instead of at
+  startup. *Mitigation*: a unit test that resolves every registered spec.
+- **Thread offload**: weasyprint rendering in a worker thread is safe (no shared event-loop
+  state), but concurrent PDF requests now run in parallel threads and can use more memory.
+  *Mitigation*: consider capping concurrency with a semaphore in the spec. *Evidence*: F004
+- **Library callers** that rely on `querysource.outputs` pulling in `aiohttp` writers as a side
+  effect. None were found in the repo. *Evidence*: F006
+
+---

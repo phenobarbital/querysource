@@ -1,0 +1,59 @@
+{
+  "feature_id": "FEAT-154",
+  "phase": "committed",
+  "mode": "enrichment",
+  "started_at": "2026-09-29T15:45:00Z",
+  "updated_at": "2026-09-29T16:00:00Z",
+  "wiki_available": true,
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "summary_oneline": "Lazy-load output writers (PDFWriter/weasyprint first) so QS and the HTTP service stop paying ~0.45 s at import"
+  },
+  "budget": {
+    "profile": "default",
+    "max_files_read": 40,
+    "max_grep_calls": 25,
+    "max_git_calls": 10,
+    "max_depth": 2,
+    "max_wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 9,
+    "grep_calls": 8,
+    "git_calls": 2,
+    "depth_reached": 1,
+    "wall_seconds": 290
+  },
+  "truncated": false,
+  "truncation_reason": null,
+  "phases": {
+    "plan": {
+      "approved_by_user": false,
+      "note": "auto mode: plan executed without gate; persisted retroactively"
+    },
+    "research": {
+      "status": "complete",
+      "findings": 9
+    },
+    "synthesis": {
+      "status": "complete",
+      "overall_confidence": "high",
+      "lint": "pass"
+    },
+    "qa": {
+      "status": "complete",
+      "questions_total": 3,
+      "questions_answered": 3
+    },
+    "output": {
+      "proposal_path": "sdd/proposals/lazy-import-writers.proposal.md",
+      "commit_sha": "f0f9dd6"
+    }
+  },
+  "errors": [],
+  "resume_hint": {
+    "next_phase": "committed",
+    "next_action": "commit proposal + state"
+  }
+}

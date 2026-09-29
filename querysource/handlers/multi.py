@@ -756,6 +756,8 @@ class QueryHandler(AbstractHandler):
                 exception=err,
                 code=402
             ) from err
+        except web.HTTPException:
+            raise
         except (QueryException, Exception) as ex:
             raise self.Except(
                 message="Error on Query",

@@ -1,0 +1,20 @@
+### 2.2 Constraints Discovered
+
+- **`WRITERS` is part of the test contract.** `tests/qsurl/test_error_envelope.py:59` calls
+  `monkeypatch.setitem(output_module.WRITERS, "json", _StubWriter)`.
+  *Implication*: `WRITERS` must remain a module-level mutable mapping in
+  `querysource.outputs.output`. Lookups must accept either a class that has already been set
+  or a lazy spec that has not been resolved yet. *Evidence*: F007
+- **Direct submodule imports must keep working.** Tests import
+  `querysource.outputs.writers.csv` / `.tsv` and `querysource.outputs.output.DataOutput`
+  directly. *Implication*: no module may be renamed or moved, and
+  `from querysource.outputs.writers import PDFWriter` must still resolve, via a PEP 562
+  `__getattr__`. *Evidence*: F007
+- **Invalid-format fallback.** An unknown format currently logs a warning and falls back to
+  `json` (F002). The lazy registry has to keep that behaviour. Resolving a known key must never
+  degrade to json silently: a genuine `ImportError` has to surface. *Evidence*: F002
+- **Other writers already follow the pattern.** pandas, bokeh, plotly, seaborn, matplotlib
+  and pygal are already imported inside methods (F003). `pdf.py` is the only exception among the
+  active writers. *Evidence*: F003
+- **Async-first convention.** `HTML(string=...).write_pdf()` is CPU-bound, blocking work
+  inside `async def get_response`. *Evidence*: F004
