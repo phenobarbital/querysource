@@ -1,6 +1,6 @@
 {
   "feature_id": "FEAT-177",
-  "phase": "proposal_drafted",
+  "phase": "committed",
   "mode": "enrichment",
   "started_at": "2026-09-29T15:45:00Z",
   "updated_at": "2026-09-29T16:00:00Z",
@@ -48,7 +48,7 @@
     },
     "output": {
       "proposal_path": "sdd/proposals/lazy-import-writers.proposal.md",
-      "commit_sha": null
+      "commit_sha": "f0f9dd6"
     }
   },
   "errors": [],
