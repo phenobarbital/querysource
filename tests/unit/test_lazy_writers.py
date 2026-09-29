@@ -2,6 +2,7 @@
 import asyncio
 import subprocess
 import sys
+from pathlib import Path
 import threading
 import time
 
@@ -12,6 +13,10 @@ import querysource.outputs.writers as writers_pkg
 from querysource.outputs.output import WRITERS, LazyWriterRegistry, resolve_writer
 from querysource.outputs.writers import pdf as pdf_module
 from querysource.outputs.writers.abstract import AbstractWriter
+
+# navconfig chdir()s the test process into the primary checkout on import, so pin
+# child interpreters to THIS tree or they would import a different querysource.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ENTRYPOINTS = [
     "querysource.queries.qs",
@@ -32,7 +37,9 @@ def fresh_writers():
 
 def _run(code: str) -> str:
     """Run ``code`` in a fresh interpreter and return its last stdout line."""
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO_ROOT
+    )
     return out.stdout.strip().splitlines()[-1]
 
 
