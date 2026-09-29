@@ -1,0 +1,160 @@
+{
+  "mode": "enrichment",
+  "summary_oneline": "Lazy-load output writers (PDFWriter/weasyprint first) so QS and the HTTP service stop paying ~0.45 s at import",
+  "localization": [
+    {
+      "path": "querysource/outputs/writers/__init__.py",
+      "symbol": "(module)",
+      "lines": "1-17",
+      "role": "eager import of all writer classes",
+      "evidence": [
+        "F001"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/outputs/output.py",
+      "symbol": "WRITERS",
+      "lines": "19-62",
+      "role": "static format\u2192class registry",
+      "evidence": [
+        "F002"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/outputs/output.py",
+      "symbol": "DataOutput.response",
+      "lines": "211-234",
+      "role": "only consumer of WRITERS",
+      "evidence": [
+        "F002"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/outputs/writers/pdf.py",
+      "symbol": "PDFWriter.get_response",
+      "lines": "7, 48-54",
+      "role": "top-level weasyprint import + sync render",
+      "evidence": [
+        "F003",
+        "F004"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/outputs/__init__.py",
+      "symbol": "DataOutput",
+      "lines": "1-6",
+      "role": "package init pulls output.py on any outputs.* import",
+      "evidence": [
+        "F006"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/queries/base.py",
+      "symbol": "OutputFactory",
+      "lines": "14",
+      "role": "library-mode entry into outputs package",
+      "evidence": [
+        "F006",
+        "F009"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path": "querysource/services.py",
+      "symbol": "(module)",
+      "lines": "21-22",
+      "role": "HTTP-mode entry via handlers",
+      "evidence": [
+        "F009"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "claims": [
+    {
+      "id": "C1",
+      "claim": "weasyprint is the only writer dependency with material import cost (~440-610 ms); other writers <3 ms",
+      "evidence": [
+        "F003",
+        "F005"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C2",
+      "claim": "weasyprint is loaded in both library mode (queries.qs) and HTTP mode (services) before any PDF is requested",
+      "evidence": [
+        "F006",
+        "F009"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C3",
+      "claim": "The WRITERS class is only needed at DataOutput.response time, so resolution can be deferred",
+      "evidence": [
+        "F002"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C4",
+      "claim": "Tests require WRITERS to stay a module-level mutable mapping that accepts classes via setitem",
+      "evidence": [
+        "F007"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C5",
+      "claim": "Moving the weasyprint import into get_response is behaviour-neutral",
+      "evidence": [
+        "F004"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C6",
+      "claim": "Expected saving is ~27% of `import querysource.queries.qs` wall time on the dev machine",
+      "evidence": [
+        "F005"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "C7",
+      "claim": "The sync write_pdf call blocks the event loop and can be offloaded with asyncio.to_thread",
+      "evidence": [
+        "F004"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "U1",
+      "question": "Scope: PDF-only, lazy registry for all writers, or also decouple the outputs package?",
+      "user_answer": "Lazy registry, all writers (option A)"
+    },
+    {
+      "id": "U2",
+      "question": "Keep WeasyPrint as a hard dependency or move it to an extra?",
+      "user_answer": "Keep hard dependency"
+    },
+    {
+      "id": "U3",
+      "question": "Include the blocking write_pdf \u2192 to_thread fix?",
+      "user_answer": "Include to_thread fix"
+    }
+  ],
+  "overall_confidence": "high",
+  "recommended_next_command": {
+    "command": "sdd-spec",
+    "rationale": "Localization is complete and measured, all design forks are resolved by the user, and the change is bounded to querysource/outputs/."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "feature_id": "FEAT-177",
+  "mode": "enrichment",
+  "wiki_available": true,
+  "queries": [
+    {"id": "Q001", "type": "wiki_query", "params": {"question": "output writers registry import"}, "intent": "locate writer modules", "priority": 1},
+    {"id": "Q002", "type": "read", "params": {"path": "querysource/outputs/writers/__init__.py"}, "intent": "eager import list", "priority": 1},
+    {"id": "Q003", "type": "read", "params": {"path": "querysource/outputs/output.py", "lines": "1-62,211-234"}, "intent": "WRITERS registry and dispatch", "priority": 1},
+    {"id": "Q004", "type": "grep", "params": {"pattern": "^(import|from) ", "path": "querysource/outputs/writers/*.py"}, "intent": "top-level heavy imports per writer", "priority": 1},
+    {"id": "Q005", "type": "read", "params": {"path": "querysource/outputs/writers/pdf.py"}, "intent": "weasyprint usage", "priority": 1},
+    {"id": "Q006", "type": "tree", "params": {"cmd": "python -X importtime"}, "intent": "measure import cost of writers and entrypoints", "priority": 1},
+    {"id": "Q007", "type": "grep", "params": {"pattern": "DataOutput|outputs.dt|WRITERS|outputs.writers"}, "intent": "importers / consumers of writers", "priority": 2},
+    {"id": "Q008", "type": "grep", "params": {"pattern": "weasyprint", "path": "pyproject.toml uv.lock"}, "intent": "dependency declaration", "priority": 2},
+    {"id": "Q009", "type": "git_log", "params": {"path": "querysource/outputs/writers/"}, "intent": "recent history", "priority": 3}
+  ]
+}
