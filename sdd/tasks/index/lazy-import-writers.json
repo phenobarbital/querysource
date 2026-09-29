@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-29T16:51:27+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-29T17:41:09+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -92,7 +92,7 @@
       "feature_id": "FEAT-154",
       "feature": "lazy-import-writers",
       "spec": "sdd/specs/lazy-import-writers.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -105,8 +105,9 @@
       "parallelism_notes": "Tests import _render_pdf/_pdf_executor + PDF_RENDER_WORKERS from TASK-790 (pdf.py, conf.py), writers.__all__/__getattr__ from TASK-791 (writers/__init__.py), LazyWriterRegistry/resolve_writer from TASK-792 (output.py), lazy DataOutput from TASK-793 (outputs/__init__.py).",
       "assigned_to": null,
       "started_at": "2026-09-29T17:24:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-794-lazy-writers-tests.md"
+      "completed_at": "2026-09-29T17:41:09+00:00",
+      "file": "sdd/tasks/completed/TASK-794-lazy-writers-tests.md",
+      "verification": "verified"
     }
   ]
 }
