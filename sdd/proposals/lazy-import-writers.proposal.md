@@ -1,10 +1,10 @@
 ---
-id: FEAT-177
+id: FEAT-154
 title: Lazy-load output writers (PDFWriter/weasyprint first) so QS and the HTTP service stop paying ~0.45 s at import
 slug: lazy-import-writers
 type: feature
 mode: enrichment
-status: review
+status: accepted
 source:
   kind: inline
   jira_key: null
@@ -15,17 +15,17 @@ overall_confidence: high
 base_branch: dev
 projects: [outputs, handlers]
 tags: [lazy-import, startup-time, weasyprint, pdf, writers, performance]
-research_state: sdd/state/FEAT-177/
+research_state: sdd/state/FEAT-154/
 created: 2026-09-29
 updated: 2026-09-29
 ---
 
-# FEAT-177 — Lazy-load output writers
+# FEAT-154 — Lazy-load output writers
 
 > **Mode**: enrichment
 > **Confidence**: high
 > **Source**: `inline`
-> **Audit**: [`sdd/state/FEAT-177/`](../state/FEAT-177/)
+> **Audit**: [`sdd/state/FEAT-154/`](../state/FEAT-154/)
 
 ---
 
@@ -224,19 +224,18 @@ Distribution: **5** high, **2** medium, **0** low.
 
 ## 6. Recommended Next Step
 
-**`/sdd-spec FEAT-177`**: *Rationale*: localization is complete and measured, the user
+**`/sdd-spec FEAT-154`**: *Rationale*: localization is complete and measured, the user
 resolved every design choice, and the change stays inside `querysource/outputs/`.
 
 ### Alternatives
 
-- **`/sdd-task FEAT-177`**: the change is small (4 source files plus tests), but the registry
+- **`/sdd-task FEAT-154`**: the change is small (4 source files plus tests), but the registry
   contract (C4) deserves a spec'd acceptance criterion first.
-- **`/sdd-brainstorm FEAT-177`**: not needed; there is no architectural choice left open.
+- **`/sdd-brainstorm FEAT-154`**: not needed; there is no architectural choice left open.
 
-> **ID note**: the proposal ID FEAT-177 was allocated as max(existing)+1 across
-> `sdd/{specs,proposals,state}` (FEAT-176 is the highest in use). The ledger
-> (`sdd/tasks/.id_ledger.json`, `next_feature_id: 154`) is behind those IDs, so
-> `/sdd-spec` should reconcile the ID when it reserves one.
+> **ID note**: this proposal was first drafted as FEAT-177 (max+1 scan). `/sdd-spec`
+> then reserved **FEAT-154** through the ledger (`scripts/sdd/reserve_ids.py`), and the
+> proposal and `sdd/state/` were renumbered to match, so the feature has a single ID.
 
 ---
 
@@ -244,11 +243,11 @@ resolved every design choice, and the change stays inside `querysource/outputs/`
 
 | Artifact | Path |
 |----------|------|
-| State checkpoints | `sdd/state/FEAT-177/state.json` |
-| Source (raw) | `sdd/state/FEAT-177/source.md` |
-| Research plan | `sdd/state/FEAT-177/research_plan.json` |
-| Findings (digests) | `sdd/state/FEAT-177/findings/F001-*.md` … `F009-*.md` |
-| Synthesis (JSON) | `sdd/state/FEAT-177/synthesis.json` |
+| State checkpoints | `sdd/state/FEAT-154/state.json` |
+| Source (raw) | `sdd/state/FEAT-154/source.md` |
+| Research plan | `sdd/state/FEAT-154/research_plan.json` |
+| Findings (digests) | `sdd/state/FEAT-154/findings/F001-*.md` … `F009-*.md` |
+| Synthesis (JSON) | `sdd/state/FEAT-154/synthesis.json` |
 
 **Budget consumed** (default profile):
 - Files read: 9 / 40
