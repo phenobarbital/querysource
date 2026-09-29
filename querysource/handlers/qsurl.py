@@ -132,7 +132,7 @@ class QSUrlService(AbstractHandler):
                         exception=err,
                         code=402
                     ) from err
-                except QSUrlError:
+                except (QSUrlError, web.HTTPException):
                     raise
                 except (QueryException, Exception) as ex:
                     raise self.Except(
