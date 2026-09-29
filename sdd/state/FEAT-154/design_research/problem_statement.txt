@@ -1,0 +1,35 @@
+## 0. Origin
+
+> lazy-import-writers -- actualmente todos los writers (includo PDF que depende de
+> weasyprint) hace un import on startup, lo que ralentiza la carga de Querysource
+> en modo normal y servidor http
+
+Follow-up from the requester, added during research:
+
+> on querysource.services > outputs > writers > PDFWriter -> weasyprint is an
+> example of code that can be lazy-imported
+
+**Initial signals**:
+- Verbs: "hace un import on startup", "ralentiza la carga" → performance improvement, not a bug
+- Named entities: writers, PDF, weasyprint, `querysource.services`
+- Modes affected: library ("modo normal") and HTTP server
+- Acceptance criteria provided: no
+
+---
+
+## 1. Synthesis Summary
+
+Every output writer is imported when the process starts. `querysource/outputs/writers/__init__.py`
+loads all 13 writer classes, and `querysource/outputs/output.py` builds a static `WRITERS`
+dict from them. The only one that matters is `PDFWriter`: `pdf.py` imports `weasyprint` at
+module level, which costs about 440–610 ms (about 27% of `import querysource.queries.qs`). Every
+other writer costs under 3 ms because it already defers pandas, bokeh, plotly and seaborn.
+Both entry modes pay this cost. Library mode goes through
+`querysource/queries/base.py` → `outputs.dt` → `querysource/outputs/__init__.py` →
+`output.py` → writers. HTTP mode goes through `querysource/services.py` → handlers → the
+same chain. The recommendation has three parts:
+- Turn `WRITERS` into a lazy, cached registry.
+- Make the two package `__init__`s lazy (PEP 562).
+- Import weasyprint inside `PDFWriter.get_response`, and move its synchronous render off the event loop.
+
+---

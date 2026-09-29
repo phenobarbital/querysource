@@ -1,0 +1,8 @@
+### Unresolved (defer to spec / implementation)
+
+- [ ] **Should PDF concurrency be capped (semaphore / dedicated executor) when rendering off-loop?**
+  *Owner*: tbd. *Blocks claims*: C7.
+  *Plausible answers*: a) the default `to_thread` pool is enough, b) a module-level semaphore
+  (e.g. 4).
+
+---

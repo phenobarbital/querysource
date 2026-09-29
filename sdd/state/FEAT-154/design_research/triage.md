@@ -1,0 +1,11 @@
+| # | Suggestion (kind) | Disposition | Reason | Landed in |
+|---|---|---|---|---|
+| S1 | Define the lazy package export contract explicitly (architecture) | CONFIRM | Verified: `writers/__init__.py` has no `__all__` today. The spec already had `__all__`/`__dir__`/globals caching; a star-import test was added | §3 M2, §4, AC5 |
+| S2 | Preserve direct WRITERS lookup compatibility (api) | CONFIRM | Only `output.py` and one test read `WRITERS` in-repo, but it is module-public. `LazyWriterRegistry(dict)` makes `[]`/`.get()` always return a class; alias test added | §2 Overview, §3 M3, AC3 |
+| S3 | Keep known-format import failures distinct from fallback (risk) | CONFIRM | Membership check before lookup; any resolution failure becomes `ImportError` | §2, §3 M3, §7, AC4 |
+| S4 | Package-level lazy export doesn't remove output.py from HTTP startup (architecture) | CONFIRM | Verified `handlers/__init__.py:6-15` imports all handlers eagerly; the HTTP invariant was narrowed to "no weasyprint, no writer submodules" | §2 item 3, AC2, §4 |
+| S5 | Move the first WeasyPrint import into the worker thread (risk) | CONFIRM | `_render_pdf` does import + build + write in-thread; `render_content`'s synchronous chart work is recorded as a non-goal | §1 Non-Goals, §2 item 4, §3 M1, §7 |
+| S6 | Resolve PDF concurrency before enabling parallel offload (risk) | ESCALATE → resolved | Asked the user: "Bounded executor" (`PDF_RENDER_WORKERS`, default 4, no module-level `asyncio.Semaphore`). Precedent verified at `interfaces/http.py:176` | §8 Q1 [x], §3 M1, AC6 |
+| S7 | Test every public import form in isolated processes (testing) | CONFIRM | Added star-import, identity, alias and HTTP-startup subprocess tests | §4 |
+| S8 | Test the actual off-loop boundary and failure propagation (testing) | CONFIRM | Added a progress-while-rendering test, an error-propagation test and a no-poisoned-executor test. There is no limiter state to leak on cancellation (it is an executor, not a semaphore), so cancellation needs no separate test | §4, AC6 |
+| S9 | Isolate registry-cache state between tests (testing) | CONFIRM | `fresh_writers` snapshot fixture; initial-spec assertions run in a subprocess; override-after-cache test | §4, §7 |
