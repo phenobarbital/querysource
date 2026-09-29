@@ -1,4 +1,5 @@
-from typing import Union
+from importlib import import_module
+from typing import Optional, Union
 
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNoContent
@@ -16,50 +17,111 @@ from ..interfaces.queries import AbstractQuery
 from ..ownership_logging import implicit_artifact_name
 from ..qsurl.errors import QSUrlError
 from ..utils.errors import build_error_payload
-from .writers import (
-    BokehWriter,
-    CSVWriter,
-    ExcelWriter,
-    HTMLWriter,
-    PDFWriter,
-    PickleWriter,
-    PlotlyWriter,
-    # ProfileWriter,
-    ReportWriter,
-    TableWriter,
-    TSVWriter,
-    TXTWriter,
-    XMLWriter,
-    # EDAWriter,
-    # DescribeWriter,
-    # ClusterWriter
-    jsonWriter,
-)
+from .writers.abstract import AbstractWriter
 
-WRITERS = {
-    "json": jsonWriter,
-    "table": TableWriter,
-    "txt": TXTWriter,
-    "plain": TXTWriter,
-    "csv": CSVWriter,
-    "tsv": TSVWriter,
-    'excel': ExcelWriter,
-    'xls': ExcelWriter,
-    'xlsx': ExcelWriter,
-    'xlsm': ExcelWriter,
-    'ods': ExcelWriter,
-    'html': HTMLWriter,
-    'bokeh': BokehWriter,
-    'plotly': PlotlyWriter,
-    'pickle': PickleWriter,
-    # 'profiling': ProfileWriter,
-    'report': ReportWriter,
-    'pdf': PDFWriter,
-    'xml': XMLWriter,
-    # 'eda': EDAWriter,
-    # 'describe': DescribeWriter,
-    # 'clustering': ClusterWriter
-}
+_WRITERS_PACKAGE = "querysource.outputs.writers"
+_logger = logging.getLogger('QS.Output')
+
+
+class LazyWriterRegistry(dict):
+    """Format → writer registry; stored values are specs or writer classes.
+
+    Reads (``[]`` and ``get``) always return a class: a ``str`` spec is imported
+    from ``querysource.outputs.writers.<submodule>`` on first access and cached
+    back with ``dict.__setitem__``. Writes, ``monkeypatch.setitem``, ``in`` and
+    ``len`` behave like a plain ``dict``; ``values()``/``items()`` expose the
+    stored form (spec or class).
+    """
+
+    def __getitem__(self, ctype: str) -> type[AbstractWriter]:
+        """Resolve and return the writer class registered for ``ctype``.
+
+        Args:
+            ctype: output format key (``"json"``, ``"pdf"``, ...).
+
+        Returns:
+            type[AbstractWriter]: the writer class (or an injected class as-is).
+
+        Raises:
+            KeyError: ``ctype`` is not registered.
+            ImportError: the registered spec cannot be imported or names a
+                missing class (raised ``from`` the original error).
+        """
+        value = dict.__getitem__(self, ctype)
+        if not isinstance(value, str):
+            return value
+        try:
+            submodule, class_name = value.split(":", 1)
+            module = import_module(f".{submodule}", _WRITERS_PACKAGE)
+            cls = getattr(module, class_name)
+        except Exception as exc:
+            raise ImportError(
+                f"cannot load writer {ctype!r} from {value!r}: {exc}"
+            ) from exc
+        dict.__setitem__(self, ctype, cls)
+        return cls
+
+    def get(
+        self, ctype: str, default: Optional[type[AbstractWriter]] = None
+    ) -> Optional[type[AbstractWriter]]:
+        """Like ``__getitem__`` but return ``default`` for a missing key.
+
+        Raises:
+            ImportError: a registered spec fails to resolve (never masked as
+                ``default``).
+        """
+        if ctype not in self:
+            return default
+        return self[ctype]
+
+
+WRITERS: LazyWriterRegistry = LazyWriterRegistry({
+    "json": "json:jsonWriter",
+    "table": "table:TableWriter",
+    "txt": "txt:TXTWriter",
+    "plain": "txt:TXTWriter",
+    "csv": "csv:CSVWriter",
+    "tsv": "tsv:TSVWriter",
+    'excel': "excel:ExcelWriter",
+    'xls': "excel:ExcelWriter",
+    'xlsx': "excel:ExcelWriter",
+    'xlsm': "excel:ExcelWriter",
+    'ods': "excel:ExcelWriter",
+    'html': "html:HTMLWriter",
+    'bokeh': "bokeh:BokehWriter",
+    'plotly': "plotly:PlotlyWriter",
+    'pickle': "pickle:PickleWriter",
+    # 'profiling': "profiling:ProfileWriter",
+    'report': "report:ReportWriter",
+    'pdf': "pdf:PDFWriter",
+    'xml': "xml:XMLWriter",
+    # 'eda': "eda:EDAWriter",
+    # 'describe': "describe:DescribeWriter",
+    # 'clustering': "clustering:ClusterWriter"
+})
+
+
+def resolve_writer(ctype: str) -> type[AbstractWriter]:
+    """Return the writer class for ``ctype``, importing it on first use.
+
+    A format that is not registered logs a warning and falls back to the
+    json writer (unchanged behaviour). A registered format always returns
+    its own class — the lazily-imported one or an injected override.
+
+    Args:
+        ctype: output format key.
+
+    Returns:
+        type[AbstractWriter]: the writer class to instantiate.
+
+    Raises:
+        ImportError: a registered writer fails to import; never swallowed
+            into the json fallback.
+    """
+    if ctype not in WRITERS:
+        _logger.warning(f'Invalid Writer {ctype}, default to JSON.')
+        return WRITERS['json']
+    return WRITERS[ctype]
 
 class DataOutput:
     """Main Router for Output formats.
@@ -214,14 +276,7 @@ class DataOutput:
                 f'::: SENDING RESPONSE in format: {self.format!s}'
             )
             ### before, making calculation of stats.
-            try:
-                wt = WRITERS[self.format]
-            except KeyError:
-                ### invalid Writer, defaulting to json
-                self.logger.warning(
-                    f'Invalid Writer {self.format}, default to JSON.'
-                )
-                wt = WRITERS['json']
+            wt = resolve_writer(self.format)
             writer = wt(
                 request=self.request,
                 resultset=self.query,
