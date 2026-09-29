@@ -279,3 +279,5 @@ uv.lock
 
 # /sdd-spec intake staging (FEAT-577)
 sdd/state/.intake/
+# parrot LLM-wiki state (local retrieval plane)
+.parrot/
