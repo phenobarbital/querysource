@@ -16,7 +16,7 @@
       "feature_id": "FEAT-154",
       "feature": "lazy-import-writers",
       "spec": "sdd/specs/lazy-import-writers.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "No dependencies: owns querysource/outputs/writers/pdf.py and querysource/conf.py (adds PDF_RENDER_WORKERS it consumes itself); no build step.",
       "assigned_to": null,
       "started_at": "2026-09-29T17:24:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-790-pdf-writer-lazy-offloop.md"
+      "completed_at": "2026-09-29T17:31:00+00:00",
+      "file": "sdd/tasks/completed/TASK-790-pdf-writer-lazy-offloop.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-791",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-154",
       "feature": "lazy-import-writers",
       "spec": "sdd/specs/lazy-import-writers.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -42,8 +43,9 @@
       "parallelism_notes": "No dependencies: rewrites only querysource/outputs/writers/__init__.py; output.py's `from .writers import (...)` keeps working via __getattr__ whether or not TASK-792 has landed.",
       "assigned_to": null,
       "started_at": "2026-09-29T17:24:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-791-lazy-writers-package.md"
+      "completed_at": "2026-09-29T17:31:00+00:00",
+      "file": "sdd/tasks/completed/TASK-791-lazy-writers-package.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-792",
@@ -52,7 +54,7 @@
       "feature_id": "FEAT-154",
       "feature": "lazy-import-writers",
       "spec": "sdd/specs/lazy-import-writers.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -60,8 +62,9 @@
       "parallelism_notes": "No dependencies: owns querysource/outputs/output.py; imports only the unchanged writers/abstract.py (AbstractWriter), resolves specs via importlib — functionally independent of TASK-791 (spec §3 M3).",
       "assigned_to": null,
       "started_at": "2026-09-29T17:24:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-792-lazy-writers-registry.md"
+      "completed_at": "2026-09-29T17:31:00+00:00",
+      "file": "sdd/tasks/completed/TASK-792-lazy-writers-registry.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-793",
@@ -70,7 +73,7 @@
       "feature_id": "FEAT-154",
       "feature": "lazy-import-writers",
       "spec": "sdd/specs/lazy-import-writers.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -78,8 +81,9 @@
       "parallelism_notes": "No dependencies: rewrites only querysource/outputs/__init__.py; DataOutput already exists in output.py, unaffected by TASK-792's edits.",
       "assigned_to": null,
       "started_at": "2026-09-29T17:24:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-793-lazy-outputs-package.md"
+      "completed_at": "2026-09-29T17:31:01+00:00",
+      "file": "sdd/tasks/completed/TASK-793-lazy-outputs-package.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-794",
