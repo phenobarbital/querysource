@@ -10,7 +10,7 @@ tags: [lazy-import, startup-time, weasyprint, pdf, writers, performance]
 **Feature ID**: FEAT-154
 **Date**: 2026-09-29
 **Author**: Jesus Lara (spec drafted by Claude Code)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 **Proposal**: `sdd/proposals/lazy-import-writers.proposal.md` (research state: `sdd/state/FEAT-154/`)
 
@@ -638,3 +638,4 @@ All 16 cited `affected_paths` passed the containment and `test -e` checks.
 |---|---|---|---|
 | 0.1 | 2026-09-29 | Claude Code for Jesus Lara | Initial draft from proposal FEAT-154 |
 | 0.2 | 2026-09-29 | Claude Code for Jesus Lara | Folded codex design research (S1–S9); Q1 resolved: bounded `qs-pdf` executor |
+| 1.0 | 2026-09-29 | Jesus Lara | Approved for task decomposition (/sdd-task) |
