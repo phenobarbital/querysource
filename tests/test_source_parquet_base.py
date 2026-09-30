@@ -2,50 +2,15 @@
 import ast
 import asyncio
 import builtins
-import importlib.util
 import inspect
 import sys
-import types
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from querysource.exceptions import DataNotFound
-
-
-def _load_module(name: str, path: Path):
-    """Load a source module without importing the Cython-dependent queries package."""
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-_ROOT = Path(__file__).parents[1]
-for _name, _path in (
-    ("querysource.queries", _ROOT / "querysource" / "queries"),
-    ("querysource.queries.multi", _ROOT / "querysource" / "queries" / "multi"),
-    ("querysource.queries.multi.sources", _ROOT / "querysource" / "queries" / "multi" / "sources"),
-    ("querysource.queries.multi.sources.parquet", _ROOT / "querysource" / "queries" / "multi" / "sources" / "parquet"),
-):
-    _package = types.ModuleType(_name)
-    _package.__path__ = [str(_path)]
-    sys.modules[_name] = _package
-
-ThreadSource = _load_module(
-    "querysource.queries.multi.sources.base", _ROOT / "querysource" / "queries" / "multi" / "sources" / "base.py"
-).ThreadSource
-_load_module(
-    "querysource.queries.multi.sources.parquet.filters",
-    _ROOT / "querysource" / "queries" / "multi" / "sources" / "parquet" / "filters.py",
-)
-ParquetSource = _load_module(
-    "querysource.queries.multi.sources.parquet.base",
-    _ROOT / "querysource" / "queries" / "multi" / "sources" / "parquet" / "base.py",
-).ParquetSource
+from querysource.queries.multi.sources.base import ThreadSource
+from querysource.queries.multi.sources.parquet.base import ParquetSource
 
 
 class _LocalTestSource(ParquetSource):

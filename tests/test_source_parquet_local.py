@@ -1,6 +1,6 @@
 """Unit tests for ParquetFileSource (FEAT-158, TASK-798)."""
 import asyncio
-from datetime import date
+from datetime import datetime, timezone
 
 import pandas as pd
 import pytest
@@ -57,7 +57,7 @@ async def test_hive_partitioned_dir(tmp_path, frame):
 
 
 async def test_glob_and_masks(tmp_path, frame):
-    today = date.today().strftime("%Y%m%d")
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
     frame.to_parquet(tmp_path / f"sales_{today}.parquet", index=False)
 
     df = await _make(
