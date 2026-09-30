@@ -54,7 +54,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -65,8 +65,9 @@
       "parallelism_notes": "Imports build_filter_expression/filter_columns from TASK-796 (parquet/filters.py); reads conf.MULTIQS_PARQUET_MAX_ROWS/MAX_BYTES created by TASK-795 (querysource/conf.py).",
       "assigned_to": null,
       "started_at": "2026-09-30T15:09:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-797-parquet-source-base.md"
+      "completed_at": "2026-09-30T15:50:45+00:00",
+      "file": "sdd/tasks/completed/TASK-797-parquet-source-base.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-798",
