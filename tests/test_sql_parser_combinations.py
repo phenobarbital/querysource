@@ -474,3 +474,16 @@ async def test_grouping_lands_before_existing_outer_order_by(parser_backend):
     )
     assert "GROUP BY country ORDER BY 2 DESC LIMIT 10" in sql
     _assert_valid_sql(sql)
+
+
+@pytest.mark.asyncio
+async def test_set_where_does_not_mutate_callers_operator_dict():
+    """set_where must read operator dicts, never popitem() them: callers re-send the same filter."""
+    from querysource.parsers.pgsql import pgSQLParser
+
+    flt = {"graduation_details": {"@>": [{"course": "Pilates Mat"}]}, "n": {">=": 3}}
+    for _ in range(2):  # the second pass used to see an emptied dict ("popitem(): dictionary is empty")
+        parser = pgSQLParser(definition=None, conditions=QueryObject(query_raw=_ORDERED_SLUG), query=_ORDERED_SLUG)
+        await parser.set_where(flt, None)
+        assert "@>" in parser.filter["graduation_details"]
+    assert flt == {"graduation_details": {"@>": [{"course": "Pilates Mat"}]}, "n": {">=": 3}}
