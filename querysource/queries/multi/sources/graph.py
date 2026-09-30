@@ -55,7 +55,7 @@ class StaticTokenCredential:
     async def close(self) -> None:
         """No-op — nothing to release; never treated as an owned Azure credential."""
 
-    async def __aenter__(self) -> "StaticTokenCredential":
+    async def __aenter__(self) -> StaticTokenCredential:
         return self
 
     async def __aexit__(self, *exc: Any) -> None:
