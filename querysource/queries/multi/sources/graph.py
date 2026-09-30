@@ -37,7 +37,8 @@ def kiota_platform_version_patch() -> Iterator[None]:
     with _PATCH_LOCK:
         if _PATCH_DEPTH == 0:
             _ORIGINAL_VERSION = platform.version
-            platform.version = lambda: _ORIGINAL_VERSION().strip()
+            # Bind the original by closure: never depend on the nullable global.
+            platform.version = lambda original=_ORIGINAL_VERSION: original().strip()
         _PATCH_DEPTH += 1
     try:
         yield

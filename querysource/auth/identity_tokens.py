@@ -19,6 +19,9 @@ IDENTITY_LINK_PATH: str = "/api/v1/user/identities/link/{provider}"
 class DelegatedIdentityError(QueryException):
     """No usable linked identity for a delegated source."""
 
+    default_code: int = 409
+    code: int = 409
+
     def __init__(self, message: str, *, provider: str, user_id: Optional[int], reason: str) -> None:
         super().__init__(message)
         self.provider = provider
