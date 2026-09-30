@@ -10,7 +10,7 @@ tags: [multiquery, hooks, pre-hook, post-hook, postgres, sql-guard]
 **Feature ID**: FEAT-157
 **Date**: 2026-09-30
 **Author**: Juan2coder (design by Jesus Lara)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 ---

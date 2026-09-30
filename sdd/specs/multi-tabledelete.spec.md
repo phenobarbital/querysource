@@ -10,7 +10,7 @@ tags: [multiquery, destinations, table-delete, flowtask-port, pbac]
 **Feature ID**: FEAT-155
 **Date**: 2026-09-29
 **Author**: Juan2coder (requested by Jesus Lara)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 ---
@@ -377,9 +377,9 @@ None new (`asyncdb`, `asyncpg`, `pandas` already required).
 
 ## 8. Open Questions
 
-- [ ] Is `datasource:use` on `pg_admin` the right grant for write destinations, or should a dedicated action (e.g. `datasource:write`) be added to navigator-auth? — *Owner: Jesus Lara*
-- [ ] Should the existing `Table` destination be added to `WRITE_DESTINATIONS` too? It already writes with `DB*` credentials and has no gate; adding it is a behaviour change for current pipelines. — *Owner: Jesus Lara*
-- [ ] Add MySQL / BigQuery support in a follow-up? — *Owner: Juan2coder*
+- [x] Grant for write destinations — *Resolved by Juan2coder (2026-09-30), spec default accepted*: `datasource:use` on `pg_admin` (existing FEAT-091 grant). A dedicated `datasource:write` action would be a navigator-auth follow-up.
+- [x] Gate the existing `Table` destination too? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: no. `WRITE_DESTINATIONS` = `{"TableDelete"}` only, so current `Table` pipelines are unchanged.
+- [x] MySQL / BigQuery support — *Resolved by Juan2coder (2026-09-30), spec default accepted*: follow-up; PostgreSQL only in this feature.
 
 ---
 

@@ -10,7 +10,7 @@ tags: [multiquery, destinations, execute-sql, flowtask-port, sql-guard]
 **Feature ID**: FEAT-156
 **Date**: 2026-09-29
 **Author**: Juan2coder (requested by Jesus Lara)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 ---
@@ -490,10 +490,10 @@ None new.
 
 ## 8. Open Questions
 
-- [ ] Should `CALL` (stored procedures) be allowed? It is currently allowed, on the grounds that procedures are pre-reviewed server code. — *Owner: Jesus Lara*
-- [ ] Should `CREATE … ` / `ALTER … ADD` DDL be allowed at all, or only DML (`WITH/SELECT/INSERT/UPDATE/DELETE/MERGE`)? The spec follows the request and blocks only destructive DDL. — *Owner: Jesus Lara*
-- [ ] Is `datasource:use` on `pg_admin` the right grant (shared with FEAT-155)? — *Owner: Jesus Lara*
-- [ ] Future: optional `{placeholder}` substitution from pipeline conditions via `safe_format_map_validated`? — *Owner: Juan2coder*
+- [x] Allow `CALL`? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: yes, allowed (procedures are pre-reviewed server code).
+- [x] Allow non-destructive DDL (`CREATE …`, `ALTER … ADD`)? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: yes. Only the §2 blocked table is rejected (destructive DDL, privileges, roles, `DO`, `COPY … PROGRAM`, transaction control).
+- [x] Grant — *Resolved by Juan2coder (2026-09-30), spec default accepted*: `datasource:use` on `pg_admin`, shared with FEAT-155.
+- [x] `{placeholder}` substitution — *Resolved by Juan2coder (2026-09-30), spec default accepted*: follow-up, not in this feature.
 
 ---
 
