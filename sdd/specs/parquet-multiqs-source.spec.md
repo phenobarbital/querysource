@@ -10,7 +10,7 @@ tags: [parquet, fsspec, pyarrow, s3, gcs, multiquery-sources]
 **Feature ID**: FEAT-158
 **Date**: 2026-09-30
 **Author**: Jesus Lara (with Claude Code)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 > Exploration trail: proposal `sdd/proposals/parquet-multiqs-source.proposal.md`
@@ -603,7 +603,7 @@ aiobotocore 2.25.1, botocore 1.40.61, s3fs 2026.9.0, gcsfs 2026.8.1, fsspec 2026
 - [x] Extras layout — *Resolved in brainstorm*: `parquet = ["pyarrow>=25", "fsspec>=2026.7"]`, `s3 = ["aioboto3>=15", "s3fs>=2026.9"]`, `gcs = ["gcsfs>=2026.8"]`, `parquet-all = ["querysource[parquet,s3,gcs]"]`
 - [x] Filter syntax in YAML — *Resolved in brainstorm*: DNF lists only (flat = AND, nested = OR of ANDs), allowlisted operators, no string grammar or mapping shorthand
 - [x] GCS credentials source — *Resolved in proposal*: SA JSON via navconfig, fallback to ADC
-- [ ] Default hard limits: `MULTIQS_PARQUET_MAX_ROWS=5_000_000` and `MULTIQS_PARQUET_MAX_BYTES=1 GiB` are spec-author defaults. Confirm or adjust before M1. — *Owner: Jesus Lara*
+- [x] Default hard limits: `MULTIQS_PARQUET_MAX_ROWS=5_000_000` and `MULTIQS_PARQUET_MAX_BYTES=1 GiB` are spec-author defaults. Confirm or adjust before M1. — *Owner: Jesus Lara*: Yes
 
 ---
 
