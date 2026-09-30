@@ -35,7 +35,7 @@
       "feature_id": "FEAT-156",
       "feature": "multi-executesql",
       "spec": "sdd/specs/multi-executesql.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -45,8 +45,9 @@
       "parallelism_notes": "Registers sql_guard::sql_guard from TASK-818's rust/src/sql_guard.rs in rust/src/lib.rs. Exclusive resource: rebuilds the compiled _qs_parsers extension with maturin develop into the shared project .venv, which every other task's pytest imports.",
       "assigned_to": null,
       "started_at": "2026-09-30T18:15:06+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-819-sql-guard-pyo3-registration.md"
+      "completed_at": "2026-09-30T18:18:05+00:00",
+      "file": "sdd/tasks/completed/TASK-819-sql-guard-pyo3-registration.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-820",
