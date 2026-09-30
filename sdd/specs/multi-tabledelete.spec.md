@@ -224,6 +224,7 @@ class TableDeleteDestination(AbstractDestination):
   `enforce_principal(self._principal, ResourceType.DATASOURCE, "pg_admin", "datasource:use", tenant=…, logger=…)`.
   If the principal is None, the existing early `return` applies, so PBAC-off behaviour does not change.
 - **Depends on**: none (only knows step *names*)
+- **HTTP path (added at task review)**: `QueryHandler` builds `MultiQS(...)` without `principal=` (`querysource/handlers/multi.py:493`), so `_preflight_principal` never fires for API callers. The same gate is therefore also added in `QueryHandler._preflight_multiquery` (`handlers/multi.py:29`). A new keyword-only `write_access: bool = False` triggers `_enforce_pbac(request, ResourceType.DATASOURCE, "pg_admin", "datasource:use")`, computed at the call site from the inline payload's `Output` against `WRITE_DESTINATIONS`. Stored multi slugs are not inspected at HTTP level, because their `Output` comes from the stored definition.
 - **Interface Skeleton**:
   ```python
   # querysource/queries/multi/__init__.py  (modifies _preflight_principal, verified: :239; insert before `if has_raw_child:` :271)
@@ -408,3 +409,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-29 | Juan2coder | Initial draft |
+| 0.2 | 2026-09-30 | Juan2coder | Task review: write gate also enforced in the HTTP handler (`_preflight_multiquery`, `write_access`) |

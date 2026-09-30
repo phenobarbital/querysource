@@ -116,7 +116,7 @@ executes.**
 
 **PBAC.** In `_preflight_principal`, if any `queries` entry declares a hook, call
 `enforce_principal(principal, ResourceType.DATASOURCE, "pg_admin", "datasource:use", …)`.
-This is the same check FEAT-155/156 perform for write destinations.
+This is the same check FEAT-155/156 perform for write destinations. HTTP callers do not reach `_preflight_principal` (no principal is passed at `handlers/multi.py:493`). For them, the FEAT-155 handler flag `write_access` is also set when any inline `queries` entry declares a hook, and `QueryHandler._preflight_multiquery` enforces the same grant (added at task review).
 
 **Execution (`ThreadSource.run`).**
 - `ThreadQuery` receives the validated `SourceHooks` and stores them via the mixin
@@ -552,3 +552,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 |---|---|---|---|
 | 0.1 | 2026-09-30 | Juan2coder | Initial draft from Jesus Lara's hook design |
 | 0.2 | 2026-09-30 | Juan2coder | Resolve §8: post-hook runs on empty retrieval; TableSource deferred to follow-up |
+| 0.3 | 2026-09-30 | Juan2coder | Task review: hooks gate also enforced on the HTTP handler via `write_access` |

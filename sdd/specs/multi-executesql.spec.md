@@ -89,6 +89,7 @@ literals and comments, uppercased:
 | `DO` | blocked `do_block`, because an anonymous code block can run dynamic DDL |
 | `GRANT` / `REVOKE` | blocked `privilege` |
 | `CREATE`/`ALTER` followed by `ROLE`/`USER`/`GROUP` | blocked `role` |
+| `SET`/`RESET` with a `ROLE` or `AUTHORIZATION` token (`SET ROLE`, `SET SESSION AUTHORIZATION`, `RESET ROLE`) | blocked `role` (added at task review) |
 | `COPY` containing the token `PROGRAM` | blocked `copy_program` |
 | `BEGIN`, `START`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `ABORT` | blocked `transaction_control`, because the component owns the transaction |
 | anything else (`WITH`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CREATE TABLE/INDEX/VIEW`, `ALTER … ADD`, `CALL`, `REFRESH MATERIALIZED VIEW`, `ANALYZE`, …) | allowed |
@@ -523,3 +524,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 |---|---|---|---|
 | 0.1 | 2026-09-29 | Juan2coder | Initial draft |
 | 0.2 | 2026-09-30 | Juan2coder | Extract guard + executor into `querysource/interfaces/guarded_sql.py` for reuse by FEAT-157 hooks |
+| 0.3 | 2026-09-30 | Juan2coder | Task review: block `SET ROLE` / `SET SESSION AUTHORIZATION`; write gate also enforced on the HTTP handler (via FEAT-155 `write_access`) |
