@@ -57,7 +57,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -67,8 +67,9 @@
       "parallelism_notes": "TASK-803: SharepointSource subclasses GraphDriveSource (querysource/queries/multi/sources/graph.py).",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-804-sharepoint-rebase.md"
+      "completed_at": "2026-09-30T15:41:59+00:00",
+      "file": "sdd/tasks/completed/TASK-804-sharepoint-rebase.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-805",
@@ -117,7 +118,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -129,8 +130,9 @@
       "parallelism_notes": "TASK-803: subclasses GraphDriveSource + StaticTokenCredential (graph.py); TASK-805: calls resolve_delegated_token (auth/identity_tokens.py); TASK-806: overrides ThreadSource.prepare added in sources/base.py.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-807-onedrive-source.md"
+      "completed_at": "2026-09-30T15:42:00+00:00",
+      "file": "sdd/tasks/completed/TASK-807-onedrive-source.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-808",
@@ -200,7 +202,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -211,8 +213,9 @@
       "parallelism_notes": "TASK-805: imports user_id_from_session (auth/identity_tokens.py); TASK-809: calls repo.patch/upsert with run_as_actor/request_info kwargs added there.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-811-manager-run-as-wiring.md"
+      "completed_at": "2026-09-30T15:42:00+00:00",
+      "file": "sdd/tasks/completed/TASK-811-manager-run-as-wiring.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-812",
