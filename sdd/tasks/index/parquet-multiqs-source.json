@@ -16,7 +16,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Exclusive: edits pyproject.toml and regenerates uv.lock (aioboto3/aiobotocore/botocore upgrade), and installs extras into the shared venv.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:09:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-795-parquet-deps-and-settings.md"
+      "completed_at": "2026-09-30T15:41:35+00:00",
+      "file": "sdd/tasks/completed/TASK-795-parquet-deps-and-settings.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-796",
