@@ -2,6 +2,7 @@
 from querysource.queries.multi.sources import (
     SOURCE_REGISTRY,
     AirtableSource,
+    OneDriveSource,
     SharepointSource,
     SmartSheetSource,
     S3Source,
@@ -24,3 +25,8 @@ class TestSourceRegistry:
     def test_airtable_in_all(self):
         import querysource.queries.multi.sources as mod
         assert "AirtableSource" in mod.__all__
+
+    def test_onedrive_registered(self):
+        import querysource.queries.multi.sources as mod
+        assert SOURCE_REGISTRY["OneDriveSource"] is OneDriveSource
+        assert "OneDriveSource" in mod.__all__

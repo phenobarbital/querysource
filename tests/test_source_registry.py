@@ -31,8 +31,10 @@ class TestSourceRegistry:
     def test_registry_contains_table(self):
         assert "TableSource" in SOURCE_REGISTRY
 
-    def test_registry_has_exactly_five_sources(self):
-        assert len(SOURCE_REGISTRY) == 5
+    def test_registry_contains_expected_sources(self):
+        # Membership, not a count: parallel features (FEAT-158/159) each add sources.
+        assert {"AirtableSource", "SharepointSource", "SmartSheetSource", "S3Source",
+                "TableSource", "OneDriveSource"} <= set(SOURCE_REGISTRY)
 
     def test_registry_values_are_thread_source_subclasses(self):
         for name, cls in SOURCE_REGISTRY.items():

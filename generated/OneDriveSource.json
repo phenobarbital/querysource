@@ -1,0 +1,116 @@
+{
+  "name": "OneDriveSource",
+  "category": "Sources",
+  "description": "Download one CSV/Excel file from OneDrive.",
+  "usage": "Modes: ``auth: app`` (default) with ``user`` + path, or ``url``; ``auth: delegated`` (the requesting / run-as user's own drive via a linked ``onedrive`` identity) with path or ``url``.",
+  "attributes": [
+    {
+      "name": "auth",
+      "type": "Any",
+      "default": "app",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.client_id",
+      "type": "Any",
+      "default": "ONEDRIVE_APP_ID",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.client_secret",
+      "type": "Any",
+      "default": "ONEDRIVE_APP_SECRET",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "credentials.tenant_id",
+      "type": "Any",
+      "default": "ONEDRIVE_TENANT_ID",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.filename",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.directory",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.sheet_name",
+      "type": "Any",
+      "default": 0,
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.pd_args",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.url",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
+      "name": "source.masks",
+      "type": "Any",
+      "default": {},
+      "required": false,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "OneDriveSource",
+    "properties": {
+      "auth": {},
+      "url": {},
+      "credentials": {
+        "type": "object",
+        "properties": {
+          "client_id": {},
+          "client_secret": {},
+          "tenant_id": {}
+        }
+      },
+      "source": {
+        "type": "object",
+        "properties": {
+          "filename": {},
+          "directory": {},
+          "sheet_name": {},
+          "pd_args": {},
+          "url": {},
+          "masks": {}
+        }
+      }
+    },
+    "required": []
+  },
+  "example": "",
+  "icon": "database"
+}

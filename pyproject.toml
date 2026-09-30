@@ -148,6 +148,12 @@ geo = [
     "timezonefinder",
 ]
 
+onedrive = [
+    "msgraph-sdk>=1.0",
+    "azure-identity>=1.0",
+    "httpx>=0.24",
+]
+
 sharepoint = [
     "msgraph-sdk>=1.0",
     "azure-identity>=1.0",

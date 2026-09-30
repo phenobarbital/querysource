@@ -474,3 +474,17 @@ These remain deployment gates that operators must verify independently.
   correctly SKIPPED in any environment without
   `QS_TEST_POSTGRES_DSN`/`QS_TEST_REDIS_URL` configured (see "Unverified
   production gates" below).
+## OneDrive source for MultiQS (FEAT-159)
+
+`OneDriveSource` downloads one CSV/Excel file from OneDrive. Install the extra with
+`uv add "querysource[onedrive]"`.
+
+| Mode | Config | Drive accessed |
+|---|---|---|
+| App (default) | `auth: app`, `user`, `source.filename` / `source.directory` or `url`, `credentials.*` | The named user's drive, through the app registration (`ONEDRIVE_APP_ID`, `ONEDRIVE_APP_SECRET`, `ONEDRIVE_TENANT_ID`) |
+| Delegated | `auth: delegated`, `source.filename` / `source.directory` or `url` | The requesting user's own drive (or the run-as user's, when scheduled), through a linked `onedrive` identity |
+
+For delegated mode the user must have linked a OneDrive identity
+(`/api/v1/user/identities/link/onedrive`). Without a usable link the API answers
+`409` with `detail.link` pointing to that URL. Scheduled runs use the stored
+`scheduler_run_as_user_id` (see the run-as section above).
