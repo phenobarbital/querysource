@@ -90,9 +90,25 @@ literals and comments, uppercased:
 | `GRANT` / `REVOKE` | blocked `privilege` |
 | `CREATE`/`ALTER` followed by `ROLE`/`USER`/`GROUP` | blocked `role` |
 | `SET`/`RESET` with a `ROLE` or `AUTHORIZATION` token (`SET ROLE`, `SET SESSION AUTHORIZATION`, `RESET ROLE`) | blocked `role` (added at task review) |
-| `COPY` containing the token `PROGRAM` | blocked `copy_program` |
+| `SET [SESSION\|LOCAL]` of `standard_conforming_strings`, `backslash_quote`, `escape_string_warning`, `statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout`, `transaction_timeout` | blocked `setting` (other `SET`, e.g. `SET search_path`, allowed) |
+| `RESET` (any parameter, incl. `RESET ALL`) other than the `role` cases above | blocked `setting` (0.4) |
+| `SET TRANSACTION …` / `SET SESSION CHARACTERISTICS …`, `PREPARE TRANSACTION` | blocked `transaction_control` |
+| `CREATE [OR REPLACE] [CONSTRAINT] [TRUSTED] [PROCEDURAL] FUNCTION \| PROCEDURE \| TRIGGER \| EXTENSION \| RULE \| AGGREGATE \| OPERATOR \| LANGUAGE \| EVENT TRIGGER \| TRANSFORM \| CAST` (also as a `CREATE SCHEMA` element); `ALTER FUNCTION \| PROCEDURE \| ROUTINE \| EXTENSION …` | blocked `executable_object` (0.4) — user-defined code would bypass every other rule |
+| `COPY` (any direction or target) | blocked `copy` (0.4, replaces `copy_program`) — no maintenance use, and `COPY … FROM STDIN` would hang the simple protocol |
 | `BEGIN`, `START`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `ABORT` | blocked `transaction_control`, because the component owns the transaction |
-| anything else (`WITH`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CREATE TABLE/INDEX/VIEW`, `ALTER … ADD`, `CALL`, `REFRESH MATERIALIZED VIEW`, `ANALYZE`, …) | allowed |
+| anything else (`WITH`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CREATE TABLE/INDEX/VIEW/MATERIALIZED VIEW/SCHEMA/SEQUENCE`, `ALTER … ADD`, `CALL`, `REFRESH MATERIALIZED VIEW`, `ANALYZE`, …) | allowed, unless the call rule below matches |
+
+*Function-call rule (0.4).* Anywhere in a statement (outside literals and comments), an
+identifier immediately followed by `(` (whitespace and comments ignored), case-insensitive
+and optionally schema-qualified (`pg_catalog.set_config(`), is blocked `dangerous_function`
+when it names one of: `set_config`, `dblink`, `dblink_exec`, `dblink_connect`, `dblink_open`,
+`dblink_send_query`, `pg_read_file`, `pg_read_binary_file`, `pg_ls_dir`, `pg_stat_file`,
+`lo_import`, `lo_export`, `lo_from_bytea`, `lo_put`, `pg_file_write`, `pg_terminate_backend`,
+`pg_cancel_backend`, `pg_reload_conf`, `pg_rotate_logfile`. A quoted identifier used as the
+function name (`"set_config"(`) and a `U&"…"` identifier (default escapes decoded) count as
+calls; a column or table with such a name and no `(` after it, or the name inside a literal,
+is allowed. A `U&"…"` identifier followed by `UESCAPE` cannot be decoded reliably and is
+blocked `unparsable`, as is any statement the lexer cannot read.
 
 The `pyfunction` `sql_guard(sql: str) -> list[str]` returns the allowed statements in
 order. It raises `ValueError("statement <n>: <kind> is not allowed: <first 80 chars>")`
@@ -470,9 +486,12 @@ Verified against: `2a9f19b`
 - Connection: `AsyncDB("pg", dsn=default_dsn)` → `async with await db.connection() as conn: raw = conn.engine()` → `async with raw.transaction(): …`.
 
 ### Known Risks / Gotchas
-- **The guard is lexical, not semantic.** It cannot see DDL executed inside functions or
-  procedures (`SELECT f()`, `CALL p()`, `dblink_exec`). Mitigations: the PBAC write gate,
-  and the fact that `DO` blocks (the ad-hoc way to run dynamic SQL) are blocked.
+- **The guard is lexical, not semantic.** It cannot see DDL executed inside *pre-existing*
+  functions or procedures (`SELECT f()`, `CALL p()`). Mitigations: the PBAC write gate;
+  `DO` blocks are blocked; since 0.4 the script cannot install its own code (`CREATE
+  FUNCTION/PROCEDURE/TRIGGER/RULE/EXTENSION/…` → `executable_object`) nor call the
+  configuration/escape functions (`set_config`, `dblink*`, file and large-object access,
+  backend signalling → `dangerous_function`).
 - **Not atomic across Output steps.** `ExecuteSQL` commits before the following `Table` step
   runs. If `Table` fails, the deleted range stays deleted until a re-run, and the
   delete-then-append is idempotent. For true atomicity, write the whole refresh as a
@@ -492,8 +511,9 @@ None new.
 ## 8. Open Questions
 
 - [x] Allow `CALL`? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: yes, allowed (procedures are pre-reviewed server code).
-- [x] Allow non-destructive DDL (`CREATE …`, `ALTER … ADD`)? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: yes. Only the §2 blocked table is rejected (destructive DDL, privileges, roles, `DO`, `COPY … PROGRAM`, transaction control).
+- [x] Allow non-destructive DDL (`CREATE …`, `ALTER … ADD`)? — *Resolved by Juan2coder (2026-09-30), spec default accepted*: yes. Only the §2 blocked table is rejected (destructive DDL, privileges, roles, `DO`, `COPY`, transaction control, and since 0.4 executable objects, `RESET` and dangerous function calls).
 - [x] Grant — *Resolved by Juan2coder (2026-09-30), spec default accepted*: `datasource:use` on `pg_admin`, shared with FEAT-155.
+- [x] Could arbitrary SQL bypass the `DROP` block via user-defined code? — *Resolved by Jesus Lara (2026-09-30), guard hardening approved*: yes, so the guard now blocks executable objects (`CREATE FUNCTION/PROCEDURE/TRIGGER/EXTENSION/RULE/AGGREGATE/OPERATOR/LANGUAGE/EVENT TRIGGER/TRANSFORM/CAST`, `ALTER FUNCTION/PROCEDURE/ROUTINE/EXTENSION`), all `RESET`, all `COPY`, and calls to configuration/escape functions (§2). Existing procedures stay callable via `CALL`.
 - [x] `{placeholder}` substitution — *Resolved by Juan2coder (2026-09-30), spec default accepted*: follow-up, not in this feature.
 
 ---
@@ -525,3 +545,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | 0.1 | 2026-09-29 | Juan2coder | Initial draft |
 | 0.2 | 2026-09-30 | Juan2coder | Extract guard + executor into `querysource/interfaces/guarded_sql.py` for reuse by FEAT-157 hooks |
 | 0.3 | 2026-09-30 | Juan2coder | Task review: block `SET ROLE` / `SET SESSION AUTHORIZATION`; write gate also enforced on the HTTP handler (via FEAT-155 `write_access`) |
+| 0.4 | 2026-09-30 | Juan2coder | Guard hardening approved by Jesus Lara: block executable objects, RESET, COPY, dangerous function calls |

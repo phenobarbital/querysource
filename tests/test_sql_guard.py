@@ -37,7 +37,30 @@ BLOCKED = [
     ("ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO x", "privilege"),
     ("CREATE SCHEMA s GRANT ALL ON t TO u", "privilege"),
     ("SELECT 1 -- c\r; DROP TABLE t", "drop"),
-    ("COPY t FROM PROGRAM 'curl http://x'", "copy_program"),
+    ("COPY t FROM PROGRAM 'curl http://x'", "copy"),
+    ("COPY t TO STDOUT", "copy"),
+    ("copy t from stdin", "copy"),
+    ("CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql", "executable_object"),
+    ("create or replace procedure p() language sql as 'select 1'", "executable_object"),
+    ("CREATE CONSTRAINT TRIGGER tr AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f()", "executable_object"),
+    ("CREATE EXTENSION dblink", "executable_object"),
+    ("CREATE EVENT TRIGGER e ON ddl_command_start EXECUTE FUNCTION f()", "executable_object"),
+    ("CREATE RULE r AS ON INSERT TO t DO INSTEAD NOTHING", "executable_object"),
+    ("CREATE CAST (text AS int) WITH FUNCTION f(text)", "executable_object"),
+    ("ALTER FUNCTION f() SECURITY DEFINER", "executable_object"),
+    ("ALTER EXTENSION e UPDATE", "executable_object"),
+    ("RESET ALL", "setting"),
+    ("reset statement_timeout", "setting"),
+    ("RESET ROLE", "role"),
+    ("SELECT set_config('statement_timeout', '0', false)", "dangerous_function"),
+    ("SELECT PG_CATALOG.Set_Config ('lock_timeout', '0', true)", "dangerous_function"),
+    ("SELECT set_config /* c */ ('a', 'b', false)", "dangerous_function"),
+    ("SELECT \"set_config\"('a', 'b', false)", "dangerous_function"),
+    ("SELECT * FROM dblink('host=x', 'DROP TABLE t') AS r(a int)", "dangerous_function"),
+    ("SELECT dblink_exec('DROP TABLE t')", "dangerous_function"),
+    ("UPDATE t SET a = pg_read_file('/etc/passwd')", "dangerous_function"),
+    ("INSERT INTO t SELECT lo_import('/etc/passwd')", "dangerous_function"),
+    ("SELECT pg_terminate_backend(123)", "dangerous_function"),
     ("BEGIN", "transaction_control"),
     ("COMMIT", "transaction_control"),
     ("ROLLBACK", "transaction_control"),
@@ -85,3 +108,38 @@ def test_sql_guard_reports_statement_index() -> None:
 
 def test_sql_guard_allows_plain_set() -> None:
     assert sql_guard("SET search_path = x") == ["SET search_path = x"]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "CREATE TABLE t (a int, event text, trigger_name text)",
+        "CREATE INDEX i ON t (a)",
+        "CREATE OR REPLACE VIEW v AS SELECT 1",
+        "CREATE MATERIALIZED VIEW m AS SELECT 1",
+        "CREATE SCHEMA s",
+        "CREATE SEQUENCE seq",
+        "ALTER TABLE t ADD COLUMN c int",
+        "CALL s.refresh_profile(1, 'x')",
+    ],
+)
+def test_sql_guard_allows_non_executable_ddl(sql: str) -> None:
+    assert sql_guard(sql) == [sql]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT set_config FROM t",
+        "SELECT t.dblink, t.pg_read_file FROM t WHERE lo_import = 1",
+        "SELECT 'set_config(''a'', ''b'', false)'",
+        "SELECT $$ pg_read_file('/etc/passwd') $$",
+        "SELECT 1 -- set_config('a', 'b', false)",
+        "SELECT /* dblink('x') */ 1",
+        "SELECT \"set_config\" FROM t",
+        "SELECT my_set_config('a'), set_configuration('b')",
+        "SELECT current_setting('statement_timeout')",
+    ],
+)
+def test_sql_guard_allows_dangerous_names_without_call(sql: str) -> None:
+    assert sql_guard(sql) == [sql]

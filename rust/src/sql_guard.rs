@@ -2,8 +2,9 @@
 //
 // sql_guard.rs — lexical guard for maintenance SQL (FEAT-156).
 // Splits a PostgreSQL script into top-level statements and rejects destructive,
-// privilege and transaction-control statements before anything reaches the database.
-// Lexical, not semantic: DDL hidden inside functions is out of reach (spec §7).
+// privilege, transaction-control, user-defined-code and escape-function statements
+// before anything reaches the database.
+// Lexical, not semantic: code inside pre-existing functions is out of reach (spec §7).
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -17,9 +18,11 @@ pub enum BlockedKind {
     DoBlock,
     Privilege,
     Role,
-    CopyProgram,
+    Copy,
     TransactionControl,
     Setting,
+    ExecutableObject,
+    DangerousFunction,
     Unparsable,
 }
 
@@ -33,9 +36,11 @@ impl BlockedKind {
             BlockedKind::DoBlock => "do_block",
             BlockedKind::Privilege => "privilege",
             BlockedKind::Role => "role",
-            BlockedKind::CopyProgram => "copy_program",
+            BlockedKind::Copy => "copy",
             BlockedKind::TransactionControl => "transaction_control",
             BlockedKind::Setting => "setting",
+            BlockedKind::ExecutableObject => "executable_object",
+            BlockedKind::DangerousFunction => "dangerous_function",
             BlockedKind::Unparsable => "unparsable",
         }
     }
@@ -56,6 +61,47 @@ const BLOCKED_SETTINGS: &[&str] = &[
 ];
 const ROLE_WORDS: &[&str] = &["ROLE", "AUTHORIZATION", "SESSION_AUTHORIZATION"];
 const ROLE_OBJECTS: &[&str] = &["ROLE", "USER", "GROUP"];
+/// Words that may sit between `CREATE` and the object type (`CREATE OR REPLACE CONSTRAINT TRIGGER`,
+/// `CREATE TRUSTED PROCEDURAL LANGUAGE`).
+const CREATE_MODIFIERS: &[&str] = &["OR", "REPLACE", "CONSTRAINT", "TRUSTED", "PROCEDURAL"];
+/// Object types whose creation installs user-defined executable code.
+const EXECUTABLE_OBJECTS: &[&str] = &[
+    "FUNCTION",
+    "PROCEDURE",
+    "TRIGGER",
+    "EXTENSION",
+    "RULE",
+    "AGGREGATE",
+    "OPERATOR",
+    "LANGUAGE",
+    "EVENT",
+    "TRANSFORM",
+    "CAST",
+];
+/// Object types whose `ALTER` changes or upgrades executable code.
+const ALTER_EXECUTABLE_OBJECTS: &[&str] = &["FUNCTION", "PROCEDURE", "ROUTINE", "EXTENSION"];
+/// Configuration and escape functions rejected when called (identifier followed by `(`).
+const DANGEROUS_FUNCTIONS: &[&str] = &[
+    "SET_CONFIG",
+    "DBLINK",
+    "DBLINK_EXEC",
+    "DBLINK_CONNECT",
+    "DBLINK_OPEN",
+    "DBLINK_SEND_QUERY",
+    "PG_READ_FILE",
+    "PG_READ_BINARY_FILE",
+    "PG_LS_DIR",
+    "PG_STAT_FILE",
+    "LO_IMPORT",
+    "LO_EXPORT",
+    "LO_FROM_BYTEA",
+    "LO_PUT",
+    "PG_FILE_WRITE",
+    "PG_TERMINATE_BACKEND",
+    "PG_CANCEL_BACKEND",
+    "PG_RELOAD_CONF",
+    "PG_ROTATE_LOGFILE",
+];
 
 /// Lexer states (spec §2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,14 +115,46 @@ enum State {
     BlockComment(u32),
 }
 
-/// One top-level statement found by `lex`: byte range, content flag, keyword tokens.
+/// What the lexer collects for one top-level statement.
+#[derive(Debug, Default)]
+struct Lexed {
+    /// Unquoted keyword-like tokens, uppercased.
+    tokens: Vec<String>,
+    /// Keyword tokens plus quoted-identifier contents, in order.
+    words: Vec<String>,
+    /// Identifiers (quoted or not) immediately followed by `(`, uppercased.
+    calls: Vec<String>,
+    /// Last significant item when it is an identifier: (uppercased name, from a `U&"…"` identifier).
+    last_ident: Option<(String, bool)>,
+    /// A `U&"…"` identifier is followed by `UESCAPE`, so its real name cannot be trusted.
+    unicode_escape: bool,
+}
+
+impl Lexed {
+    /// Record an identifier as the last significant item.
+    fn ident(&mut self, name: String, unicode: bool) {
+        self.last_ident = Some((name, unicode));
+    }
+
+    /// Record a significant non-identifier item (operator, literal, punctuation).
+    fn other(&mut self) {
+        self.last_ident = None;
+    }
+
+    /// An opening parenthesis: the preceding identifier, if any, is a call.
+    fn open_paren(&mut self) {
+        if let Some((name, _)) = self.last_ident.take() {
+            self.calls.push(name);
+        }
+    }
+}
+
+/// One top-level statement found by `lex`: byte range, content flag, collected words.
 struct Segment {
     start: usize,
     end: usize,
     has_code: bool,
-    tokens: Vec<String>,
-    /// Keyword tokens plus quoted-identifier contents, in order.
-    words: Vec<String>,
+    lexed: Lexed,
 }
 
 /// Identifier byte: ASCII alphanumeric, `_`, `$` or any non-ASCII byte.
@@ -84,21 +162,28 @@ fn is_ident(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b >= 0x80
 }
 
-/// Flush a pending identifier run into `tokens` when it is a keyword-like token.
-fn flush(
-    sql: &str,
-    tok_start: &mut Option<usize>,
-    end: usize,
-    tokens: &mut Vec<String>,
-    words: &mut Vec<String>,
-) {
+/// Flush a pending identifier run into `lexed` when it is a keyword-like token.
+fn flush(sql: &str, tok_start: &mut Option<usize>, end: usize, lexed: &mut Lexed) {
     if let Some(s) = tok_start.take() {
         let run = &sql[s..end];
-        if let Some(&first) = run.as_bytes().first() {
-            if first.is_ascii_alphabetic() || first == b'_' {
-                tokens.push(run.to_ascii_uppercase());
-                words.push(run.to_ascii_uppercase());
+        match run.as_bytes().first() {
+            Some(&first) if first.is_ascii_alphabetic() || first == b'_' => {
+                let upper = run.to_ascii_uppercase();
+                if upper == "UESCAPE" && matches!(lexed.last_ident, Some((_, true))) {
+                    lexed.unicode_escape = true;
+                }
+                lexed.tokens.push(upper.clone());
+                lexed.words.push(upper.clone());
+                lexed.ident(upper, false);
             }
+            Some(&first) if first.is_ascii_digit() => {
+                // `1set_config(`: older servers lex a trailing identifier after a number.
+                match run.find(|c: char| c.is_ascii_alphabetic() || c == '_') {
+                    Some(pos) => lexed.ident(run[pos..].to_ascii_uppercase(), false),
+                    None => lexed.other(),
+                }
+            }
+            _ => lexed.other(),
         }
     }
 }
@@ -124,6 +209,52 @@ fn dollar_tag_end(bytes: &[u8], i: usize) -> Option<usize> {
     }
 }
 
+/// True when the `"` at `i` is the start of a `U&"…"` identifier.
+fn is_unicode_ident_start(bytes: &[u8], i: usize) -> bool {
+    i >= 2
+        && bytes[i - 1] == b'&'
+        && (bytes[i - 2] == b'U' || bytes[i - 2] == b'u')
+        && (i < 3 || !is_ident(bytes[i - 3]))
+}
+
+/// Decode the default `\XXXX` / `\+XXXXXX` / `\\` escapes of a `U&"…"` identifier.
+/// Returns the raw text unchanged when an escape is malformed (the server rejects it anyway).
+fn decode_unicode_ident(raw: &str) -> String {
+    let chars: Vec<char> = raw.chars().collect();
+    let mut out = String::with_capacity(raw.len());
+    let mut i = 0usize;
+    while i < chars.len() {
+        if chars[i] != '\\' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        let (start, width) = match chars.get(i + 1) {
+            Some('\\') => {
+                out.push('\\');
+                i += 2;
+                continue;
+            }
+            Some('+') => (i + 2, 6),
+            _ => (i + 1, 4),
+        };
+        let hex: String = chars.iter().skip(start).take(width).collect();
+        let decoded = if hex.len() == width && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)
+        } else {
+            None
+        };
+        match decoded {
+            Some(c) => {
+                out.push(c);
+                i = start + width;
+            }
+            None => return raw.to_string(),
+        }
+    }
+    out
+}
+
 fn lex(sql: &str) -> Result<Vec<Segment>, String> {
     let bytes = sql.as_bytes();
     let len = bytes.len();
@@ -131,11 +262,12 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
     let mut state = State::Normal;
     let mut seg_start = 0usize;
     let mut has_code = false;
-    let mut tokens: Vec<String> = Vec::new();
-    let mut words: Vec<String> = Vec::new();
+    let mut lexed = Lexed::default();
     let mut tok_start: Option<usize> = None;
     // Start byte of the currently open construct (for error messages).
     let mut open_at = 0usize;
+    // The open quoted identifier is a `U&"…"` one.
+    let mut quote_unicode = false;
     let mut i = 0usize;
 
     while i < len {
@@ -156,53 +288,55 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                             tok_start = None;
                             state = State::EscapeString;
                         } else {
-                            flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                            flush(sql, &mut tok_start, i, &mut lexed);
                             state = State::SingleQuote;
                         }
+                        lexed.other();
                         has_code = true;
                         open_at = i;
                         i += 1;
                     }
                     b'"' => {
-                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                        flush(sql, &mut tok_start, i, &mut lexed);
+                        lexed.other();
+                        quote_unicode = is_unicode_ident_start(bytes, i);
                         has_code = true;
                         open_at = i;
                         state = State::DoubleQuote;
                         i += 1;
                     }
                     b'$' => {
-                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                        flush(sql, &mut tok_start, i, &mut lexed);
+                        lexed.other();
+                        has_code = true;
                         if let Some(end) = dollar_tag_end(bytes, i) {
                             let delim = sql[i..=end].to_string();
-                            has_code = true;
                             open_at = i;
                             i = end + 1;
                             state = State::Dollar(delim);
                         } else {
                             // `$1` parameter or lone `$`: ordinary code byte.
-                            has_code = true;
                             i += 1;
                         }
                     }
                     b'-' if bytes.get(i + 1) == Some(&b'-') => {
-                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                        flush(sql, &mut tok_start, i, &mut lexed);
                         state = State::LineComment;
                         i += 2;
                     }
                     b'/' if bytes.get(i + 1) == Some(&b'*') => {
-                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                        flush(sql, &mut tok_start, i, &mut lexed);
                         open_at = i;
                         state = State::BlockComment(1);
                         i += 2;
                     }
                     b';' => {
-                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
+                        flush(sql, &mut tok_start, i, &mut lexed);
                         segments.push(Segment {
                             start: seg_start,
                             end: i,
                             has_code,
-                            tokens: std::mem::take(&mut tokens),
-                            words: std::mem::take(&mut words),
+                            lexed: std::mem::take(&mut lexed),
                         });
                         seg_start = i + 1;
                         has_code = false;
@@ -213,8 +347,12 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                             tok_start = Some(i);
                             has_code = true;
                         } else {
-                            flush(sql, &mut tok_start, i, &mut tokens, &mut words);
-                            if !b.is_ascii_whitespace() {
+                            flush(sql, &mut tok_start, i, &mut lexed);
+                            if b == b'(' {
+                                lexed.open_paren();
+                                has_code = true;
+                            } else if !b.is_ascii_whitespace() {
+                                lexed.other();
                                 has_code = true;
                             }
                         }
@@ -253,7 +391,15 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                     if bytes.get(i + 1) == Some(&b'"') {
                         i += 2;
                     } else {
-                        words.push(sql[open_at + 1..i].replace("\"\"", "\"").to_ascii_uppercase());
+                        let raw = sql[open_at + 1..i].replace("\"\"", "\"");
+                        let name = if quote_unicode {
+                            decode_unicode_ident(&raw)
+                        } else {
+                            raw
+                        }
+                        .to_ascii_uppercase();
+                        lexed.words.push(name.clone());
+                        lexed.ident(name, quote_unicode);
                         state = State::Normal;
                         i += 1;
                     }
@@ -313,13 +459,12 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
             return Err(format!("unterminated block comment starting at byte {open_at}"));
         }
     }
-    flush(sql, &mut tok_start, len, &mut tokens, &mut words);
+    flush(sql, &mut tok_start, len, &mut lexed);
     segments.push(Segment {
         start: seg_start,
         end: len,
         has_code,
-        tokens,
-        words,
+        lexed,
     });
     Ok(segments)
 }
@@ -333,20 +478,33 @@ pub fn split_statements(sql: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Keyword tokens and all words (keywords + quoted identifiers) of one statement.
-fn statement_words(stmt: &str) -> Result<(Vec<String>, Vec<String>), String> {
-    let segs = lex(stmt)?;
-    let tokens = segs.iter().flat_map(|s| s.tokens.iter().cloned()).collect();
-    let words = segs.iter().flat_map(|s| s.words.iter().cloned()).collect();
-    Ok((tokens, words))
+/// Everything the lexer collected for one statement, merged across segments.
+fn statement_lexed(stmt: &str) -> Result<Lexed, String> {
+    let mut merged = Lexed::default();
+    for seg in lex(stmt)? {
+        merged.tokens.extend(seg.lexed.tokens);
+        merged.words.extend(seg.lexed.words);
+        merged.calls.extend(seg.lexed.calls);
+        merged.unicode_escape |= seg.lexed.unicode_escape;
+    }
+    Ok(merged)
 }
 
-/// Classify one statement; `None` = allowed. A statement that cannot be lexed is blocked.
-pub fn classify(stmt: &str) -> Option<BlockedKind> {
-    let (tokens, words) = match statement_words(stmt) {
-        Ok(v) => v,
-        Err(_) => return Some(BlockedKind::Unparsable),
-    };
+/// True when any `CREATE` in a `CREATE` statement (incl. `CREATE SCHEMA` elements) installs code.
+fn creates_executable(tokens: &[String]) -> bool {
+    tokens.iter().enumerate().any(|(i, t)| {
+        t == "CREATE"
+            && tokens[i + 1..]
+                .iter()
+                .map(String::as_str)
+                .find(|w| !CREATE_MODIFIERS.contains(w))
+                .map(|obj| EXECUTABLE_OBJECTS.contains(&obj))
+                .unwrap_or(false)
+    })
+}
+
+/// Classify by leading keyword; `None` = allowed by the statement-level rules.
+fn classify_keywords(tokens: &[String], words: &[String]) -> Option<BlockedKind> {
     let first = tokens.first()?.as_str();
     let second = tokens.get(1).map(String::as_str).unwrap_or("");
     let rest = &tokens[1..];
@@ -356,6 +514,10 @@ pub fn classify(stmt: &str) -> Option<BlockedKind> {
         "DO" => Some(BlockedKind::DoBlock),
         "GRANT" | "REVOKE" => Some(BlockedKind::Privilege),
         "CREATE" | "ALTER" if ROLE_OBJECTS.contains(&second) => Some(BlockedKind::Role),
+        "CREATE" if creates_executable(tokens) => Some(BlockedKind::ExecutableObject),
+        "ALTER" if ALTER_EXECUTABLE_OBJECTS.contains(&second) => {
+            Some(BlockedKind::ExecutableObject)
+        }
         // CREATE SCHEMA ... GRANT, ALTER DEFAULT PRIVILEGES GRANT|REVOKE embed privilege statements
         "CREATE" | "ALTER" if rest.iter().any(|t| t == "GRANT" || t == "REVOKE") => {
             Some(BlockedKind::Privilege)
@@ -365,6 +527,10 @@ pub fn classify(stmt: &str) -> Option<BlockedKind> {
         "SET" | "RESET" => {
             if words[1..].iter().any(|w| ROLE_WORDS.contains(&w.as_str())) {
                 return Some(BlockedKind::Role);
+            }
+            if first == "RESET" {
+                // RESET <any> / RESET ALL would undo the executor's SET LOCAL timeouts.
+                return Some(BlockedKind::Setting);
             }
             let target = words[1..]
                 .iter()
@@ -381,10 +547,29 @@ pub fn classify(stmt: &str) -> Option<BlockedKind> {
         }
         "PREPARE" if second == "TRANSACTION" => Some(BlockedKind::TransactionControl),
         "ALTER" if rest.iter().any(|t| t == "DROP") => Some(BlockedKind::AlterDrop),
-        "COPY" if tokens.iter().any(|t| t == "PROGRAM") => Some(BlockedKind::CopyProgram),
+        "COPY" => Some(BlockedKind::Copy),
         t if TRANSACTION_CONTROL.contains(&t) => Some(BlockedKind::TransactionControl),
         _ => None,
     }
+}
+
+/// Classify one statement; `None` = allowed. A statement that cannot be lexed is blocked.
+pub fn classify(stmt: &str) -> Option<BlockedKind> {
+    let lexed = match statement_lexed(stmt) {
+        Ok(v) => v,
+        Err(_) => return Some(BlockedKind::Unparsable),
+    };
+    if lexed.unicode_escape {
+        // U&"…" UESCAPE '…': the identifier's real name is not decoded, so fail closed.
+        return Some(BlockedKind::Unparsable);
+    }
+    classify_keywords(&lexed.tokens, &lexed.words).or_else(|| {
+        lexed
+            .calls
+            .iter()
+            .any(|c| DANGEROUS_FUNCTIONS.contains(&c.as_str()))
+            .then_some(BlockedKind::DangerousFunction)
+    })
 }
 
 /// Pure-Rust entry point used by the pyfunction and by `cargo test`.
@@ -520,13 +705,16 @@ SELECT ad.employee_id, ad.activity_date FROM activity_days ad, params WHERE ad.a
     }
 
     #[test]
-    fn blocks_copy_program() {
-        assert_kind("COPY t FROM PROGRAM 'x'", "copy_program");
-    }
-
-    #[test]
-    fn allows_copy_without_program() {
-        assert_eq!(guard("COPY t TO STDOUT").unwrap().len(), 1);
+    fn blocks_copy_any_direction() {
+        for sql in [
+            "COPY t FROM PROGRAM 'x'",
+            "COPY t TO STDOUT",
+            "COPY t FROM STDIN",
+            "copy t (a, b) from '/tmp/x.csv' with (format csv)",
+            "COPY (SELECT 1) TO '/tmp/out'",
+        ] {
+            assert_kind(sql, "copy");
+        }
     }
 
     #[test]
@@ -658,8 +846,152 @@ SELECT ad.employee_id, ad.activity_date FROM activity_days ad, params WHERE ad.a
 
     #[test]
     fn no_panic_on_odd_input() {
-        for sql in ["", ";", "'", "E", "E'", "$", "$a", "$a$", "-", "/", "é;é", "\\", "SELECT E'\\"] {
+        for sql in ["", ";", "'", "E", "E'", "$", "$a", "$a$", "-", "/", "é;é", "\\", "SELECT E'\\",
+            "U&\"", "U&\"\\\"", "U&\"\\+\"(", "u&\"x\" UESCAPE", "1(", "1e(", "_("] {
             let _ = guard(sql);
         }
+    }
+
+    #[test]
+    fn blocks_create_executable_objects() {
+        for sql in [
+            "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql",
+            "create or replace function f() returns void language plpgsql as $$ begin execute 'drop table x'; end $$",
+            "CREATE PROCEDURE p() LANGUAGE sql AS $$ DELETE FROM t $$",
+            "CREATE OR REPLACE PROCEDURE p() LANGUAGE sql AS 'SELECT 1'",
+            "CREATE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION f()",
+            "CREATE OR REPLACE TRIGGER tr AFTER UPDATE ON t EXECUTE FUNCTION f()",
+            "CREATE CONSTRAINT TRIGGER tr AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f()",
+            "CREATE EXTENSION dblink",
+            "CREATE RULE r AS ON INSERT TO t DO INSTEAD NOTHING",
+            "CREATE OR REPLACE RULE r AS ON DELETE TO t DO ALSO NOTHING",
+            "CREATE AGGREGATE a (int) (SFUNC = f, STYPE = int)",
+            "CREATE OPERATOR === (LEFTARG = int, RIGHTARG = int, FUNCTION = f)",
+            "CREATE LANGUAGE plperlu",
+            "CREATE OR REPLACE TRUSTED PROCEDURAL LANGUAGE l HANDLER h",
+            "CREATE EVENT TRIGGER e ON ddl_command_start EXECUTE FUNCTION f()",
+            "CREATE TRANSFORM FOR int LANGUAGE l (FROM SQL WITH FUNCTION f(internal))",
+            "CREATE CAST (text AS int) WITH FUNCTION f(text)",
+            "CREATE SCHEMA s CREATE TRIGGER tr BEFORE INSERT ON t EXECUTE FUNCTION f()",
+            "/* c */ CrEaTe /* c */ FuNcTiOn f() RETURNS int AS 'select 1' LANGUAGE sql",
+        ] {
+            assert_kind(sql, "executable_object");
+        }
+    }
+
+    #[test]
+    fn blocks_alter_executable_objects() {
+        for sql in [
+            "ALTER FUNCTION f() SECURITY DEFINER",
+            "alter procedure p() owner to x",
+            "ALTER ROUTINE f() SET search_path = x",
+            "ALTER EXTENSION e UPDATE",
+        ] {
+            assert_kind(sql, "executable_object");
+        }
+    }
+
+    #[test]
+    fn allows_non_executable_ddl() {
+        for sql in [
+            "CREATE TABLE t (a int)",
+            "CREATE TABLE IF NOT EXISTS s.t (event text, trigger_name text, rule int)",
+            "CREATE UNLOGGED TABLE t AS SELECT 1 AS a",
+            "CREATE INDEX i ON t (a)",
+            "CREATE UNIQUE INDEX CONCURRENTLY i ON t USING btree (a)",
+            "CREATE VIEW v AS SELECT 1",
+            "CREATE OR REPLACE VIEW v AS SELECT 1",
+            "CREATE MATERIALIZED VIEW m AS SELECT 1",
+            "CREATE SCHEMA s",
+            "CREATE SCHEMA s CREATE TABLE t (a int)",
+            "CREATE SEQUENCE seq",
+            "ALTER TABLE t ADD COLUMN c int",
+            "ALTER TABLE t ENABLE TRIGGER tr",
+            "SELECT 'CREATE FUNCTION f()' AS s",
+            "SELECT \"function\" FROM t -- CREATE FUNCTION",
+            "CALL proc()",
+            "CALL s.refresh_profile(1, 'x')",
+        ] {
+            assert_eq!(guard(sql).unwrap().len(), 1, "{sql}");
+        }
+    }
+
+    #[test]
+    fn blocks_reset_entirely() {
+        assert_kind("RESET ALL", "setting");
+        assert_kind("reset statement_timeout", "setting");
+        assert_kind("RESET search_path", "setting");
+        assert_kind("RESET \"lock_timeout\"", "setting");
+        assert_kind("RESET ROLE", "role");
+        assert_kind("RESET SESSION AUTHORIZATION", "role");
+        assert_eq!(guard("SET search_path = x").unwrap().len(), 1);
+        assert_eq!(guard("SELECT 'RESET ALL'").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn blocks_dangerous_function_calls() {
+        for name in DANGEROUS_FUNCTIONS {
+            let lower = name.to_ascii_lowercase();
+            assert_kind(&format!("SELECT {lower}('x')"), "dangerous_function");
+            assert_kind(&format!("SELECT pg_catalog.{name}('x')"), "dangerous_function");
+        }
+        for sql in [
+            "SELECT set_config('statement_timeout', '0', false)",
+            "SELECT Set_Config ('lock_timeout', '0', true)",
+            "SELECT pg_catalog . set_config /* c */ ('a', 'b', false)",
+            "SELECT set_config -- c\n ('a', 'b', false)",
+            "SELECT * FROM dblink('host=x', 'DROP TABLE t') AS r(a int)",
+            "SELECT public.dblink_exec('DROP TABLE t')",
+            "SELECT \"set_config\"('a', 'b', false)",
+            "SELECT \"pg_catalog\".\"set_config\"('a', 'b', false)",
+            "SELECT U&\"set\\005fconfig\"('a', 'b', false)",
+            "UPDATE t SET a = pg_read_file('/etc/passwd')",
+            "INSERT INTO t SELECT lo_import('/etc/passwd')",
+            "DELETE FROM t WHERE pg_terminate_backend(pid)",
+            "WITH x AS (SELECT pg_reload_conf()) SELECT * FROM x",
+            "CREATE TABLE t AS SELECT pg_ls_dir('.')",
+            "SET search_path = x; SELECT 1set_config('a', 'b', false)",
+        ] {
+            let msg = blocked(sql);
+            assert!(msg.contains("dangerous_function is not allowed"), "{sql} -> {msg}");
+        }
+    }
+
+    #[test]
+    fn dangerous_names_without_call_are_allowed() {
+        for sql in [
+            "SELECT set_config FROM t",
+            "SELECT t.dblink, t.pg_read_file FROM t WHERE lo_import = 1",
+            "SELECT 'set_config(''a'', ''b'', false)'",
+            "SELECT $$ pg_read_file('/etc/passwd') $$",
+            "SELECT E'dblink_exec(\\'x\\')'",
+            "SELECT 1 -- set_config('a', 'b', false)",
+            "SELECT /* dblink('x') */ 1",
+            "SELECT \"set_config('a')\" FROM t",
+            "SELECT \"set_config\" FROM t",
+            "SELECT my_set_config('a'), set_configuration('b'), xdblink('c')",
+            "SELECT set_config, (a) FROM t",
+            "SELECT current_setting('statement_timeout')",
+        ] {
+            assert_eq!(guard(sql).unwrap().len(), 1, "{sql}");
+        }
+    }
+
+    #[test]
+    fn unicode_escape_identifiers_are_decoded() {
+        assert_kind("SET U&\"rol\\0065\" TO x", "role");
+        assert_kind("SELECT U&\"set\\+00005fconfig\"('a', 'b', false)", "dangerous_function");
+        assert_kind("SELECT U&\"set!005fconfig\" UESCAPE '!' ('a', 'b', false)", "unparsable");
+        assert_eq!(guard("SELECT U&\"d\\0061ta\" FROM t").unwrap().len(), 1);
+        assert_eq!(guard("SELECT U&'caf\\00e9'").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn decode_unicode_ident_handles_malformed_escapes() {
+        assert_eq!(decode_unicode_ident("a\\0062c"), "abc");
+        assert_eq!(decode_unicode_ident("a\\\\b"), "a\\b");
+        assert_eq!(decode_unicode_ident("a\\zz"), "a\\zz");
+        assert_eq!(decode_unicode_ident("a\\+110000"), "a\\+110000");
+        assert_eq!(decode_unicode_ident("\\"), "\\");
     }
 }
