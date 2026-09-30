@@ -28,6 +28,7 @@ from .transformations import (
 )
 
 if TYPE_CHECKING:
+    from ...auth.identity_tokens import SourceIdentityContext
     from ...auth.principal import QSPrincipal
     from ...tenants import LoadedDefinition, QueryStore, TenantRegistry
 
@@ -118,6 +119,7 @@ class MultiQS(BaseQuery):
             tenant: str | None = None,
             definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
+            identity_context: "SourceIdentityContext | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -160,6 +162,8 @@ class MultiQS(BaseQuery):
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
         self._user_session = user_session
+        # FEAT-159: delegated-credential context resolved by sources' prepare() on this loop.
+        self._identity_context = identity_context
         # FEAT-101: track names of queries dispatched to remote qworker.
         self._remote_queries: list = []
 
@@ -554,6 +558,7 @@ class MultiQS(BaseQuery):
                     )
                     name = source_type if idx == 0 else f"{source_type}_{idx}"
                     t = cls(name, config, self._request, self._queue)
+                    await t.prepare(self._identity_context)
                     tasks[name] = t
 
         ## then, run all jobs:
