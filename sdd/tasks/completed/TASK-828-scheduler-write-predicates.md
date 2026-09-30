@@ -340,10 +340,8 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Added SOURCE_HOOK_KEYS, _as_mapping, pipeline_requires_write_grant, definition_requires_scheduler_grant to queries/multi/__init__.py. 11 new tests plus existing multi tests pass; ruff clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

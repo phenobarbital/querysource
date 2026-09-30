@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
+from collections.abc import Mapping
 from importlib import import_module
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 from asyncdb.exceptions import NoDataFound
@@ -108,6 +110,85 @@ def _output_step_names(output: object) -> set[str]:
         for name in step
         if isinstance(name, str)
     }
+
+
+# FEAT-160: source-hook keys that run SQL with the full-access DB* connection.
+# Same literals as FEAT-157's ``HOOK_KEYS`` (querysource/interfaces/source_hooks.py);
+# whichever feature merges second makes one module import the other.
+SOURCE_HOOK_KEYS: tuple[str, str] = ("pre-hook", "post-hook")
+
+
+def _as_mapping(value: object) -> Mapping[str, Any] | None:
+    """Return ``value`` as a mapping: a mapping as-is, a JSON-object string parsed.
+
+    Args:
+        value: A mapping, a JSON string, or anything else.
+
+    Returns:
+        The mapping, or ``None`` for malformed JSON, non-object JSON and other types.
+    """
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, Mapping) else None
+    return None
+
+
+def pipeline_requires_write_grant(pipeline: object) -> bool:
+    """Tell whether a MultiQuery pipeline can write with the DB* credentials.
+
+    Args:
+        pipeline: The parsed MultiQuery payload (``{"queries": …, "Output": […]}``).
+
+    Returns:
+        True when ``Output`` uses a ``WRITE_DESTINATIONS`` step or any ``queries``
+        entry declares a ``SOURCE_HOOK_KEYS`` key; False otherwise, including for
+        malformed shapes.
+    """
+    if not isinstance(pipeline, Mapping):
+        return False
+    if _output_step_names(pipeline.get("Output")) & WRITE_DESTINATIONS:
+        return True
+    queries = pipeline.get("queries")
+    if not isinstance(queries, Mapping):
+        return False
+    return any(
+        isinstance(entry, Mapping) and any(key in entry for key in SOURCE_HOOK_KEYS)
+        for entry in queries.values()
+    )
+
+
+def definition_requires_scheduler_grant(definition: Mapping[str, Any]) -> bool:
+    """Tell whether saving/syncing this definition needs ``datasource:use`` on ``pg_admin``.
+
+    Args:
+        definition: A definition row or merged change with ``provider``,
+            ``attributes`` (mapping or JSON string) and ``query_raw`` (JSON string
+            or mapping).
+
+    Returns:
+        True only for a ``provider == "multi"`` definition with a truthy
+        ``attributes.scheduler`` whose ``query_raw`` pipeline is write-capable.
+        A non-empty ``query_raw`` that ``json.loads`` cannot turn into an object
+        also returns True (fail closed): the runtime decodes ``query_raw`` with a
+        different decoder, so an unparseable payload here could still run write
+        steps there. An empty/missing ``query_raw`` returns False.
+    """
+    if not isinstance(definition, Mapping) or definition.get("provider") != "multi":
+        return False
+    attributes = _as_mapping(definition.get("attributes"))
+    if not attributes or not attributes.get("scheduler"):
+        return False
+    raw = definition.get("query_raw")
+    pipeline = _as_mapping(raw)
+    if pipeline is None:
+        # Fail closed on a scheduled multi whose pipeline we cannot inspect.
+        return isinstance(raw, str) and bool(raw.strip())
+    return pipeline_requires_write_grant(pipeline)
 
 
 def get_operator_module(clsname: str):
