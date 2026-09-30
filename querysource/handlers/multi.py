@@ -19,7 +19,7 @@ from ..exceptions import (
 )
 from ..outputs import DataOutput
 from ..queries import MultiQS
-from ..queries.multi import WRITE_DESTINATIONS, _output_step_names
+from ..queries.multi import WRITE_DESTINATIONS, _declares_hooks, _output_step_names
 from ..queries.multi.operators import Filter, GroupBy
 from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity
@@ -51,7 +51,8 @@ class QueryHandler(AbstractHandler):
             has_raw_query: True if the payload contains any raw inline query;
                 triggers a single raw_query:execute check.
             write_access: True when the inline Output uses a WRITE_DESTINATIONS
-                step (FEAT-155); triggers datasource:use on pg_admin.
+                step (FEAT-155) or an inline query declares a pre/post-hook
+                (FEAT-157); triggers datasource:use on pg_admin.
 
         Raises:
             web.HTTPNotFound: When any component is denied, or when the
@@ -477,7 +478,10 @@ class QueryHandler(AbstractHandler):
             has_raw_query=_has_raw,
             write_access=bool(
                 not slug and isinstance(options, dict)
-                and _output_step_names(options.get("Output")) & WRITE_DESTINATIONS
+                and (
+                    _output_step_names(options.get("Output")) & WRITE_DESTINATIONS
+                    or any(_declares_hooks(cfg) for cfg in (_queries or {}).values())
+                )
             ),
         )
         # Step 1b: Ownership preflight for tenant isolation.
