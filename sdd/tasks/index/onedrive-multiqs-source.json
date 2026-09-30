@@ -179,7 +179,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -189,8 +189,9 @@
       "parallelism_notes": "Exclusive: edits tests/tenants/conftest.py loaded by every tenant test. TASK-809: fixture audit table must match _run_as_audit_table naming ({table}_run_as_audit) created there.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-810-run-as-ddl-docs.md"
+      "completed_at": "2026-09-30T15:37:55+00:00",
+      "file": "sdd/tasks/completed/TASK-810-run-as-ddl-docs.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-811",
