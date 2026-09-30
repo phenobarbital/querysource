@@ -78,6 +78,15 @@ class _MockConn:
         self.scalar = scalar
         self.calls = []
 
+    async def transaction(self):
+        return self
+
+    async def commit(self):
+        return None
+
+    async def rollback(self):
+        return None
+
     async def fetch_one(self, sql, *args, **kwargs):
         self.calls.append(("fetch_one", sql, args))
         return self.rows[0] if self.rows else None

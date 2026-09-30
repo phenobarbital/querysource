@@ -596,11 +596,18 @@ class DefinitionRepository:
         """
         table = self._qualified_table(store)
         async with await self.connection_factory() as conn:
-            begin = getattr(conn, "transaction", None)
-            commit = getattr(conn, "commit", None)
-            rollback = getattr(conn, "rollback", None)
-            if begin is not None:
-                await begin()
+            # Fail closed: without real transaction support the row lock, SAVEPOINT and
+            # audit write would run in autocommit and could split from the definition write.
+            missing = [
+                name for name in ("transaction", "commit", "rollback")
+                if not callable(getattr(conn, name, None))
+            ]
+            if missing:
+                raise TenantError(
+                    f"Store connection lacks transaction support ({', '.join(missing)})",
+                    error_code="tenant_store_unavailable",
+                )
+            await conn.transaction()
             try:
                 previous_row = await conn.fetch_one(
                     f"SELECT attributes FROM {table} WHERE query_slug = $1 for update", slug
@@ -611,11 +618,12 @@ class DefinitionRepository:
                     await self._apply_run_as(
                         conn, store, slug, previous, row.get("attributes"), actor, request_info
                     )
-                if commit is not None:
-                    await commit()
+                await conn.commit()
             except BaseException:
-                if rollback is not None:
-                    await rollback()
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    _logger.exception("Rollback failed after run-as write error on %s", table)
                 raise
         return row
 

@@ -155,3 +155,37 @@ async def test_schedule_change_without_actor_is_refused_and_rolled_back():
     assert _count(conn, "INSERT INTO") == 0
     assert "ROLLBACK" in conn.log
     assert "COMMIT" not in conn.log
+
+
+class _NoTxConn:
+    """A connection without transaction support."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def fetch_one(self, sql, *args, **kwargs):  # pragma: no cover - must not be reached
+        raise AssertionError("no statement may run without a transaction")
+
+
+@pytest.mark.asyncio
+async def test_write_requires_transaction_support():
+    """Fail closed: a connection lacking transaction/commit/rollback is refused."""
+    with pytest.raises(TenantError) as exc_info:
+        await _patch(_NoTxConn(), actor=7)
+    assert exc_info.value.error_code == "tenant_store_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_failed_rollback_does_not_mask_original_error():
+    """The original write error surfaces even when the rollback itself raises."""
+    conn = _patched_row(_TxConn({}, SCHED, fail_on=("UPDATE", RuntimeError("write boom"))))
+
+    async def bad_rollback():
+        raise OSError("rollback boom")
+
+    conn.rollback = bad_rollback
+    with pytest.raises(RuntimeError, match="write boom"):
+        await _patch(conn, actor=7)
