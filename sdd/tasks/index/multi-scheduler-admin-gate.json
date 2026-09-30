@@ -16,7 +16,7 @@
       "feature_id": "FEAT-160",
       "feature": "multi-scheduler-admin-gate",
       "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Root task: creates querysource/auth/request_gate.py and tests/test_request_gate.py and modifies only querysource/handlers/abstract.py (_get_user_session/_enforce_pbac delegates); no file shared with TASK-828, no Cython rebuild; runs concurrently with TASK-828.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:48:46+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-827-request-scoped-pbac-helper.md"
+      "completed_at": "2026-09-30T21:50:12+00:00",
+      "file": "sdd/tasks/completed/TASK-827-request-scoped-pbac-helper.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-828",
