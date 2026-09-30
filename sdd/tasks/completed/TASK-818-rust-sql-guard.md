@@ -348,8 +348,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Implemented rust/src/sql_guard.rs (lexer L1-L10, classifier incl. SET/RESET ROLE|AUTHORIZATION, pyfunction). 30 cargo tests pass with a temporary `mod sql_guard;` (reverted, not committed). cargo run with CARGO_HOME copied to scratchpad because ~/.cargo is read-only.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
