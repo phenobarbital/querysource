@@ -3,7 +3,7 @@
   "feat_id": "FEAT-178",
   "feature_slug": "onedrive-multiqs-source",
   "started_at": "2026-09-30T14:26:41Z",
-  "updated_at": "2026-09-30T14:37:34Z",
+  "updated_at": "2026-09-30T14:43:04Z",
   "source": {
     "kind": "inline",
     "jira_key": null,
@@ -12,7 +12,7 @@
     "summary_oneline": "MS OneDrive source for MultiQS, modelled on the existing SharePoint source"
   },
   "mode": "enrichment",
-  "phase": "proposal_drafted",
+  "phase": "committed",
   "phases": {
     "source": {
       "status": "completed"
@@ -30,7 +30,7 @@
       "status": "completed",
       "queries_executed": 12,
       "queries_skipped": 0,
-      "findings": 14,
+      "findings": 17,
       "truncated": false
     },
     "synthesis": {
@@ -40,9 +40,9 @@
     },
     "qa": {
       "status": "completed",
-      "questions_total": 5,
-      "questions_answered": 5,
-      "new_unresolved": 2
+      "questions_total": 8,
+      "questions_answered": 7,
+      "new_unresolved": 1
     },
     "output": {
       "proposal_path": "sdd/proposals/onedrive-multiqs-source.proposal.md",
@@ -58,14 +58,14 @@
     "max_wall_seconds": 300
   },
   "consumed": {
-    "files_read": 17,
-    "grep_calls": 15,
+    "files_read": 26,
+    "grep_calls": 22,
     "git_calls": 1,
     "wall_seconds": 280
   },
   "errors": [],
   "resume_hint": {
-    "next_phase": "commit",
-    "next_action": "Commit U5 revision"
+    "next_phase": "done",
+    "next_action": "/sdd-spec FEAT-178"
   }
 }

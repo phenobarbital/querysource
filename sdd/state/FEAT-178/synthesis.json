@@ -189,6 +189,30 @@
         "F014"
       ],
       "confidence": "medium"
+    },
+    {
+      "id": "C12",
+      "claim": "The Azure identity-link flow is not enabled for querysource, and reusing AzureAuth would couple OneDrive to corporate SSO",
+      "evidence": [
+        "F015"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C13",
+      "claim": "A new ExternalAuth subclass gets the identity-link flow almost for free, but must suppress its login routes",
+      "evidence": [
+        "F016"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "C14",
+      "claim": "run_as_user_id must be persisted with the slug's scheduler definition, since jobs are rebuilt from the DB",
+      "evidence": [
+        "F017"
+      ],
+      "confidence": "medium"
     }
   ],
   "unknowns": [
@@ -220,11 +244,16 @@
     {
       "id": "U6",
       "question": "Is the navigator-auth identity-link flow (Azure provider, /api/v1/user/identities/link/{provider}) enabled in querysource deployments, and can AZURE_IDENTITY_SCOPES / the app registration cover Files.Read + personal accounts?",
-      "user_answer": null
+      "user_answer": "Researched: not enabled (BasicAuth only; AzureAuth is corporate SSO) → new 'onedrive' identity provider in navigator-auth"
     },
     {
       "id": "U7",
       "question": "Runs without an HTTP session (scheduler, CLI): resolve the linked identity from IdentityStore by user_id, or make delegated mode HTTP-only?",
+      "user_answer": "Read tokens from auth.user_identities by user_id; user_id = scheduler-job registrant (from session), persisted with the slug's scheduler definition"
+    },
+    {
+      "id": "U8",
+      "question": "Where exactly is run_as_user_id persisted: inside the query row's scheduler attributes JSON, or a new column?",
       "user_answer": null
     }
   ],

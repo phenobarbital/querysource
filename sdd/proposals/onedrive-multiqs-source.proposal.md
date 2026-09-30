@@ -62,7 +62,12 @@ Microsoft OAuth login. It stores the tokens encrypted and caches them in the
 `navigator_session` session vault under `identity:{provider}`. It also
 refreshes and persists rotated tokens (`IdentityCredentialHandler`).
 `OneDriveSource`'s delegated mode therefore consumes that linked identity
-instead of building a new token flow.
+instead of building a new token flow. querysource does not enable the
+existing `azure` provider, and that provider is the corporate SSO login, so
+a new link-only **`onedrive` identity provider** is added to navigator-auth
+(cross-repo work). Scheduled runs have no session. They read the tokens from
+`auth.user_identities` for the user who registered the job, whose
+`user_id` is saved with the slug's scheduler definition.
 
 ---
 
@@ -89,6 +94,12 @@ instead of building a new token flow.
 | 15 | `navigator_auth/identity/store.py` *(dependency)* | `IdentityStore`, `cached_credential`, `IDENTITY_VAULT_KEY` | 19, 112-400 | encrypted identity storage + session-vault cache helpers | F013 |
 | 16 | `navigator_auth/backends/azure.py` *(dependency)* | `AzureAuth.authorize_identity` / `refresh_identity_tokens` | 292-380 | MSAL-based Microsoft link flow | F013 |
 | 17 | `pyproject.toml` | `navigator-auth>=0.15.8` | 118 | pin predates the identity/vault features (0.28.2 installed) | F014 |
+| 18 | `settings/settings.py` | `AUTHENTICATION_BACKENDS` | 146-148 | only `BasicAuth` enabled; the new provider must be added here | F015 |
+| 19 | `navigator_auth/backends/azure.py` *(dependency)* | `AzureAuth` | 86, 102-108 | corporate SSO, tenant-bound; **not** reused | F015 |
+| 20 | `navigator_auth/backends/external.py` *(dependency)* | `ExternalAuth` identity hooks | 80-157, 495-611 | generic link flow a new `onedrive` provider inherits | F016 |
+| 21 | `querysource/scheduler/jobs.py` | `scheduled_multiqs_job` | 104-158 | sessionless MultiQS run; must receive `run_as_user_id` | F017 |
+| 22 | `querysource/scheduler/scheduler.py` | `QSScheduler` add_job / `register_slug` | 330-360, 586 | job kwargs rebuilt from DB rows | F017 |
+| 23 | `querysource/handlers/scheduler.py` | `SchedulerJobsView.post` | 208-260 | authenticated registration point that captures the registrant | F017 |
 
 ### 2.2 Constraints Discovered
 
@@ -143,9 +154,36 @@ instead of building a new token flow.
   *Evidence*: F003, F012
 
 - **Vault access needs a session.** The vault is reached through the
-  request's session (`session["_vault"]`). Scheduled or CLI runs don't have
-  one (see U7).
-  *Evidence*: F012
+  request's session (`session["_vault"]`). Scheduled and CLI runs don't have
+  one, so they read `auth.user_identities` directly through
+  `IdentityStore(app["authdb"], IdentityCipher())`, keyed by the stored
+  `run_as_user_id`, and apply the same refresh and persist rules.
+  *Evidence*: F012, F017
+
+- **Don't reuse the corporate `azure` provider.** querysource enables only
+  `BasicAuth`, so `/identities/link/azure` returns 404. `AzureAuth` is the
+  corporate SSO, bound to `AZURE_ADFS_TENANT_ID`/`AZURE_ADFS_CLIENT_ID` with
+  one global `AZURE_IDENTITY_SCOPES`. Reusing it would turn on corporate
+  login here, widen that app's consented scopes, and force it to accept
+  personal accounts.
+  *Implication*: add a new `onedrive` provider with its own app
+  registration and the `common` authority (work and personal accounts),
+  with scopes `Files.Read User.Read offline_access`.
+  *Evidence*: F015
+
+- **A link-only provider must not become a login method.**
+  `ExternalAuth.configure` registers login routes as well as the callback.
+  The `onedrive` provider must override that, or navigator-auth needs a
+  link-only flag.
+  *Evidence*: F016
+
+- **Jobs are rebuilt from the DB.** The scheduler re-registers jobs from
+  `public.queries` rows, so an in-memory kwarg would not survive a restart.
+  `run_as_user_id` has to be persisted with the slug's scheduler definition.
+  It is taken from the authenticated registrant's session and never from
+  the request body or the definition, so nobody can point a job at another
+  user's OneDrive.
+  *Evidence*: F017
 
 - **Registration is enough for dispatch.** MultiQS looks up `sources:`
   entries by type name in `SOURCE_REGISTRY`.
@@ -184,22 +222,37 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
     user's linked Microsoft identity, against `/me/drive/root:/<path>:` or a
     sharing URL.
   - `masks`, `sheet_name` and `pd_args` behave as in SharePoint.
+- **navigator-auth: `OneDriveAuth` provider** (cross-repo, lands first).
+  It subclasses `ExternalAuth` with `_service_name = "onedrive"`, its own
+  `ONEDRIVE_CLIENT_ID` and `ONEDRIVE_CLIENT_SECRET`, the `common` authority,
+  and `identity_scopes()` = `Files.Read User.Read offline_access`. It is
+  link-only: no login routes. It is then enabled in querysource's
+  `AUTHENTICATION_BACKENDS`. The login UI becomes
+  `/api/v1/user/identities/link/onedrive` and `/manage`.
 - **Delegated token resolver**: a small helper that runs on the request
-  loop. It reads `identity:{provider}` from the session vault
-  (`navigator_auth.identity.store.cached_credential`), falls back to
-  `IdentityStore.get_by_provider`, refreshes through the backend's
+  loop, or on the scheduler's loop. It reads `identity:onedrive` from the
+  session vault (`navigator_auth.identity.store.cached_credential`) when a
+  session exists. Otherwise, or on a cache miss, it calls
+  `IdentityStore.get_by_provider(user_id, "onedrive")`, where `user_id` is
+  the session user or the job's `run_as_user_id`. Then it refreshes through the backend's
   `refresh_identity_tokens` when the token is about to expire, persists the
   rotated token (`update_tokens` + `cache_credential`), and passes the access
   token into the source. If there is no linked identity, it raises an
-  actionable error pointing to `/api/v1/user/identities/link/azure`.
-- **Login UI**: reuse navigator-auth's `/api/v1/user/identities/manage` and
-  `/link/{provider}` pages. No new UI in querysource, except linking to them
+  actionable error pointing to `/api/v1/user/identities/link/onedrive`.
+- **Login UI**: navigator-auth's `/api/v1/user/identities/manage` and
+  `/link/onedrive` pages. No new UI in querysource, except linking to them
   from the error and the docs.
+- **Scheduler `run_as_user_id`**: `SchedulerJobsView.post` records the
+  authenticated registrant's `user_id`. It is persisted with the slug's
+  scheduler definition (U8 decides exactly where), reloaded at startup, and
+  passed `QSScheduler` → `scheduled_multiqs_job` → `MultiQS` →
+  `OneDriveSource`.
 - **Credentials**: `ONEDRIVE_APP_ID`, `ONEDRIVE_APP_SECRET` and
   `ONEDRIVE_TENANT_ID`, each falling back to its `SHAREPOINT_*` counterpart
   when unset (app-only mode). Delegated mode needs no source-level secrets,
-  only deployment config: the Azure backend's app registration, with
-  `Files.Read` in `AZURE_IDENTITY_SCOPES` and personal accounts allowed.
+  only deployment config for the `onedrive` provider: an app registration
+  that allows work and personal accounts, with a redirect to
+  `/auth/onedrive/callback/`.
 - **Tests**: `tests/test_source_onedrive.py` (offline: config parsing, the
   credential fallback, drive-path building per mode, parsing, ImportError),
   plus registry assertions.
@@ -216,6 +269,12 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
 - **`pyproject.toml`**: add a `onedrive` extra (the same packages as
   `sharepoint`), and raise the `navigator-auth` minimum to the release that
   ships `identity` and `vault`. *Evidence*: F008, F014
+- **`settings/settings.py`**::`AUTHENTICATION_BACKENDS`: add the
+  `onedrive` provider. *Evidence*: F015
+- **`querysource/handlers/scheduler.py`**::`SchedulerJobsView.post`,
+  **`querysource/scheduler/scheduler.py`** (add_job multi path, startup
+  loader) and **`querysource/scheduler/jobs.py`**::`scheduled_multiqs_job`:
+  capture, persist, reload and pass `run_as_user_id`. *Evidence*: F017
 - **`querysource/queries/multi/__init__.py`** (sources dispatch, 541-556):
   possibly a pre-start hook, so a source can resolve request-bound
   credentials on the loop before `t.start()`. The spec decides between that
@@ -252,9 +311,21 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
 - **Cross-loop vault use.** Touching `SessionVault` from the worker thread's
   loop would break or deadlock on the loop-bound pools. Mitigation: resolve
   the token before the thread starts (see §2.2). *Evidence*: F003, F012
-- **Deployment prerequisites.** The Azure identity backend, the vault master
-  keys and the `auth.user_identities` tables must all be enabled, but none of
-  that is visible from this repo (U6). *Evidence*: F014
+- **Cross-repo sequencing.** querysource cannot ship delegated mode until a
+  navigator-auth release with `OneDriveAuth` exists and the pin is raised.
+  Mitigation: split the work into (1) navigator-auth provider, (2)
+  querysource app-only and `url` modes (no dependency on 1), then (3)
+  querysource delegated mode and the scheduler changes. *Evidence*: F014, F016
+- **Impersonation through `run_as_user_id`.** If the value could come from
+  a request body or a definition, a user could read someone else's
+  OneDrive. Mitigation: set it only from the authenticated session at
+  registration, and audit-log it. *Evidence*: F017
+- **Revoked or expired link in scheduled runs.** A refresh failure makes
+  the job fail. Mitigation: a clear "re-link at /link/onedrive" error sent
+  through the existing `notification_manager`. *Evidence*: F013, F017
+- **Deployment prerequisites.** The vault master keys, the
+  `auth.user_identities` tables and the OneDrive app registration must all
+  exist, and none of that is visible from this repo. *Evidence*: F014, F015
 
 ---
 
@@ -274,7 +345,11 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
 | C10 | The delegated token must be resolved on the request loop, before the thread's own loop | F003, F012 | medium | inferred from loop-bound pools; not exercised |
 | C11 | The navigator-auth pin must be raised to a release with identity/vault | F014 | medium | installed 0.28.2 has them; exact first release not verified |
 
-Distribution: **7** high, **4** medium, **0** low.
+| C12 | The Azure identity link is not enabled for querysource; reusing `AzureAuth` would couple OneDrive to corporate SSO | F015 | high | direct read of settings, backend lookup and AzureAuth |
+| C13 | A new `ExternalAuth` subclass inherits the identity-link flow but must suppress its login routes | F016 | medium | generic flow read; link-only override not yet tried |
+| C14 | `run_as_user_id` must be persisted with the slug's scheduler definition | F017 | medium | jobs are rebuilt from DB rows; exact storage slot open (U8) |
+
+Distribution: **8** high, **6** medium, **0** low.
 
 ---
 
@@ -295,23 +370,29 @@ Distribution: **7** high, **4** medium, **0** low.
   identity from the session vault.
   *Resolves claims*: C7, C8
 
+- [x] **U6 — Is the Azure identity link enabled?** *Resolved*: "lets
+  research, if no, we need a new provider in navigator-auth." Research
+  answer: **no**. Only `BasicAuth` is enabled, and `AzureAuth` is the
+  tenant-bound corporate SSO (F015). Decision: a new link-only `onedrive`
+  provider in navigator-auth.
+  *Resolves claims*: C12, C13
+- [x] **U7 — Runs without a session.** *Resolved*: "read the stored tokens
+  from user identity table by user_id, registering in some place the
+  user_id." Follow-up answer: the `user_id` is the **scheduler job's
+  registrant**, taken from the session at registration and never from the
+  body or the definition.
+  *Resolves claims*: C14
+
 ### Unresolved (defer to spec)
 
-- [ ] **U6 — Deployment enablement.** Is the navigator-auth Azure identity
-  link flow (`/api/v1/user/identities/link/azure`) enabled where querysource
-  runs? Can the Azure app registration and `AZURE_IDENTITY_SCOPES` include
-  `Files.Read` and personal Microsoft accounts (`common` authority)? Or does
-  OneDrive need its own provider name (e.g. `onedrive`)? *Owner*: tbd
-  *Blocks claims*: C8
-  *Plausible answers*: a) reuse the `azure` provider and add scopes ·
-  b) register a dedicated `onedrive` backend or provider in navigator-auth
-- [ ] **U7 — Runs without a session.** When a MultiQS definition with
-  delegated OneDrive runs from the scheduler or CLI, there's no session and
-  so no vault. *Owner*: tbd
-  *Plausible answers*: a) fall back to `IdentityStore.get_by_provider(user_id)`
-  (the DB copy of the same tokens) when the run carries an owner user_id ·
-  b) delegated mode is HTTP-only, and non-session runs fail with a clear
-  error
+- [ ] **U8 — Where is `run_as_user_id` persisted?** Jobs are rebuilt from
+  `public.queries` rows, so it has to live with the slug's scheduler
+  definition. *Owner*: tbd
+  *Blocks claims*: C14
+  *Plausible answers*: a) inside the row's scheduler attributes JSON (next
+  to the `attributes.scheduler.*` keys the loader already parses) ·
+  b) a dedicated column or side table (`scheduler_run_as`) with an audit
+  trail
 
 ---
 
@@ -319,9 +400,12 @@ Distribution: **7** high, **4** medium, **0** low.
 
 **`/sdd-spec FEAT-178`**. *Rationale*: localization is high-confidence
 (C1–C3, C5), the pattern is a direct mirror of SharePoint, and the design
-forks have been resolved, including the login/vault flow (U5, F013). The
-spec needs to settle U6/U7, the base-class contract, and where the
-delegated token is resolved (C10).
+forks have been resolved: the login/vault flow (U5), the new provider
+(U6) and sessionless runs (U7). The spec needs to settle U8, the base-class
+contract, and where the delegated token is resolved (C10). It should also
+split the work into three phases: the navigator-auth provider (cross-repo),
+the querysource app-only/url modes, and the querysource delegated mode plus
+scheduler changes.
 
 ### Alternatives
 
@@ -337,12 +421,12 @@ delegated token is resolved (C10).
 | State checkpoints | `sdd/state/FEAT-178/state.json` |
 | Source (raw) | `sdd/state/FEAT-178/source.md` |
 | Research plan | `sdd/state/FEAT-178/research_plan.json` |
-| Findings (digests) | `sdd/state/FEAT-178/findings/F001-*.md` … `F014-*.md` (F012–F014 added after the U5 answer) |
+| Findings (digests) | `sdd/state/FEAT-178/findings/F001-*.md` … `F017-*.md` (F012–F014 after the U5 answer; F015–F017 after U6/U7) |
 | Synthesis (JSON) | `sdd/state/FEAT-178/synthesis.json` |
 
 **Budget consumed** (default profile):
-- Files read: 17 / 40
-- Grep calls: 15 / 25
+- Files read: 26 / 40
+- Grep calls: 22 / 25
 - Git calls: 1 / 10
 - Truncated: **no**
 
