@@ -553,7 +553,9 @@ class MultiQS(BaseQuery):
                         t.start()
                     active.append(t)
                 for t in list(active):
-                    t.join(timeout=timeout)
+                    # Join off the event loop: a blocking t.join() here froze the HTTP loop for the
+                    # whole thread run, serialising every concurrent request on the server.
+                    await asyncio.to_thread(t.join, timeout)
                     if t.is_alive():
                         raise self.Error(
                             message=f"Source {t.slug!r} timed out after {timeout} seconds.",
