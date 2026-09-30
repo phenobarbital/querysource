@@ -2,6 +2,7 @@ from .airtable import AirtableSource
 from .base import ThreadSource
 from .executors import LocalExecutor, QueryExecutor, RemoteConfig, RemoteExecutor
 from .file import FileSource
+from .parquet import ParquetFileSource, ParquetGCSSource, ParquetS3Source
 from .query import ThreadQuery
 from .s3 import S3Source
 from .sharepoint import SharepointSource
@@ -17,6 +18,9 @@ __all__ = [
     "SmartSheetSource",
     "S3Source",
     "TableSource",
+    "ParquetFileSource",
+    "ParquetS3Source",
+    "ParquetGCSSource",
     "SOURCE_REGISTRY",
     "QueryExecutor",
     "LocalExecutor",
@@ -32,4 +36,7 @@ SOURCE_REGISTRY: dict = {
     "SmartSheetSource": SmartSheetSource,
     "S3Source": S3Source,
     "TableSource": TableSource,
+    "ParquetFileSource": ParquetFileSource,
+    "ParquetS3Source": ParquetS3Source,
+    "ParquetGCSSource": ParquetGCSSource,
 }

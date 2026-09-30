@@ -378,7 +378,7 @@ def refresh_sql() -> str:
 ## 5. Acceptance Criteria
 
 - [ ] `cd rust && cargo test --no-default-features` passes (includes `sql_guard` tests).
-- [ ] Extension rebuilt (`maturin develop` from `rust/`) and `python -c "from querysource.qs_parsers import sql_guard"` works.
+- [ ] Extension rebuilt and staged into the worktree's `querysource/qs_parsers/` (`maturin build` + copy, as in `make stage-rust`; never `maturin develop` into the shared venv), and `python -c "from querysource.qs_parsers import sql_guard"` works.
 - [ ] `pytest tests/test_sql_guard.py tests/test_guarded_sql.py tests/test_destination_execute_sql.py tests/test_rust_parsers.py -v` passes.
 - [ ] `querysource/interfaces/guarded_sql.py` imports nothing from `querysource.queries.multi` (reusable by FEAT-157).
 - [ ] Existing destination tests still pass (`tests/test_destination_table.py`, `tests/test_multiqs_destination_dispatch.py`, `tests/test_destinations_documentation_endpoint.py`).

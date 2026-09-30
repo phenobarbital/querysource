@@ -205,10 +205,15 @@ No new tests. This task's safety net is the existing S3 suites above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (seat gpt-5.6-luna, retry after empty delivery on gpt-5.6-terra); lock finalized by orchestrator
+**Date**: 2026-09-30
+**Notes**: Extras and conf settings delivered by the coder. `uv lock` was unsatisfiable because
+`asyncdb[boto3]` pins `aiobotocore==2.15.2` and `aioboto3==13.2.0`. Per human decision (option 2) added
+`[tool.uv] override-dependencies = ["aiobotocore>=2.25,<2.26", "aioboto3>=15"]` in `pyproject.toml`.
+Resolved: aioboto3 15.5.0, aiobotocore 2.25.2, botocore 1.40.70, s3fs 2026.9.0, gcsfs 2026.8.1, fsspec 2026.9.0, pyarrow 25.0.1, asyncdb 2.16.2.
+`uv.lock` was un-ignored and is now tracked (`.gitignore` edit, human-approved).
+S3 regression: `pytest tests/test_source_s3.py tests/test_destination_s3.py` -> 25 passed (run in main checkout against upgraded venv;
+worktree lacks built Cython extensions). `ruff check querysource/conf.py` clean.
+Risk: asyncdb's boto3 path runs on aiobotocore 2.25 despite its 2.15.2 pin (override).
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none
+**Deviations from spec**: added `override-dependencies` to `pyproject.toml` (human-approved) and `.gitignore` un-ignore of `uv.lock`.

@@ -531,10 +531,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented TableDeleteDestination per blueprint; 9 M1 tests pass, ruff clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (fallback sequential)
+**Date**: 2026-09-30
+**Notes**: Pre-existing failures unrelated: tests/test_destinations_documentation_endpoint.py (2 tests, TableOutputAdapter/migrated destinations) fail on base too.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

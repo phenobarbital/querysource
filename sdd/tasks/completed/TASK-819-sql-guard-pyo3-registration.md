@@ -18,10 +18,14 @@ not compiled until `rust/src/lib.rs` declares it. This task registers the pyfunc
 `querysource/qs_parsers/__init__.py`, rebuilds the extension, and pins the Python-visible
 behaviour with `tests/test_sql_guard.py`. TASK-820 imports `sql_guard` from `querysource.qs_parsers`.
 
-This task is **exclusive** (`parallel: false`): it rebuilds the compiled extension, which
-`maturin develop` installs into the shared project `.venv` (currently as the top-level
-`_qs_parsers` package in site-packages). Any concurrently running task would see a
-half-installed or different extension.
+This task is **exclusive** (`parallel: false`), because it rebuilds the compiled extension.
+
+**Do NOT run `maturin develop`** (updated at task review). It installs into the shared project
+`.venv`, which is mounted read-only inside the worker sandbox and is shared by every worktree.
+Build a wheel and **stage the `.so` into this worktree's `querysource/qs_parsers/`** instead.
+`querysource/qs_parsers/__init__.py:12` imports that in-wheel location first, so the worktree's
+own build shadows the stale top-level `_qs_parsers` in the venv. `*.so` and `target/` are
+gitignored (`.gitignore:22`, `:108`), so nothing extra is committed.
 
 ---
 
@@ -29,7 +33,7 @@ half-installed or different extension.
 
 - `rust/src/lib.rs`: add `mod sql_guard;` to the mod list and register `sql_guard::sql_guard` after the SafeDict block.
 - `querysource/qs_parsers/__init__.py`: explicit `sql_guard` re-export in the in-wheel **and** local-dev branches.
-- Rebuild: `cd rust && cargo test --no-default-features` then `.venv/bin/maturin develop --release --manifest-path rust/Cargo.toml` from the repo root.
+- Rebuild: `cd rust && cargo test --no-default-features`, then `/home/juanfran/Documents/navigator/QUERYSOURCE/querysource/.venv/bin/maturin build --release -i python --manifest-path rust/Cargo.toml --out target/wheels` (run from the **worktree** root), then copy the fresh `_qs_parsers*.so` out of the newest `target/wheels/qs_parsers-*.whl` into the worktree's `querysource/qs_parsers/` (same steps as `make stage-rust`, Makefile:74-84, qs_parsers part only).
 - Write `tests/test_sql_guard.py` (spec §4 M2 tests).
 
 **NOT in scope**:
@@ -122,7 +126,7 @@ rust/pyproject.toml     module-name = "querysource.qs_parsers._qs_parsers"; matu
 1. Edit `rust/src/lib.rs` (three insertions below) — *why*: compiles and registers the TASK-818 module.
 2. `cd rust && cargo test --no-default-features` — *why*: full Rust suite incl. `sql_guard::tests` with the real registration.
 3. Edit `querysource/qs_parsers/__init__.py` — *why*: callers import `sql_guard` from the package, not the raw extension.
-4. From the repo root: `.venv/bin/maturin develop --release --manifest-path rust/Cargo.toml`, then the `HAS_RUST` check above — *why*: pytest only sees the rebuilt `.so`.
+4. Stage the extension into the worktree: `/home/juanfran/Documents/navigator/QUERYSOURCE/querysource/.venv/bin/maturin build --release -i python --manifest-path rust/Cargo.toml --out target/wheels` (run from the **worktree** root), then copy the fresh `_qs_parsers*.so` out of the newest `target/wheels/qs_parsers-*.whl` into the worktree's `querysource/qs_parsers/` (same steps as `make stage-rust`, Makefile:74-84, qs_parsers part only). Then run the `HAS_RUST` check above and confirm `querysource.qs_parsers._qs_parsers.__file__` points inside the worktree — *why*: pytest must load this worktree's rebuilt `.so`, not the venv's stale one, and the shared venv is read-only in the sandbox.
 5. Write `tests/test_sql_guard.py`, run the Validation Commands, `ruff check querysource/qs_parsers/__init__.py tests/test_sql_guard.py` — *why*: pins the Python contract FEAT-156/157 rely on.
 
 ### `rust/src/lib.rs` (MODIFY)

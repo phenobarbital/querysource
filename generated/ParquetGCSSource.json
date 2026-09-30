@@ -1,0 +1,25 @@
+{
+  "name": "ParquetGCSSource",
+  "category": "Sources",
+  "description": "Read Parquet from Google Cloud Storage via gcsfs.",
+  "usage": "Token precedence: explicit ``credentials.token`` \u2192 ``GOOGLE_CREDENTIALS_FILE`` \u2192 ``BIGQUERY_CREDENTIALS`` \u2192 ``google_default`` (Application Default Credentials).",
+  "attributes": [
+    {"name": "credentials.bucket", "type": "Any", "default": null, "required": true, "description": ""},
+    {"name": "credentials.project", "type": "Any", "default": null, "required": false, "description": ""},
+    {"name": "credentials.token", "type": "Any", "default": null, "required": false, "description": ""},
+    {"name": "source.directory", "type": "Any", "default": "", "required": false, "description": ""},
+    {"name": "source.file", "type": "Any", "default": "", "required": false, "description": ""}
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "ParquetGCSSource",
+    "properties": {
+      "credentials": {"type": "object", "properties": {"bucket": {}, "project": {}, "token": {}}, "required": ["bucket"]},
+      "source": {"type": "object", "properties": {"directory": {}, "file": {}}}
+    },
+    "required": []
+  },
+  "example": "",
+  "icon": "database"
+}
