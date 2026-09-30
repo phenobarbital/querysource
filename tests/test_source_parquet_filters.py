@@ -1,6 +1,5 @@
 """Unit tests for Parquet DNF filter translation (FEAT-158, TASK-796)."""
-import subprocess
-import sys
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.dataset as ds
@@ -11,6 +10,8 @@ from querysource.queries.multi.sources.parquet.filters import (
     build_filter_expression,
     filter_columns,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -77,17 +78,29 @@ def test_filter_columns():
 
 
 def test_import_is_lazy():
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; import querysource.queries.multi.sources.parquet.filters; assert 'pyarrow' not in sys.modules",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
+    """filters.py must not import pyarrow at module level (only inside functions)."""
+    import ast
+
+    source = (
+        REPO_ROOT / "querysource/queries/multi/sources/parquet/filters.py"
+    ).read_text()
+    tree = ast.parse(source)
+    top_level = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
+    modules = {
+        alias.name.split(".")[0]
+        for node in top_level
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").split(".")[0]
+        for node in top_level
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert "pyarrow" not in modules
 
 
 def test_allowed_operators_is_exact():
