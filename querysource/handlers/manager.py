@@ -169,9 +169,9 @@ class QueryManager(QueryView):
             }
         merged: dict[str, Any] = dict(stored)
         for key in ("provider", "query_raw"):
-            if key in data:
+            if data.get(key) is not None:  # None = "keep stored" on upsert; over-gates on patch
                 merged[key] = data[key]
-        if "attributes" in data:
+        if data.get("attributes") is not None:
             incoming = data["attributes"]
             if isinstance(incoming, str):
                 try:

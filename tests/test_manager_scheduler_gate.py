@@ -153,3 +153,15 @@ async def test_manager_gate_patch_unscheduled_write_multi_not_gated(monkeypatch)
     assert response.status == 200
     assert repo.calls[0][0] == "patch"
     pbac.assert_not_awaited()
+
+
+@pytest.mark.parametrize("verb", ["put", "patch"])
+async def test_manager_gate_null_attributes_does_not_bypass(verb, monkeypatch):
+    deny = AsyncMock(side_effect=web.HTTPNotFound())
+    monkeypatch.setattr(_PBAC, deny)
+    repo = _Repo(stored={"provider": "db", "query_raw": "SELECT 1", "attributes": {"scheduler": SCHEDULE}})
+    payload = {"query_slug": "s1", "provider": "multi", "attributes": None, "query_raw": WRITE_RAW}
+    manager = _manager(repo, json_data=payload, match_info={"slug": "s1"})
+    with pytest.raises(web.HTTPNotFound):
+        await getattr(manager, verb)()
+    assert repo.calls == []
