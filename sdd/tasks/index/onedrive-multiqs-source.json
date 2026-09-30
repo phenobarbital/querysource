@@ -247,7 +247,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -258,8 +258,9 @@
       "parallelism_notes": "Exclusive: edits pyproject.toml + uv.lock and regenerates generated/. TASK-807: imports OneDriveSource (sources/onedrive.py); TASK-810: same file docs/PER_TENANT_QUERIES.md.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-813-onedrive-registration.md"
+      "completed_at": "2026-09-30T15:47:11+00:00",
+      "file": "sdd/tasks/completed/TASK-813-onedrive-registration.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-814",
