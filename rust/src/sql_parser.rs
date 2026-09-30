@@ -190,6 +190,15 @@ fn find_first_keyword_at_depth(
         .min()
 }
 
+/// Step back over the `{` of a `{limit}` / `{offset}` placeholder so a clause
+/// inserted at `pos` lands before the placeholder, not inside its braces.
+fn before_placeholder_brace(sql: &str, pos: usize) -> usize {
+    if pos > 0 && sql.as_bytes()[pos - 1] == b'{' {
+        pos - 1
+    } else {
+        pos
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Individual SQL clause builders
@@ -413,8 +422,19 @@ pub fn group_by(sql: &str, grouping: Vec<String>) -> String {
             sql[end_pos..].trim_start()
         ).trim().to_string()
     } else {
+        // No outer GROUP BY yet: it must precede an outer ORDER BY / LIMIT / OFFSET
+        // (e.g. hard-coded in a slug's query_raw), never follow it.
         let group = grouping.join(", ");
-        format!("{sql} GROUP BY {group}")
+        match find_first_keyword_at_depth(sql, &["ORDER BY", "LIMIT", "OFFSET"], 0)
+            .map(|p| before_placeholder_brace(sql, p))
+        {
+            Some(pos) => format!(
+                "{} GROUP BY {group} {}",
+                sql[..pos].trim_end(),
+                sql[pos..].trim_start()
+            ),
+            None => format!("{sql} GROUP BY {group}"),
+        }
     }
 }
 
@@ -428,7 +448,27 @@ pub fn order_by(sql: &str, ordering: Vec<String>) -> String {
         return sql.to_string();
     }
     let order = ordering.join(", ");
-    format!("{sql} ORDER BY {order}")
+    // An outer ORDER BY already in the query (e.g. hard-coded in a slug's
+    // query_raw) is extended with the requested columns as tie-breakers;
+    // appending a second ORDER BY is a syntax error. ORDER BY nested in a
+    // subquery, CTE or window (OVER (...)) sits at depth > 0 and is ignored.
+    if let Some(ob_pos) = find_keyword_at_depth(sql, "ORDER BY", 0) {
+        let after_ob = ob_pos + 8; // len("ORDER BY")
+        let end_pos =
+            find_first_keyword_at_depth(&sql[after_ob..], &["LIMIT", "OFFSET", "FETCH", "FOR"], 0)
+                .map(|p| after_ob + p)
+                .map(|p| before_placeholder_brace(sql, p))
+                .unwrap_or(sql.len());
+        let head = sql[..end_pos].trim_end();
+        let tail = sql[end_pos..].trim_start();
+        if tail.is_empty() {
+            format!("{head}, {order}")
+        } else {
+            format!("{head}, {order} {tail}")
+        }
+    } else {
+        format!("{sql} ORDER BY {order}")
+    }
 }
 
 /// Build LIMIT/OFFSET clause.
@@ -749,6 +789,51 @@ mod tests {
         let result =
             order_by("SELECT * FROM t", vec!["col1 ASC".to_string()]);
         assert_eq!(result, "SELECT * FROM t ORDER BY col1 ASC");
+    }
+
+    #[test]
+    fn test_order_by_extends_existing_outer_order_by() {
+        let sql = "SELECT a FROM t  ORDER BY CASE WHEN f THEN 0 ELSE 1 END";
+        assert_eq!(
+            order_by(sql, vec!["a".to_string()]),
+            "SELECT a FROM t  ORDER BY CASE WHEN f THEN 0 ELSE 1 END, a"
+        );
+    }
+
+    #[test]
+    fn test_order_by_extends_before_limit_placeholder() {
+        let sql = "SELECT a FROM t ORDER BY b DESC {limit}";
+        assert_eq!(
+            order_by(sql, vec!["a".to_string()]),
+            "SELECT a FROM t ORDER BY b DESC, a {limit}"
+        );
+        let sql = "SELECT a FROM t ORDER BY b LIMIT 5 OFFSET 2";
+        assert_eq!(
+            order_by(sql, vec!["a".to_string()]),
+            "SELECT a FROM t ORDER BY b, a LIMIT 5 OFFSET 2"
+        );
+    }
+
+    #[test]
+    fn test_order_by_ignores_nested_order_by() {
+        let sql = "SELECT a, row_number() OVER (ORDER BY b) FROM (SELECT * FROM t ORDER BY c) s";
+        assert_eq!(
+            order_by(sql, vec!["a".to_string()]),
+            format!("{sql} ORDER BY a")
+        );
+    }
+
+    #[test]
+    fn test_group_by_inserted_before_outer_order_by() {
+        let sql = "SELECT a, count(*) FROM t ORDER BY a";
+        assert_eq!(
+            group_by(sql, vec!["a".to_string()]),
+            "SELECT a, count(*) FROM t GROUP BY a ORDER BY a"
+        );
+        assert_eq!(
+            group_by("SELECT a, count(*) FROM t {limit}", vec!["a".to_string()]),
+            "SELECT a, count(*) FROM t GROUP BY a {limit}"
+        );
     }
 
     #[test]

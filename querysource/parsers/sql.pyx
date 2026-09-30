@@ -283,9 +283,17 @@ cdef class SQLParser(AbstractParser):
                 ).strip()
             else:
                 if isinstance(self.grouping, str):
-                    sql = f"{sql} GROUP BY {self.grouping}"
+                    group = self.grouping
                 else:
                     group = ', '.join(self.grouping)
+                # No outer GROUP BY yet: it must precede an outer ORDER BY /
+                # LIMIT / OFFSET (e.g. hard-coded in a slug's query_raw).
+                end_pos = _find_first_kw_at_depth(sql, ("ORDER BY", "LIMIT", "OFFSET"), 0)
+                if end_pos > 0 and sql[end_pos - 1] == '{':
+                    end_pos -= 1  # a `{limit}` / `{offset}` placeholder: stop before its brace
+                if end_pos != -1:
+                    sql = f"{sql[:end_pos].rstrip()} GROUP BY {group} {sql[end_pos:].lstrip()}"
+                else:
                     sql = f"{sql} GROUP BY {group}"
         return sql
 
@@ -297,13 +305,30 @@ cdef class SQLParser(AbstractParser):
             else:
                 return _rs.order_by(sql, [self.ordering])
         # --- Cython fallback ---
-        _sql = "{sql} ORDER BY {order}"
-        if isinstance(self.ordering, list) and len(self.ordering) > 0:
+        cdef Py_ssize_t ob_pos
+        cdef Py_ssize_t after_ob
+        cdef Py_ssize_t end_pos
+        if isinstance(self.ordering, list):
+            if not self.ordering:
+                return sql
             order = ', '.join(self.ordering)
-            sql = _sql.format_map(SafeDict(sql=sql, order=order))
         else:
-            sql = _sql.format_map(SafeDict(sql=sql, order=self.ordering))
-        return sql
+            order = self.ordering
+        # An outer ORDER BY already in the query (e.g. hard-coded in a slug's
+        # query_raw) is extended with the requested columns as tie-breakers;
+        # appending a second ORDER BY is a syntax error. ORDER BY nested in a
+        # subquery, CTE or window (OVER (...)) sits at depth > 0 and is ignored.
+        ob_pos = _find_kw_at_depth(sql, "ORDER BY", 0)
+        if ob_pos == -1:
+            return f"{sql} ORDER BY {order}"
+        after_ob = ob_pos + 8  # len("ORDER BY")
+        end_pos = _find_first_kw_at_depth(sql[after_ob:], ("LIMIT", "OFFSET", "FETCH", "FOR"), 0)
+        end_pos = after_ob + end_pos if end_pos != -1 else len(sql)
+        if 0 < end_pos < len(sql) and sql[end_pos - 1] == '{':
+            end_pos -= 1  # a `{limit}` / `{offset}` placeholder: stop before its brace
+        head = sql[:end_pos].rstrip()
+        tail = sql[end_pos:].lstrip()
+        return f"{head}, {order} {tail}" if tail else f"{head}, {order}"
 
     async def limiting(self, sql: str, limit: Union[str, int] = None, offset: Union[str, int] = None):
         # Rust fast path
