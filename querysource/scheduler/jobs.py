@@ -107,6 +107,8 @@ async def scheduled_multiqs_job(
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
+    run_as_user_id: int | None = None,
+    identity_auth: Any = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and preserve it through all pipeline children.
@@ -136,12 +138,23 @@ async def scheduled_multiqs_job(
         job_id: The job's own real registered scheduler id — see
             ``scheduled_query_job``'s docstring for why this must not be
             re-guessed as the legacy ``multi_<slug>`` shape.
+        run_as_user_id: Stored user id for sessionless delegated sources.
+        identity_auth: Auth handler used to resolve the delegated identity.
         **kwargs: Additional keyword arguments (ignored).
     """
     try:
         from querysource.queries import MultiQS
         tenant = owner.get("schema") if owner is not None else None
-        qs = MultiQS(slug=slug, tenant=tenant)
+        if run_as_user_id is not None:
+            from querysource.auth.identity_tokens import SourceIdentityContext
+
+            qs = MultiQS(
+                slug=slug,
+                tenant=tenant,
+                identity_context=SourceIdentityContext.for_scheduler(run_as_user_id, identity_auth),
+            )
+        else:
+            qs = MultiQS(slug=slug, tenant=tenant)
         if owner is not None:
             await _revalidate_owner(qs, owner, slug)
         await qs.query()
