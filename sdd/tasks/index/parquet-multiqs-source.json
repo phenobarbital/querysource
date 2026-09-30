@@ -16,14 +16,14 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Exclusive: edits pyproject.toml and regenerates uv.lock (aioboto3/aiobotocore/botocore upgrade), and installs extras into the shared venv.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-795-parquet-deps-and-settings.md"
     },
@@ -34,14 +34,14 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No dependencies: a pure module over pyarrow.compute (already importable). Creates the parquet/ subpackage marker.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-796-parquet-dnf-filters.md"
     },
@@ -52,7 +52,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,7 +62,7 @@
       "parallel": true,
       "parallelism_notes": "Imports build_filter_expression/filter_columns from TASK-796 (parquet/filters.py); reads conf.MULTIQS_PARQUET_MAX_ROWS/MAX_BYTES created by TASK-795 (querysource/conf.py).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-797-parquet-source-base.md"
     },
@@ -73,7 +73,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -82,7 +82,7 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-798-parquet-file-source.md"
     },
@@ -93,7 +93,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -103,7 +103,7 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py); needs s3fs installed by TASK-795 (uv.lock).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-799-parquet-s3-source.md"
     },
@@ -114,7 +114,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -124,7 +124,7 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py); needs gcsfs installed by TASK-795 (uv.lock).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-800-parquet-gcs-source.md"
     },
@@ -135,7 +135,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -146,7 +146,7 @@
       "parallel": false,
       "parallelism_notes": "Imports ParquetFileSource (TASK-798, parquet/local.py), ParquetS3Source (TASK-799, parquet/s3.py), ParquetGCSSource (TASK-800, parquet/gcs.py); modifies parquet/__init__.py created by TASK-796. Exclusive: runs generate-multiquery-docs, which rewrites shared generated/*.json.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:09:41+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-801-parquet-registry-schemas.md"
     }
