@@ -13,6 +13,8 @@ try:
     from . import _qs_parsers
     # Explicit re-export for context-aware validating substitution (FEAT-103)
     from ._qs_parsers import safe_format_map_validated  # noqa: F401
+    # Explicit re-export for the ExecuteSQL statement guard (FEAT-156)
+    from ._qs_parsers import sql_guard  # noqa: F401
     HAS_RUST = True
 except ImportError:
     try:
@@ -21,6 +23,8 @@ except ImportError:
         import _qs_parsers
         # Explicit re-export for context-aware validating substitution (FEAT-103)
         from _qs_parsers import safe_format_map_validated  # noqa: F401
+        # Explicit re-export for the ExecuteSQL statement guard (FEAT-156)
+        from _qs_parsers import sql_guard  # noqa: F401
         HAS_RUST = True
     except ImportError:
         HAS_RUST = False
