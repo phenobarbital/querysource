@@ -210,8 +210,8 @@ A MultiQS definition lists one or more Parquet sources under `sources:`:
   that can be an SA JSON path or navconfig variable, `google_default`, `anon` or a dict. It defaults to
   navconfig `GOOGLE_CREDENTIALS_FILE`, which wins over `BIGQUERY_CREDENTIALS`, then ADC. It also accepts
   `storage_options`, and `source.directory`/`file` as for S3.
-- **Common read options**: `columns: [...]`, `filters: [[col, op, value], ...]` (DNF, with
-  operators from an allowlist), `partitioning: hive | null`, optional `recursive`, and
+- **Common read options**: `columns: [...]`, `filters: [[col, op, value], ...]` (DNF lists only: a flat list is AND, a list of lists is OR of ANDs; operators
+  come from an allowlist), `partitioning: hive | null`, optional `recursive`, and
   `max_rows` / `max_bytes` to override the hard size limit.
 
 Each source puts one pandas DataFrame on the MultiQS queue under its auto-assigned name
@@ -265,7 +265,7 @@ Each source puts one pandas DataFrame on the MultiQS queue under its auto-assign
 |---|---|---|
 | `querysource/queries/multi/sources/` (new `parquet.py`) | extends | New base + 3 subclasses |
 | `querysource/queries/multi/sources/__init__.py` | modifies | `SOURCE_REGISTRY` + `__all__` |
-| `pyproject.toml` / `uv.lock` | modifies | New extras (e.g. `parquet` = pyarrow+fsspec, `s3` += s3fs, `gcs` = gcsfs). Upgrades aioboto3/aiobotocore/botocore |
+| `pyproject.toml` / `uv.lock` | modifies | New extras: `parquet` = pyarrow+fsspec, `s3` += s3fs (aioboto3>=15), `gcs` = gcsfs, `parquet-all` bundle. Upgrades aioboto3/aiobotocore/botocore |
 | `S3Source`, `ToS3`, `async-notify` | depends on | Must be re-tested after the AWS stack upgrade. Migrating `S3Source` to s3fs is a follow-up feature, not in scope here |
 | `generated/*.json` | extends | `ParquetFileSource.json`, `ParquetS3Source.json`, `ParquetGCSSource.json` via `generate-multiquery-docs` |
 | `tests/` | extends | `test_source_parquet.py`; `test_source_registry.py` updated |
@@ -372,8 +372,8 @@ import fsspec                                         # verified in .venv (2026.
 - [x] Async level — *Owner: Jesus Lara*: running off the loop via asyncio.to_thread is enough
 - [x] Auth extras — *Owner: Jesus Lara*: S3-compatible endpoints, storage_options passthrough, AWS profile/anon, GCS token variants
 - [x] v1 read features — *Owner: Jesus Lara*: column projection, row filters, dirs/partitioned datasets, masks in path
-- [ ] Extras layout: one `parquet` extra (pyarrow+fsspec) plus `s3` += s3fs and a new `gcs` = gcsfs, or a single `parquet-cloud` extra? — *Owner: tbd*
+- [x] Extras layout — *Owner: Jesus Lara*: one extra per backend plus a bundle: `parquet = ["pyarrow>=25", "fsspec>=2026.7"]`, `s3 = ["aioboto3>=15", "s3fs>=2026.9"]`, `gcs = ["gcsfs>=2026.8"]`, `parquet-all = ["querysource[parquet,s3,gcs]"]`
 - [x] GCS default credential precedence — *Owner: Jesus Lara*: `GOOGLE_CREDENTIALS_FILE` wins over `BIGQUERY_CREDENTIALS` (then ADC)
-- [ ] Filter syntax in YAML: DNF lists only, or also a restricted string grammar? — *Owner: tbd*
+- [x] Filter syntax in YAML — *Owner: Jesus Lara*: DNF lists only. A list of `[col, op, value]` means AND, and a list of such lists means OR of ANDs. Operators come from an allowlist, and there's no string grammar or mapping shorthand.
 - [x] Memory guard — *Owner: Jesus Lara*: a hard limit. Reading stops with an error when it's exceeded, rather than only logging a warning.
 - [x] Consolidate `S3Source` onto s3fs as the single S3 client? — *Owner: Jesus Lara*: yes, as a **follow-up feature**, not in FEAT-177 v1
