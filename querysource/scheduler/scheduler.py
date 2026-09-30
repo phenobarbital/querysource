@@ -19,7 +19,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from urllib.parse import quote
 
 from aiohttp import web
@@ -37,6 +37,7 @@ from querysource.conf import (
     QS_SCHEDULER_TIMEZONE,
 )
 from querysource.repositories import DefinitionRepository
+from querysource.repositories.definitions import RUN_AS_COLUMN
 from querysource.scheduler.jobs import (
     cache_refresh_job,
     scheduled_multiqs_job,
@@ -356,6 +357,8 @@ class QSScheduler:
                     # "qsj2-..." id, not the legacy "multi_<slug>" shape a
                     # notify() callback would otherwise have to guess.
                     "job_id": job_id,
+                    "run_as_user_id": row.get(RUN_AS_COLUMN),
+                    "identity_auth": getattr(self, "_auth", None),
                 },
             )
             self.logger.info("Registered scheduled multi-query job: %s", job_id)
@@ -553,7 +556,26 @@ class QSScheduler:
             "provider": getattr(runtime, "provider", None),
             "is_cached": getattr(runtime, "is_cached", False),
             "query_raw": getattr(runtime, "query_raw", None),
+            RUN_AS_COLUMN: await self._run_as_for(identity),
         }
+
+    async def _run_as_for(self, identity: Any) -> int | None:
+        """Return the stored run-as user when repository support is available.
+
+        Args:
+            identity: Query identity used to resolve the stored user.
+
+        Returns:
+            The stored user id, or None if it cannot be read.
+        """
+        getter = getattr(self._repository, "get_run_as", None)
+        if getter is None:
+            return None
+        try:
+            return await getter(identity)
+        except Exception as exc:  # noqa: BLE001 - an optional column must not block sync.
+            self.logger.warning("QSScheduler: could not resolve run-as user: %s", exc)
+            return None
 
     def remove_job(self, job_id: str) -> bool:
         """Remove a single job from the live scheduler.
@@ -682,6 +704,8 @@ class QSScheduler:
 
         self._registry = app.get("qs_tenant_registry") or TenantRegistry()
         self._repository = app.get("qs_definition_repository")
+        # FEAT-159: auth handler for sessionless delegated identities in scheduled multi jobs.
+        self._auth = app.get("auth")
         if self._repository is None:
             self.logger.error(
                 "QSScheduler: qs_definition_repository is not published on "

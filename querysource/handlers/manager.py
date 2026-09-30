@@ -16,9 +16,11 @@ from aiohttp import web
 from asyncdb.exceptions import NoDataFound
 from datamodel.exceptions import ValidationError
 from navconfig.logging import logging
+from navigator_session import get_session
 from pydantic import ValidationError as PydanticValidationError
 
 from ..auth import ResourceType
+from ..auth.identity_tokens import user_id_from_session
 from ..auth.request_gate import enforce_request_pbac
 from ..models import QueryModel
 from ..queries.multi import definition_requires_scheduler_grant
@@ -44,6 +46,27 @@ _SCHEDULER_GATE_KEYS: tuple[str, str, str] = ("provider", "query_raw", "attribut
 
 class QueryManager(QueryView):
     _model: QueryModel = None
+
+    async def _run_as_context(self) -> tuple[int | None, dict]:
+        """Return the numeric session user id and minimal request info.
+
+        Used for run-as auditing. If no session is available the actor is
+        ``None``; a schedule change is then refused by the repository (fail closed).
+
+        Returns:
+            Tuple of (numeric user id or None, {"method", "path", "remote"}).
+        """
+        info = {
+            "method": self.request.method,
+            "path": self.request.path,
+            "remote": self.request.remote,
+        }
+        try:
+            session = await get_session(self.request, new=False)
+        except Exception as exc:  # noqa: BLE001 - session system may be absent
+            logging.getLogger(__name__).warning("Run-as actor lookup failed (%s); treating as no session", exc)
+            return None, info
+        return user_id_from_session(session), info
 
     # Default projection for the list branch when the caller does
     # not supply ``?fields=``. The single-slug / :meta / :insert
@@ -535,7 +558,10 @@ class QueryManager(QueryView):
             try:
                 identity = QueryIdentity(store=store, slug=query_slug)
                 await self._enforce_scheduler_grant(repo, identity, data)
-                result = await repo.patch(identity, data)
+                actor, info = await self._run_as_context()
+                result = await repo.patch(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)
@@ -793,7 +819,10 @@ class QueryManager(QueryView):
             try:
                 identity = QueryIdentity(store=store, slug=data['query_slug'])
                 await self._enforce_scheduler_grant(repo, identity, data)
-                result, is_created = await repo.upsert(identity, data)
+                actor, info = await self._run_as_context()
+                result, is_created = await repo.upsert(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)
@@ -912,7 +941,10 @@ class QueryManager(QueryView):
             try:
                 identity = QueryIdentity(store=store, slug=slug['query_slug'])
                 await self._enforce_scheduler_grant(repo, identity, data)
-                result, is_created = await repo.upsert(identity, data)
+                actor, info = await self._run_as_context()
+                result, is_created = await repo.upsert(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)

@@ -266,10 +266,9 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Registered `ExecuteSQL` in DESTINATION_REGISTRY (after TableDelete block), extended WRITE_DESTINATIONS to {"TableDelete","ExecuteSQL"}, added registry + preflight allow/deny tests. 85 tests pass across the feature's destination/guard/gate/HTTP-gate/principal suites; ruff clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none (added the FILL IN denied test; FEAT-155 gate passes args positionally so `call.args[1:4]` assertion kept)

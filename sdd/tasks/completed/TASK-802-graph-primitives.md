@@ -253,4 +253,4 @@ async def test_static_token_credential_unknown_expiry_and_close():
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Attempts: 1 · Duration: 155s. Implemented graph.py (kiota patch + StaticTokenCredential). Merge-tier validation 17 passed. No fix commits (review: coder-review:95520c36b9498924231e5779).

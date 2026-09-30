@@ -229,4 +229,4 @@ async def test_unmigrated_store_still_commits():
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet (native) · Attempts: 1. Transactional run-as audit. Deviations: lowercase 'for update'; getattr for transaction/commit/rollback to keep existing mock-based tests passing. Merge-tier: 33 passed.

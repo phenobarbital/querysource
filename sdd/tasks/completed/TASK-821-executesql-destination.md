@@ -310,8 +310,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Created ExecuteSQLDestination with full _catalog and tests (11 pass). 3 failures in test_destinations_documentation_endpoint (2) and test_destination_table (1) are pre-existing: verified identical failures with execute_sql.py removed.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

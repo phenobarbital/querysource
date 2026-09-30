@@ -7,6 +7,7 @@ from aiohttp import web
 from pandas import DataFrame
 
 from ..auth import ResourceType
+from ..auth.identity_tokens import DelegatedIdentityError, SourceIdentityContext
 from ..conf import CSV_DEFAULT_DELIMITER, CSV_DEFAULT_QUOTING
 from ..exceptions import (
     DataNotFound,
@@ -515,6 +516,7 @@ class QueryHandler(AbstractHandler):
             query=options,
             conditions=data,
             user_session=_user_session,
+            identity_context=SourceIdentityContext.from_request(request, _user_session),
             tenant=_tenant,
             definition=request.get('qs_definition'),
         )
@@ -542,6 +544,13 @@ class QueryHandler(AbstractHandler):
                 message=str(dnf),
                 headers=_err_headers,
             )
+        except DelegatedIdentityError as die:
+            raise self.Error(
+                message=str(die),
+                exception=die,
+                code=409,
+                detail={"provider": die.provider, "reason": die.reason, "link": die.link_url},
+            ) from die
         except SlugNotFound as snf:
             raise self.Error(
                 message="Slug Not Found",

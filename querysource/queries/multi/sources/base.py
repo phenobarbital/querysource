@@ -2,13 +2,16 @@ import asyncio
 import logging
 import threading
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from aiohttp import web
 from asyncdb.exceptions import NoDataFound
 
 from ....exceptions import DataNotFound
+
+if TYPE_CHECKING:
+    from ....auth.identity_tokens import SourceIdentityContext
 
 
 class ThreadSource(threading.Thread, ABC):
@@ -128,6 +131,17 @@ class ThreadSource(threading.Thread, ABC):
             Any exception that occurs during data retrieval.  The exception
             will be captured in ``self.exc`` by ``run()``.
         """
+
+    async def prepare(self, context: "SourceIdentityContext | None") -> None:
+        """Resolve caller-loop-bound credentials before the thread starts.
+
+        Called by MultiQS on the request or scheduler event loop, never from
+        ``run()``. The default implementation keeps existing sources as-is.
+
+        Args:
+            context: Optional identity context supplied by the caller.
+        """
+        return None
 
     def run(self) -> None:
         """Thread entry point.
