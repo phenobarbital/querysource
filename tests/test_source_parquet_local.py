@@ -84,3 +84,15 @@ async def test_recursive_false_ignores_subdirs(tmp_path, frame):
     df = await _make({"source": {"path": str(tmp_path)}, "recursive": False}).fetch()
 
     pd.testing.assert_frame_equal(df, frame)
+
+
+async def test_hive_glob_keeps_partition_column(tmp_path, frame):
+    for part in ("dt=20260101", "dt=20260102"):
+        (tmp_path / part).mkdir()
+        frame.to_parquet(tmp_path / part / "p.parquet", index=False)
+
+    df = await _make(
+        {"source": {"path": str(tmp_path / "dt=2026*" / "*.parquet")}, "partitioning": "hive"}
+    ).fetch()
+
+    assert "dt" in df.columns

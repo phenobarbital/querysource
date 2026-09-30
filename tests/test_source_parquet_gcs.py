@@ -119,3 +119,9 @@ async def test_read_via_memory_fs(sa_files):
     with patch("gcsfs.GCSFileSystem", return_value=memfs):
         result = await source.fetch()
     pd.testing.assert_frame_equal(result.reset_index(drop=True), frame)
+
+
+def test_gcs_secrets_include_inline_token():
+    inline = '{"private_key": "TOPSECRETKEY"}'
+    src = _make({"credentials": {"bucket": "b", "token": inline}})
+    assert src._secrets() == [inline]

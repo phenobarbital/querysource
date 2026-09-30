@@ -54,7 +54,12 @@ class ParquetSource(ThreadSource):
                 raise ValueError(f"{type(self).__name__}: {field} must be a positive integer")
         if not isinstance(self._storage_options, dict):
             raise ValueError(f"{type(self).__name__}: storage_options must be a dict")
-        build_filter_expression(self._filters)
+        try:
+            build_filter_expression(self._filters)
+        except ImportError as exc:
+            raise ImportError(
+                "Install the parquet extra for Parquet sources: pip install querysource[parquet]"
+            ) from exc
 
     @staticmethod
     def _is_unresolved(value: object) -> bool:
@@ -92,7 +97,8 @@ class ParquetSource(ThreadSource):
             sources = sorted(item for item in fs.glob(path) if item.endswith(".parquet"))
             first_glob = min(path.index(character) for character in _GLOB_CHARS if character in path)
             static_prefix = path[:first_glob]
-            partition_base_dir = static_prefix.rstrip("/") or None
+            partition_base_dir = static_prefix.rsplit("/", 1)[0] if "/" in static_prefix else None
+            partition_base_dir = partition_base_dir or None
         elif fs.isdir(path):
             if self._recursive:
                 sources = path
@@ -147,8 +153,11 @@ class ParquetSource(ThreadSource):
             ) from exc
         try:
             return await asyncio.to_thread(self._read)
-        except (DataNotFound, ValueError, ImportError):
+        except (DataNotFound, ImportError):
             raise
+        except ValueError as exc:
+            # ArrowInvalid subclasses ValueError, so backend messages must be redacted too.
+            raise ValueError(self._redact(str(exc))) from None
         except Exception as exc:  # noqa: BLE001
             message = self._redact(f"{type(exc).__name__}: {exc}")
             raise RuntimeError(f"{type(self).__name__} {self._name!r} read failed: {message}") from None

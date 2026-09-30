@@ -40,6 +40,13 @@ class ParquetGCSSource(ParquetSource):
         if not self._bucket or self._is_unresolved(self._bucket):
             raise ValueError("ParquetGCSSource: 'credentials.bucket' is required.")
 
+    def _secrets(self) -> list[str]:
+        """Redact string token values and service-account private keys from errors."""
+        token = self._token
+        if isinstance(token, dict):
+            return [str(token[key]) for key in ("private_key", "private_key_id") if token.get(key)]
+        return [token] if isinstance(token, str) and token else []
+
     def _resolve_token(self) -> str | dict:
         """Resolve the gcsfs token by the fixed precedence.
 
@@ -67,9 +74,10 @@ class ParquetGCSSource(ParquetSource):
                 if resolved in _TOKEN_KEYWORDS:
                     return resolved
                 if not Path(str(resolved)).is_file():
-                    raise ValueError(
-                        f"ParquetGCSSource: credentials file not found: {resolved}"
-                    )
+                    shown = str(resolved)
+                    if shown.lstrip().startswith(("{", "-----")):
+                        shown = "<inline credential>"
+                    raise ValueError(f"ParquetGCSSource: credentials file not found: {shown}")
                 return str(resolved)
         for candidate in (conf.GOOGLE_CREDENTIALS_FILE, conf.BIGQUERY_CREDENTIALS):
             if candidate and Path(candidate).is_file():
