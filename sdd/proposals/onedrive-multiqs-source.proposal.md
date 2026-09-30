@@ -4,7 +4,7 @@ title: OneDriveSource for MultiQS — download a CSV/Excel file from OneDrive (B
 slug: onedrive-multiqs-source
 type: feature
 mode: enrichment
-status: discussion
+status: review
 source:
   kind: inline
   jira_key: null
@@ -66,8 +66,9 @@ instead of building a new token flow. querysource does not enable the
 existing `azure` provider, and that provider is the corporate SSO login, so
 a new link-only **`onedrive` identity provider** is added to navigator-auth
 (cross-repo work). Scheduled runs have no session. They read the tokens from
-`auth.user_identities` for the user who registered the job, whose
-`user_id` is saved with the slug's scheduler definition.
+`auth.user_identities` for the user who registered the job. That
+`user_id` is saved in a dedicated `scheduler_run_as_user_id` column, and
+every change to it is recorded in an append-only audit table.
 
 ---
 
@@ -100,6 +101,9 @@ a new link-only **`onedrive` identity provider** is added to navigator-auth
 | 21 | `querysource/scheduler/jobs.py` | `scheduled_multiqs_job` | 104-158 | sessionless MultiQS run; must receive `run_as_user_id` | F017 |
 | 22 | `querysource/scheduler/scheduler.py` | `QSScheduler` add_job / `register_slug` | 330-360, 586 | job kwargs rebuilt from DB rows | F017 |
 | 23 | `querysource/handlers/scheduler.py` | `SchedulerJobsView.post` | 208-260 | authenticated registration point that captures the registrant | F017 |
+| 24 | `docs/PER_TENANT_QUERIES.md` | Provisional DDL gate / legacy migration | 35-75 | where the new column + audit DDL is documented (FEAT-151 precedent) | F018 |
+| 25 | `querysource/models.py` | `QueryModel` (`dwh_scheduler`, `created_by`) | 93-106 | model gains `scheduler_run_as_user_id` | F017, F018 |
+| 26 | `querysource/scheduler/scheduler.py` | `attributes.get("scheduler")` loader | 295-301 | startup loader must also read the run-as column | F018 |
 
 ### 2.2 Constraints Discovered
 
@@ -243,10 +247,33 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
   `/link/onedrive` pages. No new UI in querysource, except linking to them
   from the error and the docs.
 - **Scheduler `run_as_user_id`**: `SchedulerJobsView.post` records the
-  authenticated registrant's `user_id`. It is persisted with the slug's
-  scheduler definition (U8 decides exactly where), reloaded at startup, and
-  passed `QSScheduler` → `scheduled_multiqs_job` → `MultiQS` →
-  `OneDriveSource`.
+  authenticated registrant's `user_id` in the new column (below). It is
+  reloaded at startup and passed `QSScheduler` → `scheduled_multiqs_job` →
+  `MultiQS` → `OneDriveSource`.
+- **Dedicated column and audit trail (U8)**, shipped as documented DDL in
+  `docs/PER_TENANT_QUERIES.md`, following the FEAT-151 pattern:
+  ```sql
+  ALTER TABLE "{schema}".queries
+      ADD COLUMN IF NOT EXISTS scheduler_run_as_user_id INTEGER;
+  CREATE TABLE IF NOT EXISTS "{schema}".queries_run_as_audit (
+      audit_id      BIGSERIAL PRIMARY KEY,
+      query_slug    VARCHAR NOT NULL,
+      old_user_id   INTEGER,
+      new_user_id   INTEGER,
+      operation     VARCHAR NOT NULL,        -- set | change | clear
+      changed_by    INTEGER NOT NULL,        -- session user who made the change
+      changed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      request_info  JSONB                    -- from LoggingService.request_info
+  );
+  ```
+  - The code tolerates un-migrated stores: a missing column reads as
+    `NULL`, and a job with no run-as user fails delegated sources with a
+    clear message instead of crashing the loader.
+  - Every write of the column appends an audit row in the **same
+    transaction**. The table is append-only (the grant gives INSERT and
+    SELECT only).
+  - The same DDL goes into the "Provisional DDL gate" for new tenant stores.
+  - The final table and column names are for the spec to confirm.
 - **Credentials**: `ONEDRIVE_APP_ID`, `ONEDRIVE_APP_SECRET` and
   `ONEDRIVE_TENANT_ID`, each falling back to its `SHAREPOINT_*` counterpart
   when unset (app-only mode). Delegated mode needs no source-level secrets,
@@ -271,6 +298,9 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
   ships `identity` and `vault`. *Evidence*: F008, F014
 - **`settings/settings.py`**::`AUTHENTICATION_BACKENDS`: add the
   `onedrive` provider. *Evidence*: F015
+- **`querysource/models.py`**::`QueryModel`: add
+  `scheduler_run_as_user_id: int` (optional). **`docs/PER_TENANT_QUERIES.md`**:
+  add the ALTER, audit table DDL and grants. *Evidence*: F018
 - **`querysource/handlers/scheduler.py`**::`SchedulerJobsView.post`,
   **`querysource/scheduler/scheduler.py`** (add_job multi path, startup
   loader) and **`querysource/scheduler/jobs.py`**::`scheduled_multiqs_job`:
@@ -320,6 +350,14 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
   a request body or a definition, a user could read someone else's
   OneDrive. Mitigation: set it only from the authenticated session at
   registration, and audit-log it. *Evidence*: F017
+- **Schema rollout across tenant stores.** The column and audit table must
+  be added to `public.queries` and to every tenant schema, and the repo
+  holds no migrations for these tables. Mitigation: follow FEAT-151 (deploy
+  the code first, tolerate the missing column, document the ALTER, and add
+  both to the DDL gate). *Evidence*: F018
+- **Silent run-as changes.** Mitigation: the audit row is written in the
+  same transaction as the column update, and the audit table is
+  append-only. *Evidence*: F018
 - **Revoked or expired link in scheduled runs.** A refresh failure makes
   the job fail. Mitigation: a clear "re-link at /link/onedrive" error sent
   through the existing `notification_manager`. *Evidence*: F013, F017
@@ -349,7 +387,9 @@ No activity since 2026-07-01, so extracting a base now won't conflict with any i
 | C13 | A new `ExternalAuth` subclass inherits the identity-link flow but must suppress its login routes | F016 | medium | generic flow read; link-only override not yet tried |
 | C14 | `run_as_user_id` must be persisted with the slug's scheduler definition | F017 | medium | jobs are rebuilt from DB rows; exact storage slot open (U8) |
 
-Distribution: **8** high, **6** medium, **0** low.
+| C15 | Run-as is a dedicated column plus an append-only audit table, shipped as documented DDL (FEAT-151 pattern) | F018 | high | user decision; precedent read directly |
+
+Distribution: **9** high, **6** medium, **0** low.
 
 ---
 
@@ -383,16 +423,20 @@ Distribution: **8** high, **6** medium, **0** low.
   body or the definition.
   *Resolves claims*: C14
 
+- [x] **U8 — Where is `run_as_user_id` persisted?** *Resolved*: "dedicated
+  column with an audit trail if possible." It is possible: a
+  `scheduler_run_as_user_id` column on `{schema}.queries` plus an
+  append-only `{schema}.queries_run_as_audit` table, written in the same
+  transaction and shipped as documented DDL following the FEAT-151 pattern
+  (F018).
+  *Resolves claims*: C14, C15
+
 ### Unresolved (defer to spec)
 
-- [ ] **U8 — Where is `run_as_user_id` persisted?** Jobs are rebuilt from
-  `public.queries` rows, so it has to live with the slug's scheduler
-  definition. *Owner*: tbd
-  *Blocks claims*: C14
-  *Plausible answers*: a) inside the row's scheduler attributes JSON (next
-  to the `attributes.scheduler.*` keys the loader already parses) ·
-  b) a dedicated column or side table (`scheduler_run_as`) with an audit
-  trail
+None blocking. Spec-level details remain: the final table and column
+names; whether a slug edit through the management API (as opposed to an
+explicit scheduler registration) may change the run-as user (recommended:
+no); and where the delegated token is resolved (C10).
 
 ---
 
@@ -401,8 +445,9 @@ Distribution: **8** high, **6** medium, **0** low.
 **`/sdd-spec FEAT-178`**. *Rationale*: localization is high-confidence
 (C1–C3, C5), the pattern is a direct mirror of SharePoint, and the design
 forks have been resolved: the login/vault flow (U5), the new provider
-(U6) and sessionless runs (U7). The spec needs to settle U8, the base-class
-contract, and where the delegated token is resolved (C10). It should also
+(U6), sessionless runs (U7) and run-as persistence (U8). The spec needs to
+settle the base-class contract and where the delegated token is resolved
+(C10). It should also
 split the work into three phases: the navigator-auth provider (cross-repo),
 the querysource app-only/url modes, and the querysource delegated mode plus
 scheduler changes.
@@ -421,12 +466,12 @@ scheduler changes.
 | State checkpoints | `sdd/state/FEAT-178/state.json` |
 | Source (raw) | `sdd/state/FEAT-178/source.md` |
 | Research plan | `sdd/state/FEAT-178/research_plan.json` |
-| Findings (digests) | `sdd/state/FEAT-178/findings/F001-*.md` … `F017-*.md` (F012–F014 after the U5 answer; F015–F017 after U6/U7) |
+| Findings (digests) | `sdd/state/FEAT-178/findings/F001-*.md` … `F018-*.md` (F012–F014 after the U5 answer; F015–F017 after U6/U7; F018 after U8) |
 | Synthesis (JSON) | `sdd/state/FEAT-178/synthesis.json` |
 
 **Budget consumed** (default profile):
-- Files read: 26 / 40
-- Grep calls: 22 / 25
+- Files read: 29 / 40
+- Grep calls: 24 / 25
 - Git calls: 1 / 10
 - Truncated: **no**
 

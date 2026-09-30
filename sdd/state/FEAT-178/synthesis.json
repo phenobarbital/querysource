@@ -213,6 +213,14 @@
         "F017"
       ],
       "confidence": "medium"
+    },
+    {
+      "id": "C15",
+      "claim": "run_as is a dedicated scheduler_run_as_user_id column on {schema}.queries plus an append-only audit table, shipped as documented DDL following the FEAT-151 tolerant pattern",
+      "evidence": [
+        "F018"
+      ],
+      "confidence": "high"
     }
   ],
   "unknowns": [
@@ -254,7 +262,7 @@
     {
       "id": "U8",
       "question": "Where exactly is run_as_user_id persisted: inside the query row's scheduler attributes JSON, or a new column?",
-      "user_answer": null
+      "user_answer": "Dedicated column with an audit trail"
     }
   ],
   "recommended_next_command": {

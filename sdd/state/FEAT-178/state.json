@@ -3,7 +3,7 @@
   "feat_id": "FEAT-178",
   "feature_slug": "onedrive-multiqs-source",
   "started_at": "2026-09-30T14:26:41Z",
-  "updated_at": "2026-09-30T14:43:04Z",
+  "updated_at": "2026-09-30T14:46:00Z",
   "source": {
     "kind": "inline",
     "jira_key": null,
@@ -30,7 +30,7 @@
       "status": "completed",
       "queries_executed": 12,
       "queries_skipped": 0,
-      "findings": 17,
+      "findings": 18,
       "truncated": false
     },
     "synthesis": {
@@ -40,9 +40,9 @@
     },
     "qa": {
       "status": "completed",
-      "questions_total": 8,
-      "questions_answered": 7,
-      "new_unresolved": 1
+      "questions_total": 9,
+      "questions_answered": 9,
+      "new_unresolved": 0
     },
     "output": {
       "proposal_path": "sdd/proposals/onedrive-multiqs-source.proposal.md",
@@ -58,8 +58,8 @@
     "max_wall_seconds": 300
   },
   "consumed": {
-    "files_read": 26,
-    "grep_calls": 22,
+    "files_read": 29,
+    "grep_calls": 24,
     "git_calls": 1,
     "wall_seconds": 280
   },
