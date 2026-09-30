@@ -156,15 +156,22 @@ def definition_requires_scheduler_grant(definition: Mapping[str, Any]) -> bool:
     Returns:
         True only for a ``provider == "multi"`` definition with a truthy
         ``attributes.scheduler`` whose ``query_raw`` pipeline is write-capable.
-        ``query_raw`` that is not a JSON object returns False, because MultiQS then
-        falls back to single-query mode.
+        A non-empty ``query_raw`` that ``json.loads`` cannot turn into an object
+        also returns True (fail closed): the runtime decodes ``query_raw`` with a
+        different decoder, so an unparseable payload here could still run write
+        steps there. An empty/missing ``query_raw`` returns False.
     """
     if not isinstance(definition, Mapping) or definition.get("provider") != "multi":
         return False
     attributes = _as_mapping(definition.get("attributes"))
     if not attributes or not attributes.get("scheduler"):
         return False
-    return pipeline_requires_write_grant(_as_mapping(definition.get("query_raw")))
+    raw = definition.get("query_raw")
+    pipeline = _as_mapping(raw)
+    if pipeline is None:
+        # Fail closed on a scheduled multi whose pipeline we cannot inspect.
+        return isinstance(raw, str) and bool(raw.strip())
+    return pipeline_requires_write_grant(pipeline)
 
 
 def get_operator_module(clsname: str):

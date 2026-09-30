@@ -45,8 +45,7 @@ def test_pipeline_requires_write_grant(monkeypatch):
         _definition(DELETE, attributes={}),
         _definition(DELETE, attributes={"scheduler": {}}),
         _definition(READ_ONLY),
-        _definition("SELECT 1"),
-        _definition("{not json"),
+        _definition(""),
         {"provider": "multi", "attributes": SCHEDULE},
         {},
     ],
@@ -62,3 +61,9 @@ def test_definition_requires_scheduler_grant_true():
     assert definition_requires_scheduler_grant(
         {"provider": "multi", "attributes": json.dumps(SCHEDULE), "query_raw": DELETE}
     ) is True
+
+
+@pytest.mark.parametrize("raw", ["SELECT 1", "{not json", "[1, 2]"])
+def test_scheduled_multi_with_unparseable_query_raw_fails_closed(raw):
+    """A scheduled multi whose query_raw json.loads cannot read requires the grant (review S2)."""
+    assert definition_requires_scheduler_grant(_definition(raw)) is True

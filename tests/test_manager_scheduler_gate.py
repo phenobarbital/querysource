@@ -40,11 +40,11 @@ class _Repo:
             raise TenantError("Query not found", error_code="query_not_found")
         return SimpleNamespace(runtime=SimpleNamespace(**self.stored))
 
-    async def upsert(self, identity: QueryIdentity, data: dict):
+    async def upsert(self, identity: QueryIdentity, data: dict, **kwargs):
         self.calls.append(("upsert", identity, data))
         return {"query_slug": identity.slug}, self.stored is None
 
-    async def patch(self, identity: QueryIdentity, data: dict):
+    async def patch(self, identity: QueryIdentity, data: dict, **kwargs):
         self.calls.append(("patch", identity, data))
         return {"query_slug": identity.slug}
 
