@@ -5,12 +5,12 @@ from querysource.queries.multi.sources import (
     SOURCE_REGISTRY,
     AirtableSource,
     FileSource,
-    ThreadQuery,
-    ThreadSource,
     S3Source,
     SharepointSource,
     SmartSheetSource,
     TableSource,
+    ThreadQuery,
+    ThreadSource,
     __all__,
 )
 
