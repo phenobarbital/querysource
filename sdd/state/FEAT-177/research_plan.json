@@ -1,0 +1,20 @@
+{
+  "feat_id": "FEAT-177",
+  "mode_hint": "enrichment",
+  "wiki_available": true,
+  "queries": [
+    {"id": "Q001", "type": "wiki_query", "params": {"q": "MultiQuery S3 source"}, "intent": "orient on existing S3 source + its spec/task", "priority": 1},
+    {"id": "Q002", "type": "read", "params": {"path": "querysource/queries/multi/sources/s3.py"}, "intent": "reference implementation to mirror", "priority": 1},
+    {"id": "Q003", "type": "read", "params": {"path": "querysource/queries/multi/sources/base.py"}, "intent": "source base contract", "priority": 1},
+    {"id": "Q004", "type": "read", "params": {"path": "querysource/queries/multi/sources/file.py"}, "intent": "local-file source (possible parquet handling today)", "priority": 1},
+    {"id": "Q005", "type": "read", "params": {"path": "querysource/queries/multi/sources/__init__.py"}, "intent": "registration / exports", "priority": 1},
+    {"id": "Q006", "type": "grep", "params": {"pattern": "parquet", "path": "querysource/"}, "intent": "existing parquet readers/writers", "priority": 1},
+    {"id": "Q007", "type": "grep", "params": {"pattern": "gcs|GCS|google.cloud.storage|gcsfs", "path": "querysource/"}, "intent": "existing GCS client/credentials", "priority": 2},
+    {"id": "Q008", "type": "grep", "params": {"pattern": "SourceS3|S3Source|registry", "path": "querysource/queries/multi/"}, "intent": "how sources are dispatched from a MultiQuery definition", "priority": 1},
+    {"id": "Q009", "type": "read", "params": {"path": "querysource/queries/multi/sources/query.catalog.yaml"}, "intent": "catalog/docs for sources", "priority": 2},
+    {"id": "Q010", "type": "grep", "params": {"pattern": "pyarrow|polars|fsspec|s3fs|aiobotocore|aioboto3", "path": "pyproject.toml"}, "intent": "available deps", "priority": 1},
+    {"id": "Q011", "type": "read", "params": {"path": "sdd/specs/multiquery-new-sources.spec.md"}, "intent": "design conventions of FEAT that added SourceS3", "priority": 2},
+    {"id": "Q012", "type": "glob", "params": {"pattern": "tests/*source*s3*|tests/**/test_source*"}, "intent": "test patterns for sources", "priority": 2},
+    {"id": "Q013", "type": "git_log", "params": {"path": "querysource/queries/multi/sources/", "since": "90 days"}, "intent": "recent activity", "priority": 3}
+  ]
+}

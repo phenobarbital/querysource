@@ -1,0 +1,186 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-177",
+  "detected_mode": "enrichment",
+  "summary_oneline": "ParquetSource for MultiQS: read Parquet from local FS, S3 or GCS into a DataFrame, mirroring S3Source",
+  "overall_confidence": "medium",
+  "localization": [
+    {
+      "path": "querysource/queries/multi/sources/s3.py",
+      "symbol": "S3Source",
+      "lines": "24-165",
+      "role": "reference implementation (credentials, aioboto3 download, parsing)",
+      "evidence": [
+        "F002"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/base.py",
+      "symbol": "ThreadSource",
+      "lines": "14-163",
+      "role": "base contract: fetch(), resolve_credential, resolve_masks, per-thread loop",
+      "evidence": [
+        "F003"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/file.py",
+      "symbol": "FileSource",
+      "lines": "21-105",
+      "role": "local-file precedent (masks, no parquet)",
+      "evidence": [
+        "F004"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/sources/__init__.py",
+      "symbol": "SOURCE_REGISTRY",
+      "lines": "1-35",
+      "role": "registration point",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/__init__.py",
+      "symbol": "MultiQS",
+      "lines": "535-557",
+      "role": "sources: dispatch by type name",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "path": "querysource/queries/multi/destinations/s3.py",
+      "symbol": "ToS3",
+      "lines": "141-143",
+      "role": "existing pyarrow parquet usage (write side)",
+      "evidence": [
+        "F006"
+      ]
+    },
+    {
+      "path": "generated/S3Source.json",
+      "symbol": "-",
+      "lines": "-",
+      "role": "generated component schema to add for ParquetSource",
+      "evidence": [
+        "F009"
+      ]
+    },
+    {
+      "path": "tests/test_source_s3.py",
+      "symbol": "TestS3Source",
+      "lines": "1-130",
+      "role": "test pattern",
+      "evidence": [
+        "F010"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "C1",
+      "text": "New sources register in SOURCE_REGISTRY and are dispatched from the YAML `sources:` list by type name",
+      "evidence": [
+        "F005"
+      ],
+      "confidence": "high"
+    },
+    {
+      "path_note": "",
+      "id": "C2",
+      "text": "S3Source reads the full object into memory via aioboto3 and parses only CSV/GZ/Excel",
+      "evidence": [
+        "F002"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C3",
+      "text": "No MultiQS source reads Parquet today; pyarrow is used only for writing (ToS3, cache)",
+      "evidence": [
+        "F006",
+        "F004"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C4",
+      "text": "There is no GCS client pattern in querysource to reuse",
+      "evidence": [
+        "F007"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C5",
+      "text": "pyarrow and google-cloud-storage are installed only transitively and must be declared (optional extras) before relying on them",
+      "evidence": [
+        "F008"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C6",
+      "text": "ThreadSource runs fetch() in its own thread/event loop, so sync pyarrow reads do not block the aiohttp loop, but wrapping them in asyncio.to_thread keeps the async convention",
+      "evidence": [
+        "F003"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "C7",
+      "text": "A component schema generated/ParquetSource.json and unit tests mirroring test_source_s3.py are expected deliverables",
+      "evidence": [
+        "F009",
+        "F010"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "U1",
+      "question": "Which I/O layer reads remote parquet?",
+      "resolves": [
+        "C6"
+      ],
+      "user_answer": "pyarrow.fs (S3FileSystem / GcsFileSystem / LocalFileSystem) + pyarrow.parquet/dataset read in asyncio.to_thread"
+    },
+    {
+      "id": "U2",
+      "question": "One ParquetSource with URI/backend selector, or separate classes?",
+      "resolves": [
+        "C1"
+      ],
+      "user_answer": "Separate classes: ParquetFileSource, ParquetS3Source, ParquetGCSSource sharing a common parquet base/mixin"
+    },
+    {
+      "id": "U3",
+      "question": "How are GCS credentials supplied?",
+      "resolves": [
+        "C4"
+      ],
+      "user_answer": "Service-account JSON via navconfig (default GOOGLE_CREDENTIALS_FILE / BIGQUERY_CREDENTIALS), fallback to ADC"
+    },
+    {
+      "id": "U4",
+      "question": "Which read features are in scope (columns, filters, partitioned dirs/globs)?",
+      "resolves": [
+        "C2"
+      ],
+      "user_answer": "All in scope: column projection, row filters, directories / partitioned datasets, masks in path"
+    }
+  ],
+  "budget_status": {
+    "files_read": 14,
+    "grep_calls": 9,
+    "git_calls": 3,
+    "truncated": false
+  },
+  "recommended_next_command": {
+    "command": "sdd-spec",
+    "rationale": "Localization is high-confidence and the pattern (ThreadSource + SOURCE_REGISTRY) is established; the remaining forks are design choices resolved in Q&A."
+  }
+}
