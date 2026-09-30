@@ -1,10 +1,10 @@
 """Shared Microsoft Graph helpers for MultiQS drive sources (FEAT-159)."""
 from __future__ import annotations
 
+import asyncio
 import platform
 import threading
 import time
-import asyncio
 from abc import abstractmethod
 from contextlib import contextmanager
 from datetime import datetime
