@@ -35,7 +35,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -43,8 +43,9 @@
       "parallelism_notes": "No dependencies: a pure module over pyarrow.compute (already importable). Creates the parquet/ subpackage marker.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:09:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-796-parquet-dnf-filters.md"
+      "completed_at": "2026-09-30T15:46:16+00:00",
+      "file": "sdd/tasks/completed/TASK-796-parquet-dnf-filters.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-797",
