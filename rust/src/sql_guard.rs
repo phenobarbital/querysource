@@ -23,6 +23,7 @@ pub enum BlockedKind {
     Setting,
     ExecutableObject,
     DangerousFunction,
+    ForeignAccess,
     Unparsable,
 }
 
@@ -41,6 +42,7 @@ impl BlockedKind {
             BlockedKind::Setting => "setting",
             BlockedKind::ExecutableObject => "executable_object",
             BlockedKind::DangerousFunction => "dangerous_function",
+            BlockedKind::ForeignAccess => "foreign_access",
             BlockedKind::Unparsable => "unparsable",
         }
     }
@@ -79,7 +81,8 @@ const EXECUTABLE_OBJECTS: &[&str] = &[
     "CAST",
 ];
 /// Object types whose `ALTER` changes or upgrades executable code.
-const ALTER_EXECUTABLE_OBJECTS: &[&str] = &["FUNCTION", "PROCEDURE", "ROUTINE", "EXTENSION"];
+const ALTER_EXECUTABLE_OBJECTS: &[&str] =
+    &["FUNCTION", "PROCEDURE", "ROUTINE", "EXTENSION", "EVENT"];
 /// Configuration and escape functions rejected when called (identifier followed by `(`).
 const DANGEROUS_FUNCTIONS: &[&str] = &[
     "SET_CONFIG",
@@ -513,7 +516,22 @@ fn classify_keywords(tokens: &[String], words: &[String]) -> Option<BlockedKind>
         "TRUNCATE" => Some(BlockedKind::Truncate),
         "DO" => Some(BlockedKind::DoBlock),
         "GRANT" | "REVOKE" => Some(BlockedKind::Privilege),
+        "LOAD" => Some(BlockedKind::ExecutableObject),
+        "IMPORT" if second == "FOREIGN" => Some(BlockedKind::ForeignAccess),
+        // CREATE|ALTER SERVER, FOREIGN DATA WRAPPER, FOREIGN TABLE, USER MAPPING (before the role rule)
+        "CREATE" | "ALTER"
+            if second == "SERVER"
+                || second == "FOREIGN"
+                || (second == "USER" && tokens.get(2).map(String::as_str) == Some("MAPPING")) =>
+        {
+            Some(BlockedKind::ForeignAccess)
+        }
         "CREATE" | "ALTER" if ROLE_OBJECTS.contains(&second) => Some(BlockedKind::Role),
+        // ALTER SYSTEM …, ALTER DATABASE … SET|RESET … change settings of future sessions
+        "ALTER" if second == "SYSTEM" => Some(BlockedKind::Setting),
+        "ALTER" if second == "DATABASE" && rest.iter().any(|t| t == "SET" || t == "RESET") => {
+            Some(BlockedKind::Setting)
+        }
         "CREATE" if creates_executable(tokens) => Some(BlockedKind::ExecutableObject),
         "ALTER" if ALTER_EXECUTABLE_OBJECTS.contains(&second) => {
             Some(BlockedKind::ExecutableObject)
@@ -993,5 +1011,60 @@ SELECT ad.employee_id, ad.activity_date FROM activity_days ad, params WHERE ad.a
         assert_eq!(decode_unicode_ident("a\\zz"), "a\\zz");
         assert_eq!(decode_unicode_ident("a\\+110000"), "a\\+110000");
         assert_eq!(decode_unicode_ident("\\"), "\\");
+    }
+
+    #[test]
+    fn blocks_server_level_settings() {
+        for sql in [
+            "ALTER SYSTEM SET statement_timeout = 0",
+            "alter system reset all",
+            "ALTER DATABASE d SET statement_timeout = 0",
+            "ALTER DATABASE d RESET ALL",
+            "ALTER DATABASE d IN TABLESPACE x SET work_mem = '1GB'",
+        ] {
+            assert_kind(sql, "setting");
+        }
+        assert_kind("ALTER ROLE r SET statement_timeout = 0", "role");
+        assert_kind("ALTER USER u RESET ALL", "role");
+        assert_eq!(guard("ALTER TABLE t ALTER COLUMN c SET DEFAULT 0").unwrap().len(), 1);
+        assert_eq!(guard("ALTER TABLE t SET (fillfactor = 70)").unwrap().len(), 1);
+        assert_eq!(guard("SELECT * FROM system WHERE database = 'd'").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn blocks_load_and_alter_event_trigger() {
+        assert_kind("LOAD 'plpgsql'", "executable_object");
+        assert_kind("load '$libdir/plugins/x'", "executable_object");
+        assert_kind("ALTER EVENT TRIGGER e ENABLE", "executable_object");
+        assert_eq!(guard("SELECT load FROM t").unwrap().len(), 1);
+        assert_eq!(guard("SELECT 'LOAD x'").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn blocks_foreign_access() {
+        for sql in [
+            "CREATE SERVER s FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'x')",
+            "CREATE SERVER IF NOT EXISTS s FOREIGN DATA WRAPPER postgres_fdw",
+            "ALTER SERVER s OPTIONS (SET host 'y')",
+            "CREATE FOREIGN DATA WRAPPER w HANDLER h",
+            "alter foreign data wrapper w options (add x 'y')",
+            "CREATE USER MAPPING FOR CURRENT_USER SERVER s OPTIONS (user 'u', password 'p')",
+            "ALTER USER MAPPING FOR u SERVER s OPTIONS (SET password 'p')",
+            "CREATE FOREIGN TABLE f (a int) SERVER s",
+            "ALTER FOREIGN TABLE f OPTIONS (SET table_name 'x')",
+            "IMPORT FOREIGN SCHEMA public FROM SERVER s INTO local",
+        ] {
+            assert_kind(sql, "foreign_access");
+        }
+        assert_kind("CREATE USER u", "role");
+        for sql in [
+            "SELECT * FROM server",
+            "SELECT server, foreign_table FROM t",
+            "ALTER TABLE t ADD COLUMN c int",
+            "ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES s (a)",
+            "CREATE TABLE t (a int REFERENCES s (a), server text)",
+        ] {
+            assert_eq!(guard(sql).unwrap().len(), 1, "{sql}");
+        }
     }
 }

@@ -94,6 +94,9 @@ literals and comments, uppercased:
 | `RESET` (any parameter, incl. `RESET ALL`) other than the `role` cases above | blocked `setting` (0.4) |
 | `SET TRANSACTION …` / `SET SESSION CHARACTERISTICS …`, `PREPARE TRANSACTION` | blocked `transaction_control` |
 | `CREATE [OR REPLACE] [CONSTRAINT] [TRUSTED] [PROCEDURAL] FUNCTION \| PROCEDURE \| TRIGGER \| EXTENSION \| RULE \| AGGREGATE \| OPERATOR \| LANGUAGE \| EVENT TRIGGER \| TRANSFORM \| CAST` (also as a `CREATE SCHEMA` element); `ALTER FUNCTION \| PROCEDURE \| ROUTINE \| EXTENSION …` | blocked `executable_object` (0.4) — user-defined code would bypass every other rule |
+| `ALTER SYSTEM …`; `ALTER DATABASE … SET\|RESET …` (`ALTER ROLE\|USER … SET\|RESET` stays `role`) | blocked `setting` (0.5) — changes settings of future sessions |
+| `LOAD '…'`; `ALTER EVENT TRIGGER …` | blocked `executable_object` (0.5) |
+| `CREATE\|ALTER SERVER`, `CREATE\|ALTER FOREIGN DATA WRAPPER`, `CREATE\|ALTER FOREIGN TABLE`, `CREATE\|ALTER USER MAPPING`, `IMPORT FOREIGN SCHEMA` | blocked `foreign_access` (0.5) — reaching other servers would bypass the guard |
 | `COPY` (any direction or target) | blocked `copy` (0.4, replaces `copy_program`) — no maintenance use, and `COPY … FROM STDIN` would hang the simple protocol |
 | `BEGIN`, `START`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `ABORT` | blocked `transaction_control`, because the component owns the transaction |
 | anything else (`WITH`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CREATE TABLE/INDEX/VIEW/MATERIALIZED VIEW/SCHEMA/SEQUENCE`, `ALTER … ADD`, `CALL`, `REFRESH MATERIALIZED VIEW`, `ANALYZE`, …) | allowed, unless the call rule below matches |
@@ -546,3 +549,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | 0.2 | 2026-09-30 | Juan2coder | Extract guard + executor into `querysource/interfaces/guarded_sql.py` for reuse by FEAT-157 hooks |
 | 0.3 | 2026-09-30 | Juan2coder | Task review: block `SET ROLE` / `SET SESSION AUTHORIZATION`; write gate also enforced on the HTTP handler (via FEAT-155 `write_access`) |
 | 0.4 | 2026-09-30 | Juan2coder | Guard hardening approved by Jesus Lara: block executable objects, RESET, COPY, dangerous function calls |
+| 0.5 | 2026-09-30 | Juan2coder | Guard follow-up (same approval): block `ALTER SYSTEM`, `ALTER DATABASE … SET/RESET` (`setting`), `LOAD`, `ALTER EVENT TRIGGER` (`executable_object`), foreign-data access (`foreign_access`) |
