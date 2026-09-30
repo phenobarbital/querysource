@@ -583,10 +583,8 @@ See the `tests/test_multiqs_source_hooks.py` block above (spec §4 M3 rows: `tes
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-30
+**Notes**: Wired hooks into MultiQS: PG_HOOK_DRIVERS/_declares_hooks, _hooks_target_same_database, _validate_source_hooks (dialect -> same DB -> guard), pg_admin gate next to the FEAT-155/156 write gate (separate condition), request-condition rejection in both places, pop before merge, files/sources rejection, ThreadQuery(hooks=), handler write_access extended. 11 + 2 new tests pass; regression suites green except pre-existing test_guardrail_rejects_too_many_sources.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
