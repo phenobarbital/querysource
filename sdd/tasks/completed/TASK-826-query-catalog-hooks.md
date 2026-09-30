@@ -255,10 +255,8 @@ See the `tests/test_catalog_hooks.py` block above (spec §4 M4 row `test_catalog
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-30
+**Notes**: Added pre-hook/post-hook attributes to query.catalog.yaml; generated/Query.json regenerated via the generator into the scratchpad (the in-tree run hit a read-only error on generated/Concat.json in the sandbox) and only Query.json copied. The regeneration also brought in pre-existing drift inside Query.json (tenant json_schema default and example text). 8 tests pass (test_catalog_hooks + test_catalog_remote).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: Query.json contains unrelated pre-existing regeneration drift (tenant default, example); other generated files untouched.

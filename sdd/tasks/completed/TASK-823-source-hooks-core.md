@@ -390,10 +390,8 @@ See the `tests/test_source_hooks.py` block above (spec §4 M1 rows: `test_pop_ho
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-30
+**Notes**: Created source_hooks.py (HOOK_KEYS, SourceHooks, pop_hooks, build_hooks, SourceHooksMixin) and tests/test_source_hooks.py. 6 tests pass, ruff clean. guarded_sql imports verified to not touch providers/queries (no cycle).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

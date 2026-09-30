@@ -393,10 +393,8 @@ See the two test blocks above (spec §4 M2 rows: `test_provider_dialects`, `test
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback, Claude)
+**Date**: 2026-09-30
+**Notes**: Mixin on BaseProvider/ThreadSource (first in bases), pgProvider dialect, ThreadSource._fetch_with_hooks + run() swap, tests. 17 + 1 + 8 + (sources integration 8 pass, 1 fail) tests. tests/test_multiqs_sources_integration.py::test_guardrail_rejects_too_many_sources fails identically without my change (pre-existing, SlugNotFound needs DB).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none (abstract.py import placed in ruff-sorted position)
