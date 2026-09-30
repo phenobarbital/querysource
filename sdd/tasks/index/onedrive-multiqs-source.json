@@ -224,7 +224,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -236,8 +236,9 @@
       "parallelism_notes": "TASK-805: SourceIdentityContext.for_scheduler; TASK-806: MultiQS(identity_context=) kw added in queries/multi/__init__.py; TASK-808: RUN_AS_COLUMN + DefinitionRepository.get_run_as.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-812-scheduler-run-as-wiring.md"
+      "completed_at": "2026-09-30T15:45:06+00:00",
+      "file": "sdd/tasks/completed/TASK-812-scheduler-run-as-wiring.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-813",
