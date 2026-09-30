@@ -11,9 +11,10 @@ Cython ``datamodel`` validator breaks on both when constructing
 """
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+import logging
 from typing import Any
 
-from asyncdb.drivers.pg import UndefinedTableError, pg
+from asyncdb.drivers.pg import UndefinedColumnError, UndefinedTableError, pg
 
 from querysource.cache_identity import definition_revision
 from querysource.models import QueryModel
@@ -46,6 +47,19 @@ _TENANT_COLUMNS: frozenset = frozenset(
 # hardcoded public.queries startup query (querysource/scheduler/scheduler.py,
 # QSScheduler.startup), qualified to an arbitrary store instead of
 # hardcoded public.queries.
+RUN_AS_COLUMN: str = "scheduler_run_as_user_id"
+_RUN_AS_FALLBACK_WARNED: set = set()
+_logger = logging.getLogger(__name__)
+
+
+def _is_missing_run_as_column(exc: Exception) -> bool:
+    """Return True when exc means the store has no run-as column (not migrated)."""
+    if isinstance(exc, UndefinedColumnError):
+        return True
+    msg = str(exc).lower()
+    return RUN_AS_COLUMN in msg and "does not exist" in msg
+
+
 _SCHEDULABLE_COLUMNS = "query_slug, attributes, cache_options, provider, is_cached, query_raw"
 _SCHEDULABLE_PREDICATE = (
     "(attributes IS NOT NULL AND attributes != '{}') "
@@ -101,6 +115,8 @@ class DefinitionRepository:
         other field has no encoder and round-trips unchanged.
         """
         data = dict(row)
+        # FEAT-159: repository-only column; never enters models, revisions or API output.
+        data.pop(RUN_AS_COLUMN, None)
         legacy_program_slug = data.pop("program_slug", None) if store.contract == "legacy" else None
         validated = TenantQueryDefinition(**data)
         persisted = validated.to_dict()
@@ -282,9 +298,26 @@ class DefinitionRepository:
     async def schedulable(self, store: QueryStore) -> tuple[Mapping[str, Any], ...]:
         """Return scheduler candidates from one store using existing eligibility rules."""
         table = self._qualified_table(store)
-        sql = f"SELECT {_SCHEDULABLE_COLUMNS} FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
-        async with await self.connection_factory() as conn:
-            rows = await conn.fetch_all(sql)
+        sql = f"SELECT {_SCHEDULABLE_COLUMNS}, {RUN_AS_COLUMN} FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
+        try:
+            async with await self.connection_factory() as conn:
+                rows = await conn.fetch_all(sql)
+        except Exception as exc:
+            if not _is_missing_run_as_column(exc):
+                raise
+            key = (store.schema, store.table)
+            if key not in _RUN_AS_FALLBACK_WARNED:
+                _RUN_AS_FALLBACK_WARNED.add(key)
+                _logger.warning(
+                    "Store %s.%s has no %s column; run migration to enable run-as",
+                    store.schema, store.table, RUN_AS_COLUMN,
+                )
+            sql = (
+                f"SELECT {_SCHEDULABLE_COLUMNS}, NULL AS {RUN_AS_COLUMN} "
+                f"FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
+            )
+            async with await self.connection_factory() as conn:
+                rows = await conn.fetch_all(sql)
         return tuple(dict(row) for row in (rows or []))
 
     # -- mutation methods ----------------------------------------------------------
@@ -295,6 +328,7 @@ class DefinitionRepository:
         Raises TenantError(tenant_write_forbidden) on permission failure.
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
+        self._reject_run_as(data)
         # Validate input data with TenantQueryDefinition (rejects program_slug)
         validated = TenantQueryDefinition(**data)
         persisted = validated.to_dict()
@@ -341,6 +375,7 @@ class DefinitionRepository:
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
         store = identity.store
+        self._reject_run_as(data)
 
         # Validate input data with TenantQueryDefinition (rejects program_slug)
         validated = TenantQueryDefinition(**data)
@@ -417,6 +452,8 @@ class DefinitionRepository:
                 error_code="invalid_tenant",
             )
 
+        self._reject_run_as(data)
+
         # Reject program_slug (never allowed for tenants)
         if "program_slug" in data:
             raise TenantError(
@@ -472,6 +509,35 @@ class DefinitionRepository:
 
         persisted_result, _ = self._row_to_persisted(dict(row), store)
         return persisted_result
+
+    @staticmethod
+    def _reject_run_as(data: Mapping[str, Any]) -> None:
+        """Refuse API payloads that try to set the run-as user (G6)."""
+        if RUN_AS_COLUMN in data:
+            raise TenantError(
+                f"{RUN_AS_COLUMN} cannot be set via the API",
+                error_code="invalid_tenant",
+            )
+
+    async def get_run_as(self, identity: QueryIdentity) -> int | None:
+        """Return the stored run-as user id.
+
+        Returns None when unset, when the row is missing, or when the column
+        is absent (store not migrated).
+        """
+        table = self._qualified_table(identity.store)
+        sql = f"SELECT {RUN_AS_COLUMN} FROM {table} WHERE query_slug = $1"
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, identity.slug)
+        except Exception as exc:
+            if _is_missing_run_as_column(exc):
+                return None
+            raise
+        if not row:
+            return None
+        value = row[RUN_AS_COLUMN]
+        return None if value is None else int(value)
 
     async def delete(self, identity: QueryIdentity) -> bool:
         """Delete exactly this owner's row; report missing without fallback.
