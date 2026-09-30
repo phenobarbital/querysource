@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-30T16:52:57+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-30T20:14:26+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -98,7 +98,7 @@
       "feature_id": "FEAT-156",
       "feature": "multi-executesql",
       "spec": "sdd/specs/multi-executesql.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -108,8 +108,9 @@
       "parallelism_notes": "Imports ExecuteSQLDestination from TASK-821's querysource/queries/multi/destinations/execute_sql.py. CROSS-FEATURE: both anchors (the TableDelete registry block and WRITE_DESTINATIONS) are created by FEAT-155 multi-tabledelete TASK-816/TASK-817, tracked in another index and therefore not in depends_on; hold this task until FEAT-155 is merged into dev and the feature branch is rebased.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-822-executesql-registry-and-gate.md"
+      "completed_at": "2026-09-30T20:14:26+00:00",
+      "file": "sdd/tasks/completed/TASK-822-executesql-registry-and-gate.md",
+      "verification": "verified"
     }
   ]
 }
