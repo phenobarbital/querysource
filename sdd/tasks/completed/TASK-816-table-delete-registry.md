@@ -190,10 +190,9 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Registered TableDelete in DESTINATION_REGISTRY; registry test passes.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (fallback sequential)
+**Date**: 2026-09-30
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

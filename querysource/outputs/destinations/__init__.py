@@ -225,6 +225,14 @@ except ImportError:
     )
 
 try:
+    from querysource.queries.multi.destinations.table_delete import TableDeleteDestination
+    DESTINATION_REGISTRY["TableDelete"] = TableDeleteDestination
+except ImportError:
+    _pkg_logger.debug(
+        "TableDelete destination not available"
+    )
+
+try:
     from querysource.queries.multi.destinations.dwh import DWHDestination
     DESTINATION_REGISTRY["DWH"] = DWHDestination
 except ImportError:

@@ -18,6 +18,7 @@ from ..exceptions import (
 )
 from ..outputs import DataOutput
 from ..queries import MultiQS
+from ..queries.multi import WRITE_DESTINATIONS, _output_step_names
 from ..queries.multi.operators import Filter, GroupBy
 from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity
@@ -32,6 +33,8 @@ class QueryHandler(AbstractHandler):
         slugs: list,
         files: list,
         has_raw_query: bool,
+        *,
+        write_access: bool = False,
     ) -> None:
         """All-or-nothing PBAC pre-flight for MultiQuery.
 
@@ -46,6 +49,8 @@ class QueryHandler(AbstractHandler):
                 treated as named-query resources).
             has_raw_query: True if the payload contains any raw inline query;
                 triggers a single raw_query:execute check.
+            write_access: True when the inline Output uses a WRITE_DESTINATIONS
+                step (FEAT-155); triggers datasource:use on pg_admin.
 
         Raises:
             web.HTTPNotFound: When any component is denied, or when the
@@ -93,6 +98,15 @@ class QueryHandler(AbstractHandler):
                     resource_type=ResourceType.RAW_QUERY,
                     resource_name="raw_query",
                     action="raw_query:execute",
+                )
+
+            if write_access:
+                # FEAT-155: write-capable Output steps run on DB* credentials.
+                await self._enforce_pbac(
+                    request,
+                    resource_type=ResourceType.DATASOURCE,
+                    resource_name="pg_admin",
+                    action="datasource:use",
                 )
         except web.HTTPNotFound:
             raise  # already the correct exception
@@ -460,6 +474,10 @@ class QueryHandler(AbstractHandler):
             slugs=list((_queries or {}).keys()),
             files=list((_files or {}).keys()),
             has_raw_query=_has_raw,
+            write_access=bool(
+                not slug and isinstance(options, dict)
+                and _output_step_names(options.get("Output")) & WRITE_DESTINATIONS
+            ),
         )
         # Step 1b: Ownership preflight for tenant isolation.
         # Real stored slugs — the alias keys of `_queries` (the output
