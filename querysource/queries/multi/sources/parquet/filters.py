@@ -24,7 +24,7 @@ def _is_conjunction(filters: list) -> bool:
     return bool(filters) and isinstance(filters[0], (list, tuple)) and bool(filters[0]) and isinstance(filters[0][0], str)
 
 
-def _predicate(entry: Any, position: str) -> "pc.Expression":
+def _predicate(entry: Any, position: str) -> pc.Expression:
     """Convert one ``[col, op, value]`` (or ``[col, "is null"]``) entry.
 
     Raises:
@@ -72,7 +72,7 @@ def _predicate(entry: Any, position: str) -> "pc.Expression":
     return field >= value
 
 
-def build_filter_expression(filters: list | None) -> "pc.Expression | None":
+def build_filter_expression(filters: list | None) -> pc.Expression | None:
     """Convert a DNF filter list into a pyarrow compute expression.
 
     Args:
