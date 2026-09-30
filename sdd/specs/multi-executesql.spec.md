@@ -106,19 +106,30 @@ Config:
 - `driver`: `"pg"`, the only one supported for now.
 - `timeout`: seconds, default 3600. Applied with `SET LOCAL statement_timeout`.
 
-`run()`:
-1. `HAS_RUST` is False → `OutputError` ("ExecuteSQL requires the Rust extension").
-2. Normalize `sql` to a list, then run `sql_guard` on each script and flatten the statements
-   in order. `ValueError` → `OutputError(category="data")`. **Nothing reaches the database
-   when any statement is blocked.**
-3. `AsyncDB("pg", dsn=default_dsn)`, then `raw = conn.engine()`. Inside
-   `raw.transaction()`: `SET LOCAL statement_timeout = <ms>`, then
-   `status = await raw.execute(stmt)` for each statement. The status tag
-   (`"DELETE 1234"`, `"INSERT 0 900"`) is appended to `self.results`.
-4. Log the results. Return `self.data`.
+**Shared guarded-SQL executor (`querysource/interfaces/guarded_sql.py`).** The guard and the
+execution logic live in a module that **does not depend on MultiQuery destinations**. FEAT-157
+(`multi-source-hooks`) reuses it for the pre/post-hooks. Its contract:
+1. `guard_statements(sql)`:
+   - Normalizes `sql` (str | list[str]) to a list.
+   - Runs `sql_guard` on each script and returns the flattened statements in order.
+   - `HAS_RUST` False → `GuardedSQLError(category="infra")`.
+   - `ValueError` from the guard → `GuardedSQLError(category="data")`.
+   - **Nothing reaches the database when any statement is blocked.**
+2. `execute_guarded(statements, timeout=…)`:
+   - Connects with `AsyncDB("pg", dsn=default_dsn)`, then `raw = conn.engine()`.
+   - Inside `raw.transaction()`: `SET LOCAL statement_timeout = <ms>`, then
+     `status = await raw.execute(stmt)` for each statement.
+   - Returns the status tags (`"DELETE 1234"`, `"INSERT 0 900"`).
+   - Any database error → `GuardedSQLError(category="infra")`, and the transaction is rolled back.
 
 Statements are executed one by one, not as a single multi-statement string. That way the
 exact guarded strings are what runs, and each status tag is attributable.
+
+`ExecuteSQLDestination.run()`:
+1. Call `guard_statements(self._sql)`, then `execute_guarded(...)`, and store the tags in
+   `self.results`.
+2. `GuardedSQLError` → `OutputError(str(err), category=err.category)`.
+3. Log the results. Return `self.data`.
 
 Example (the employee_detail_profile refresh):
 ```json
@@ -135,9 +146,10 @@ MultiQS.query()
   ├─ _preflight_principal()  ── "ExecuteSQL" ∈ WRITE_DESTINATIONS ──→ enforce_principal(DATASOURCE,"pg_admin","datasource:use")
   └─ Output loop
         ExecuteSQLDestination.run()
-          ├─ _qs_parsers.sql_guard(script)  (Rust: lex → split → classify; raises on blocked)
-          └─ AsyncDB("pg", dsn=default_dsn) → raw asyncpg conn
-                └─ transaction: SET LOCAL statement_timeout → execute(stmt₁) … execute(stmtₙ)
+          └─ interfaces/guarded_sql.py   (shared; reused by FEAT-157 hooks)
+               ├─ guard_statements() → _qs_parsers.sql_guard(script)  (Rust: lex → split → classify)
+               └─ execute_guarded()  → AsyncDB("pg", dsn=default_dsn) → raw asyncpg conn
+                     └─ transaction: SET LOCAL statement_timeout → execute(stmt₁) … execute(stmtₙ)
         TableDestination.run()   (optional re-insert)
 ```
 
@@ -146,6 +158,7 @@ MultiQS.query()
 |---|---|---|
 | `_qs_parsers` PyO3 module (`rust/src/lib.rs`) | extends | new `mod sql_guard;` + `wrap_pyfunction!(sql_guard::sql_guard, m)` |
 | `querysource/qs_parsers/__init__.py` | modifies | explicit re-export of `sql_guard` in both import branches |
+| `QueryException` | extends | new `GuardedSQLError` in `interfaces/guarded_sql.py` |
 | `AbstractDestination` | extends | pass-through `run()` |
 | `DESTINATION_REGISTRY` | registers | key `"ExecuteSQL"` |
 | `WRITE_DESTINATIONS` (FEAT-155) | extends | add `"ExecuteSQL"` |
@@ -158,6 +171,11 @@ None new.
 ```python
 # Python view of the Rust function
 def sql_guard(sql: str) -> list[str]: ...   # raises ValueError on blocked / unterminated input
+
+# querysource/interfaces/guarded_sql.py
+class GuardedSQLError(QueryException): category: str
+def guard_statements(sql: str | list[str]) -> list[str]: ...
+async def execute_guarded(statements: list[str], *, timeout: float = 3600.0) -> list[str]: ...
 
 class ExecuteSQLDestination(AbstractDestination):
     results: list[str]
@@ -174,7 +192,8 @@ class ExecuteSQLDestination(AbstractDestination):
 |---|---|---|---|
 | M1: Rust `sql_guard` | yes | lexer states, classification table §2, `ValueError` message format, pure-Rust core + thin pyfunction | — |
 | M2: PyO3 registration + re-export | yes | one `mod`, one `add_function`, two re-export lines | — |
-| M3: ExecuteSQLDestination | yes | run() steps 1-4, one transaction, `SET LOCAL statement_timeout` | — |
+| M2b: Shared guarded-SQL executor | yes | `GuardedSQLError`, `guard_statements`, `execute_guarded` contracts in §2; one transaction, `SET LOCAL statement_timeout` | — |
+| M3: ExecuteSQLDestination | yes | thin wrapper over M2b; `GuardedSQLError` → `OutputError(category=…)` | — |
 | M4: registry + write gate | yes | one registry block; add `"ExecuteSQL"` to `WRITE_DESTINATIONS` | — |
 
 ### Module 1: Rust SQL guard
@@ -230,19 +249,51 @@ class ExecuteSQLDestination(AbstractDestination):
   from _qs_parsers import sql_guard  # noqa: F401    (local-dev branch)
   ```
 
+### Module 2b: Shared guarded-SQL executor
+- **Path**: `querysource/interfaces/guarded_sql.py` (new)
+- **Responsibility**: Guard SQL with the Rust guard and execute it on PostgreSQL with `DB*` credentials in one transaction. It has no dependency on MultiQuery, and FEAT-157 hooks use it.
+- **Depends on**: M2
+- **Interface Skeleton**:
+  ```python
+  # querysource/interfaces/guarded_sql.py  (new)
+  from typing import List, Union
+  from asyncdb import AsyncDB                      # verified: querysource/interfaces/connections.py:11
+  from querysource.conf import default_dsn         # verified: querysource/conf.py:32
+  from querysource.exceptions import QueryException  # verified: querysource/exceptions.py:6
+  from querysource.qs_parsers import HAS_RUST      # verified: querysource/qs_parsers/__init__.py:16,26
+
+  class GuardedSQLError(QueryException):
+      """Guard rejection (category ``data``) or missing extension / DB failure (category ``infra``)."""
+      def __init__(self, message: str, *, category: str) -> None: ...
+
+  def guard_statements(sql: Union[str, List[str]]) -> List[str]:
+      """Return the flattened, guard-approved statements of every script, in order.
+
+      Raises:
+          GuardedSQLError: empty input or non-str items (``data``); ``HAS_RUST`` False (``infra``);
+              a blocked or unparsable statement (``data``, the guard's message).
+      """
+
+  async def execute_guarded(statements: List[str], *, timeout: float = 3600.0) -> List[str]:
+      """Execute ``statements`` in ONE transaction on ``default_dsn`` and return their status tags.
+
+      Raises:
+          GuardedSQLError: any connection or statement error (``infra``); the transaction is rolled back.
+      """
+  ```
+
 ### Module 3: ExecuteSQLDestination
 - **Path**: `querysource/queries/multi/destinations/execute_sql.py` (new)
-- **Responsibility**: Guard, then execute the SQL in one transaction with `DB*` credentials. Pass the data through.
-- **Depends on**: M2
+- **Responsibility**: A thin Output wrapper over M2b. Pass the data through.
+- **Depends on**: M2b
 - **Interface Skeleton**:
   ```python
   # querysource/queries/multi/destinations/execute_sql.py  (new)
   from typing import List, Union
   import pandas as pd
-  from querysource.conf import default_dsn  # verified: querysource/conf.py:32
   from querysource.exceptions import OutputError  # verified: querysource/exceptions.py:104
+  from querysource.interfaces.guarded_sql import GuardedSQLError, execute_guarded, guard_statements  # created by M2b
   from querysource.outputs.destinations.abstract import AbstractDestination  # verified: querysource/outputs/destinations/abstract.py:19
-  from querysource.qs_parsers import HAS_RUST  # verified: querysource/qs_parsers/__init__.py:16,26
 
   class ExecuteSQLDestination(AbstractDestination):
       """Run guarded SQL statements on PostgreSQL (DB* credentials) in one transaction.
@@ -258,26 +309,13 @@ class ExecuteSQLDestination(AbstractDestination):
               OutputError: missing/empty ``sql``, non-string items, unsupported driver, timeout <= 0.
           """
 
-      def _guarded_statements(self) -> List[str]:
-          """Run ``sql_guard`` over every script and return the flattened statements.
-
-          Raises:
-              OutputError: Rust extension missing (category ``infra``) or a statement blocked /
-                  unparsable (category ``data``, message from the guard).
-          """
-
-      async def _execute(self, statements: List[str]) -> List[str]:
-          """Execute ``statements`` in one transaction and return their status tags.
-
-          Raises:
-              OutputError: any database error (the transaction is rolled back).
-          """
-
       async def run(self) -> Union[dict, pd.DataFrame]:
-          """Guard, execute, store ``self.results``.
+          """``guard_statements`` → ``execute_guarded``; store ``self.results``.
 
           Returns:
               ``self.data`` unchanged.
+          Raises:
+              OutputError: wraps ``GuardedSQLError`` keeping its ``category``.
           """
   ```
 
@@ -307,12 +345,16 @@ class ExecuteSQLDestination(AbstractDestination):
 | `test_sql_guard_ignores_keywords_in_literals` | M2 | `SELECT 'drop table x'`, `-- DROP`, `/* DROP */`, `$$DROP$$` allowed |
 | `test_sql_guard_splits` | M2 | `DELETE …; INSERT …;` → 2 statements, `';'` inside literal not split |
 | `test_sql_guard_unterminated` | M2 | `SELECT 'abc` → `ValueError` |
+| `test_guard_statements_flattens` (`tests/test_guarded_sql.py`) | M2b | list of scripts → statements in order |
+| `test_guard_statements_blocked` | M2b | `DROP TABLE x` → `GuardedSQLError(category="data")` |
+| `test_guard_statements_no_rust_fails_closed` | M2b | `HAS_RUST=False` patched → `GuardedSQLError(category="infra")` |
+| `test_execute_guarded_one_transaction` | M2b | mocked raw conn: `SET LOCAL statement_timeout` first, statements in order, inside `transaction()`; returns status tags |
+| `test_execute_guarded_db_error` | M2b | asyncpg error on stmt 2 → `GuardedSQLError(category="infra")`, transaction exited with exception |
+| `test_execute_guarded_uses_default_dsn` | M2b | `AsyncDB` built with `default_dsn`, never `asyncpg_url` |
 | `test_execsql_init_validation` (`tests/test_destination_execute_sql.py`) | M3 | missing sql, bad driver, timeout ≤ 0 → `OutputError` |
-| `test_execsql_blocked_never_connects` | M3 | `DROP TABLE x` → `OutputError`; `AsyncDB` never instantiated |
-| `test_execsql_no_rust_fails_closed` | M3 | `HAS_RUST=False` patched → `OutputError` |
-| `test_execsql_runs_in_one_transaction` | M3 | mocked raw conn: `SET LOCAL statement_timeout` first, statements in order, inside `transaction()`; `results` = status tags |
-| `test_execsql_db_error_wrapped` | M3 | asyncpg error on stmt 2 → `OutputError`, transaction exited with exception |
-| `test_execsql_passthrough` | M3 | return value `is` input data |
+| `test_execsql_blocked_never_connects` | M3 | `DROP TABLE x` → `OutputError(category="data")`; `AsyncDB` never instantiated |
+| `test_execsql_wraps_guarded_error` | M3 | `GuardedSQLError` → `OutputError` with the same `category` |
+| `test_execsql_passthrough` | M3 | return value `is` input data; `results` = status tags |
 | `test_registry_has_executesql` | M4 | `get_destination("ExecuteSQL")` |
 | `test_preflight_gate_executesql` | M4 | `ExecuteSQL` in Output triggers the `pg_admin` gate |
 
@@ -336,7 +378,8 @@ def refresh_sql() -> str:
 
 - [ ] `cd rust && cargo test --no-default-features` passes (includes `sql_guard` tests).
 - [ ] Extension rebuilt (`maturin develop` from `rust/`) and `python -c "from querysource.qs_parsers import sql_guard"` works.
-- [ ] `pytest tests/test_sql_guard.py tests/test_destination_execute_sql.py tests/test_rust_parsers.py -v` passes.
+- [ ] `pytest tests/test_sql_guard.py tests/test_guarded_sql.py tests/test_destination_execute_sql.py tests/test_rust_parsers.py -v` passes.
+- [ ] `querysource/interfaces/guarded_sql.py` imports nothing from `querysource.queries.multi` (reusable by FEAT-157).
 - [ ] Existing destination tests still pass (`tests/test_destination_table.py`, `tests/test_multiqs_destination_dispatch.py`, `tests/test_destinations_documentation_endpoint.py`).
 - [ ] `ruff check` is clean on the new and modified Python files.
 - [ ] Every statement kind in the §2 blocked table is rejected **before any database connection is opened**.
@@ -354,6 +397,7 @@ def refresh_sql() -> str:
 ```python
 from querysource.outputs.destinations.abstract import AbstractDestination  # verified: querysource/outputs/destinations/abstract.py:19
 from querysource.exceptions import OutputError                            # verified: querysource/exceptions.py:104
+from querysource.exceptions import QueryException                         # verified: querysource/exceptions.py:6
 from querysource.conf import default_dsn                                  # verified: querysource/conf.py:32
 from querysource.qs_parsers import HAS_RUST                               # verified: querysource/qs_parsers/__init__.py:16,26
 from asyncdb import AsyncDB                                               # verified: querysource/interfaces/connections.py:11
@@ -393,6 +437,7 @@ pg.transaction()/commit()/rollback()     # drivers/pg.py:1069/1076/1083 (asyncdb
 - ~~A SQL grammar/AST parser in `rust/`~~. The existing `*_parser.rs` modules build and format WHERE/ORDER/LIMIT fragments, and `safe_dict.rs` checks **values** for injection markers (`safe_dict.rs:17-33`). None of them classify statements. `sql_guard.rs` is new.
 - ~~`sqlparser` / `sqlglot` dependencies~~. Neither is present in `rust/Cargo.toml` or `pyproject.toml`, and this feature adds none.
 - ~~`querysource.queries.multi.destinations.execute_sql`~~ — created here.
+- ~~`querysource.interfaces.guarded_sql` / `GuardedSQLError`~~ — created here (M2b).
 - ~~Flowtask imports (`flowtask.components.ExecuteSQL`, `TemplateSupport`, `QSSupport`, `_taskstore`)~~ — not available in QuerySource.
 - ~~`WRITE_DESTINATIONS`~~ does not exist until FEAT-155 is merged.
 
@@ -406,10 +451,12 @@ Verified against: `2a9f19b`
 | `rust/src/lib.rs` | MODIFY | `    m.add_function(wrap_pyfunction!(safe_dict::safe_format_map_validated, m)?)?;` | `lib.rs:57` | 1 |
 | `querysource/qs_parsers/__init__.py` | MODIFY | `    from ._qs_parsers import safe_format_map_validated  # noqa: F401` | `__init__.py:15` | 1 |
 | `querysource/qs_parsers/__init__.py` | MODIFY | `        from _qs_parsers import safe_format_map_validated  # noqa: F401` | `__init__.py:23` | 1 |
+| `querysource/interfaces/guarded_sql.py` | CREATE | — | — | — |
 | `querysource/queries/multi/destinations/execute_sql.py` | CREATE | — | — | — |
 | `querysource/outputs/destinations/__init__.py` | MODIFY | `    DESTINATION_REGISTRY["TableDelete"] = TableDeleteDestination` (from FEAT-155) | (after FEAT-155) | 1 |
 | `querysource/queries/multi/__init__.py` | MODIFY | `WRITE_DESTINATIONS: frozenset[str] = frozenset({"TableDelete"})` (from FEAT-155) | (after FEAT-155) | 1 |
 | `tests/test_sql_guard.py` | CREATE | — | — | — |
+| `tests/test_guarded_sql.py` | CREATE | — | — | — |
 | `tests/test_destination_execute_sql.py` | CREATE | — | — | — |
 
 ---
@@ -463,10 +510,10 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 
 ## Worktree Strategy
 - Isolation: one feature worktree `.claude/worktrees/feat-FEAT-156-multi-executesql`.
-- Module graph: M2 → M1 (registers `sql_guard`). M3 → M2 (imports `sql_guard`). M4 → M3 (imports `ExecuteSQLDestination`).
+- Module graph: M2 → M1 (registers `sql_guard`). M2b → M2 (imports `sql_guard`). M3 → M2b (imports `guard_statements`/`execute_guarded`). M4 → M3 (imports `ExecuteSQLDestination`).
 - Shared files: `rust/src/lib.rs` (M2 only); none shared between modules.
 - Exclusive resources: rebuilding the Rust extension (`maturin develop`) is required after M1/M2 and before the M3 tests, so M2 is `parallel: false`.
-- Cross-feature: **FEAT-155 (`multi-tabledelete`) must be merged first**. It creates `WRITE_DESTINATIONS` and the `TableDelete` registry block that M4 anchors on.
+- Cross-feature: **FEAT-155 (`multi-tabledelete`) must be merged first**. It creates `WRITE_DESTINATIONS` and the `TableDelete` registry block that M4 anchors on. **FEAT-157 (`multi-source-hooks`) depends on this feature** (M1, M2, M2b).
 
 ---
 
@@ -475,3 +522,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-29 | Juan2coder | Initial draft |
+| 0.2 | 2026-09-30 | Juan2coder | Extract guard + executor into `querysource/interfaces/guarded_sql.py` for reuse by FEAT-157 hooks |
