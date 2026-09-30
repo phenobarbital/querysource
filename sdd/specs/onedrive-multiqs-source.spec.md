@@ -11,7 +11,7 @@ tags: [onedrive, sharepoint, microsoft-graph, multiquery-source, session-vault, 
 **Feature ID**: FEAT-159
 **Date**: 2026-09-30
 **Author**: Jesus Lara (spec drafted by Claude Code, Opus 5.5)
-**Status**: draft
+**Status**: approved
 **Target version**: next minor after the navigator-auth `onedrive` provider release
 **Research**: proposal `sdd/proposals/onedrive-multiqs-source.proposal.md` (research id FEAT-178, state `sdd/state/FEAT-178/`)
 
@@ -222,7 +222,14 @@ append-only `{table}_run_as_audit` table in the same schema.
 | **P1 — navigator-auth `onedrive` provider** | external prerequisite | see below |
 
 **P1 — required navigator-auth contract.** This is the cross-repo
-prerequisite, delivered by its own spec in the navigator-auth repo:
+prerequisite, specified as **navigator-auth FEAT-100**
+(`../navigator-auth/sdd/specs/onedrive-identity-provider.spec.md`, committed
+`1c7c57f`, target release **0.29.0**). The backend's dotted path is
+`navigator_auth.backends.OneDriveAuth`, and its settings are
+`ONEDRIVE_CLIENT_ID`, `ONEDRIVE_CLIENT_SECRET`, `ONEDRIVE_TENANT` (default
+`common`) and `ONEDRIVE_IDENTITY_SCOPES`. Those are navigator-auth's
+delegated-app settings, separate from querysource's app-only
+`ONEDRIVE_APP_*`. The contract:
 
 - `OneDriveAuth(ExternalAuth)` with `_service_name = "onedrive"`, so
   `AuthHandler.get_external_backend("onedrive")` resolves it.
@@ -235,9 +242,11 @@ prerequisite, delivered by its own spec in the navigator-auth repo:
 - `identity_scopes()` returns `["Files.Read", "User.Read", "offline_access"]`.
 - `refresh_identity_tokens()` handles rotated refresh tokens. The generic
   `ExternalAuth` implementation is enough.
-- *Nice to have:* a public `AuthHandler.identity_provider` property. querysource
-  falls back to `AuthHandler._idp` when it is absent (§6).
-- It is released as a navigator-auth version **V**. §8 Q2 tracks V.
+- A public, read-only `AuthHandler.identity_provider` property (navigator-auth
+  FEAT-100 M3). querysource prefers it and falls back to `AuthHandler._idp`
+  only on older releases (§6).
+- It is released as navigator-auth **0.29.0** (navigator-auth FEAT-100 §8 Q1
+  confirms the number at release).
 
 ### Data Models
 
@@ -288,9 +297,19 @@ CREATE TRIGGER qs_run_as_audit_no_mutation
     BEFORE UPDATE OR DELETE ON "{schema}"."{table}_run_as_audit"
     FOR EACH ROW EXECUTE FUNCTION "{schema}".qs_run_as_audit_immutable();
 
-REVOKE UPDATE, DELETE, TRUNCATE ON "{schema}"."{table}_run_as_audit" FROM <app_role>;
-GRANT  INSERT, SELECT          ON "{schema}"."{table}_run_as_audit" TO   <app_role>;
-GRANT  USAGE                   ON SEQUENCE "{schema}"."{table}_run_as_audit_audit_id_seq" TO <app_role>;
+-- Roles (§8 Q3). Create once per cluster; run the DDL above AS qs_owner, or re-own it:
+--   CREATE ROLE qs_owner NOLOGIN;
+--   CREATE ROLE qs_app   NOLOGIN;
+--   GRANT qs_app TO <DBUSER login>;   -- the querysource login (DBUSER = PG_USER)
+ALTER TABLE    "{schema}"."{table}_run_as_audit"      OWNER TO qs_owner;
+ALTER FUNCTION "{schema}".qs_run_as_audit_immutable() OWNER TO qs_owner;
+REVOKE ALL ON "{schema}"."{table}_run_as_audit" FROM PUBLIC, qs_app;
+GRANT  INSERT, SELECT ON "{schema}"."{table}_run_as_audit" TO qs_app;
+GRANT  USAGE ON SEQUENCE "{schema}"."{table}_run_as_audit_audit_id_seq" TO qs_app;
+
+-- Rollout check: the app login must NOT own the audit table. An owner ignores
+-- REVOKE and can DISABLE TRIGGER, which would defeat append-only.
+SELECT tableowner FROM pg_tables WHERE schemaname = '{schema}' AND tablename = '{table}_run_as_audit';
 ```
 
 ### New Public Interfaces
@@ -334,7 +353,7 @@ Python: `OneDriveSource`, `GraphDriveSource`, `SourceIdentityContext`,
 | M6: Run-as persistence | no | — | transactional diff-and-audit inside `patch`/`upsert` touches tenant write semantics; needs a thinking-model implementer |
 | M7: Manager + scheduler run-as wiring | yes | kwargs names and flow fixed below | — |
 | M8: Registration, extra, docs, generated schema | yes | file list fixed; generator command | — |
-| M9: Enable the `onedrive` provider + pin | yes, **blocked on P1** | settings entry + `navigator-auth>=V` | blocked by the external release |
+| M9: Enable the `onedrive` provider + pin | yes, **blocked on P1** | settings entry `navigator_auth.backends.OneDriveAuth` + `navigator-auth>=0.29.0` | blocked by the navigator-auth FEAT-100 release |
 
 ### Module 1: Graph drive-item base
 - **Path**: `querysource/queries/multi/sources/graph.py` (new)
@@ -614,8 +633,9 @@ Python: `OneDriveSource`, `GraphDriveSource`, `SourceIdentityContext`,
   ```
 
 ### Module 9: Enable the `onedrive` provider and raise the pin (**blocked on P1**)
-- **Paths**: `settings/settings.py` (`AUTHENTICATION_BACKENDS` adds P1's dotted
-  path), `pyproject.toml` (`navigator-auth>=V`), `uv.lock`
+- **Paths**: `settings/settings.py` (`AUTHENTICATION_BACKENDS` adds
+  `'navigator_auth.backends.OneDriveAuth'`), `pyproject.toml`
+  (`navigator-auth>=0.29.0`), `uv.lock`
 - **Responsibility**: turn on the link-only provider and require the
   navigator-auth release that ships it, plus a startup test that the backend
   resolves and exposes no login route.
@@ -936,7 +956,7 @@ Verified against: **7e6916e**
 | `azure-identity` | `>=1.0` | app-only `ClientSecretCredential` (aio) |
 | `azure-core` | transitive | `AccessToken` for `StaticTokenCredential` |
 | `httpx` | `>=0.24` (core dep `httpx[http2]>=0.26.0`) | file download |
-| `navigator-auth` | `>=V` (P1 release; currently `>=0.15.8`, 0.28.2 installed) | identity link, vault helpers, `onedrive` backend |
+| `navigator-auth` | `>=0.29.0` (navigator-auth FEAT-100; currently `>=0.15.8`, 0.28.2 installed) | identity link, vault helpers, `OneDriveAuth` backend, `identity_provider` |
 
 ---
 
@@ -953,8 +973,8 @@ Verified against: **7e6916e**
 - [x] Model field or repository-only? — *Resolved at spec time*: "Repository-only". The field is kept out of `QueryModel` and `TenantQueryDefinition`, and only `DefinitionRepository` reads and writes it. This deliberately departs from the proposal's "QueryModel gains the field".
 - [x] Cross-repo scope? — *Resolved at spec time*: "External prerequisite". This spec is querysource-only, and P1 gets its own spec in the navigator-auth repo.
 - [ ] **Q1 — Backfill** for slugs already scheduled before this feature. Options: leave them `NULL` until the schedule is re-saved (default, and the safest), or add an admin-only explicit "claim run-as" endpoint that writes an audit row. — *Owner: Jesus Lara*
-- [ ] **Q2 — navigator-auth version V** that ships `OneDriveAuth`, and whether it adds the public `AuthHandler.identity_provider`. This blocks M9 only. — *Owner: Jesus Lara*
-- [ ] **Q3 — `<app_role>`** name for the audit-table grants in production and tenant schemas. It is a deployment value filled in the DDL doc. — *Owner: Jesus Lara*
+- [x] **Q2 — navigator-auth version V** that ships `OneDriveAuth`, and whether it adds the public `AuthHandler.identity_provider`. This blocks M9 only. — *Owner: Jesus Lara*: generates a follow-up spec for OneDriveAuth in navigator-auth repository (../navigator-auth) → written as navigator-auth **FEAT-100** `onedrive-identity-provider` (`../navigator-auth/sdd/specs/onedrive-identity-provider.spec.md`, commit `1c7c57f`). It adds the link-only `OneDriveAuth` and the public `AuthHandler.identity_provider`, targets **0.29.0**, and M9 pins `navigator-auth>=0.29.0`. M9 stays blocked until that release.
+- [x] **Q3 — `<app_role>`** name for the audit-table grants in production and tenant schemas. It is a deployment value filled in the DDL doc. — *Owner: Jesus Lara*: "qs_owner + qs_app roles". Two NOLOGIN group roles: `qs_owner` owns the audit table and trigger function, and `qs_app` gets INSERT/SELECT plus sequence USAGE. The querysource login (`DBUSER` = `PG_USER`, the same in `env/.env` and `env/prod/.env`) is granted `qs_app`. The app login must never own the audit table (see the rollout check in §2 Data Models).
 
 ---
 
@@ -1019,3 +1039,4 @@ Summary: **10** confirmed (1 partial) · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-30 | Jesus Lara / Claude Code | Initial draft from accepted proposal FEAT-178 research + codex design research |
+| 0.2 | 2026-09-30 | Jesus Lara / Claude Code | Q2 → navigator-auth FEAT-100 (0.29.0, `OneDriveAuth`, `identity_provider`); Q3 → `qs_owner`/`qs_app` roles + owner rollout check |
