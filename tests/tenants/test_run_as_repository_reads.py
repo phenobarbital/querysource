@@ -4,8 +4,7 @@ from asyncdb.drivers.pg import UndefinedColumnError
 
 from querysource.repositories.definitions import RUN_AS_COLUMN, DefinitionRepository
 from querysource.tenant_errors import TenantError
-from querysource.tenants import QueryIdentity
-from querysource.tenants import QueryStore
+from querysource.tenants import QueryIdentity, QueryStore
 
 
 def _tenant_store(schema: str = "tenant1") -> QueryStore:

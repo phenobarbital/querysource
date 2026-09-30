@@ -9,9 +9,9 @@ annotations`` nor ``X | None``/``list[X]`` union syntax. See
 Cython ``datamodel`` validator breaks on both when constructing
 ``TenantQueryDefinition`` instances.
 """
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-import logging
 from typing import Any
 
 from asyncdb.drivers.pg import UndefinedColumnError, UndefinedTableError, pg
