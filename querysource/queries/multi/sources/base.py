@@ -6,6 +6,9 @@ from typing import Optional
 
 import pandas as pd
 from aiohttp import web
+from asyncdb.exceptions import NoDataFound
+
+from ....exceptions import DataNotFound
 
 
 class ThreadSource(threading.Thread, ABC):
@@ -144,6 +147,11 @@ class ThreadSource(threading.Thread, ABC):
             result = loop.run_until_complete(self.fetch())
             if result is not None:
                 loop.run_until_complete(self._queue.put({self._name: result}))
+        except (DataNotFound, NoDataFound) as ex:
+            # An empty result is not a failure: record it without a traceback
+            # so MultiQS can answer "no data" (HTTP 204).
+            self.logger.info("ThreadSource %r returned no data: %s", self._name, ex)
+            self.exc = ex
         except Exception as ex:  # noqa: BLE001
             self.logger.error("ThreadSource %r failed: %s", self._name, ex, exc_info=True)
             self.exc = ex

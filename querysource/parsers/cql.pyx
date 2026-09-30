@@ -84,7 +84,9 @@ cdef class CQLParser(SQLParser):
                 _, name, end = field_components(key)[0]
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
-                    op, v = value.popitem()
+                    if not value:
+                        continue
+                    op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in ('>=', '<=', '<>', '!=', '<', '>'):
                         # SECURITY: Escape comparison value
                         safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)

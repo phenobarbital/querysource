@@ -4,6 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Optional
 
 from aiohttp import web
+from asyncdb.exceptions import NoDataFound
 
 from ... import conf
 from ...conf import QWORKER_HOST, QWORKER_PORT, QWORKER_TIMEOUT, QWORKER_WORKERS
@@ -568,7 +569,17 @@ class MultiQS(BaseQuery):
                             (n for n, task in tasks.items() if task is t), None
                         )
                         child_store = resolved_stores.get(task_name)
-                        if child_store is not None:
+                        if child_store is not None and isinstance(
+                            t.exc, (DataNotFound, NoDataFound)
+                        ):
+                            self._logger.info(
+                                "MultiQS child query returned no data (%s): %s",
+                                ownership_fields(
+                                    QueryIdentity(store=child_store, slug=t.slug)
+                                ),
+                                t.exc,
+                            )
+                        elif child_store is not None:
                             self._logger.warning(
                                 "MultiQS child query failed (%s): %s",
                                 ownership_fields(
@@ -586,7 +597,7 @@ class MultiQS(BaseQuery):
                             raise SlugNotFound(
                                 f"Slug Not Found: {t.slug}"
                             )
-                        if isinstance(t.exc, DataNotFound):
+                        if isinstance(t.exc, (DataNotFound, NoDataFound)):
                             raise DataNotFound(
                                 f"No Data was Found on Query {t.slug}"
                             )

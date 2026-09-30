@@ -207,7 +207,9 @@ cdef class BigQueryParser(SQLParser):
 
                 # Handle various value types
                 if isinstance(value, dict):
-                    op, v = value.popitem()
+                    if not value:
+                        continue
+                    op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
                         where_cond.append(f"{field_expr} {op} {bq_quote_string(str(v))}")
