@@ -37,7 +37,9 @@ def _httpx_client(content: bytes):
 
 def _item(name: str):
     """Return a minimal Graph drive item with a downloadable URL."""
-    return MagicMock(id="item-id", name=name, additional_data={"@microsoft.graph.downloadUrl": "https://download"})
+    item = MagicMock(id="item-id", additional_data={"@microsoft.graph.downloadUrl": "https://download"})
+    item.name = name  # MagicMock(name=...) names the mock itself, not the attribute
+    return item
 
 
 def test_encode_share_url_unpadded():

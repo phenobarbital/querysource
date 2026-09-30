@@ -1,6 +1,7 @@
 """Tests for caller-loop source preparation and delegated identity errors."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from querysource.auth.identity_tokens import DelegatedIdentityError
@@ -20,7 +21,7 @@ class _Rec(ThreadSource):
         super().start()
 
     async def fetch(self):
-        return None
+        return pd.DataFrame({"value": [1]})
 
 
 class _FailingRec(_Rec):
