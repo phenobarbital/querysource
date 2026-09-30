@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-30T15:24:21Z",
-  "completed_at": "2026-09-30T15:55:51+00:00",
+  "completed_at": "2026-09-30T18:01:08+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "notes": "M9 (enable navigator_auth.backends.OneDriveAuth + pin navigator-auth>=0.29.0) intentionally NOT generated: blocked on navigator-auth FEAT-100 release; append with /sdd-task after 0.29.0 ships.",
