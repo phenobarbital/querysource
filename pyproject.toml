@@ -155,7 +155,21 @@ sharepoint = [
 ]
 
 s3 = [
-    "aioboto3>=12.0",
+    "aioboto3>=15",
+    "s3fs>=2026.9",
+]
+
+parquet = [
+    "pyarrow>=25",
+    "fsspec>=2026.7",
+]
+
+gcs = [
+    "gcsfs>=2026.8",
+]
+
+parquet-all = [
+    "querysource[parquet,s3,gcs]",
 ]
 
 dev = [
