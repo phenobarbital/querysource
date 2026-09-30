@@ -1,4 +1,5 @@
 """ExecuteSQL destination: run guarded SQL on PostgreSQL (``DB*`` credentials), pass data through."""
+import math
 from typing import List, Union
 
 import pandas as pd
@@ -122,7 +123,7 @@ class ExecuteSQLDestination(AbstractDestination):
                 category="data",
             )
         timeout = kwargs.get("timeout", 3600)
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
             raise OutputError(f"ExecuteSQL: 'timeout' must be a number of seconds > 0, got {timeout!r}", category="data")
         self._sql: List[str] = scripts
         self._driver: str = "pg"

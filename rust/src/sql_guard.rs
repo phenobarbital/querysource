@@ -19,6 +19,8 @@ pub enum BlockedKind {
     Role,
     CopyProgram,
     TransactionControl,
+    Setting,
+    Unparsable,
 }
 
 impl BlockedKind {
@@ -33,6 +35,8 @@ impl BlockedKind {
             BlockedKind::Role => "role",
             BlockedKind::CopyProgram => "copy_program",
             BlockedKind::TransactionControl => "transaction_control",
+            BlockedKind::Setting => "setting",
+            BlockedKind::Unparsable => "unparsable",
         }
     }
 }
@@ -40,6 +44,17 @@ impl BlockedKind {
 const TRANSACTION_CONTROL: &[&str] = &[
     "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT",
 ];
+/// Session settings that change identity, string lexing or the timeouts imposed by the executor.
+const BLOCKED_SETTINGS: &[&str] = &[
+    "STANDARD_CONFORMING_STRINGS",
+    "BACKSLASH_QUOTE",
+    "ESCAPE_STRING_WARNING",
+    "STATEMENT_TIMEOUT",
+    "LOCK_TIMEOUT",
+    "IDLE_IN_TRANSACTION_SESSION_TIMEOUT",
+    "TRANSACTION_TIMEOUT",
+];
+const ROLE_WORDS: &[&str] = &["ROLE", "AUTHORIZATION", "SESSION_AUTHORIZATION"];
 const ROLE_OBJECTS: &[&str] = &["ROLE", "USER", "GROUP"];
 
 /// Lexer states (spec §2).
@@ -60,6 +75,8 @@ struct Segment {
     end: usize,
     has_code: bool,
     tokens: Vec<String>,
+    /// Keyword tokens plus quoted-identifier contents, in order.
+    words: Vec<String>,
 }
 
 /// Identifier byte: ASCII alphanumeric, `_`, `$` or any non-ASCII byte.
@@ -68,12 +85,19 @@ fn is_ident(b: u8) -> bool {
 }
 
 /// Flush a pending identifier run into `tokens` when it is a keyword-like token.
-fn flush(sql: &str, tok_start: &mut Option<usize>, end: usize, tokens: &mut Vec<String>) {
+fn flush(
+    sql: &str,
+    tok_start: &mut Option<usize>,
+    end: usize,
+    tokens: &mut Vec<String>,
+    words: &mut Vec<String>,
+) {
     if let Some(s) = tok_start.take() {
         let run = &sql[s..end];
         if let Some(&first) = run.as_bytes().first() {
             if first.is_ascii_alphabetic() || first == b'_' {
                 tokens.push(run.to_ascii_uppercase());
+                words.push(run.to_ascii_uppercase());
             }
         }
     }
@@ -108,6 +132,7 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
     let mut seg_start = 0usize;
     let mut has_code = false;
     let mut tokens: Vec<String> = Vec::new();
+    let mut words: Vec<String> = Vec::new();
     let mut tok_start: Option<usize> = None;
     // Start byte of the currently open construct (for error messages).
     let mut open_at = 0usize;
@@ -131,7 +156,7 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                             tok_start = None;
                             state = State::EscapeString;
                         } else {
-                            flush(sql, &mut tok_start, i, &mut tokens);
+                            flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                             state = State::SingleQuote;
                         }
                         has_code = true;
@@ -139,14 +164,14 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                         i += 1;
                     }
                     b'"' => {
-                        flush(sql, &mut tok_start, i, &mut tokens);
+                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                         has_code = true;
                         open_at = i;
                         state = State::DoubleQuote;
                         i += 1;
                     }
                     b'$' => {
-                        flush(sql, &mut tok_start, i, &mut tokens);
+                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                         if let Some(end) = dollar_tag_end(bytes, i) {
                             let delim = sql[i..=end].to_string();
                             has_code = true;
@@ -160,23 +185,24 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                         }
                     }
                     b'-' if bytes.get(i + 1) == Some(&b'-') => {
-                        flush(sql, &mut tok_start, i, &mut tokens);
+                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                         state = State::LineComment;
                         i += 2;
                     }
                     b'/' if bytes.get(i + 1) == Some(&b'*') => {
-                        flush(sql, &mut tok_start, i, &mut tokens);
+                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                         open_at = i;
                         state = State::BlockComment(1);
                         i += 2;
                     }
                     b';' => {
-                        flush(sql, &mut tok_start, i, &mut tokens);
+                        flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                         segments.push(Segment {
                             start: seg_start,
                             end: i,
                             has_code,
                             tokens: std::mem::take(&mut tokens),
+                            words: std::mem::take(&mut words),
                         });
                         seg_start = i + 1;
                         has_code = false;
@@ -187,7 +213,7 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                             tok_start = Some(i);
                             has_code = true;
                         } else {
-                            flush(sql, &mut tok_start, i, &mut tokens);
+                            flush(sql, &mut tok_start, i, &mut tokens, &mut words);
                             if !b.is_ascii_whitespace() {
                                 has_code = true;
                             }
@@ -227,6 +253,7 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                     if bytes.get(i + 1) == Some(&b'"') {
                         i += 2;
                     } else {
+                        words.push(sql[open_at + 1..i].replace("\"\"", "\"").to_ascii_uppercase());
                         state = State::Normal;
                         i += 1;
                     }
@@ -246,7 +273,7 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
                 }
             },
             State::LineComment => {
-                if b == b'\n' {
+                if b == b'\n' || b == b'\r' {
                     state = State::Normal;
                 }
                 i += 1;
@@ -286,12 +313,13 @@ fn lex(sql: &str) -> Result<Vec<Segment>, String> {
             return Err(format!("unterminated block comment starting at byte {open_at}"));
         }
     }
-    flush(sql, &mut tok_start, len, &mut tokens);
+    flush(sql, &mut tok_start, len, &mut tokens, &mut words);
     segments.push(Segment {
         start: seg_start,
         end: len,
         has_code,
         tokens,
+        words,
     });
     Ok(segments)
 }
@@ -305,29 +333,54 @@ pub fn split_statements(sql: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Upper-cased keyword tokens of one statement, skipping literals, identifiers and comments.
-fn keyword_tokens(stmt: &str) -> Vec<String> {
-    lex(stmt)
-        .map(|segs| segs.into_iter().flat_map(|s| s.tokens).collect())
-        .unwrap_or_default()
+/// Keyword tokens and all words (keywords + quoted identifiers) of one statement.
+fn statement_words(stmt: &str) -> Result<(Vec<String>, Vec<String>), String> {
+    let segs = lex(stmt)?;
+    let tokens = segs.iter().flat_map(|s| s.tokens.iter().cloned()).collect();
+    let words = segs.iter().flat_map(|s| s.words.iter().cloned()).collect();
+    Ok((tokens, words))
 }
 
-/// Classify one statement; `None` = allowed.
+/// Classify one statement; `None` = allowed. A statement that cannot be lexed is blocked.
 pub fn classify(stmt: &str) -> Option<BlockedKind> {
-    let tokens = keyword_tokens(stmt);
+    let (tokens, words) = match statement_words(stmt) {
+        Ok(v) => v,
+        Err(_) => return Some(BlockedKind::Unparsable),
+    };
     let first = tokens.first()?.as_str();
     let second = tokens.get(1).map(String::as_str).unwrap_or("");
+    let rest = &tokens[1..];
     match first {
         "DROP" => Some(BlockedKind::Drop),
         "TRUNCATE" => Some(BlockedKind::Truncate),
         "DO" => Some(BlockedKind::DoBlock),
         "GRANT" | "REVOKE" => Some(BlockedKind::Privilege),
         "CREATE" | "ALTER" if ROLE_OBJECTS.contains(&second) => Some(BlockedKind::Role),
-        // SET [SESSION|LOCAL] ROLE …, SET SESSION AUTHORIZATION …, RESET ROLE / RESET SESSION AUTHORIZATION
-        "SET" | "RESET" if tokens[1..].iter().any(|t| t == "ROLE" || t == "AUTHORIZATION") => {
-            Some(BlockedKind::Role)
+        // CREATE SCHEMA ... GRANT, ALTER DEFAULT PRIVILEGES GRANT|REVOKE embed privilege statements
+        "CREATE" | "ALTER" if rest.iter().any(|t| t == "GRANT" || t == "REVOKE") => {
+            Some(BlockedKind::Privilege)
         }
-        "ALTER" if tokens[1..].iter().any(|t| t == "DROP") => Some(BlockedKind::AlterDrop),
+        // SET [SESSION|LOCAL] ROLE …, SET SESSION AUTHORIZATION …, SET session_authorization, RESET ROLE …
+        // (quoted identifiers such as SET "role" are in `words`)
+        "SET" | "RESET" => {
+            if words[1..].iter().any(|w| ROLE_WORDS.contains(&w.as_str())) {
+                return Some(BlockedKind::Role);
+            }
+            let target = words[1..]
+                .iter()
+                .map(String::as_str)
+                .find(|w| *w != "SESSION" && *w != "LOCAL")
+                .unwrap_or("");
+            if BLOCKED_SETTINGS.contains(&target) {
+                Some(BlockedKind::Setting)
+            } else if target == "TRANSACTION" || target == "CHARACTERISTICS" {
+                Some(BlockedKind::TransactionControl)
+            } else {
+                None
+            }
+        }
+        "PREPARE" if second == "TRANSACTION" => Some(BlockedKind::TransactionControl),
+        "ALTER" if rest.iter().any(|t| t == "DROP") => Some(BlockedKind::AlterDrop),
         "COPY" if tokens.iter().any(|t| t == "PROGRAM") => Some(BlockedKind::CopyProgram),
         t if TRANSACTION_CONTROL.contains(&t) => Some(BlockedKind::TransactionControl),
         _ => None,
@@ -355,7 +408,7 @@ pub fn guard(sql: &str) -> Result<Vec<String>, String> {
 #[pyfunction]
 #[pyo3(signature = (sql))]
 pub fn sql_guard(sql: &str) -> PyResult<Vec<String>> {
-    guard(sql).map_err(|e| PyValueError::new_err(e))
+    guard(sql).map_err(PyValueError::new_err)
 }
 
 #[cfg(test)]
@@ -463,7 +516,7 @@ SELECT ad.employee_id, ad.activity_date FROM activity_days ad, params WHERE ad.a
         assert_kind("SET SESSION AUTHORIZATION x", "role");
         assert_kind("RESET ROLE", "role");
         assert_eq!(guard("SET search_path = x").unwrap().len(), 1);
-        assert_eq!(guard("SET statement_timeout = 5000").unwrap().len(), 1);
+        assert_eq!(guard("SET work_mem = '64MB'").unwrap().len(), 1);
     }
 
     #[test]
@@ -577,6 +630,30 @@ SELECT ad.employee_id, ad.activity_date FROM activity_days ad, params WHERE ad.a
         let msg = blocked(&sql);
         let after = msg.splitn(3, ": ").nth(2).unwrap_or("");
         assert_eq!(after.chars().count(), 80);
+    }
+
+    #[test]
+    fn line_comment_ends_at_carriage_return() {
+        for sql in ["SELECT 1 -- c\r; DROP TABLE t", "SELECT 1 -- c\r\n; DROP TABLE t"] {
+            assert!(blocked(sql).contains("drop is not allowed"), "{sql}");
+        }
+    }
+
+    #[test]
+    fn blocks_identity_and_lexer_settings() {
+        assert_kind("SET session_authorization = x", "role");
+        assert_kind("SET \"role\" TO x", "role");
+        assert_kind("SET standard_conforming_strings = off", "setting");
+        assert_kind("SET LOCAL statement_timeout = 0", "setting");
+        assert_kind("SET TRANSACTION READ ONLY", "transaction_control");
+        assert_kind("PREPARE TRANSACTION 'x'", "transaction_control");
+        assert_eq!(guard("SET search_path = 'role'").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn blocks_embedded_privileges() {
+        assert_kind("ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO x", "privilege");
+        assert_kind("CREATE SCHEMA s GRANT ALL ON t TO u", "privilege");
     }
 
     #[test]

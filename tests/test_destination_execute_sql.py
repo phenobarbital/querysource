@@ -24,7 +24,8 @@ def data() -> pd.DataFrame:
 
 @pytest.mark.parametrize("kwargs", [{}, {"sql": ""}, {"sql": []}, {"sql": ["ok", 3]},
                                     {"sql": REFRESH_SQL, "driver": "mysql"},
-                                    {"sql": REFRESH_SQL, "timeout": 0}, {"sql": REFRESH_SQL, "timeout": True}])
+                                    {"sql": REFRESH_SQL, "timeout": 0}, {"sql": REFRESH_SQL, "timeout": True},
+                                    {"sql": REFRESH_SQL, "timeout": float("inf")}, {"sql": REFRESH_SQL, "timeout": float("nan")}])
 def test_execsql_init_validation(data, kwargs) -> None:
     with pytest.raises(OutputError) as exc:
         ExecuteSQLDestination(data, **kwargs)

@@ -29,6 +29,14 @@ BLOCKED = [
     ("ALTER USER bob WITH SUPERUSER", "role"),
     ("SET ROLE admin", "role"),
     ("SET SESSION AUTHORIZATION bob", "role"),
+    ("SET session_authorization = bob", "role"),
+    ("SET \"role\" TO bob", "role"),
+    ("SET standard_conforming_strings = off", "setting"),
+    ("SET LOCAL statement_timeout = 0", "setting"),
+    ("PREPARE TRANSACTION 'x'", "transaction_control"),
+    ("ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO x", "privilege"),
+    ("CREATE SCHEMA s GRANT ALL ON t TO u", "privilege"),
+    ("SELECT 1 -- c\r; DROP TABLE t", "drop"),
     ("COPY t FROM PROGRAM 'curl http://x'", "copy_program"),
     ("BEGIN", "transaction_control"),
     ("COMMIT", "transaction_control"),
@@ -38,7 +46,7 @@ BLOCKED = [
 
 @pytest.mark.parametrize("sql,kind", BLOCKED)
 def test_sql_guard_blocks_each_kind(sql: str, kind: str) -> None:
-    with pytest.raises(ValueError, match=rf"statement 1: {kind} is not allowed"):
+    with pytest.raises(ValueError, match=rf"statement \d: {kind} is not allowed"):
         sql_guard(sql)
 
 
