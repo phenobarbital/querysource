@@ -76,7 +76,7 @@
       "feature_id": "FEAT-157",
       "feature": "multi-source-hooks",
       "spec": "sdd/specs/multi-source-hooks.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [],
@@ -84,8 +84,9 @@
       "parallelism_notes": "Exclusive resource: generate-multiquery-docs -o generated rewrites the shared generated/ tree, so it must not run concurrently with any other task regenerating generated/. Documentation-only: edits query.catalog.yaml, no code dependency on TASK-823/824/825.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:57:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-826-query-catalog-hooks.md"
+      "completed_at": "2026-09-30T21:59:08+00:00",
+      "file": "sdd/tasks/completed/TASK-826-query-catalog-hooks.md",
+      "verification": "verified"
     }
   ]
 }
