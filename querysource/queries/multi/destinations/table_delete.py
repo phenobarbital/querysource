@@ -190,6 +190,7 @@ class TableDeleteDestination(AbstractDestination):
         try:
             deleted = int(str(status).split()[-1])
         except (ValueError, IndexError):
+            self.logger.warning("TableDelete: unparseable status %r", status)
             deleted = 0
         return deleted
 
