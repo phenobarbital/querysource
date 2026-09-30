@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-178",
+  "feature_slug": "onedrive-multiqs-source",
+  "started_at": "2026-09-30T14:26:41Z",
+  "updated_at": "2026-09-30T14:29:37Z",
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "raw_path": "sdd/state/FEAT-178/source.md",
+    "fetched_at": "2026-09-30T14:26:41Z",
+    "summary_oneline": "MS OneDrive source for MultiQS, modelled on the existing SharePoint source"
+  },
+  "mode": "enrichment",
+  "phase": "qa_complete",
+  "phases": {
+    "source": {
+      "status": "completed"
+    },
+    "plan": {
+      "status": "completed",
+      "queries_total": 12,
+      "approved_by_user": false,
+      "edited_by_user": false,
+      "plan_path": "sdd/state/FEAT-178/research_plan.json",
+      "wiki_available": true,
+      "base_branch": "dev"
+    },
+    "research": {
+      "status": "completed",
+      "queries_executed": 12,
+      "queries_skipped": 0,
+      "findings": 11,
+      "truncated": false
+    },
+    "synthesis": {
+      "status": "completed",
+      "overall_confidence": "medium",
+      "lint": "passed"
+    },
+    "qa": {
+      "status": "completed",
+      "questions_total": 4,
+      "questions_answered": 4,
+      "new_unresolved": 1
+    },
+    "output": {
+      "proposal_path": "sdd/proposals/onedrive-multiqs-source.proposal.md"
+    }
+  },
+  "budget": {
+    "profile": "default",
+    "max_files_read": 40,
+    "max_grep_calls": 25,
+    "max_git_calls": 10,
+    "max_depth": 2,
+    "max_wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 9,
+    "grep_calls": 8,
+    "git_calls": 1,
+    "wall_seconds": 280
+  },
+  "errors": [],
+  "resume_hint": {
+    "next_phase": "commit",
+    "next_action": "Commit proposal"
+  }
+}
