@@ -4,7 +4,7 @@ title: OneDriveSource for MultiQS — download a CSV/Excel file from OneDrive (B
 slug: onedrive-multiqs-source
 type: feature
 mode: enrichment
-status: review
+status: accepted
 source:
   kind: inline
   jira_key: null
