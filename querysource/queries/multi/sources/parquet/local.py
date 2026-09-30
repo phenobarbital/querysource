@@ -35,7 +35,7 @@ class ParquetFileSource(ParquetSource):
         if not self._path:
             raise ValueError("ParquetFileSource: 'source.path' is required.")
 
-    def _build_filesystem(self) -> tuple["fsspec.AbstractFileSystem", str]:
+    def _build_filesystem(self) -> tuple[fsspec.AbstractFileSystem, str]:
         """Return a LocalFileSystem and the absolute, mask-resolved path."""
         from fsspec.implementations.local import LocalFileSystem  # noqa: PLC0415
 
