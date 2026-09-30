@@ -9,22 +9,26 @@ Falls back gracefully when the extension is not available
 """
 try:
     # In-wheel location: .so bundled inside querysource/qs_parsers/
-    from ._qs_parsers import *  # noqa: F401,F403
     from . import _qs_parsers
+    from ._qs_parsers import *  # noqa: F401,F403
+
     # Explicit re-export for context-aware validating substitution (FEAT-103)
     from ._qs_parsers import safe_format_map_validated  # noqa: F401
-    # Explicit re-export for the ExecuteSQL statement guard (FEAT-156)
-    from ._qs_parsers import sql_guard  # noqa: F401
     HAS_RUST = True
 except ImportError:
     try:
         # Local dev (maturin develop): installed as top-level package
-        from _qs_parsers import *  # noqa: F401,F403
         import _qs_parsers
+        from _qs_parsers import *  # noqa: F401,F403
+
         # Explicit re-export for context-aware validating substitution (FEAT-103)
         from _qs_parsers import safe_format_map_validated  # noqa: F401
-        # Explicit re-export for the ExecuteSQL statement guard (FEAT-156)
-        from _qs_parsers import sql_guard  # noqa: F401
         HAS_RUST = True
     except ImportError:
         HAS_RUST = False
+
+# ExecuteSQL statement guard (FEAT-156). Resolved separately from the block above, so that an
+# extension built before FEAT-156 (no ``sql_guard``) does not turn HAS_RUST off for every other
+# Rust parser. Callers such as ``querysource.interfaces.guarded_sql`` treat None as unavailable
+# and fail closed.
+sql_guard = getattr(_qs_parsers, "sql_guard", None) if HAS_RUST else None

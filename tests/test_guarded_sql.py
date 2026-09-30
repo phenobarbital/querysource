@@ -121,3 +121,21 @@ async def test_execute_guarded_rejects_bad_timeout() -> None:
     with pytest.raises(GuardedSQLError) as exc:
         await execute_guarded(["DELETE FROM t"], timeout=0)
     assert exc.value.category == "data"
+
+
+@pytest.mark.parametrize(
+    ("timeout", "expected_ms"),
+    [(0.0001, 1), (0.0015, 2), (10**9, 2_147_483_647)],
+)
+async def test_execute_guarded_timeout_never_zero_and_capped(fake_db, timeout, expected_ms) -> None:
+    """Sub-millisecond timeouts must not become 0 (= no limit); huge ones are capped at int4."""
+    _factory, _raw, log = fake_db
+    await execute_guarded(["DELETE FROM t"], timeout=timeout)
+    assert log[1] == f"SET LOCAL statement_timeout = {expected_ms}"
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("nan"), -1])
+async def test_execute_guarded_rejects_non_finite_timeout(bad) -> None:
+    with pytest.raises(GuardedSQLError) as exc:
+        await execute_guarded(["DELETE FROM t"], timeout=bad)
+    assert exc.value.category == "data"

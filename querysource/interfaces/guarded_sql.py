@@ -6,6 +6,7 @@ import from ``querysource.queries.multi``.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable, List, Optional, Union
 
 from asyncdb import AsyncDB
@@ -21,6 +22,7 @@ except ImportError:  # extension missing, or built before FEAT-156
 
 sql_guard: Optional[Callable[[str], List[str]]] = _sql_guard
 logger = logging.getLogger(__name__)
+_MAX_STATEMENT_TIMEOUT_MS = 2_147_483_647
 
 
 class GuardedSQLError(QueryException):
@@ -80,11 +82,13 @@ async def execute_guarded(statements: List[str], *, timeout: float = 3600.0) -> 
         GuardedSQLError: ``timeout <= 0`` (``data``); any connection or statement error (``infra``);
             the transaction is rolled back.
     """
-    if timeout <= 0:
-        raise GuardedSQLError("timeout must be > 0 seconds", category="data")
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise GuardedSQLError("timeout must be a finite number of seconds > 0", category="data")
     if not statements:
         return []
-    timeout_ms = int(timeout * 1000)
+    # Never 0: PostgreSQL treats statement_timeout = 0 as "no timeout". Also cap at the int4
+    # maximum PostgreSQL accepts for the setting.
+    timeout_ms = min(max(1, math.ceil(timeout * 1000)), _MAX_STATEMENT_TIMEOUT_MS)
     results: List[str] = []
     current = 0
     try:
