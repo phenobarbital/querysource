@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-30T15:24:21Z",
-  "completed_at": null,
+  "completed_at": "2026-09-30T15:55:51+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "notes": "M9 (enable navigator_auth.backends.OneDriveAuth + pin navigator-auth>=0.29.0) intentionally NOT generated: blocked on navigator-auth FEAT-100 release; append with /sdd-task after 0.29.0 ships.",
@@ -269,7 +269,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -281,8 +281,9 @@
       "parallelism_notes": "TASK-811: repo.patch run_as_actor path; TASK-812: scheduled_multiqs_job run_as_user_id/identity_auth; TASK-813: OneDriveSource in SOURCE_REGISTRY for sources: dispatch.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-814-integration-tests.md"
+      "completed_at": "2026-09-30T15:55:51+00:00",
+      "file": "sdd/tasks/completed/TASK-814-integration-tests.md",
+      "verification": "verified"
     }
   ]
 }
