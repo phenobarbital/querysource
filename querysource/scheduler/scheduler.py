@@ -36,8 +36,8 @@ from querysource.conf import (
     QS_SCHEDULER_MAX_INSTANCES,
     QS_SCHEDULER_TIMEZONE,
 )
-from querysource.repositories.definitions import RUN_AS_COLUMN
 from querysource.repositories import DefinitionRepository
+from querysource.repositories.definitions import RUN_AS_COLUMN
 from querysource.scheduler.jobs import (
     cache_refresh_job,
     scheduled_multiqs_job,
