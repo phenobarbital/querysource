@@ -9,9 +9,11 @@ annotations`` nor ``X | None``/``list[X]`` union syntax. See
 Cython ``datamodel`` validator breaks on both when constructing
 ``TenantQueryDefinition`` instances.
 """
+import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from typing import Any
 
 from asyncdb.drivers.pg import UndefinedColumnError, UndefinedTableError, pg
@@ -50,6 +52,28 @@ _TENANT_COLUMNS: frozenset = frozenset(
 RUN_AS_COLUMN: str = "scheduler_run_as_user_id"
 _RUN_AS_FALLBACK_WARNED: set = set()
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RunAsChange:
+    """One run-as transition recorded in the append-only audit table."""
+
+    query_slug: str
+    old_user_id: int | None
+    new_user_id: int | None
+    operation: str  # "set" | "change" | "clear"
+
+
+def _scheduler_of(attributes: Any) -> Any:
+    """Return the ``scheduler`` entry of an attributes value (dict or JSON text)."""
+    if isinstance(attributes, (str, bytes)):
+        try:
+            attributes = json.loads(attributes)
+        except ValueError:
+            return None
+    if not isinstance(attributes, Mapping):
+        return None
+    return attributes.get("scheduler")
 
 
 def _is_missing_run_as_column(exc: Exception) -> bool:
@@ -363,7 +387,12 @@ class DefinitionRepository:
         return persisted_result
 
     async def upsert(
-        self, identity: QueryIdentity, data: Mapping[str, Any]
+        self,
+        identity: QueryIdentity,
+        data: Mapping[str, Any],
+        *,
+        run_as_actor: int | None = None,
+        request_info: Mapping[str, Any] | None = None,
     ) -> tuple[Mapping[str, Any], bool]:
         """Atomically upsert and return persisted row with created flag.
 
@@ -409,8 +438,9 @@ class DefinitionRepository:
         """
 
         try:
-            async with await self.connection_factory() as conn:
-                row = await conn.fetch_one(sql, *values)
+            row = await self._write_with_run_as(
+                store, identity.slug, sql, values, run_as_actor, request_info
+            )
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise
@@ -432,7 +462,12 @@ class DefinitionRepository:
         return persisted_result, is_created
 
     async def patch(
-        self, identity: QueryIdentity, data: Mapping[str, Any]
+        self,
+        identity: QueryIdentity,
+        data: Mapping[str, Any],
+        *,
+        run_as_actor: int | None = None,
+        request_info: Mapping[str, Any] | None = None,
     ) -> Mapping[str, Any]:
         """Update supplied mutable fields only; owner and slug cannot change.
 
@@ -495,8 +530,9 @@ class DefinitionRepository:
         values.append(identity.slug)
 
         try:
-            async with await self.connection_factory() as conn:
-                row = await conn.fetch_one(sql, *values)
+            row = await self._write_with_run_as(
+                store, identity.slug, sql, values, run_as_actor, request_info
+            )
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise
@@ -538,6 +574,119 @@ class DefinitionRepository:
             return None
         value = row[RUN_AS_COLUMN]
         return None if value is None else int(value)
+
+    def _run_as_audit_table(self, store: QueryStore) -> str:
+        """Return the quoted ``{schema}.{table}_run_as_audit`` name for this store."""
+        return f"{quote_identifier(store.schema)}.{quote_identifier(f'{store.table}_run_as_audit')}"
+
+    async def _write_with_run_as(
+        self,
+        store: QueryStore,
+        slug: str,
+        sql: str,
+        values: list,
+        actor: int | None,
+        request_info: Mapping[str, Any] | None,
+    ) -> Mapping[str, Any] | None:
+        """Run a definition write plus any run-as/audit change in one transaction.
+
+        Locks and reads the previous ``attributes``, performs the write, applies
+        the run-as change from the RETURNING row and commits; any error rolls
+        the whole transaction back and is re-raised.
+        """
+        table = self._qualified_table(store)
+        async with await self.connection_factory() as conn:
+            begin = getattr(conn, "transaction", None)
+            commit = getattr(conn, "commit", None)
+            rollback = getattr(conn, "rollback", None)
+            if begin is not None:
+                await begin()
+            try:
+                previous_row = await conn.fetch_one(
+                    f"SELECT attributes FROM {table} WHERE query_slug = $1 for update", slug
+                )
+                previous = previous_row.get("attributes") if previous_row else None
+                row = await conn.fetch_one(sql, *values)
+                if row is not None:
+                    await self._apply_run_as(
+                        conn, store, slug, previous, row.get("attributes"), actor, request_info
+                    )
+                if commit is not None:
+                    await commit()
+            except BaseException:
+                if rollback is not None:
+                    await rollback()
+                raise
+        return row
+
+    async def _apply_run_as(
+        self,
+        conn: Any,
+        store: QueryStore,
+        slug: str,
+        previous: Any,
+        current: Any,
+        actor: int | None,
+        request_info: Mapping[str, Any] | None,
+    ) -> "RunAsChange | None":
+        """Set/change/clear run-as and write one audit row in the caller's transaction."""
+        prev = _scheduler_of(previous)
+        cur = _scheduler_of(current)
+        if not prev and not cur:
+            return None
+        if prev and cur and prev == cur:
+            return None
+        if actor is None:
+            _logger.warning(
+                "Schedule change on %s.%s/%s without an actor; run-as left untouched",
+                store.schema, store.table, slug,
+            )
+            return None
+
+        table = self._qualified_table(store)
+        audit = self._run_as_audit_table(store)
+        await conn.fetch_one("SAVEPOINT qs_run_as")
+        try:
+            row = await conn.fetch_one(
+                f"SELECT {RUN_AS_COLUMN} FROM {table} WHERE query_slug = $1", slug
+            )
+            old = row.get(RUN_AS_COLUMN) if row else None
+            old = None if old is None else int(old)
+            if cur:
+                if old == actor:
+                    await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+                    return None
+                new: int | None = actor
+                operation = "set" if old is None else "change"
+            else:
+                if old is None:
+                    await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+                    return None
+                new = None
+                operation = "clear"
+            await conn.fetch_one(
+                f"UPDATE {table} SET {RUN_AS_COLUMN} = $1 WHERE query_slug = $2 "
+                "RETURNING query_slug",
+                new, slug,
+            )
+            await conn.fetch_one(
+                f"INSERT INTO {audit} "
+                "(query_slug, old_user_id, new_user_id, operation, changed_by, request_info) "
+                "VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING audit_id",
+                slug, old, new, operation, actor,
+                None if request_info is None else json.dumps(dict(request_info), default=str),
+            )
+            await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+        except Exception as exc:
+            if _is_missing_run_as_column(exc) or isinstance(exc, UndefinedTableError):
+                await conn.fetch_one("ROLLBACK TO SAVEPOINT qs_run_as")
+                _logger.warning(
+                    "Store %s.%s is not migrated for run-as (%s); definition written without it",
+                    store.schema, store.table, exc,
+                )
+                return None
+            raise
+        return RunAsChange(query_slug=slug, old_user_id=old, new_user_id=new, operation=operation)
 
     async def delete(self, identity: QueryIdentity) -> bool:
         """Delete exactly this owner's row; report missing without fallback.
