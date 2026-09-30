@@ -31,8 +31,10 @@ class TestSourceRegistry:
     def test_registry_contains_table(self):
         assert "TableSource" in SOURCE_REGISTRY
 
-    def test_registry_has_exactly_eight_sources(self):
-        assert len(SOURCE_REGISTRY) == 8
+    def test_registry_contains_expected_sources(self):
+        assert {"AirtableSource", "SharepointSource", "SmartSheetSource", "S3Source",
+                "TableSource", "OneDriveSource", "ParquetFileSource", "ParquetS3Source",
+                "ParquetGCSSource"} <= set(SOURCE_REGISTRY)
 
     def test_registry_contains_parquet_sources(self):
         from querysource.queries.multi.sources import (

@@ -175,4 +175,4 @@ _RUN_AS_AUDIT_DDL = (
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Implemented by orchestrator (attempt 3): both Nova seats (mistral, glm) failed instantly with infra error 'No module named parrot.clients.amazon' (not a task defect). Docs section + fixture audit DDL added; rollout-doc and repository-reads tests pass (8).

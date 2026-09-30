@@ -50,13 +50,13 @@ class _FakeRepo:
         self._delete_result = delete_result
         self._raise_on = raise_on or {}
 
-    async def upsert(self, identity: QueryIdentity, data: dict):
+    async def upsert(self, identity: QueryIdentity, data: dict, **_run_as):
         self.calls.append(("upsert", identity, data))
         if "upsert" in self._raise_on:
             raise self._raise_on["upsert"]
         return self._upsert_result, self._upsert_created
 
-    async def patch(self, identity: QueryIdentity, data: dict):
+    async def patch(self, identity: QueryIdentity, data: dict, **_run_as):
         self.calls.append(("patch", identity, data))
         if "patch" in self._raise_on:
             raise self._raise_on["patch"]

@@ -235,4 +235,4 @@ async def test_get_run_as_values():
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet (native) · Attempts: 1. Implemented run-as repository reads in definitions.py. Merge-tier validation 17 passed. No fix commits (review: coder-review:f499ed3983a8659cad06fff3).

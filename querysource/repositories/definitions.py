@@ -9,11 +9,14 @@ annotations`` nor ``X | None``/``list[X]`` union syntax. See
 Cython ``datamodel`` validator breaks on both when constructing
 ``TenantQueryDefinition`` instances.
 """
+import json
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from typing import Any
 
-from asyncdb.drivers.pg import UndefinedTableError, pg
+from asyncdb.drivers.pg import UndefinedColumnError, UndefinedTableError, pg
 
 from querysource.cache_identity import definition_revision
 from querysource.models import QueryModel
@@ -46,6 +49,41 @@ _TENANT_COLUMNS: frozenset = frozenset(
 # hardcoded public.queries startup query (querysource/scheduler/scheduler.py,
 # QSScheduler.startup), qualified to an arbitrary store instead of
 # hardcoded public.queries.
+RUN_AS_COLUMN: str = "scheduler_run_as_user_id"
+_RUN_AS_FALLBACK_WARNED: set = set()
+_logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RunAsChange:
+    """One run-as transition recorded in the append-only audit table."""
+
+    query_slug: str
+    old_user_id: int | None
+    new_user_id: int | None
+    operation: str  # "set" | "change" | "clear"
+
+
+def _scheduler_of(attributes: Any) -> Any:
+    """Return the ``scheduler`` entry of an attributes value (dict or JSON text)."""
+    if isinstance(attributes, (str, bytes)):
+        try:
+            attributes = json.loads(attributes)
+        except ValueError:
+            return None
+    if not isinstance(attributes, Mapping):
+        return None
+    return attributes.get("scheduler")
+
+
+def _is_missing_run_as_column(exc: Exception) -> bool:
+    """Return True when exc means the store has no run-as column (not migrated)."""
+    if isinstance(exc, UndefinedColumnError):
+        return True
+    msg = str(exc).lower()
+    return RUN_AS_COLUMN in msg and "does not exist" in msg
+
+
 _SCHEDULABLE_COLUMNS = "query_slug, attributes, cache_options, provider, is_cached, query_raw"
 _SCHEDULABLE_PREDICATE = (
     "(attributes IS NOT NULL AND attributes != '{}') "
@@ -101,6 +139,8 @@ class DefinitionRepository:
         other field has no encoder and round-trips unchanged.
         """
         data = dict(row)
+        # FEAT-159: repository-only column; never enters models, revisions or API output.
+        data.pop(RUN_AS_COLUMN, None)
         legacy_program_slug = data.pop("program_slug", None) if store.contract == "legacy" else None
         validated = TenantQueryDefinition(**data)
         persisted = validated.to_dict()
@@ -282,9 +322,26 @@ class DefinitionRepository:
     async def schedulable(self, store: QueryStore) -> tuple[Mapping[str, Any], ...]:
         """Return scheduler candidates from one store using existing eligibility rules."""
         table = self._qualified_table(store)
-        sql = f"SELECT {_SCHEDULABLE_COLUMNS} FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
-        async with await self.connection_factory() as conn:
-            rows = await conn.fetch_all(sql)
+        sql = f"SELECT {_SCHEDULABLE_COLUMNS}, {RUN_AS_COLUMN} FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
+        try:
+            async with await self.connection_factory() as conn:
+                rows = await conn.fetch_all(sql)
+        except Exception as exc:
+            if not _is_missing_run_as_column(exc):
+                raise
+            key = (store.schema, store.table)
+            if key not in _RUN_AS_FALLBACK_WARNED:
+                _RUN_AS_FALLBACK_WARNED.add(key)
+                _logger.warning(
+                    "Store %s.%s has no %s column; run migration to enable run-as",
+                    store.schema, store.table, RUN_AS_COLUMN,
+                )
+            sql = (
+                f"SELECT {_SCHEDULABLE_COLUMNS}, NULL AS {RUN_AS_COLUMN} "
+                f"FROM {table} WHERE {_SCHEDULABLE_PREDICATE}"
+            )
+            async with await self.connection_factory() as conn:
+                rows = await conn.fetch_all(sql)
         return tuple(dict(row) for row in (rows or []))
 
     # -- mutation methods ----------------------------------------------------------
@@ -295,6 +352,7 @@ class DefinitionRepository:
         Raises TenantError(tenant_write_forbidden) on permission failure.
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
+        self._reject_run_as(data)
         # Validate input data with TenantQueryDefinition (rejects program_slug)
         validated = TenantQueryDefinition(**data)
         persisted = validated.to_dict()
@@ -329,7 +387,12 @@ class DefinitionRepository:
         return persisted_result
 
     async def upsert(
-        self, identity: QueryIdentity, data: Mapping[str, Any]
+        self,
+        identity: QueryIdentity,
+        data: Mapping[str, Any],
+        *,
+        run_as_actor: int | None = None,
+        request_info: Mapping[str, Any] | None = None,
     ) -> tuple[Mapping[str, Any], bool]:
         """Atomically upsert and return persisted row with created flag.
 
@@ -341,6 +404,7 @@ class DefinitionRepository:
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
         store = identity.store
+        self._reject_run_as(data)
 
         # Validate input data with TenantQueryDefinition (rejects program_slug)
         validated = TenantQueryDefinition(**data)
@@ -374,8 +438,9 @@ class DefinitionRepository:
         """
 
         try:
-            async with await self.connection_factory() as conn:
-                row = await conn.fetch_one(sql, *values)
+            row = await self._write_with_run_as(
+                store, identity.slug, sql, values, run_as_actor, request_info
+            )
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise
@@ -397,7 +462,12 @@ class DefinitionRepository:
         return persisted_result, is_created
 
     async def patch(
-        self, identity: QueryIdentity, data: Mapping[str, Any]
+        self,
+        identity: QueryIdentity,
+        data: Mapping[str, Any],
+        *,
+        run_as_actor: int | None = None,
+        request_info: Mapping[str, Any] | None = None,
     ) -> Mapping[str, Any]:
         """Update supplied mutable fields only; owner and slug cannot change.
 
@@ -416,6 +486,8 @@ class DefinitionRepository:
                 "Cannot change query_slug via PATCH",
                 error_code="invalid_tenant",
             )
+
+        self._reject_run_as(data)
 
         # Reject program_slug (never allowed for tenants)
         if "program_slug" in data:
@@ -458,8 +530,9 @@ class DefinitionRepository:
         values.append(identity.slug)
 
         try:
-            async with await self.connection_factory() as conn:
-                row = await conn.fetch_one(sql, *values)
+            row = await self._write_with_run_as(
+                store, identity.slug, sql, values, run_as_actor, request_info
+            )
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise
@@ -472,6 +545,160 @@ class DefinitionRepository:
 
         persisted_result, _ = self._row_to_persisted(dict(row), store)
         return persisted_result
+
+    @staticmethod
+    def _reject_run_as(data: Mapping[str, Any]) -> None:
+        """Refuse API payloads that try to set the run-as user (G6)."""
+        if RUN_AS_COLUMN in data:
+            raise TenantError(
+                f"{RUN_AS_COLUMN} cannot be set via the API",
+                error_code="invalid_tenant",
+            )
+
+    async def get_run_as(self, identity: QueryIdentity) -> int | None:
+        """Return the stored run-as user id.
+
+        Returns None when unset, when the row is missing, or when the column
+        is absent (store not migrated).
+        """
+        table = self._qualified_table(identity.store)
+        sql = f"SELECT {RUN_AS_COLUMN} FROM {table} WHERE query_slug = $1"
+        try:
+            async with await self.connection_factory() as conn:
+                row = await conn.fetch_one(sql, identity.slug)
+        except Exception as exc:
+            if _is_missing_run_as_column(exc):
+                return None
+            raise
+        if not row:
+            return None
+        value = row[RUN_AS_COLUMN]
+        return None if value is None else int(value)
+
+    def _run_as_audit_table(self, store: QueryStore) -> str:
+        """Return the quoted ``{schema}.{table}_run_as_audit`` name for this store."""
+        return f"{quote_identifier(store.schema)}.{quote_identifier(f'{store.table}_run_as_audit')}"
+
+    async def _write_with_run_as(
+        self,
+        store: QueryStore,
+        slug: str,
+        sql: str,
+        values: list,
+        actor: int | None,
+        request_info: Mapping[str, Any] | None,
+    ) -> Mapping[str, Any] | None:
+        """Run a definition write plus any run-as/audit change in one transaction.
+
+        Locks and reads the previous ``attributes``, performs the write, applies
+        the run-as change from the RETURNING row and commits; any error rolls
+        the whole transaction back and is re-raised.
+        """
+        table = self._qualified_table(store)
+        async with await self.connection_factory() as conn:
+            # Fail closed: without real transaction support the row lock, SAVEPOINT and
+            # audit write would run in autocommit and could split from the definition write.
+            missing = [
+                name for name in ("transaction", "commit", "rollback")
+                if not callable(getattr(conn, name, None))
+            ]
+            if missing:
+                raise TenantError(
+                    f"Store connection lacks transaction support ({', '.join(missing)})",
+                    error_code="tenant_store_unavailable",
+                )
+            await conn.transaction()
+            try:
+                previous_row = await conn.fetch_one(
+                    f"SELECT attributes FROM {table} WHERE query_slug = $1 for update", slug
+                )
+                previous = previous_row.get("attributes") if previous_row else None
+                row = await conn.fetch_one(sql, *values)
+                if row is not None:
+                    await self._apply_run_as(
+                        conn, store, slug, previous, row.get("attributes"), actor, request_info
+                    )
+                await conn.commit()
+            except BaseException:
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    _logger.exception("Rollback failed after run-as write error on %s", table)
+                raise
+        return row
+
+    async def _apply_run_as(
+        self,
+        conn: Any,
+        store: QueryStore,
+        slug: str,
+        previous: Any,
+        current: Any,
+        actor: int | None,
+        request_info: Mapping[str, Any] | None,
+    ) -> "RunAsChange | None":
+        """Set/change/clear run-as and write one audit row in the caller's transaction."""
+        prev = _scheduler_of(previous)
+        cur = _scheduler_of(current)
+        if not prev and not cur:
+            return None
+        if prev and cur and prev == cur:
+            return None
+        if actor is None:
+            # Fail closed: a schedule change must be attributable (audit changed_by is
+            # NOT NULL), otherwise a stale run-as user could keep running it.
+            raise TenantError(
+                f"Schedule change on {slug!r} requires an authenticated user",
+                error_code="tenant_write_forbidden",
+            )
+
+        table = self._qualified_table(store)
+        audit = self._run_as_audit_table(store)
+        await conn.fetch_one("SAVEPOINT qs_run_as")
+        try:
+            row = await conn.fetch_one(
+                f"SELECT {RUN_AS_COLUMN} FROM {table} WHERE query_slug = $1", slug
+            )
+            old = row.get(RUN_AS_COLUMN) if row else None
+            old = None if old is None else int(old)
+            if cur:
+                if old == actor:
+                    await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+                    return None
+                new: int | None = actor
+                operation = "set" if old is None else "change"
+            else:
+                if old is None:
+                    await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+                    return None
+                new = None
+                operation = "clear"
+            await conn.fetch_one(
+                f"UPDATE {table} SET {RUN_AS_COLUMN} = $1 WHERE query_slug = $2 "
+                "RETURNING query_slug",
+                new, slug,
+            )
+            await conn.fetch_one(
+                f"INSERT INTO {audit} "
+                "(query_slug, old_user_id, new_user_id, operation, changed_by, request_info) "
+                "VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING audit_id",
+                slug, old, new, operation, actor,
+                None if request_info is None else json.dumps(dict(request_info), default=str),
+            )
+            await conn.fetch_one("RELEASE SAVEPOINT qs_run_as")
+        except Exception as exc:
+            if _is_missing_run_as_column(exc) or isinstance(exc, UndefinedTableError):
+                await conn.fetch_one("ROLLBACK TO SAVEPOINT qs_run_as")
+                key = (store.schema, store.table)
+                if key not in _RUN_AS_FALLBACK_WARNED:
+                    _RUN_AS_FALLBACK_WARNED.add(key)
+                    _logger.warning(
+                        "Store %s.%s is not migrated for run-as (%s); definition written without it",
+                        store.schema, store.table, exc,
+                    )
+                return None
+            raise
+        return RunAsChange(query_slug=slug, old_user_id=old, new_user_id=new, operation=operation)
 
     async def delete(self, identity: QueryIdentity) -> bool:
         """Delete exactly this owner's row; report missing without fallback.
