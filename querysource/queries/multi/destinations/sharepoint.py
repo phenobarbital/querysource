@@ -11,15 +11,16 @@ Upload strategy:
 - Files ≤ 4 MB: single PUT request.
 - Files > 4 MB: resumable upload session with 10 MB chunks.
 """
-import io
 import asyncio
+import io
 from pathlib import PurePosixPath
 from typing import Union
+
 import pandas as pd
+
 from querysource.exceptions import OutputError
 from querysource.outputs.destinations.abstract import AbstractDestination
 from querysource.queries.multi.sources.graph import kiota_platform_version_patch
-
 
 # Upload size thresholds (bytes)
 _SMALL_FILE_THRESHOLD = 4 * 1024 * 1024   # 4 MB
@@ -174,8 +175,8 @@ class ToSharepoint(AbstractDestination):
 
         # Fallback: search by display name using $search query parameter
         try:
-            from msgraph.generated.sites.sites_request_builder import SitesRequestBuilder
             from kiota_abstractions.base_request_configuration import RequestConfiguration
+            from msgraph.generated.sites.sites_request_builder import SitesRequestBuilder
 
             query_params = SitesRequestBuilder.SitesRequestBuilderGetQueryParameters(
                 search=self._site
@@ -367,8 +368,9 @@ class ToSharepoint(AbstractDestination):
         content: bytes,
     ) -> None:
         """Upload *content* via a resumable upload session (> 4 MB)."""
-        import aiohttp
         from urllib.parse import quote
+
+        import aiohttp
         from msgraph.generated.drives.item.items.item.create_upload_session.create_upload_session_post_request_body import (  # noqa: E501
             CreateUploadSessionPostRequestBody,
         )
