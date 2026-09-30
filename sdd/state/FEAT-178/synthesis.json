@@ -156,6 +156,39 @@
         "F007"
       ],
       "confidence": "medium"
+    },
+    {
+      "id": "C8",
+      "claim": "navigator-auth already provides the login UI, token capture, encrypted storage, auto-refresh with rotation, and a session-vault cache (identity:{provider})",
+      "evidence": [
+        "F013"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C9",
+      "claim": "The session vault is navigator_session.SessionVault, reached through session['_vault']; querysource has no vault code of its own",
+      "evidence": [
+        "F012"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "C10",
+      "claim": "The delegated token must be resolved on the request loop before the ThreadSource starts its own event loop",
+      "evidence": [
+        "F003",
+        "F012"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "C11",
+      "claim": "The navigator-auth pin (>=0.15.8) must be raised to the version that ships identity/vault",
+      "evidence": [
+        "F014"
+      ],
+      "confidence": "medium"
     }
   ],
   "unknowns": [
@@ -182,6 +215,16 @@
     {
       "id": "U5",
       "question": "Personal OneDrive delegated auth: how is the initial refresh token obtained (device-code CLI vs. manual) and where is the rotated token persisted (navconfig is read-only; Redis cache?)",
+      "user_answer": "UI login flow that captures the refresh token and saves it into the user's session vault"
+    },
+    {
+      "id": "U6",
+      "question": "Is the navigator-auth identity-link flow (Azure provider, /api/v1/user/identities/link/{provider}) enabled in querysource deployments, and can AZURE_IDENTITY_SCOPES / the app registration cover Files.Read + personal accounts?",
+      "user_answer": null
+    },
+    {
+      "id": "U7",
+      "question": "Runs without an HTTP session (scheduler, CLI): resolve the linked identity from IdentityStore by user_id, or make delegated mode HTTP-only?",
       "user_answer": null
     }
   ],
