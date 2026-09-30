@@ -1,0 +1,34 @@
+{
+  "name": "ParquetFileSource",
+  "category": "Sources",
+  "description": "Read Parquet from the local filesystem (a file, directory or glob).",
+  "usage": "",
+  "attributes": [
+    {
+      "name": "source.path",
+      "type": "Any",
+      "default": null,
+      "required": true,
+      "description": ""
+    }
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "ParquetFileSource",
+    "properties": {
+      "source": {
+        "type": "object",
+        "properties": {
+          "path": {}
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    "required": []
+  },
+  "example": "{\n  \"source\": {\n    \"path\": \"/data/sales/{filedate}/*.parquet\"\n  },\n  \"masks\": {\n    \"{filedate}\": [\n      \"today\",\n      {\n        \"mask\": \"%Y%m%d\"\n      }\n    ]\n  },\n  \"columns\": [\n    \"store_id\",\n    \"amount\"\n  ],\n  \"filters\": [\n    [\n      \"amount\",\n      \">=\",\n      100\n    ]\n  ],\n  \"partitioning\": \"hive\"\n}",
+  "icon": "database"
+}

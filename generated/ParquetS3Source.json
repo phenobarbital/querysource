@@ -1,0 +1,29 @@
+{
+  "name": "ParquetS3Source",
+  "category": "Sources",
+  "description": "Read Parquet from AWS S3 or an S3-compatible endpoint via s3fs.",
+  "usage": "Credential values may be navconfig variable names. Names that stay unresolved are ignored, so s3fs falls back to the ambient AWS credential chain (as S3Source does).",
+  "attributes": [
+    {"name": "credentials.bucket", "type": "Any", "default": "AWS_S3_BUCKET", "required": false, "description": ""},
+    {"name": "credentials.region_name", "type": "Any", "default": "AWS_REGION_NAME", "required": false, "description": ""},
+    {"name": "credentials.aws_key", "type": "Any", "default": "AWS_ACCESS_KEY_ID", "required": false, "description": ""},
+    {"name": "credentials.aws_secret", "type": "Any", "default": "AWS_SECRET_ACCESS_KEY", "required": false, "description": ""},
+    {"name": "credentials.profile", "type": "Any", "default": null, "required": false, "description": ""},
+    {"name": "credentials.anon", "type": "Any", "default": false, "required": false, "description": ""},
+    {"name": "credentials.endpoint_url", "type": "Any", "default": null, "required": false, "description": ""},
+    {"name": "source.directory", "type": "Any", "default": "", "required": false, "description": ""},
+    {"name": "source.file", "type": "Any", "default": "", "required": false, "description": ""}
+  ],
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "ParquetS3Source",
+    "properties": {
+      "credentials": {"type": "object", "properties": {"bucket": {}, "region_name": {}, "aws_key": {}, "aws_secret": {}, "profile": {}, "anon": {}, "endpoint_url": {}}},
+      "source": {"type": "object", "properties": {"directory": {}, "file": {}}}
+    },
+    "required": []
+  },
+  "example": "",
+  "icon": "database"
+}
