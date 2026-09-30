@@ -25,7 +25,11 @@ from typing import TYPE_CHECKING
 from aiohttp import web
 from navigator.views import BaseView
 
+from querysource.auth import ResourceType
+from querysource.auth.request_gate import enforce_request_pbac
+from querysource.queries.multi import definition_requires_scheduler_grant
 from querysource.tenant_errors import TenantError
+from querysource.tenants import QueryIdentity, TenantRegistry
 
 if TYPE_CHECKING:
     from apscheduler.job import Job
@@ -90,6 +94,65 @@ class SchedulerJobsView(BaseView):
             initialised).
         """
         return self.request.app.get("qs_scheduler")
+
+    async def _enforce_scheduler_grant(self, slug: str, tenant: str | None) -> None:
+        """Gate syncing a scheduled write-capable multi behind ``pg_admin`` (FEAT-160).
+
+        Loads the stored definition the same way ``QSScheduler`` does: the
+        store comes from ``app['qs_tenant_registry']`` (or a default
+        ``TenantRegistry()``, as ``QSScheduler.startup`` falls back to) resolved
+        with ``tenant``, and the row from ``app['qs_definition_repository']``.
+        PBAC disabled, no repository, an unresolvable tenant, or a missing row
+        return without a check, so ``register_slug`` reports exactly as
+        before. Any other read failure is fail-closed (404).
+
+        Args:
+            slug: The query slug being synced.
+            tenant: The validated tenant selector from the body (None = default).
+
+        Raises:
+            web.HTTPNotFound: When the stored definition needs the grant and
+                the caller does not hold it, or the stored row cannot be read.
+        """
+        app = self.request.app
+        if app.get("security") is None:
+            return  # PBAC disabled: no stored-row read, no check
+        repo = app.get("qs_definition_repository")
+        if repo is None:
+            return  # register_slug cannot read a row either: nothing is registered
+        registry = app.get("qs_tenant_registry") or TenantRegistry()
+        try:
+            store = registry.resolve(tenant)
+        except TenantError:
+            return  # register_slug raises and reports the same TenantError
+        try:
+            loaded = await repo.get(QueryIdentity(store=store, slug=slug))
+        except TenantError as exc:
+            if exc.error_code == "query_not_found":
+                return  # missing row: register_slug only removes jobs
+            logger.warning(
+                "Scheduler admin gate: cannot read slug '%s' (%s); denying", slug, exc
+            )
+            raise web.HTTPNotFound() from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Scheduler admin gate: cannot read slug '%s' (%s); denying", slug, exc
+            )
+            raise web.HTTPNotFound() from exc
+        runtime = loaded.runtime
+        row = {
+            "provider": getattr(runtime, "provider", None),
+            "query_raw": getattr(runtime, "query_raw", None),
+            "attributes": getattr(runtime, "attributes", None),
+        }
+        if definition_requires_scheduler_grant(row):
+            await enforce_request_pbac(
+                self.request,
+                ResourceType.DATASOURCE,
+                "pg_admin",
+                "datasource:use",
+                logger=logger,
+            )
 
     def _serialize_job(self, job: Job) -> dict:
         """Include canonical owner/tenant identity from validated job kwargs; preserve current response fields.
@@ -254,6 +317,9 @@ class SchedulerJobsView(BaseView):
                 response={"error": "'tenant' must be a non-empty string or omitted."},
                 status=400,
             )
+
+        # FEAT-160: a scheduled write-capable multi needs pg_admin to be synced.
+        await self._enforce_scheduler_grant(slug, tenant)
 
         try:
             result = await scheduler.register_slug(slug, tenant=tenant)

@@ -539,10 +539,8 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Added QueryManager._enforce_scheduler_grant and gated put/post/patch before repo write, with except web.HTTPNotFound: raise. 9 new tests + existing manager/tenant tests pass; ruff clean (one isort fix applied to imports).
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
