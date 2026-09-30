@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-30T21:30:10+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-30T21:52:05+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -54,7 +54,7 @@
       "feature_id": "FEAT-160",
       "feature": "multi-scheduler-admin-gate",
       "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -65,8 +65,9 @@
       "parallelism_notes": "Calls enforce_request_pbac from TASK-827 (querysource/auth/request_gate.py) and definition_requires_scheduler_grant from TASK-828; touches only querysource/handlers/manager.py and tests/test_manager_scheduler_gate.py, disjoint from TASK-830, so both run concurrently after the roots.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:48:46+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-829-manager-scheduler-gate.md"
+      "completed_at": "2026-09-30T21:52:04+00:00",
+      "file": "sdd/tasks/completed/TASK-829-manager-scheduler-gate.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-830",
@@ -75,7 +76,7 @@
       "feature_id": "FEAT-160",
       "feature": "multi-scheduler-admin-gate",
       "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -86,8 +87,9 @@
       "parallelism_notes": "Calls enforce_request_pbac from TASK-827 and definition_requires_scheduler_grant from TASK-828; touches only querysource/handlers/scheduler.py and tests/test_scheduler_sync_gate.py, disjoint from TASK-829's manager.py, so it runs concurrently with TASK-829.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:48:46+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-830-scheduler-sync-gate.md"
+      "completed_at": "2026-09-30T21:52:05+00:00",
+      "file": "sdd/tasks/completed/TASK-830-scheduler-sync-gate.md",
+      "verification": "verified"
     }
   ]
 }
