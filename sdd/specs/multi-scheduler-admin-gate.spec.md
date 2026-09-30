@@ -10,7 +10,7 @@ tags: [scheduler, pbac, pg-admin, write-steps, multiquery]
 **Feature ID**: FEAT-160
 **Date**: 2026-09-30
 **Author**: Juan2coder (decision by Jesus Lara)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 ---
