@@ -73,7 +73,7 @@ class SourceIdentityContext:
     origin: str = "request"
 
     @classmethod
-    def from_request(cls, request: web.Request, session: Any) -> "SourceIdentityContext":
+    def from_request(cls, request: web.Request, session: Any) -> SourceIdentityContext:
         return cls(
             user_id=user_id_from_session(session),
             session=session,
@@ -82,7 +82,7 @@ class SourceIdentityContext:
         )
 
     @classmethod
-    def for_scheduler(cls, run_as_user_id: Optional[int], auth: Any) -> "SourceIdentityContext":
+    def for_scheduler(cls, run_as_user_id: Optional[int], auth: Any) -> SourceIdentityContext:
         return cls(user_id=run_as_user_id, session=None, auth=auth, origin="scheduler")
 
 
