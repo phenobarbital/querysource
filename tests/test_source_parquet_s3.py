@@ -11,6 +11,7 @@ import pyarrow.parquet as pq
 import pytest
 from fsspec.implementations.memory import MemoryFileSystem
 
+
 def _load_module(name: str, path: Path):
     """Load a source module without importing the Cython-dependent queries package."""
     spec = importlib.util.spec_from_file_location(name, path)

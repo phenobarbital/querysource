@@ -50,7 +50,7 @@ class ParquetS3Source(ParquetSource):
         parts = (self._bucket, self.resolve_masks(self._directory), self.resolve_masks(self._file))
         return '/'.join(str(part).strip('/') for part in parts if part)
 
-    def _build_filesystem(self) -> tuple["fsspec.AbstractFileSystem", str]:
+    def _build_filesystem(self) -> tuple[fsspec.AbstractFileSystem, str]:
         """Build ``s3fs.S3FileSystem`` and return it with the source path."""
         try:
             import s3fs  # noqa: PLC0415
