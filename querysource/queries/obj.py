@@ -93,10 +93,16 @@ class QueryObject(BaseQuery):
             # is the one initialized on QuerySource's singleton (real
             # discovery), never an empty, never-discovered TenantRegistry.
             from querysource.tenants import QueryIdentity
-            repo = await self.get_definition_repository()
-            store = repo.registry.resolve(self._tenant_selector)
-            identity = QueryIdentity(store=store, slug=self._query)
-            loaded_def = await repo.get(identity)
+            preloaded = self._preloaded_definition
+            if preloaded is not None and preloaded.identity.slug == self._query:
+                # MultiQS already read this definition on the request loop: reuse it instead
+                # of re-reading it over a fresh connection bound to this thread's loop.
+                loaded_def = preloaded
+            else:
+                repo = await self.get_definition_repository()
+                store = repo.registry.resolve(self._tenant_selector)
+                identity = QueryIdentity(store=store, slug=self._query)
+                loaded_def = await repo.get(identity)
             # Store definition identity and revision on the execution object
             self._definition_identity = loaded_def.identity
             self._definition_revision = loaded_def.revision

@@ -279,7 +279,12 @@ class MultiQS(BaseQuery):
         """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
         import copy
 
-        from querysource.tenants import QueryIdentity
+        from querysource.tenants import LoadedDefinition, QueryIdentity
+
+        # Definitions already read by this request, handed to each child thread so its
+        # QueryObject does not re-read them over a fresh, loop-local connection.
+        top_definition: LoadedDefinition | None = None
+        child_definitions: dict[str, LoadedDefinition] = {}
 
         # Deep-copy pipeline config to avoid mutating input config
         self._queries = copy.deepcopy(self._queries)
@@ -310,6 +315,7 @@ class MultiQS(BaseQuery):
                 query = preloaded.runtime
                 self._definition_identity = preloaded.identity
                 self._definition_revision = preloaded.revision
+                top_definition = preloaded
             else:
                 # get_query_slug (interfaces/connections.py) stashes
                 # _definition_identity/_definition_revision on self before
@@ -322,6 +328,12 @@ class MultiQS(BaseQuery):
                     ):
                         raise QueryAccessDenied() from ex
                     raise
+                if self._definition_identity is not None and self._definition_revision is not None:
+                    top_definition = LoadedDefinition(
+                        identity=self._definition_identity,
+                        runtime=query,
+                        revision=self._definition_revision,
+                    )
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -433,7 +445,11 @@ class MultiQS(BaseQuery):
                 # Preflight policy check: verify the definition exists in the resolved store
                 try:
                     ident = QueryIdentity(store=child_store, slug=child_slug)
-                    await repo.get(ident)
+                    if top_definition is not None and ident == top_definition.identity:
+                        # A single-query slug wrapped as its own child: already loaded above.
+                        child_definitions[name] = top_definition
+                    else:
+                        child_definitions[name] = await repo.get(ident)
                 except TenantError as ex:
                     if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
                         raise QueryAccessDenied() from ex
@@ -508,6 +524,7 @@ class MultiQS(BaseQuery):
                         # dispatch with store=None (the existing, unowned
                         # legacy dispatch path) instead of raising KeyError.
                         store=resolved_stores.get(name),
+                        definition=child_definitions.get(name),
                     )
                 except Exception as ex:
                     raise self.Error(

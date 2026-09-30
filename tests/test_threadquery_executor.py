@@ -69,7 +69,7 @@ class TestThreadQueryFetchDelegation:
         # TASK-727: fetch() now forwards the resolved store (None when
         # unset) to executor.execute() as a keyword argument.
         tq._executor.execute.assert_awaited_once_with(
-            "test", query, queue, request, store=None
+            "test", query, queue, request, store=None, definition=None
         )
 
     @pytest.mark.asyncio

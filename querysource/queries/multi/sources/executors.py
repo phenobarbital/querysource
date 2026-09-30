@@ -15,7 +15,7 @@ from aiohttp import web
 from navconfig.logging import logging
 
 from querysource.ownership_logging import ownership_fields
-from querysource.tenants import QueryStore, TenantOwnerEnvelope
+from querysource.tenants import LoadedDefinition, QueryStore, TenantOwnerEnvelope
 
 from ....conf import QWORKER_QUERY_TIMEOUT, QWORKER_TIMEOUT
 from ....exceptions import QueryException
@@ -63,6 +63,7 @@ class QueryExecutor(ABC):
         request: web.Request,
         *,
         store: QueryStore | None = None,
+        definition: LoadedDefinition | None = None,
     ) -> None:
         """Put {alias: DataFrame}; route metadata never becomes SQL conditions."""
 
@@ -84,6 +85,7 @@ class LocalExecutor(QueryExecutor):
         request: web.Request,
         *,
         store: QueryStore | None = None,
+        definition: LoadedDefinition | None = None,
     ) -> None:
         """Execute the query locally using QueryObject.
 
@@ -93,6 +95,8 @@ class LocalExecutor(QueryExecutor):
             queue: Shared asyncio queue for the result.
             request: aiohttp request for credential lookup.
             store: Resolved QueryStore for the query.
+            definition: Definition already loaded by MultiQS for this child; the
+                QueryObject reuses it instead of re-reading it.
 
         Returns:
             None — QueryObject places the result in the queue directly.
@@ -107,6 +111,7 @@ class LocalExecutor(QueryExecutor):
             request=request,
             loop=loop,
             tenant=tenant_selector,
+            definition=definition,
         )
         await query_obj.build_provider()
         await query_obj.query()
@@ -159,6 +164,7 @@ class RemoteExecutor(QueryExecutor):
         request: web.Request,
         *,
         store: QueryStore | None = None,
+        definition: LoadedDefinition | None = None,
     ) -> None:
         """Dispatch the query to a remote qworker and place the result in the queue.
 
