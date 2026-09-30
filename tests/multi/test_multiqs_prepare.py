@@ -111,3 +111,20 @@ async def test_multi_handler_maps_delegated_error_409(monkeypatch):
     kwargs = handler.Error.call_args.kwargs
     assert kwargs["code"] == 409
     assert kwargs["detail"]["link"] == "/api/v1/user/identities/link/onedrive"
+
+
+def test_real_error_maps_delegated_identity_to_409_with_link():
+    """The real handler Error() answers HTTP 409 and exposes the link in the body."""
+    import json
+
+    handler = QueryHandler()
+    error = DelegatedIdentityError("No linked identity", provider="onedrive", user_id=42, reason="not_linked")
+    response = handler.Error(
+        message=str(error),
+        exception=error,
+        code=409,
+        detail={"provider": error.provider, "reason": error.reason, "link": error.link_url},
+    )
+    assert response.status == 409
+    body = json.loads(response.text)
+    assert body["detail"]["link"] == "/api/v1/user/identities/link/onedrive"

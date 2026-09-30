@@ -187,7 +187,7 @@ class GraphDriveSource(ThreadSource):
             import httpx  # noqa: PLC0415
         except ImportError as exc:
             raise ImportError(
-                "Install httpx for SharePoint file download support: "
+                f"Install httpx for {self._extra_name.title()} file download support: "
                 "pip install httpx"
             ) from exc
         download_url = item.additional_data.get('@microsoft.graph.downloadUrl') if item.additional_data else None

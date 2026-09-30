@@ -22,8 +22,10 @@ class OneDriveSource(GraphDriveSource):
 
     def __init__(self, name: str, options: dict, request: web.Request, queue: asyncio.Queue) -> None:
         super().__init__(name, options, request, queue)
-        self._auth_mode: str = options.get('auth', 'app')
-        self._user: str = options.get('user', '')
+        # Wrapped in str(): the docs introspector treats a bare `x = options.get('k')`
+        # as a sub-dict alias and would drop the field from the generated schema.
+        self._auth_mode = str(options.get('auth', 'app'))
+        self._user = str(options.get('user', ''))
         creds = options.get('credentials', {})
         self._client_id = self._with_fallback('client_id', creds.get('client_id', 'ONEDRIVE_APP_ID'), 'SHAREPOINT_APP_ID')
         self._client_secret = self._with_fallback(
@@ -48,6 +50,8 @@ class OneDriveSource(GraphDriveSource):
             raise ValueError("OneDrive app mode requires 'user' unless 'url' is configured.")
         if self._auth_mode == 'delegated' and self._user:
             raise ValueError("OneDrive delegated mode does not accept 'user'.")
+        if self._url and not self._url.lower().startswith('https://'):
+            raise ValueError("OneDrive 'url' must be an https:// share or file URL.")
         if not self._url and not self._filename:
             raise ValueError("OneDrive requires either 'url' or a source 'filename'.")
 

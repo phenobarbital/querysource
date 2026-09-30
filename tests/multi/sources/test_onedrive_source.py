@@ -102,3 +102,24 @@ async def test_onedrive_missing_item_message():
     client.drives.by_drive_id.return_value.items.by_drive_item_id.return_value.get = AsyncMock(return_value=None)
     with pytest.raises(RuntimeError, match="File 'f.csv' not found in OneDrive directory 'dir'"):
         await source._resolve_drive_item(client)
+
+
+def test_onedrive_rejects_non_https_url():
+    """A non-https share URL is refused in every auth mode."""
+    import asyncio
+
+    import pytest
+
+    from querysource.queries.multi.sources.onedrive import OneDriveSource
+
+    with pytest.raises(ValueError, match="https"):
+        OneDriveSource("n", {"auth": "delegated", "url": "http://evil/x"}, None, asyncio.Queue())
+
+
+def test_onedrive_schema_lists_auth_and_user():
+    """Generated docs expose the mode fields ``auth`` and ``user``."""
+    from querysource.queries.multi._introspect import extract_source_schema
+    from querysource.queries.multi.sources.onedrive import OneDriveSource
+
+    names = [a["name"] for a in extract_source_schema(OneDriveSource)["attributes"]]
+    assert {"auth", "user", "url"} <= set(names)

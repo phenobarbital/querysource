@@ -12,6 +12,13 @@
       "description": ""
     },
     {
+      "name": "user",
+      "type": "Any",
+      "default": "",
+      "required": false,
+      "description": ""
+    },
+    {
       "name": "url",
       "type": "Any",
       "default": "",
@@ -88,6 +95,7 @@
     "title": "OneDriveSource",
     "properties": {
       "auth": {},
+      "user": {},
       "url": {},
       "credentials": {
         "type": "object",

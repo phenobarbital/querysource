@@ -484,6 +484,9 @@ These remain deployment gates that operators must verify independently.
 | App (default) | `auth: app`, `user`, `source.filename` / `source.directory` or `url`, `credentials.*` | The named user's drive, through the app registration (`ONEDRIVE_APP_ID`, `ONEDRIVE_APP_SECRET`, `ONEDRIVE_TENANT_ID`) |
 | Delegated | `auth: delegated`, `source.filename` / `source.directory` or `url` | The requesting user's own drive (or the run-as user's, when scheduled), through a linked `onedrive` identity |
 
+App mode reads any user's drive (or any share URL) the app registration can reach, so
+treat `auth: app` definitions as admin-authored only. `url` must be `https://`.
+
 For delegated mode the user must have linked a OneDrive identity
 (`/api/v1/user/identities/link/onedrive`). Without a usable link the API answers
 `409` with `detail.link` pointing to that URL. Scheduled runs use the stored
