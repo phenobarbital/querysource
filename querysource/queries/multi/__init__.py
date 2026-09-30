@@ -598,6 +598,7 @@ class MultiQS(BaseQuery):
                     raise DriverError(
                         f"{name}: 'pre-hook'/'post-hook' cannot be passed as request conditions"
                     )
+                query = dict(query)  # do not mutate self._queries (gate re-scans it)
                 pre_hook, post_hook = pop_hooks(query)
                 # those conditions be applied to the query
                 query = {**conditions, **query}
