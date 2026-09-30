@@ -77,7 +77,7 @@
       "feature_id": "FEAT-156",
       "feature": "multi-executesql",
       "spec": "sdd/specs/multi-executesql.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -87,8 +87,9 @@
       "parallelism_notes": "Thin wrapper importing GuardedSQLError, guard_statements and execute_guarded from TASK-820's querysource/interfaces/guarded_sql.py. Only new files; the destinations folder scan picks the class up without editing a shared registry.",
       "assigned_to": null,
       "started_at": "2026-09-30T18:15:06+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-821-executesql-destination.md"
+      "completed_at": "2026-09-30T18:19:10+00:00",
+      "file": "sdd/tasks/completed/TASK-821-executesql-destination.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-822",
