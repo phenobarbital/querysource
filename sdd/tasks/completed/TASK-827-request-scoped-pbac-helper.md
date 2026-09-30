@@ -630,10 +630,8 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Moved _get_user_session/_enforce_pbac bodies into querysource/auth/request_gate.py with injection kwargs; AbstractHandler methods are delegates. All regression files pass; ruff clean except pre-existing B012.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
