@@ -42,7 +42,6 @@ Whichever lands second rebases.
 |---|---|---|
 | `querysource/queries/multi/sources/__init__.py` | MODIFY | register |
 | `pyproject.toml` | MODIFY | `onedrive` extra |
-| `uv.lock` | MODIFY | relock for the new extra (`uv lock`) |
 | `generated/OneDriveSource.json` | CREATE | generated schema |
 | `tests/test_source_registry.py` | MODIFY | membership instead of count |
 | `tests/multi/sources/test_registry.py` | MODIFY | OneDrive entry |
@@ -82,7 +81,6 @@ pyproject.toml:174   generate-multiquery-docs = "querysource.cli.generate_docs:m
   "targets": [
     {"path": "querysource/queries/multi/sources/__init__.py", "action": "MODIFY"},
     {"path": "pyproject.toml", "action": "MODIFY"},
-    {"path": "uv.lock", "action": "MODIFY"},
     {"path": "generated/OneDriveSource.json", "action": "CREATE"},
     {"path": "tests/test_source_registry.py", "action": "MODIFY"},
     {"path": "tests/multi/sources/test_registry.py", "action": "MODIFY"},
@@ -98,8 +96,8 @@ pyproject.toml:174   generate-multiquery-docs = "querysource.cli.generate_docs:m
 
 ### Key Constraints
 - **Exclusive task (`parallel: false`)**: it edits `pyproject.toml` and regenerates `generated/`.
-- Run `uv lock` with the venv active after adding the extra, and commit `uv.lock`.
-  The extra's metadata is recorded in the lock, and `uv sync --locked` fails otherwise.
+- `uv.lock` is gitignored and untracked in this repository (.gitignore:275), so it is NOT
+  part of this task: do not create, commit or relock it (corrected by the orchestrator).
 - The generated `OneDriveSource.json` must list `auth`, `user`,
   `credentials.client_id|client_secret|tenant_id` and the shared `source.*` keys.
 
