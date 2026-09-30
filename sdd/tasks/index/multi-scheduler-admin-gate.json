@@ -35,7 +35,7 @@
       "feature_id": "FEAT-160",
       "feature": "multi-scheduler-admin-gate",
       "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -43,8 +43,9 @@
       "parallelism_notes": "Root task: modifies only querysource/queries/multi/__init__.py (predicates above get_operator_module) and creates tests/test_scheduler_write_predicates.py; pure functions, no import of TASK-827's module; runs concurrently with TASK-827. Cross-feature: FEAT-156 TASK-822 / FEAT-157 TASK-825 edit other lines of the same file.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:48:46+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-828-scheduler-write-predicates.md"
+      "completed_at": "2026-09-30T21:50:12+00:00",
+      "file": "sdd/tasks/completed/TASK-828-scheduler-write-predicates.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-829",
