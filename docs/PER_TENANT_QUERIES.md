@@ -47,6 +47,7 @@ CREATE TABLE "{schema}".queries (
     description VARCHAR,
     columns_definition TEXT[] DEFAULT '{}'::text[],
     program_id INTEGER DEFAULT 1,
+    scheduler_run_as_user_id INTEGER,
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
@@ -62,6 +63,58 @@ ALTER TABLE public.queries ADD COLUMN IF NOT EXISTS columns_definition TEXT[] DE
 Reads on a store without the column return an empty list. Writes omit an empty
 `columns_definition`, so un-migrated stores keep accepting writes; a non-empty value
 requires the column.
+
+### Scheduler run-as user and audit trail (FEAT-159)
+
+**Deploy order: code first, then the DDL.** A store that has not been migrated keeps
+working: `schedulable()` falls back to `NULL` for the run-as user, and schedule changes
+skip the audit write with a warning. A migrated store running old code breaks every
+read, so never run this DDL before the code is deployed.
+
+Apply to `public` and to every tenant schema (`{table}` is the store's queries table):
+
+```sql
+ALTER TABLE "{schema}"."{table}" ADD COLUMN IF NOT EXISTS scheduler_run_as_user_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS "{schema}"."{table}_run_as_audit" (
+    audit_id     BIGSERIAL PRIMARY KEY,
+    query_slug   VARCHAR     NOT NULL,
+    old_user_id  INTEGER,
+    new_user_id  INTEGER,
+    operation    VARCHAR     NOT NULL CHECK (operation IN ('set', 'change', 'clear')),
+    changed_by   INTEGER     NOT NULL,
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    request_info JSONB
+);
+
+CREATE OR REPLACE FUNCTION "{schema}".qs_run_as_audit_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'run-as audit is append-only'; END $$;
+
+CREATE TRIGGER qs_run_as_audit_no_mutation
+    BEFORE UPDATE OR DELETE ON "{schema}"."{table}_run_as_audit"
+    FOR EACH ROW EXECUTE FUNCTION "{schema}".qs_run_as_audit_immutable();
+
+-- Roles. Create once per cluster; run the DDL above AS qs_owner, or re-own it:
+--   CREATE ROLE qs_owner NOLOGIN;
+--   CREATE ROLE qs_app   NOLOGIN;
+--   GRANT qs_app TO <DBUSER login>;   -- the querysource login (DBUSER = PG_USER)
+ALTER TABLE    "{schema}"."{table}_run_as_audit"      OWNER TO qs_owner;
+ALTER FUNCTION "{schema}".qs_run_as_audit_immutable() OWNER TO qs_owner;
+REVOKE ALL ON "{schema}"."{table}_run_as_audit" FROM PUBLIC, qs_app;
+GRANT  INSERT, SELECT ON "{schema}"."{table}_run_as_audit" TO qs_app;
+GRANT  USAGE ON SEQUENCE "{schema}"."{table}_run_as_audit_audit_id_seq" TO qs_app;
+
+-- Rollout check: the app login must NOT own the audit table. An owner ignores
+-- REVOKE and can DISABLE TRIGGER, which would defeat append-only.
+SELECT tableowner FROM pg_tables WHERE schemaname = '{schema}' AND tablename = '{table}_run_as_audit';
+```
+
+**Semantics.** `scheduler_run_as_user_id` is set, changed or cleared only when
+`attributes.scheduler` is created, changed or removed through the management API
+(`QueryManager`), and each change writes exactly one row to the audit table in the same
+transaction. It is never accepted in a PATCH or upsert payload (rejected with
+`invalid_tenant`), never changed by non-schedule edits, and never changed by the
+scheduler re-sync (`POST /api/v1/qs/scheduler/jobs`).
 
 **Grants required**:
 - SELECT for read operations

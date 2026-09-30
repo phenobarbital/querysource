@@ -28,8 +28,29 @@ _TENANT_TABLE_DDL = (
     "query_raw text, "
     "description varchar, "
     "columns_definition text[] DEFAULT '{}'::text[], "
+    "scheduler_run_as_user_id integer, "
     "updated_at timestamptz DEFAULT now()"
     ")"
+)
+
+# FEAT-159: run-as audit table + append-only trigger. Roles are not created here:
+# the test DB user owns everything in the throwaway schema. Statements run one by one.
+_RUN_AS_AUDIT_DDL = (
+    'CREATE TABLE "{schema}".queries_run_as_audit ('
+    "audit_id bigserial PRIMARY KEY, "
+    "query_slug varchar NOT NULL, "
+    "old_user_id integer, "
+    "new_user_id integer, "
+    "operation varchar NOT NULL CHECK (operation IN ('set', 'change', 'clear')), "
+    "changed_by integer NOT NULL, "
+    "changed_at timestamptz NOT NULL DEFAULT now(), "
+    "request_info jsonb"
+    ")",
+    'CREATE OR REPLACE FUNCTION "{schema}".qs_run_as_audit_immutable() RETURNS trigger '
+    "LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'run-as audit is append-only'; END $$",
+    "CREATE TRIGGER qs_run_as_audit_no_mutation "
+    'BEFORE UPDATE OR DELETE ON "{schema}".queries_run_as_audit '
+    'FOR EACH ROW EXECUTE FUNCTION "{schema}".qs_run_as_audit_immutable()',
 )
 
 
@@ -103,6 +124,12 @@ async def provision_tenant_services():
                 raise RuntimeError(
                     f"Failed to create {schema!r}.queries: {error}"
                 )
+            for statement in _RUN_AS_AUDIT_DDL:
+                _, error = await conn.execute(statement.format(schema=schema))
+                if error:
+                    raise RuntimeError(
+                        f"Failed to create {schema!r} run-as audit objects: {error}"
+                    )
 
         yield {
             "run_id": run_id,
