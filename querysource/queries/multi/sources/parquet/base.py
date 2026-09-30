@@ -62,7 +62,7 @@ class ParquetSource(ThreadSource):
         return isinstance(value, str) and value.isupper() and '_' in value
 
     @abstractmethod
-    def _build_filesystem(self) -> tuple["fsspec.AbstractFileSystem", str]:
+    def _build_filesystem(self) -> tuple[fsspec.AbstractFileSystem, str]:
         """Return (filesystem, root path or glob) with masks already resolved."""
 
     def _secrets(self) -> list[str]:
