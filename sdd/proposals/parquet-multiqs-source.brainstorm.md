@@ -208,10 +208,11 @@ A MultiQS definition lists one or more Parquet sources under `sources:`:
   `anon`, `endpoint_url` and `storage_options`. `source` takes `directory` and `file`, where the file can be a glob.
 - **`ParquetGCSSource`**: `credentials.bucket`, `credentials.project`, and a `credentials.token`
   that can be an SA JSON path or navconfig variable, `google_default`, `anon` or a dict. It defaults to
-  navconfig `GOOGLE_CREDENTIALS_FILE` (then `BIGQUERY_CREDENTIALS`), then ADC. It also accepts
+  navconfig `GOOGLE_CREDENTIALS_FILE`, which wins over `BIGQUERY_CREDENTIALS`, then ADC. It also accepts
   `storage_options`, and `source.directory`/`file` as for S3.
 - **Common read options**: `columns: [...]`, `filters: [[col, op, value], ...]` (DNF, with
-  operators from an allowlist), `partitioning: hive | null`, and optional `recursive`.
+  operators from an allowlist), `partitioning: hive | null`, optional `recursive`, and
+  `max_rows` / `max_bytes` to override the hard size limit.
 
 Each source puts one pandas DataFrame on the MultiQS queue under its auto-assigned name
 (`ParquetS3Source`, `ParquetS3Source_1`, …), ready for transformations and outputs.
@@ -228,7 +229,9 @@ Each source puts one pandas DataFrame on the MultiQS queue under its auto-assign
    `pyarrow.dataset.dataset(...)` over the fsspec filesystem, converts the validated `filters`
    into a `pyarrow.compute` expression, and calls `to_table(columns, filter)` then `to_pandas()`.
 5. An empty result raises `DataNotFound`, which `ThreadSource.run` turns into MultiQS "no data" (HTTP 204).
-   A warning is logged above a configurable row or byte threshold, like the 100 MB warning in `S3Source`.
+   A **hard limit** (configurable `max_rows` / `max_bytes`, with a conservative default) is enforced. Before the read,
+   dataset metadata (`count_rows()` with the filter applied, and file sizes) is checked. If the limit is exceeded, the read is refused
+   with a `ValueError` that names the limit and the observed size, so the source fails instead of exhausting memory.
 
 ### Edge Cases & Error Handling
 
@@ -241,6 +244,7 @@ Each source puts one pandas DataFrame on the MultiQS queue under its auto-assign
 - **Auth failure or missing bucket**: re-raise as `RuntimeError`, without echoing secrets in the message.
 - **Unresolved navconfig variable names** (UPPER_SNAKE left as-is): treat as absent and fall back to ambient auth, as `S3Source` does.
 - **fsspec instance cache**: never reuse an authenticated instance across sources with different credentials.
+- **Size limit exceeded**: `ValueError` before the table is materialized. The limit is checked against filtered row counts and object sizes.
 
 ---
 
@@ -262,7 +266,7 @@ Each source puts one pandas DataFrame on the MultiQS queue under its auto-assign
 | `querysource/queries/multi/sources/` (new `parquet.py`) | extends | New base + 3 subclasses |
 | `querysource/queries/multi/sources/__init__.py` | modifies | `SOURCE_REGISTRY` + `__all__` |
 | `pyproject.toml` / `uv.lock` | modifies | New extras (e.g. `parquet` = pyarrow+fsspec, `s3` += s3fs, `gcs` = gcsfs). Upgrades aioboto3/aiobotocore/botocore |
-| `S3Source`, `ToS3`, `async-notify` | depends on | Must be re-tested after the AWS stack upgrade |
+| `S3Source`, `ToS3`, `async-notify` | depends on | Must be re-tested after the AWS stack upgrade. Migrating `S3Source` to s3fs is a follow-up feature, not in scope here |
 | `generated/*.json` | extends | `ParquetFileSource.json`, `ParquetS3Source.json`, `ParquetGCSSource.json` via `generate-multiquery-docs` |
 | `tests/` | extends | `test_source_parquet.py`; `test_source_registry.py` updated |
 
@@ -369,7 +373,7 @@ import fsspec                                         # verified in .venv (2026.
 - [x] Auth extras — *Owner: Jesus Lara*: S3-compatible endpoints, storage_options passthrough, AWS profile/anon, GCS token variants
 - [x] v1 read features — *Owner: Jesus Lara*: column projection, row filters, dirs/partitioned datasets, masks in path
 - [ ] Extras layout: one `parquet` extra (pyarrow+fsspec) plus `s3` += s3fs and a new `gcs` = gcsfs, or a single `parquet-cloud` extra? — *Owner: tbd*
-- [ ] GCS default credential precedence: `GOOGLE_CREDENTIALS_FILE` before `BIGQUERY_CREDENTIALS`, or the reverse? — *Owner: tbd*
+- [x] GCS default credential precedence — *Owner: Jesus Lara*: `GOOGLE_CREDENTIALS_FILE` wins over `BIGQUERY_CREDENTIALS` (then ADC)
 - [ ] Filter syntax in YAML: DNF lists only, or also a restricted string grammar? — *Owner: tbd*
-- [ ] Memory guard: warn only, or a hard `max_rows`/`max_bytes` limit? — *Owner: tbd*
-- [ ] Should `S3Source` later migrate to s3fs to consolidate on one S3 client? (out of scope for v1) — *Owner: tbd*
+- [x] Memory guard — *Owner: Jesus Lara*: a hard limit. Reading stops with an error when it's exceeded, rather than only logging a warning.
+- [x] Consolidate `S3Source` onto s3fs as the single S3 client? — *Owner: Jesus Lara*: yes, as a **follow-up feature**, not in FEAT-177 v1
