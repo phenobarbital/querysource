@@ -368,8 +368,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Created guarded_sql.py per blueprint and tests/test_guarded_sql.py (10 tests pass with mocked AsyncDB). ruff clean. The grep for "queries.multi" matches only the module docstring sentence forbidding the import, no actual import.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

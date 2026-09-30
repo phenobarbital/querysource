@@ -68,8 +68,8 @@ def classify_output_error(exc: BaseException) -> str | None:
 
 # FEAT-155: Output step names that modify data on the full-access DB* connection.
 # A MultiQuery using any of them requires ``datasource:use`` on ``pg_admin``
-# (FEAT-091) at pre-flight. FEAT-156 adds "ExecuteSQL".
-WRITE_DESTINATIONS: frozenset[str] = frozenset({"TableDelete"})
+# (FEAT-091) at pre-flight. FEAT-156 added "ExecuteSQL".
+WRITE_DESTINATIONS: frozenset[str] = frozenset({"TableDelete", "ExecuteSQL"})
 
 
 def _output_step_names(output: object) -> set[str]:

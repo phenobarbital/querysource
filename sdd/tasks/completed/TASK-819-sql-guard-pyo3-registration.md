@@ -268,8 +268,8 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (sequential fallback)
+**Date**: 2026-09-30
+**Notes**: Registered sql_guard in lib.rs, re-exported in qs_parsers/__init__.py (both branches), added tests/test_sql_guard.py. Staged .so into worktree via maturin build + unzip (no maturin develop); HAS_RUST True, path inside worktree. pytest test_sql_guard + test_rust_parsers: 149 passed. cargo test --no-default-features: 311 passed, 4 failed in unrelated modules (bigquery_parser, pgsql_parser, sql_parser, validators) - not touched by this feature; all 30 sql_guard tests pass. ruff: 2 I001 import-order findings in __init__.py are pre-existing (same at baseline).
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
