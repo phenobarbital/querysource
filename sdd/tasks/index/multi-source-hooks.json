@@ -16,7 +16,7 @@
       "feature_id": "FEAT-157",
       "feature": "multi-source-hooks",
       "spec": "sdd/specs/multi-source-hooks.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Root task inside this index: creates querysource/interfaces/source_hooks.py and tests/test_source_hooks.py; no upstream symbols in this feature. Cross-feature (another index, so not in depends_on): imports querysource.interfaces.guarded_sql created by FEAT-156 TASK-820 — do not start FEAT-157 until FEAT-156 is merged into dev.",
       "assigned_to": null,
       "started_at": "2026-09-30T21:57:40+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-823-source-hooks-core.md"
+      "completed_at": "2026-09-30T21:57:58+00:00",
+      "file": "sdd/tasks/completed/TASK-823-source-hooks-core.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-824",
