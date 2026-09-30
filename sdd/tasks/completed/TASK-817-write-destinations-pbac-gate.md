@@ -415,10 +415,9 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Added WRITE_DESTINATIONS/_output_step_names + MultiQS and HTTP (write_access) gates; 5 new tests plus 24 existing PBAC/dispatch tests pass.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (fallback sequential)
+**Date**: 2026-09-30
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
