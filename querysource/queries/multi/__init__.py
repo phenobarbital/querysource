@@ -113,9 +113,8 @@ def _output_step_names(output: object) -> set[str]:
 
 
 # FEAT-160: source-hook keys that run SQL with the full-access DB* connection.
-# Same literals as FEAT-157's ``HOOK_KEYS`` (querysource/interfaces/source_hooks.py);
-# whichever feature merges second makes one module import the other.
-SOURCE_HOOK_KEYS: tuple[str, str] = ("pre-hook", "post-hook")
+# FEAT-160 name kept as an alias of FEAT-157's canonical ``HOOK_KEYS`` (single source of truth).
+SOURCE_HOOK_KEYS: tuple[str, str] = HOOK_KEYS
 
 
 def _as_mapping(value: object) -> Mapping[str, Any] | None:
