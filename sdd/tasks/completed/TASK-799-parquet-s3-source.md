@@ -266,7 +266,7 @@ See the `tests/test_source_parquet_s3.py` block above.
 
 **Completed by**: sdd-worker (seat gpt-5.6-luna, codex, ~218s)
 **Date**: 2026-09-30
-**Notes**: `ParquetFileSource` delivered per the task; combined Parquet suite 60 passed. Residual style lint left for /sdd-done
+**Notes**: `ParquetS3Source` delivered per the task; combined Parquet suite 60 passed. Residual style lint left for /sdd-done
 (DTZ011 in tests/test_source_parquet_local.py, B018 in tests/test_source_parquet_s3.py). No review fixes needed.
 
 **Deviations from spec**: none
