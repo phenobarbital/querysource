@@ -17,14 +17,14 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Root task: creates querysource/queries/multi/sources/graph.py (kiota_platform_version_patch, StaticTokenCredential); no upstream symbols.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-802-graph-primitives.md"
     },
@@ -35,7 +35,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -44,7 +44,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-802: modifies the same file graph.py and uses kiota_platform_version_patch + StaticTokenCredential created there.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-803-graph-drive-base.md"
     },
@@ -55,7 +55,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -64,7 +64,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-803: SharepointSource subclasses GraphDriveSource (querysource/queries/multi/sources/graph.py).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-804-sharepoint-rebase.md"
     },
@@ -75,14 +75,14 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Root task: creates querysource/auth/identity_tokens.py; only depends on installed navigator-auth.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-805-identity-resolver.md"
     },
@@ -93,7 +93,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -102,7 +102,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-805: handlers/multi.py imports DelegatedIdentityError and SourceIdentityContext from querysource/auth/identity_tokens.py.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-806-prepare-hook-wiring.md"
     },
@@ -113,7 +113,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -124,7 +124,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-803: subclasses GraphDriveSource + StaticTokenCredential (graph.py); TASK-805: calls resolve_delegated_token (auth/identity_tokens.py); TASK-806: overrides ThreadSource.prepare added in sources/base.py.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-807-onedrive-source.md"
     },
@@ -135,14 +135,14 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Root task: modifies querysource/repositories/definitions.py only (RUN_AS_COLUMN, pop, guards, get_run_as).",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-808-run-as-repository-reads.md"
     },
@@ -153,7 +153,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -162,7 +162,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-808: same file repositories/definitions.py; uses RUN_AS_COLUMN and _is_missing_run_as_column created there.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-809-run-as-transactional-audit.md"
     },
@@ -173,7 +173,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -182,7 +182,7 @@
       "parallel": false,
       "parallelism_notes": "Exclusive: edits tests/tenants/conftest.py loaded by every tenant test. TASK-809: fixture audit table must match _run_as_audit_table naming ({table}_run_as_audit) created there.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-810-run-as-ddl-docs.md"
     },
@@ -193,7 +193,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -203,7 +203,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-805: imports user_id_from_session (auth/identity_tokens.py); TASK-809: calls repo.patch/upsert with run_as_actor/request_info kwargs added there.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-811-manager-run-as-wiring.md"
     },
@@ -214,7 +214,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -225,7 +225,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-805: SourceIdentityContext.for_scheduler; TASK-806: MultiQS(identity_context=) kw added in queries/multi/__init__.py; TASK-808: RUN_AS_COLUMN + DefinitionRepository.get_run_as.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-812-scheduler-run-as-wiring.md"
     },
@@ -236,7 +236,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -246,7 +246,7 @@
       "parallel": false,
       "parallelism_notes": "Exclusive: edits pyproject.toml + uv.lock and regenerates generated/. TASK-807: imports OneDriveSource (sources/onedrive.py); TASK-810: same file docs/PER_TENANT_QUERIES.md.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-813-onedrive-registration.md"
     },
@@ -257,7 +257,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -268,7 +268,7 @@
       "parallel": true,
       "parallelism_notes": "TASK-811: repo.patch run_as_actor path; TASK-812: scheduled_multiqs_job run_as_user_id/identity_auth; TASK-813: OneDriveSource in SOURCE_REGISTRY for sources: dispatch.",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-09-30T15:27:22+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-814-integration-tests.md"
     }
