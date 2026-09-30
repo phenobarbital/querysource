@@ -37,7 +37,9 @@ class dbProvider(pgProvider):
                 raise self.NotFound(
                     'DB: Empty Result'
                 )
-        except (DataNotFound, NoDataFound) as ex:
+        except DataNotFound:
+            raise
+        except NoDataFound as ex:
             raise self.NotFound(
                 f'DB: Empty Result: {ex}'
             ) from ex

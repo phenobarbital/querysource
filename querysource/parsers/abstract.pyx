@@ -482,7 +482,9 @@ cdef class AbstractParser:
         cdef str fn
         cdef object result
         if isinstance(val, dict):
-            op, value = val.popitem()
+            if not val:
+                return False
+            op, value = next(reversed(val.items()))  # never popitem(): the dict is the caller's
             result = is_valid(key, value, _type)
             self._conditions[key] = {op: result}
             return True
@@ -563,7 +565,11 @@ cdef class AbstractParser:
         """Process a single element for the WHERE clause."""
 
         if isinstance(value, dict):
-            op, v = value.popitem()
+            if not value:
+                return key, value
+            # Read the (last) operator without popitem(): the dict belongs to the caller, who may reuse it
+            # (e.g. a linked dashboard re-sending the same filter); mutating it empties the filter.
+            op, v = next(reversed(value.items()))
             result = is_valid(key, v, noquote=self.string_literal)
             return key, {op: result}
 

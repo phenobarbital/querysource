@@ -150,7 +150,9 @@ cdef class SQLParser(AbstractParser):
                     name, end = key, ''
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
-                    op, v = value.popitem()
+                    if not value:
+                        continue
+                    op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     # SECURITY: Operator must be in allowlist
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value

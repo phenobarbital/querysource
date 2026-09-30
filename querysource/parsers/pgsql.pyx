@@ -266,7 +266,9 @@ cdef class pgSQLParser(SQLParser):
                         if cond:
                             where_cond.append(cond)
                         continue
-                    op, v = value.popitem()
+                    if not value:
+                        continue
+                    op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
                         safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
