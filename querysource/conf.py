@@ -296,6 +296,14 @@ MULTIQS_SOURCE_TIMEOUT_SECONDS = config.getint(
     "MULTIQS_SOURCE_TIMEOUT_SECONDS",
     fallback=30,
 )
+MULTIQS_PARQUET_MAX_ROWS = config.getint(
+    "MULTIQS_PARQUET_MAX_ROWS",
+    fallback=5_000_000,
+)
+MULTIQS_PARQUET_MAX_BYTES = config.getint(
+    "MULTIQS_PARQUET_MAX_BYTES",
+    fallback=1_073_741_824,
+)
 
 ## Google API:
 GOOGLE_API_KEY = config.get('GOOGLE_API_KEY')

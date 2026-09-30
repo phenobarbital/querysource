@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-09-30T15:06:23+00:00",
-  "completed_at": null,
+  "completed_at": "2026-09-30T16:01:45+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "Exclusive: edits pyproject.toml and regenerates uv.lock (aioboto3/aiobotocore/botocore upgrade), and installs extras into the shared venv.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-795-parquet-deps-and-settings.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:41:35+00:00",
+      "file": "sdd/tasks/completed/TASK-795-parquet-deps-and-settings.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-796",
@@ -34,16 +35,17 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No dependencies: a pure module over pyarrow.compute (already importable). Creates the parquet/ subpackage marker.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-796-parquet-dnf-filters.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:46:16+00:00",
+      "file": "sdd/tasks/completed/TASK-796-parquet-dnf-filters.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-797",
@@ -52,7 +54,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -62,9 +64,10 @@
       "parallel": true,
       "parallelism_notes": "Imports build_filter_expression/filter_columns from TASK-796 (parquet/filters.py); reads conf.MULTIQS_PARQUET_MAX_ROWS/MAX_BYTES created by TASK-795 (querysource/conf.py).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-797-parquet-source-base.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:50:45+00:00",
+      "file": "sdd/tasks/completed/TASK-797-parquet-source-base.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-798",
@@ -73,7 +76,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -82,9 +85,10 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-798-parquet-file-source.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:55:07+00:00",
+      "file": "sdd/tasks/completed/TASK-798-parquet-file-source.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-799",
@@ -93,7 +97,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -103,9 +107,10 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py); needs s3fs installed by TASK-795 (uv.lock).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-799-parquet-s3-source.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:55:07+00:00",
+      "file": "sdd/tasks/completed/TASK-799-parquet-s3-source.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-800",
@@ -114,7 +119,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -124,9 +129,10 @@
       "parallel": true,
       "parallelism_notes": "Subclasses ParquetSource from TASK-797 (parquet/base.py); needs gcsfs installed by TASK-795 (uv.lock).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-800-parquet-gcs-source.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T15:55:07+00:00",
+      "file": "sdd/tasks/completed/TASK-800-parquet-gcs-source.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-801",
@@ -135,7 +141,7 @@
       "feature_id": "FEAT-158",
       "feature": "parquet-multiqs-source",
       "spec": "sdd/specs/parquet-multiqs-source.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -146,9 +152,10 @@
       "parallel": false,
       "parallelism_notes": "Imports ParquetFileSource (TASK-798, parquet/local.py), ParquetS3Source (TASK-799, parquet/s3.py), ParquetGCSSource (TASK-800, parquet/gcs.py); modifies parquet/__init__.py created by TASK-796. Exclusive: runs generate-multiquery-docs, which rewrites shared generated/*.json.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-801-parquet-registry-schemas.md"
+      "started_at": "2026-09-30T15:09:41+00:00",
+      "completed_at": "2026-09-30T16:01:45+00:00",
+      "file": "sdd/tasks/completed/TASK-801-parquet-registry-schemas.md",
+      "verification": "verified"
     }
   ]
 }

@@ -265,11 +265,10 @@ See the test blocks above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (seat gpt-5.6-terra, codex, 1 attempt, ~317s)
+**Date**: 2026-09-30
+**Notes**: Registry wiring, exports, integration test and 3 generated schemas delivered. Registry + integration tests: 24 passed;
+full Parquet + S3 suites: 85 passed. `tests/test_multiqs_sources_integration.py::test_guardrail_rejects_too_many_sources`
+fails identically on unmodified `dev` (expects DriverError, gets QueryException) — pre-existing, not caused by this feature.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: the integration test lives in a new `tests/test_multiqs_parquet_integration.py` instead of
-extending `tests/test_multiqs_sources_integration.py`, to avoid a file shared with other in-flight source features.
+**Deviations from spec**: none
