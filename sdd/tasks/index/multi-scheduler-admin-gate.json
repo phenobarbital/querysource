@@ -1,0 +1,91 @@
+{
+  "feature": "multi-scheduler-admin-gate",
+  "feature_id": "FEAT-160",
+  "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-09-30T21:30:10+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-827",
+      "slug": "request-scoped-pbac-helper",
+      "title": "Request-scoped PBAC helper (auth/request_gate.py)",
+      "feature_id": "FEAT-160",
+      "feature": "multi-scheduler-admin-gate",
+      "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Root task: creates querysource/auth/request_gate.py and tests/test_request_gate.py and modifies only querysource/handlers/abstract.py (_get_user_session/_enforce_pbac delegates); no file shared with TASK-828, no Cython rebuild; runs concurrently with TASK-828.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-827-request-scoped-pbac-helper.md"
+    },
+    {
+      "id": "TASK-828",
+      "slug": "scheduler-write-predicates",
+      "title": "Write-capability predicates for scheduled multi-queries",
+      "feature_id": "FEAT-160",
+      "feature": "multi-scheduler-admin-gate",
+      "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Root task: modifies only querysource/queries/multi/__init__.py (predicates above get_operator_module) and creates tests/test_scheduler_write_predicates.py; pure functions, no import of TASK-827's module; runs concurrently with TASK-827. Cross-feature: FEAT-156 TASK-822 / FEAT-157 TASK-825 edit other lines of the same file.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-828-scheduler-write-predicates.md"
+    },
+    {
+      "id": "TASK-829",
+      "slug": "manager-scheduler-gate",
+      "title": "Slug-management gate in QueryManager (put/post/patch)",
+      "feature_id": "FEAT-160",
+      "feature": "multi-scheduler-admin-gate",
+      "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-827",
+        "TASK-828"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Calls enforce_request_pbac from TASK-827 (querysource/auth/request_gate.py) and definition_requires_scheduler_grant from TASK-828; touches only querysource/handlers/manager.py and tests/test_manager_scheduler_gate.py, disjoint from TASK-830, so both run concurrently after the roots.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-829-manager-scheduler-gate.md"
+    },
+    {
+      "id": "TASK-830",
+      "slug": "scheduler-sync-gate",
+      "title": "Scheduler sync gate in SchedulerJobsView.post",
+      "feature_id": "FEAT-160",
+      "feature": "multi-scheduler-admin-gate",
+      "spec": "sdd/specs/multi-scheduler-admin-gate.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "M",
+      "depends_on": [
+        "TASK-827",
+        "TASK-828"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Calls enforce_request_pbac from TASK-827 and definition_requires_scheduler_grant from TASK-828; touches only querysource/handlers/scheduler.py and tests/test_scheduler_sync_gate.py, disjoint from TASK-829's manager.py, so it runs concurrently with TASK-829.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-830-scheduler-sync-gate.md"
+    }
+  ]
+}
