@@ -3,9 +3,9 @@ from querysource.queries.multi.sources import (
     SOURCE_REGISTRY,
     AirtableSource,
     OneDriveSource,
+    S3Source,
     SharepointSource,
     SmartSheetSource,
-    S3Source,
     TableSource,
 )
 

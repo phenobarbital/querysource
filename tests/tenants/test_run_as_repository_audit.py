@@ -5,7 +5,7 @@ import pytest
 from asyncdb.drivers.pg import UndefinedTableError
 
 from querysource.repositories.definitions import DefinitionRepository
-from querysource.tenants import QueryIdentity, QueryStore
+from querysource.tenants import QueryIdentity, QueryStore, TenantError
 
 SCHED = {"scheduler": {"every": "1h"}}
 
@@ -146,10 +146,12 @@ async def test_unmigrated_store_still_commits(caplog):
 
 
 @pytest.mark.asyncio
-async def test_no_actor_leaves_column_and_audit_untouched(caplog):
+async def test_schedule_change_without_actor_is_refused_and_rolled_back():
+    """Fail closed: an unattributable schedule change writes nothing (no stale run-as)."""
     conn = _patched_row(_TxConn({}, SCHED))
-    with caplog.at_level(logging.WARNING):
+    with pytest.raises(TenantError) as exc_info:
         await _patch(conn, actor=None)
+    assert exc_info.value.error_code == "tenant_write_forbidden"
     assert _count(conn, "INSERT INTO") == 0
-    assert _count(conn, "UPDATE") == 1
-    assert any("without an actor" in r.message for r in caplog.records)
+    assert "ROLLBACK" in conn.log
+    assert "COMMIT" not in conn.log

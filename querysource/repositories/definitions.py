@@ -637,11 +637,12 @@ class DefinitionRepository:
         if prev and cur and prev == cur:
             return None
         if actor is None:
-            _logger.warning(
-                "Schedule change on %s.%s/%s without an actor; run-as left untouched",
-                store.schema, store.table, slug,
+            # Fail closed: a schedule change must be attributable (audit changed_by is
+            # NOT NULL), otherwise a stale run-as user could keep running it.
+            raise TenantError(
+                f"Schedule change on {slug!r} requires an authenticated user",
+                error_code="tenant_write_forbidden",
             )
-            return None
 
         table = self._qualified_table(store)
         audit = self._run_as_audit_table(store)
