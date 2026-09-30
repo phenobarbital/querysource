@@ -681,10 +681,13 @@ class DefinitionRepository:
         except Exception as exc:
             if _is_missing_run_as_column(exc) or isinstance(exc, UndefinedTableError):
                 await conn.fetch_one("ROLLBACK TO SAVEPOINT qs_run_as")
-                _logger.warning(
-                    "Store %s.%s is not migrated for run-as (%s); definition written without it",
-                    store.schema, store.table, exc,
-                )
+                key = (store.schema, store.table)
+                if key not in _RUN_AS_FALLBACK_WARNED:
+                    _RUN_AS_FALLBACK_WARNED.add(key)
+                    _logger.warning(
+                        "Store %s.%s is not migrated for run-as (%s); definition written without it",
+                        store.schema, store.table, exc,
+                    )
                 return None
             raise
         return RunAsChange(query_slug=slug, old_user_id=old, new_user_id=new, operation=operation)

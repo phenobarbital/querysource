@@ -42,7 +42,7 @@ class QueryManager(QueryView):
         """Return the numeric session user id and minimal request info.
 
         Used for run-as auditing. If no session is available the actor is
-        ``None`` and the write proceeds without touching run-as.
+        ``None``; a schedule change is then refused by the repository (fail closed).
 
         Returns:
             Tuple of (numeric user id or None, {"method", "path", "remote"}).
@@ -54,7 +54,8 @@ class QueryManager(QueryView):
         }
         try:
             session = await get_session(self.request, new=False)
-        except Exception:  # noqa: BLE001 - session system may be absent
+        except Exception as exc:  # noqa: BLE001 - session system may be absent
+            logging.getLogger(__name__).warning("Run-as actor lookup failed (%s); treating as no session", exc)
             return None, info
         return user_id_from_session(session), info
 
