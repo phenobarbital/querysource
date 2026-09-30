@@ -50,7 +50,9 @@ avoids adding an extra pipeline layer.
   - There is **no shared transaction**. Each hook is atomic on its own, all of its statements in one
     transaction.
 - The `pre-hook` runs before the source's retrieval. If it fails, the source is not fetched.
-- The `post-hook` runs **only if the retrieval did not fail**.
+- The `post-hook` runs **only if the retrieval did not fail**. An **empty** retrieval
+  (`DataNotFound` / `NoDataFound`, HTTP 204) counts as *not failed*, so the post-hook runs. This
+  way audit/log hooks leave a trace on days with no data.
 - A common capability layer: a `SourceHooksMixin` that decorates both `BaseProvider` and
   `ThreadSource`.
 - Hooks SQL goes through the FEAT-156 Rust guard (`sql_guard`) and executor (`guarded_sql`). No
@@ -64,6 +66,10 @@ avoids adding an extra pipeline layer.
 - Non-SQL hooks (API calls, e.g. before reading a Smartsheet). This is a follow-up.
 - Hooks on non-PostgreSQL sources (BigQuery, SQL Server, MySQL, …), on `sources:` entries (`TableSource`, Airtable,
   Smartsheet, S3, SharePoint) and on `files:` entries. This is a follow-up.
+  - `TableSource` with `driver: pg` is deliberately deferred. It can carry its own `dsn` /
+    `credentials` pointing at another PostgreSQL database, where a `DB*` hook would change the
+    wrong database. The equivalent works today as a `queries` entry
+    (`{"query": "SELECT * FROM schema.table WHERE …", "driver": "pg"}`), which does support hooks.
 - **Option A (same credentials, shared connection / transaction between pre-hook, fetch and
   post-hook).** Jesus confirmed that a pre-hook cannot open a transaction closed by the post-hook
   under Option B. Switching to A later is a separate feature.
@@ -120,8 +126,12 @@ This is the same check FEAT-155/156 perform for write destinations.
   ```
   pre-hook  (if any)  → execute_guarded(pre)   — DB* connection, own transaction
   fetch()             → retrieval, unchanged (local or remote executor)
-  post-hook (if any)  → execute_guarded(post)  — only when fetch() raised nothing
+  post-hook (if any)  → execute_guarded(post)  — when fetch() raised nothing OR raised DataNotFound/NoDataFound
   ```
+- Empty retrieval: when `fetch()` raises `DataNotFound`/`NoDataFound`, the post-hook runs and then
+  the **same no-data exception is re-raised**. MultiQS keeps answering "no data" (204) exactly as
+  today. If that post-hook itself fails, its error replaces the no-data exception.
+- Any other `fetch()` exception → the post-hook is skipped.
 - A failing pre-hook means `fetch()` is not called. A failing post-hook fails the thread. In both
   cases `self.exc` is set, and MultiQS's existing child-failure handling fails the pipeline.
 - Hook status tags are logged with the source name.
@@ -263,7 +273,10 @@ class SourceHooksMixin:
   # querysource/queries/multi/sources/base.py:14  (verified: `class ThreadSource(threading.Thread, ABC):`)
   class ThreadSource(SourceHooksMixin, threading.Thread, ABC):
       async def _fetch_with_hooks(self) -> Optional[pd.DataFrame]:
-          """``run_pre_hook`` → ``fetch`` → ``run_post_hook`` (post only when fetch raised nothing).
+          """``run_pre_hook`` → ``fetch`` → ``run_post_hook``.
+
+          The post-hook runs when fetch raised nothing or raised ``DataNotFound``/``NoDataFound``; in the
+          latter case the no-data exception is re-raised after the post-hook. Any other fetch error skips it.
 
           Without hooks this is exactly ``await self.fetch()``.
           """
@@ -309,7 +322,7 @@ class SourceHooksMixin:
 
 ### Module 4: Catalog / JSON schema
 - **Path**: `querysource/queries/multi/sources/query.catalog.yaml` (modify), `generated/` (regenerated)
-- **Responsibility**: Document `pre-hook` / `post-hook` (type `str | list`, PostgreSQL only, needs `pg_admin` grant, guard rules, post-hook only on success).
+- **Responsibility**: Document `pre-hook` / `post-hook` (type `str | list`, PostgreSQL only, needs `pg_admin` grant, guard rules, post-hook runs on success or empty result, not on errors).
 - **Depends on**: none
 - **Interface Skeleton**:
   ```yaml
@@ -343,7 +356,9 @@ class SourceHooksMixin:
 | `test_provider_dialects` | M2 | `pgProvider`/`dbProvider.sql_hooks_dialect == "postgres"`; `sqlserverProvider`, `bigqueryProvider` → None |
 | `test_fetch_with_hooks_order` (`tests/test_thread_source_base.py`) | M2 | pre → fetch → post call order |
 | `test_pre_hook_failure_skips_fetch` | M2 | pre raises → fetch not awaited, `exc` set |
-| `test_post_hook_skipped_on_fetch_failure` | M2 | fetch raises → post not called |
+| `test_post_hook_skipped_on_fetch_failure` | M2 | fetch raises `DriverError` → post not called |
+| `test_post_hook_runs_on_empty_result` | M2 | fetch raises `DataNotFound` → post called, then `DataNotFound` re-raised (`exc` is `DataNotFound`) |
+| `test_post_hook_error_on_empty_result` | M2 | fetch raises `DataNotFound`, post raises → `exc` is the post-hook error |
 | `test_no_hooks_unchanged` | M2 | without hooks `run()` behaves as before (existing tests stay green) |
 | `test_hooks_gate` (`tests/test_multiqs_source_hooks.py`) | M3 | hook declared + principal → `enforce_principal(DATASOURCE,"pg_admin","datasource:use")`; deny before any thread starts |
 | `test_hooks_rejected_from_request_conditions` | M3 | `conditions={"q1": {"pre-hook": "…"}}` → `DriverError` |
@@ -357,7 +372,7 @@ class SourceHooksMixin:
 ### Integration Tests
 | Test | Description |
 |---|---|
-| `test_source_hooks_postgres_roundtrip` | (skipped without live `DB*`/`PG_*` Postgres) pre-hook `UPDATE` is visible to the read; post-hook `INSERT` into an audit table happens only on success |
+| `test_source_hooks_postgres_roundtrip` | (skipped without live `DB*`/`PG_*` Postgres) pre-hook `UPDATE` is visible to the read; post-hook `INSERT` into an audit table happens on success and on an empty read, not when the read errors |
 
 ### Test Data / Fixtures
 ```python
@@ -378,7 +393,8 @@ def hooked_pipeline() -> dict:
 - [ ] The full existing MultiQuery suite still passes, which shows pipelines without hooks are unchanged on every driver: `pytest tests/ -k "multiqs or thread_source or destination" -v`.
 - [ ] `ruff check` is clean on new and modified files.
 - [ ] Hooks run with `default_dsn` (`DB*`) through `execute_guarded`, never on the retrieval connection.
-- [ ] Pre-hook → retrieval → post-hook order holds. A pre-hook failure skips the retrieval, and the post-hook runs only when the retrieval raised nothing.
+- [ ] Pre-hook → retrieval → post-hook order holds. A pre-hook failure skips the retrieval. The post-hook runs when the retrieval succeeded or returned no data, and never when it failed with any other error.
+- [ ] An empty retrieval with a post-hook still yields MultiQS's existing "no data" outcome (204).
 - [ ] Every validation failure (location, dialect, DB mismatch, guard, PBAC) happens **before any source thread starts**.
 - [ ] Hook keys never reach `QueryObject` conditions, and hook keys coming from request conditions are rejected.
 - [ ] Only PostgreSQL `queries` entries accept hooks; all other drivers/sections raise a clear `DriverError` **only when a hook is declared**.
@@ -505,8 +521,8 @@ None new.
 - [x] Post-hook when retrieval fails — *Resolved by Jesus Lara*: it runs only when the retrieval does not fail.
 - [x] Keep `ExecuteSQL` / `TableDelete` — *Resolved by Jesus Lara*: yes, as components (FEAT-155 / FEAT-156).
 - [x] Drivers — *Resolved by Juan2coder*: PostgreSQL only. Other drivers are unchanged unless a hook is declared, which raises a clear error.
-- [ ] Does an **empty** retrieval (`DataNotFound`, HTTP 204) count as "retrieval did not fail" for the post-hook? The spec currently treats it as not-success, so the post-hook is skipped. — *Owner: Jesus Lara*
-- [ ] Hooks on `sources: TableSource` with `driver: pg` and no custom `dsn`/`credentials` (same database): add in this release or in a follow-up? — *Owner: Jesus Lara*
+- [x] Does an empty retrieval (`DataNotFound`, HTTP 204) count as "did not fail" for the post-hook? — *Resolved by Juan2coder (2026-09-30)*: yes. The post-hook runs and the no-data result is preserved, because QS treats no data as a non-error and audit/log hooks need a trace.
+- [x] Hooks on `sources: TableSource` (`driver: pg`) — *Resolved by Juan2coder (2026-09-30)*: follow-up. A custom `dsn`/`credentials` may target another database, and the same read works as a `queries` entry with hooks.
 
 ---
 
@@ -535,3 +551,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-09-30 | Juan2coder | Initial draft from Jesus Lara's hook design |
+| 0.2 | 2026-09-30 | Juan2coder | Resolve §8: post-hook runs on empty retrieval; TableSource deferred to follow-up |
