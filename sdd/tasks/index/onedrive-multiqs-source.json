@@ -36,7 +36,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -46,8 +46,9 @@
       "parallelism_notes": "TASK-802: modifies the same file graph.py and uses kiota_platform_version_patch + StaticTokenCredential created there.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-803-graph-drive-base.md"
+      "completed_at": "2026-09-30T15:36:46+00:00",
+      "file": "sdd/tasks/completed/TASK-803-graph-drive-base.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-804",
@@ -95,7 +96,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -105,8 +106,9 @@
       "parallelism_notes": "TASK-805: handlers/multi.py imports DelegatedIdentityError and SourceIdentityContext from querysource/auth/identity_tokens.py.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-806-prepare-hook-wiring.md"
+      "completed_at": "2026-09-30T15:36:46+00:00",
+      "file": "sdd/tasks/completed/TASK-806-prepare-hook-wiring.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-807",
@@ -156,7 +158,7 @@
       "feature_id": "FEAT-159",
       "feature": "onedrive-multiqs-source",
       "spec": "sdd/specs/onedrive-multiqs-source.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -166,8 +168,9 @@
       "parallelism_notes": "TASK-808: same file repositories/definitions.py; uses RUN_AS_COLUMN and _is_missing_run_as_column created there.",
       "assigned_to": null,
       "started_at": "2026-09-30T15:27:22+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-809-run-as-transactional-audit.md"
+      "completed_at": "2026-09-30T15:36:47+00:00",
+      "file": "sdd/tasks/completed/TASK-809-run-as-transactional-audit.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-810",
