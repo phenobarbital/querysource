@@ -56,7 +56,7 @@
       "feature_id": "FEAT-156",
       "feature": "multi-executesql",
       "spec": "sdd/specs/multi-executesql.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -66,8 +66,9 @@
       "parallelism_notes": "Imports sql_guard from querysource.qs_parsers, which exists only after TASK-819's re-export in querysource/qs_parsers/__init__.py and the extension rebuild. Touches only its own new files.",
       "assigned_to": null,
       "started_at": "2026-09-30T18:15:06+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-820-guarded-sql-executor.md"
+      "completed_at": "2026-09-30T18:18:23+00:00",
+      "file": "sdd/tasks/completed/TASK-820-guarded-sql-executor.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-821",
