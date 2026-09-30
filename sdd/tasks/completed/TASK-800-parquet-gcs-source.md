@@ -268,10 +268,9 @@ See the `tests/test_source_parquet_gcs.py` block above.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (seat sonnet (native), 1 attempt)
+**Date**: 2026-09-30
+**Notes**: `ParquetGCSSource` delivered per the task; combined Parquet suite 60 passed. Residual style lint left for /sdd-done
+(DTZ011 in tests/test_source_parquet_local.py, B018 in tests/test_source_parquet_s3.py). No review fixes needed.
 
 **Deviations from spec**: none

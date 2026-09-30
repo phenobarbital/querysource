@@ -50,7 +50,6 @@ eggs/
 etc/
 google/*.json
 great_expetations/
-uv.lock
 /querysource/_version.py
 /templates/.compiled
 #lib/
@@ -272,7 +271,6 @@ querysource/_version.py
 great_expectations/
 querysource/handlers/variables.py
 resources/
-uv.lock
 
 # antigrativy workspace
 .code-workspace

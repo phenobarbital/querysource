@@ -155,7 +155,21 @@ sharepoint = [
 ]
 
 s3 = [
-    "aioboto3>=12.0",
+    "aioboto3>=15",
+    "s3fs>=2026.9",
+]
+
+parquet = [
+    "pyarrow>=25",
+    "fsspec>=2026.7",
+]
+
+gcs = [
+    "gcsfs>=2026.8",
+]
+
+parquet-all = [
+    "querysource[parquet,s3,gcs]",
 ]
 
 dev = [
@@ -293,6 +307,8 @@ known-first-party = ["querysource"]
 # producing ModuleNotFoundError: No module named '<pkg>.<native>' at import.
 [tool.uv]
 link-mode = "copy"
+# FEAT-158: asyncdb[boto3] pins aiobotocore==2.15.2 and aioboto3==13.2.0, which conflict with s3fs>=2026.9.
+override-dependencies = ["aiobotocore>=2.25,<2.26", "aioboto3>=15"]
 
 [tool.uv.sources]
 # navigator-auth = { path = "../../navigator/navigator-auth", editable = true }
