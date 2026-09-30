@@ -12,7 +12,7 @@
     "summary_oneline": "MS OneDrive source for MultiQS, modelled on the existing SharePoint source"
   },
   "mode": "enrichment",
-  "phase": "qa_complete",
+  "phase": "committed",
   "phases": {
     "source": {
       "status": "completed"
@@ -45,7 +45,8 @@
       "new_unresolved": 1
     },
     "output": {
-      "proposal_path": "sdd/proposals/onedrive-multiqs-source.proposal.md"
+      "proposal_path": "sdd/proposals/onedrive-multiqs-source.proposal.md",
+      "commit_sha": "d8f615f"
     }
   },
   "budget": {
@@ -64,7 +65,7 @@
   },
   "errors": [],
   "resume_hint": {
-    "next_phase": "commit",
-    "next_action": "Commit proposal"
+    "next_phase": "done",
+    "next_action": "/sdd-spec FEAT-178"
   }
 }
