@@ -27,7 +27,8 @@ except ImportError:
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 # JSONB operators accepted as the key of a dict-typed filter value.
 # ``@>|`` is the any-of form: a list of containment operands OR-ed together.
-JSONB_OPERATORS = ('@>', '<@', '@>|', '->', '->>',)
+# ``@!`` is none-of (negated any-of); ``@$`` is not-all (OR of negated checks).
+JSONB_OPERATORS = ('@>', '<@', '@>|', '@!', '@$', '->', '->>',)
 # Key suffixes (negation, overlap, ...) carry no meaning for JSONB filters
 # and are stripped from the column name.
 JSONB_KEY_SUFFIXES = '|!~#@:'
@@ -113,6 +114,66 @@ cdef str jsonb_any_of_condition(str col, object operand):
     return '(' + ' OR '.join(parts) + ')'
 
 
+cdef list jsonb_containment_terms(str col, object operand):
+    """Render each item of ``operand`` as ``col @> '<json>'::jsonb``.
+
+    Args:
+        col: safe column identifier.
+        operand: list of containment operands.
+
+    Returns:
+        The terms, or None when the operand is not a non-empty list/tuple.
+    """
+    if not isinstance(operand, (list, tuple)) or not operand:
+        return None
+    return [
+        f"{col} @> {pg_literal(jsonb_operand(item))}::jsonb" for item in operand
+    ]
+
+
+cdef str jsonb_none_of_condition(str col, object operand):
+    """Render ``{"@!": [a, b, ...]}`` as ``NOT (col @> a OR col @> b ...)``.
+
+    None-of containment, the negation of ``@>|``: a row matches when it
+    contains none of the operands. An empty or non-list operand returns None,
+    so the condition is dropped (no filter), the same as ``@>|``.
+
+    Args:
+        col: safe column identifier.
+        operand: list of containment operands.
+
+    Returns:
+        The condition, or None when the operand is not a non-empty list.
+    """
+    cdef list parts = jsonb_containment_terms(col, operand)
+    if parts is None:
+        return None
+    return 'NOT (' + ' OR '.join(parts) + ')'
+
+
+cdef str jsonb_not_all_condition(str col, object operand):
+    """Render ``{"@$": [a, b, ...]}`` as ``((NOT col @> a) OR (NOT col @> b) ...)``.
+
+    Not-all containment: a row matches when it lacks at least one operand.
+    One operand renders ``NOT (col @> a)``, the same as ``@!``. An empty or
+    non-list operand returns None, so the condition is dropped (no filter,
+    not a logical FALSE).
+
+    Args:
+        col: safe column identifier.
+        operand: list of containment operands.
+
+    Returns:
+        The condition, or None when the operand is not a non-empty list.
+    """
+    cdef list parts = jsonb_containment_terms(col, operand)
+    if parts is None:
+        return None
+    if len(parts) == 1:
+        return f'NOT ({parts[0]})'
+    return '(' + ' OR '.join(f'(NOT {part})' for part in parts) + ')'
+
+
 cdef str jsonb_path_condition(str col, str op, object operand):
     """Render ``{"->>": {"path": value}}`` / ``{"->": {...}}`` as comparisons.
 
@@ -148,6 +209,28 @@ cdef str jsonb_path_condition(str col, str op, object operand):
     return '(' + ' AND '.join(parts) + ')'
 
 
+cdef str jsonb_operator_condition(str col, str op, object operand):
+    """Render one ``op: operand`` pair of a JSONB filter dict.
+
+    Args:
+        col: safe column identifier.
+        op: a member of ``JSONB_OPERATORS``.
+        operand: the operator's operand.
+
+    Returns:
+        The condition, or None when the operand cannot be rendered.
+    """
+    if op in ('@>', '<@'):
+        return f"{col} {op} {pg_literal(jsonb_operand(operand))}::jsonb"
+    if op == '@>|':
+        return jsonb_any_of_condition(col, operand)
+    if op == '@!':
+        return jsonb_none_of_condition(col, operand)
+    if op == '@$':
+        return jsonb_not_all_condition(col, operand)
+    return jsonb_path_condition(col, op, operand)
+
+
 cdef tuple jsonb_condition(str col, dict value):
     """Inspect a dict-typed filter value and render it as a JSONB condition.
 
@@ -156,7 +239,12 @@ cdef tuple jsonb_condition(str col, dict value):
     * ``{"@>": operand}`` / ``{"<@": operand}``: explicit containment; the
       operand is a dict/list/scalar or a JSON text string.
     * ``{"@>|": [operand, ...]}``: any-of containment, the checks are OR-ed.
+    * ``{"@!": [operand, ...]}``: none-of containment, the checks are OR-ed
+      inside a ``NOT (...)`` group.
+    * ``{"@$": [operand, ...]}``: not-all containment, OR-ed negated checks.
     * ``{"->>": {...}}`` / ``{"->": {...}}``: key comparisons.
+    * Multiple JSONB operators render groups that are AND-ed; any invalid
+      group drops the whole condition.
     * A first key that is a comparison token is left to the caller; dicts
       mixing operator and plain keys are dropped.
 
@@ -171,6 +259,7 @@ cdef tuple jsonb_condition(str col, dict value):
         dicts; ``condition`` is None when a JSONB filter must be dropped.
     """
     cdef int operators
+    cdef list groups
     if not value:
         return (False, None)
     col = col.rstrip(JSONB_KEY_SUFFIXES)
@@ -190,11 +279,17 @@ cdef tuple jsonb_condition(str col, dict value):
             return (True, f"{col} @> {pg_literal(jsonb_dumps(value))}::jsonb")
         if operators != len(value):
             return (True, None)
-        if op in ('@>', '<@'):
-            return (True, f"{col} {op} {pg_literal(jsonb_operand(operand))}::jsonb")
-        if op == '@>|':
-            return (True, jsonb_any_of_condition(col, operand))
-        return (True, jsonb_path_condition(col, op, operand))
+        if any(k in COMPARISON_TOKENS for k in value):
+            return (True, None)
+        groups = []
+        for op, operand in value.items():
+            cond = jsonb_operator_condition(col, op, operand)
+            if cond is None:
+                return (True, None)
+            groups.append(cond)
+        if len(groups) == 1:
+            return (True, groups[0])
+        return (True, '(' + ' AND '.join(groups) + ')')
     except (orjson.JSONDecodeError, orjson.JSONEncodeError, TypeError, ValueError):
         return (True, None)
 
