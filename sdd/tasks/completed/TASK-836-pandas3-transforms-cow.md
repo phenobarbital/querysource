@@ -156,10 +156,8 @@ ver blueprint
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (manual: both Nova seats failed with infrastructure error `No module named parrot.clients.amazon` in 0.3s; engine refused a native seat)
+**Date**: 2026-10-02
+**Notes**: to_json assigns fillna result; removed the discarded astype lines in string_to_date/epoch_to_date. 3 tests in tests/unit/test_pandas3_transforms.py pass.
 
 **Deviations from spec**: none
