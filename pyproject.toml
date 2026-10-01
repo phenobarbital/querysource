@@ -28,7 +28,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Software Development :: Build Tools",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -246,10 +245,10 @@ filterwarnings = [
 # fixes the remaining findings in the files a feature touches.
 [tool.black]
 line-length = 120
-# Floor of requires-python (>=3.10.1) plus the venv's 3.11; formatting for
+# Floor of requires-python (>=3.11); formatting for
 # 3.10 is valid on every supported interpreter and keeps black's AST safety
 # check on when run from an older venv.
-target-version = ["py310", "py311"]
+target-version = ["py311"]
 extend-exclude = '''
 /(
     \.claude/worktrees
