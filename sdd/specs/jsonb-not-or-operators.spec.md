@@ -16,7 +16,7 @@ reuse_feature_id: FEAT-179
 **Feature ID**: FEAT-179
 **Date**: 2026-10-01
 **Author**: Jesus Lara (jlara@trocglobal.com)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.1.5
 
 ---
