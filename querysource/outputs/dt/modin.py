@@ -1,3 +1,5 @@
+from querysource.exceptions import QueryException
+
 from .abstract import OutputFormat
 
 
@@ -6,8 +8,13 @@ class modinFormat(OutputFormat):
     Returns a Pandas Dataframe from a Resultset
     """
     def __init__(self):
-        import modin.config as modin_cfg
-        from distributed import Client
+        try:
+            import modin.config as modin_cfg
+            from distributed import Client
+        except ImportError as exc:
+            raise QueryException(
+                "modinFormat requires modin: pip install querysource[modin]"
+            ) from exc
         from ...conf import MODIN_SERVER
 
         try:
