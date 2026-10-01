@@ -1365,7 +1365,7 @@ def to_json(df: pd.DataFrame, field: str):
     """
     try:
         # remove Nan
-        df[field].fillna("[]", inplace=True)
+        df[field] = df[field].fillna("[]")
         df[field] = df[field].str.replace("'", '"', regex=True)
         df[field] = df[field].apply(orjson.loads)
     except Exception as err:
@@ -1566,7 +1566,6 @@ def string_to_date(df: pd.DataFrame, field: str, column="", format="%Y-%m-%d"):
     """
     df[field] = pd.to_datetime(df[column], format=format, errors="coerce")
     df[field] = df[field].replace({pd.NaT: None})
-    df[field].astype("datetime64[ns]")
     return df
 
 
@@ -1596,7 +1595,6 @@ def epoch_to_date(
             df[field] = pd.to_datetime(df[field], unit=unit, errors="coerce")
         except Exception as err:
             logging.error(err)
-    df[field].astype("datetime64[ns]")
     return df
 
 
