@@ -16,14 +16,14 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "exclusive: edits pyproject.toml and uv.lock and re-syncs the shared .venv (pandas 2.2 -> 3.x); every other task needs pandas 3 installed",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-834-pandas3-deps.md"
     },
@@ -34,7 +34,7 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -43,7 +43,7 @@
       "parallel": true,
       "parallelism_notes": "needs the `querysource[modin]` extra name created by TASK-834 (pyproject.toml) for the error message, and modin uninstalled from the env by TASK-834",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-835-pandas3-modin-optional.md"
     },
@@ -54,7 +54,7 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -63,7 +63,7 @@
       "parallel": true,
       "parallelism_notes": "needs pandas 3 installed by TASK-834 (pyproject.toml/uv.lock) so the CoW no-op in to_json is observable",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-836-pandas3-transforms-cow.md"
     },
@@ -74,7 +74,7 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -83,7 +83,7 @@
       "parallel": true,
       "parallelism_notes": "needs pandas 3 installed by TASK-834 (uv.lock) — the default `str` dtype that breaks `col.dtype == object` only exists there",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-837-pandas3-multiqs-operators.md"
     },
@@ -94,7 +94,7 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -103,7 +103,7 @@
       "parallel": true,
       "parallelism_notes": "needs pandas 3 installed by TASK-834 (uv.lock) to exercise str/NA/us-datetime frames through TableOutput",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-838-pandas3-tableoutput-tests.md"
     },
@@ -114,7 +114,7 @@
       "feature_id": "FEAT-161",
       "feature": "pandas3-migration",
       "spec": "sdd/specs/pandas3-migration.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -126,7 +126,7 @@
       "parallel": false,
       "parallelism_notes": "exclusive: runs the full suite on the shared env and may edit any module; consumes baseline.txt from TASK-834 and the bug list in TASK-838's Completion Note, after the fixes land: TASK-835 (querysource/queries/multi/operators/abstract.py), TASK-836 (querysource/types/dt/transforms.py), TASK-837 (querysource/queries/multi/transformations/FilterCols.py, querysource/queries/multi/operators/filter/flt.py) — the suite diff is only meaningful once those are in",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-10-01T22:47:24+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-839-pandas3-regression-sweep.md"
     }
