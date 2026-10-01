@@ -10,7 +10,7 @@ tags: [pandas, pandas3, modin, dependencies, copy-on-write]
 **Feature ID**: FEAT-161
 **Date**: 2026-10-02
 **Author**: Jesus Lara (jlara@trocglobal.com)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.0
 
 ---
@@ -276,8 +276,8 @@ Sitios adicionales que aparezcan al correr la suite bajo pandas 3 se añaden a l
 
 - [x] ¿Qué hacer con modin? — *Resolved (usuario, 2026-10-02)*: hacerlo opcional (extra) y subir pandas a 3.0.
 - [x] ¿Enfoque? — *Resolved (usuario)*: empírico en worktree, con piso `pandas>=3.0` (sin compatibilidad dual).
-- [ ] Target version: ¿5.2.0 (minor por cambio de dependencias) o 6.0.0? — *Owner: Jesus Lara*
-- [ ] Extras analytics incompatibles: ¿aislar en extra nuevo o eliminar? — *Owner: Jesus Lara* (se decide con el resultado de `uv lock`)
+- [x] Target version — *Resolved (usuario, 2026-10-02)*: 5.2.0.
+- [x] Extras analytics incompatibles — *Resolved (usuario, 2026-10-02)*: aislarlos en un extra propio.
 
 ---
 
