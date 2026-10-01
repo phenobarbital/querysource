@@ -51,7 +51,7 @@ class FilterCols(AbstractTransform):
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         # Pop expression BEFORE super().__init__ so introspection works
         self.expression: str = kwargs.pop('expression', None)
-        super(FilterCols, self).__init__(data, **kwargs)
+        super().__init__(data, **kwargs)
         # Tracks whether start() has been called; prevents a redundant second
         # call when using ``async with obj as o: await o.run()``.
         self._started: bool = False
@@ -80,7 +80,7 @@ class FilterCols(AbstractTransform):
             # df.replace("", pd.NA) on mixed-dtype DataFrames in pandas 2.x.
             def _is_all_null_or_empty(col: pd.Series) -> bool:
                 null_mask = col.isnull()
-                if col.dtype == object:
+                if col.dtype == object or pd.api.types.is_string_dtype(col):
                     null_mask = null_mask | (col == "")
                 return bool(null_mask.all())
 
