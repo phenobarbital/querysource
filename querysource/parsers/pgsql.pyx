@@ -104,7 +104,7 @@ cdef str jsonb_any_of_condition(str col, object operand):
         The condition, or None when the operand is not a non-empty list.
     """
     cdef list parts
-    if not isinstance(operand, (list, tuple)) or not operand:
+    if not isinstance(operand, list) or not operand:
         return None
     parts = [
         f"{col} @> {pg_literal(jsonb_operand(item))}::jsonb" for item in operand
@@ -124,7 +124,7 @@ cdef list jsonb_containment_terms(str col, object operand):
     Returns:
         The terms, or None when the operand is not a non-empty list/tuple.
     """
-    if not isinstance(operand, (list, tuple)) or not operand:
+    if not isinstance(operand, list) or not operand:
         return None
     return [
         f"{col} @> {pg_literal(jsonb_operand(item))}::jsonb" for item in operand

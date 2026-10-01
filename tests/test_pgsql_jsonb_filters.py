@@ -180,6 +180,9 @@ async def test_jsonb_values_are_escaped(path: str) -> None:
     {"attrs": {"@!": [{"a": 1}], "@$": []}},  # one bad group drops the whole dict
     {"attrs": {"@!": [{"a": 1}], ">=": 5}},  # mixed comparison/JSONB tokens
     {"attrs": {">=": 5, "@!": [{"a": 1}]}},  # mixed, comparison token first
+    {"attrs": {"@!": ({"a": 1},)}},  # tuple is not a list (Rust parity)
+    {"attrs": {"@$": ({"a": 1},)}},
+    {"attrs": {"@>|": ({"a": 1},)}},
 ])
 async def test_invalid_jsonb_filters_are_dropped(path: str, filter_: dict) -> None:
     assert _where(await _render(path, filter_)) is None
