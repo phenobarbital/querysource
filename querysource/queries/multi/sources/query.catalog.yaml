@@ -85,6 +85,36 @@ attributes:
       the configured default store. If explicitly ``null``, uses the legacy
       store. If a string, selects that exact tenant from the allowlist.
       Examples: ``null`` (legacy), ``client_a`` (explicit tenant).
+  - name: pre-hook
+    type: str
+    required: false
+    default: null
+    description: >-
+      SQL (a string or a list of strings) run BEFORE this query's retrieval,
+      isolated on the write (DB*) credentials in its own transaction — never
+      on, or in a transaction shared with, the read. PostgreSQL ``queries``
+      entries only (slug on the ``db``/``pg`` provider, or raw ``driver``
+      ``pg``/``postgres``/``postgresql`` without ``datasource``); requires the
+      ``datasource:use`` grant on ``pg_admin``. Guarded: DROP, TRUNCATE,
+      ALTER … DROP, DO, GRANT/REVOKE, role DDL, COPY … PROGRAM and transaction
+      control are rejected. If it fails the query is not read. Never accepted
+      from request conditions.
+  - name: post-hook
+    type: str
+    required: false
+    default: null
+    description: >-
+      SQL (a string or a list of strings) run AFTER this query's retrieval,
+      isolated on the write (DB*) credentials in its own transaction — never
+      on, or in a transaction shared with, the read. It runs after a
+      successful OR empty (no data / 204) retrieval, but NOT after a failed
+      one; an empty result is still reported as "no data". PostgreSQL
+      ``queries`` entries only (slug on the ``db``/``pg`` provider, or raw
+      ``driver`` ``pg``/``postgres``/``postgresql`` without ``datasource``);
+      requires the ``datasource:use`` grant on ``pg_admin``. Guarded: DROP,
+      TRUNCATE, ALTER … DROP, DO, GRANT/REVOKE, role DDL, COPY … PROGRAM and
+      transaction control are rejected. Never accepted from request
+      conditions.
 
 # Schema-level constraints overlaid onto the synthesized json_schema.
 schema:

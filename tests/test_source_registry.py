@@ -5,12 +5,12 @@ from querysource.queries.multi.sources import (
     SOURCE_REGISTRY,
     AirtableSource,
     FileSource,
-    ThreadQuery,
-    ThreadSource,
     S3Source,
     SharepointSource,
     SmartSheetSource,
     TableSource,
+    ThreadQuery,
+    ThreadSource,
     __all__,
 )
 
@@ -31,8 +31,23 @@ class TestSourceRegistry:
     def test_registry_contains_table(self):
         assert "TableSource" in SOURCE_REGISTRY
 
-    def test_registry_has_exactly_five_sources(self):
-        assert len(SOURCE_REGISTRY) == 5
+    def test_registry_contains_expected_sources(self):
+        assert {"AirtableSource", "SharepointSource", "SmartSheetSource", "S3Source",
+                "TableSource", "OneDriveSource", "ParquetFileSource", "ParquetS3Source",
+                "ParquetGCSSource"} <= set(SOURCE_REGISTRY)
+
+    def test_registry_contains_parquet_sources(self):
+        from querysource.queries.multi.sources import (
+            ParquetFileSource,
+            ParquetGCSSource,
+            ParquetS3Source,
+        )
+
+        assert SOURCE_REGISTRY["ParquetFileSource"] is ParquetFileSource
+        assert SOURCE_REGISTRY["ParquetS3Source"] is ParquetS3Source
+        assert SOURCE_REGISTRY["ParquetGCSSource"] is ParquetGCSSource
+        assert {"ParquetFileSource", "ParquetS3Source", "ParquetGCSSource"} <= set(__all__)
+        assert "ParquetSource" not in SOURCE_REGISTRY
 
     def test_registry_values_are_thread_source_subclasses(self):
         for name, cls in SOURCE_REGISTRY.items():

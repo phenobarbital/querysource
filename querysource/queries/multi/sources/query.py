@@ -6,6 +6,7 @@ from aiohttp import web
 
 from querysource.tenants import LoadedDefinition, QueryStore
 
+from ....interfaces.source_hooks import SourceHooks
 from .base import ThreadSource
 from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
 
@@ -37,6 +38,7 @@ class ThreadQuery(ThreadSource):
         *,
         store: Optional[QueryStore] = None,
         definition: Optional[LoadedDefinition] = None,
+        hooks: Optional[SourceHooks] = None,
     ):
         assert isinstance(query, dict), (
             f"ThreadQuery expects a dict for 'query', got {type(query).__name__!r}"
@@ -48,6 +50,8 @@ class ThreadQuery(ThreadSource):
         self._store = store
         # Definition MultiQS already loaded for this child (None → the QueryObject loads it).
         self._definition = definition
+        # FEAT-157: MultiQS-validated pre/post-hooks, run around fetch() by ThreadSource.run().
+        self.set_hooks(hooks)
         # Note: self._request is already set by ThreadSource.__init__ (via super());
         # the redundant assignment is intentionally omitted here.
         if remote_config is not None:

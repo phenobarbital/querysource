@@ -8,14 +8,22 @@ GET /api/v1/management/queries supports paginated listing via
 see :mod:`querysource.handlers._pagination` and the FEAT-090 spec.
 """
 # for aiohttp
+import json
 from math import ceil
+from typing import Any
 
+from aiohttp import web
 from asyncdb.exceptions import NoDataFound
 from datamodel.exceptions import ValidationError
 from navconfig.logging import logging
+from navigator_session import get_session
 from pydantic import ValidationError as PydanticValidationError
 
+from ..auth import ResourceType
+from ..auth.identity_tokens import user_id_from_session
+from ..auth.request_gate import enforce_request_pbac
 from ..models import QueryModel
+from ..queries.multi import definition_requires_scheduler_grant
 from ..repositories import DefinitionRepository
 from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity, QueryStore, TenantRegistry
@@ -32,9 +40,33 @@ from ._pagination import (
     build_where_clause,
 )
 
+# FEAT-160: stored-row fields the scheduler admin gate merges with the incoming change.
+_SCHEDULER_GATE_KEYS: tuple[str, str, str] = ("provider", "query_raw", "attributes")
+
 
 class QueryManager(QueryView):
     _model: QueryModel = None
+
+    async def _run_as_context(self) -> tuple[int | None, dict]:
+        """Return the numeric session user id and minimal request info.
+
+        Used for run-as auditing. If no session is available the actor is
+        ``None``; a schedule change is then refused by the repository (fail closed).
+
+        Returns:
+            Tuple of (numeric user id or None, {"method", "path", "remote"}).
+        """
+        info = {
+            "method": self.request.method,
+            "path": self.request.path,
+            "remote": self.request.remote,
+        }
+        try:
+            session = await get_session(self.request, new=False)
+        except Exception as exc:  # noqa: BLE001 - session system may be absent
+            logging.getLogger(__name__).warning("Run-as actor lookup failed (%s); treating as no session", exc)
+            return None, info
+        return user_id_from_session(session), info
 
     # Default projection for the list branch when the caller does
     # not supply ``?fields=``. The single-slug / :meta / :insert
@@ -117,6 +149,71 @@ class QueryManager(QueryView):
         qp = qp.copy()
         qp.pop('tenant', None)
         return qp
+
+    async def _enforce_scheduler_grant(
+        self,
+        repo: DefinitionRepository,
+        identity: QueryIdentity,
+        data: dict,
+    ) -> None:
+        """Gate a scheduled write-capable multi behind ``datasource:use`` on ``pg_admin`` (FEAT-160).
+
+        The decision uses the *resulting* definition: the stored row
+        (``repo.get(identity)``; ``query_not_found`` means a create, so the
+        base is empty) with ``data`` merged over it for ``provider`` and
+        ``query_raw`` (incoming value wins) and ``attributes`` (shallow merge,
+        incoming keys win, so a patch of only ``attributes.scheduler`` keeps the
+        stored pipeline in view). PBAC disabled (``app['security']`` absent)
+        returns before the stored row is read.
+
+        Args:
+            repo: The definition repository the write goes through.
+            identity: The definition identity being written.
+            data: The incoming (selector-stripped) payload.
+
+        Raises:
+            web.HTTPNotFound: When the merged definition needs the grant and
+                the caller does not hold it.
+            TenantError: When reading the stored row fails with any code other
+                than ``query_not_found`` (the caller's handler maps it).
+        """
+        if self.request.app.get('security') is None:
+            return  # PBAC disabled: no stored-row read, no check
+        stored: dict[str, Any] = {}
+        try:
+            loaded = await repo.get(identity)
+        except TenantError as err:
+            if err.error_code != "query_not_found":
+                raise
+        else:
+            stored = {
+                key: getattr(loaded.runtime, key, None)
+                for key in _SCHEDULER_GATE_KEYS
+            }
+        merged: dict[str, Any] = dict(stored)
+        for key in ("provider", "query_raw"):
+            if data.get(key) is not None:  # None = "keep stored" on upsert; over-gates on patch
+                merged[key] = data[key]
+        if data.get("attributes") is not None:
+            incoming = data["attributes"]
+            if isinstance(incoming, str):
+                try:
+                    incoming = json.loads(incoming)
+                except ValueError:
+                    pass
+            base = stored.get("attributes")
+            if isinstance(incoming, dict) and isinstance(base, dict):
+                merged["attributes"] = {**base, **incoming}
+            else:
+                merged["attributes"] = incoming
+        if definition_requires_scheduler_grant(merged):
+            await enforce_request_pbac(
+                self.request,
+                ResourceType.DATASOURCE,
+                "pg_admin",
+                "datasource:use",
+                logger=self.logger,
+            )
 
     async def _sync_definition_jobs(self, identity: QueryIdentity) -> bool:
         """Synchronize jobs only after the definition transaction commits.
@@ -460,7 +557,11 @@ class QueryManager(QueryView):
             # Call repository patch
             try:
                 identity = QueryIdentity(store=store, slug=query_slug)
-                result = await repo.patch(identity, data)
+                await self._enforce_scheduler_grant(repo, identity, data)
+                actor, info = await self._run_as_context()
+                result = await repo.patch(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)
@@ -470,6 +571,8 @@ class QueryManager(QueryView):
                     return self.json_response(result, headers=headers)
                 
                 return self.json_response(result)
+            except web.HTTPNotFound:
+                raise
             except TenantError as err:
                 return self.error(
                     reason=str(err),
@@ -715,7 +818,11 @@ class QueryManager(QueryView):
             # Call repository upsert
             try:
                 identity = QueryIdentity(store=store, slug=data['query_slug'])
-                result, is_created = await repo.upsert(identity, data)
+                await self._enforce_scheduler_grant(repo, identity, data)
+                actor, info = await self._run_as_context()
+                result, is_created = await repo.upsert(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)
@@ -726,6 +833,8 @@ class QueryManager(QueryView):
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
+            except web.HTTPNotFound:
+                raise
             except TenantError as err:
                 return self.error(
                     reason=str(err),
@@ -831,7 +940,11 @@ class QueryManager(QueryView):
             # Call repository upsert
             try:
                 identity = QueryIdentity(store=store, slug=slug['query_slug'])
-                result, is_created = await repo.upsert(identity, data)
+                await self._enforce_scheduler_grant(repo, identity, data)
+                actor, info = await self._run_as_context()
+                result, is_created = await repo.upsert(
+                    identity, data, run_as_actor=actor, request_info=info
+                )
                 
                 # Sync definition jobs if scheduler is active
                 sync_success = await self._sync_definition_jobs(identity)
@@ -842,6 +955,8 @@ class QueryManager(QueryView):
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
+            except web.HTTPNotFound:
+                raise
             except TenantError as err:
                 return self.error(
                     reason=str(err),

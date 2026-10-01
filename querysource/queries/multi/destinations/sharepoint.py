@@ -11,14 +11,16 @@ Upload strategy:
 - Files ≤ 4 MB: single PUT request.
 - Files > 4 MB: resumable upload session with 10 MB chunks.
 """
-import io
 import asyncio
+import io
 from pathlib import PurePosixPath
 from typing import Union
+
 import pandas as pd
+
 from querysource.exceptions import OutputError
 from querysource.outputs.destinations.abstract import AbstractDestination
-
+from querysource.queries.multi.sources.graph import kiota_platform_version_patch
 
 # Upload size thresholds (bytes)
 _SMALL_FILE_THRESHOLD = 4 * 1024 * 1024   # 4 MB
@@ -121,13 +123,6 @@ class ToSharepoint(AbstractDestination):
                 "Install them with: pip install azure-identity msgraph-sdk"
             ) from exc
 
-        # The msgraph/kiota SDK uses platform.version() to build the User-Agent
-        # header. On Linux the string has a trailing space which aiohttp rejects
-        # as an illegal header value. Patch it before the client is constructed.
-        import platform as _platform
-        _orig_version = _platform.version
-        _platform.version = lambda: _orig_version().strip()
-
         if not all([self._tenant_id, self._client_id, self._client_secret]):
             raise OutputError(
                 "ToSharepoint: 'tenant_id', 'client_id', and 'client_secret' "
@@ -180,8 +175,8 @@ class ToSharepoint(AbstractDestination):
 
         # Fallback: search by display name using $search query parameter
         try:
-            from msgraph.generated.sites.sites_request_builder import SitesRequestBuilder
             from kiota_abstractions.base_request_configuration import RequestConfiguration
+            from msgraph.generated.sites.sites_request_builder import SitesRequestBuilder
 
             query_params = SitesRequestBuilder.SitesRequestBuilderGetQueryParameters(
                 search=self._site
@@ -373,8 +368,9 @@ class ToSharepoint(AbstractDestination):
         content: bytes,
     ) -> None:
         """Upload *content* via a resumable upload session (> 4 MB)."""
-        import aiohttp
         from urllib.parse import quote
+
+        import aiohttp
         from msgraph.generated.drives.item.items.item.create_upload_session.create_upload_session_post_request_body import (  # noqa: E501
             CreateUploadSessionPostRequestBody,
         )
@@ -441,33 +437,36 @@ class ToSharepoint(AbstractDestination):
         :param content: File bytes to upload.
         :param filename: Target filename on SharePoint.
         """
-        graph_client = self._build_graph_client()
+        # kiota builds its User-Agent from platform.version(), whose trailing space
+        # is rejected as an illegal header; the scoped patch is restored on exit.
+        with kiota_platform_version_patch():
+            graph_client = self._build_graph_client()
 
-        site_id = await self._resolve_site_id(graph_client)
-        library_name, path_within = self._parse_directory_path(self._directory)
-        drive_id = await self._resolve_drive(graph_client, site_id, library_name)
-        parent_id = await self._ensure_folder(graph_client, drive_id, path_within)
+            site_id = await self._resolve_site_id(graph_client)
+            library_name, path_within = self._parse_directory_path(self._directory)
+            drive_id = await self._resolve_drive(graph_client, site_id, library_name)
+            parent_id = await self._ensure_folder(graph_client, drive_id, path_within)
 
-        if len(content) <= _SMALL_FILE_THRESHOLD:
-            self.logger.info(
-                "ToSharepoint: small-file upload (%d bytes) → %s/%s",
-                len(content),
-                self._directory,
-                filename,
-            )
-            await self._upload_bytes_small(
-                graph_client, drive_id, parent_id, filename, content
-            )
-        else:
-            self.logger.info(
-                "ToSharepoint: large-file upload (%d bytes) → %s/%s",
-                len(content),
-                self._directory,
-                filename,
-            )
-            await self._upload_bytes_large(
-                graph_client, drive_id, parent_id, filename, content
-            )
+            if len(content) <= _SMALL_FILE_THRESHOLD:
+                self.logger.info(
+                    "ToSharepoint: small-file upload (%d bytes) → %s/%s",
+                    len(content),
+                    self._directory,
+                    filename,
+                )
+                await self._upload_bytes_small(
+                    graph_client, drive_id, parent_id, filename, content
+                )
+            else:
+                self.logger.info(
+                    "ToSharepoint: large-file upload (%d bytes) → %s/%s",
+                    len(content),
+                    self._directory,
+                    filename,
+                )
+                await self._upload_bytes_large(
+                    graph_client, drive_id, parent_id, filename, content
+                )
 
     # ------------------------------------------------------------------
     # AbstractDestination interface

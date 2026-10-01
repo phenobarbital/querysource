@@ -2,16 +2,20 @@ import asyncio
 import logging
 import threading
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from aiohttp import web
 from asyncdb.exceptions import NoDataFound
 
 from ....exceptions import DataNotFound
+from ....interfaces.source_hooks import SourceHooksMixin
+
+if TYPE_CHECKING:
+    from ....auth.identity_tokens import SourceIdentityContext
 
 
-class ThreadSource(threading.Thread, ABC):
+class ThreadSource(SourceHooksMixin, threading.Thread, ABC):
     """Abstract base class for all MultiQuery source threads.
 
     Encapsulates the common boilerplate shared by all MultiQuery source
@@ -129,6 +133,48 @@ class ThreadSource(threading.Thread, ABC):
             will be captured in ``self.exc`` by ``run()``.
         """
 
+    async def prepare(self, context: "SourceIdentityContext | None") -> None:
+        """Resolve caller-loop-bound credentials before the thread starts.
+
+        Called by MultiQS on the request or scheduler event loop, never from
+        ``run()``. The default implementation keeps existing sources as-is.
+
+        Args:
+            context: Optional identity context supplied by the caller.
+        """
+        return None
+
+    async def _fetch_with_hooks(self) -> Optional[pd.DataFrame]:
+        """Run ``run_pre_hook`` -> ``fetch`` -> ``run_post_hook``.
+
+        The post-hook runs when ``fetch`` raised nothing or raised
+        ``DataNotFound``/``NoDataFound``; in the latter case the same no-data
+        exception is re-raised after the post-hook (a post-hook error replaces
+        it). Any other ``fetch`` error skips the post-hook. A pre-hook error
+        propagates and ``fetch`` is never called.
+
+        Without hooks this is exactly ``await self.fetch()``.
+
+        Returns:
+            Whatever ``fetch()`` returned.
+        """
+        if not self.has_hooks:
+            return await self.fetch()
+        tags = await self.run_pre_hook()
+        if tags:
+            self.logger.info("pre-hook %s: %s", self._name, ", ".join(tags))
+        try:
+            result = await self.fetch()
+        except (DataNotFound, NoDataFound):
+            tags = await self.run_post_hook()
+            if tags:
+                self.logger.info("post-hook %s: %s", self._name, ", ".join(tags))
+            raise
+        tags = await self.run_post_hook()
+        if tags:
+            self.logger.info("post-hook %s: %s", self._name, ", ".join(tags))
+        return result
+
     def run(self) -> None:
         """Thread entry point.
 
@@ -144,7 +190,7 @@ class ThreadSource(threading.Thread, ABC):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(self.fetch())
+            result = loop.run_until_complete(self._fetch_with_hooks())
             if result is not None:
                 loop.run_until_complete(self._queue.put({self._name: result}))
         except (DataNotFound, NoDataFound) as ex:

@@ -1,0 +1,116 @@
+{
+  "feature": "multi-executesql",
+  "feature_id": "FEAT-156",
+  "spec": "sdd/specs/multi-executesql.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-09-30T16:52:57+00:00",
+  "completed_at": "2026-09-30T20:14:26+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-818",
+      "slug": "rust-sql-guard",
+      "title": "Rust sql_guard lexer, splitter and statement classifier",
+      "feature_id": "FEAT-156",
+      "feature": "multi-executesql",
+      "spec": "sdd/specs/multi-executesql.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "L",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Root task: creates only rust/src/sql_guard.rs (pure Rust, no Python, no rebuild). rust/src/lib.rs is touched only temporarily and uncommitted to run cargo test; it is owned by TASK-819.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:06+00:00",
+      "completed_at": "2026-09-30T18:16:30+00:00",
+      "file": "sdd/tasks/completed/TASK-818-rust-sql-guard.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-819",
+      "slug": "sql-guard-pyo3-registration",
+      "title": "Register sql_guard in _qs_parsers, re-export it, rebuild, Python tests",
+      "feature_id": "FEAT-156",
+      "feature": "multi-executesql",
+      "spec": "sdd/specs/multi-executesql.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-818"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Registers sql_guard::sql_guard from TASK-818's rust/src/sql_guard.rs in rust/src/lib.rs. Exclusive resource: rebuilds the compiled _qs_parsers extension with maturin develop into the shared project .venv, which every other task's pytest imports.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:06+00:00",
+      "completed_at": "2026-09-30T18:18:05+00:00",
+      "file": "sdd/tasks/completed/TASK-819-sql-guard-pyo3-registration.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-820",
+      "slug": "guarded-sql-executor",
+      "title": "Shared guarded-SQL executor (querysource/interfaces/guarded_sql.py)",
+      "feature_id": "FEAT-156",
+      "feature": "multi-executesql",
+      "spec": "sdd/specs/multi-executesql.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-819"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Imports sql_guard from querysource.qs_parsers, which exists only after TASK-819's re-export in querysource/qs_parsers/__init__.py and the extension rebuild. Touches only its own new files.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:06+00:00",
+      "completed_at": "2026-09-30T18:18:23+00:00",
+      "file": "sdd/tasks/completed/TASK-820-guarded-sql-executor.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-821",
+      "slug": "executesql-destination",
+      "title": "ExecuteSQLDestination pass-through MultiQuery Output step",
+      "feature_id": "FEAT-156",
+      "feature": "multi-executesql",
+      "spec": "sdd/specs/multi-executesql.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-820"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Thin wrapper importing GuardedSQLError, guard_statements and execute_guarded from TASK-820's querysource/interfaces/guarded_sql.py. Only new files; the destinations folder scan picks the class up without editing a shared registry.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:06+00:00",
+      "completed_at": "2026-09-30T18:19:10+00:00",
+      "file": "sdd/tasks/completed/TASK-821-executesql-destination.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-822",
+      "slug": "executesql-registry-and-gate",
+      "title": "Register ExecuteSQL and add it to the PBAC write gate",
+      "feature_id": "FEAT-156",
+      "feature": "multi-executesql",
+      "spec": "sdd/specs/multi-executesql.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-821"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Imports ExecuteSQLDestination from TASK-821's querysource/queries/multi/destinations/execute_sql.py. CROSS-FEATURE: both anchors (the TableDelete registry block and WRITE_DESTINATIONS) are created by FEAT-155 multi-tabledelete TASK-816/TASK-817, tracked in another index and therefore not in depends_on; hold this task until FEAT-155 is merged into dev and the feature branch is rebased.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-09-30T20:14:26+00:00",
+      "file": "sdd/tasks/completed/TASK-822-executesql-registry-and-gate.md",
+      "verification": "verified"
+    }
+  ]
+}

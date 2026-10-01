@@ -13,9 +13,11 @@ entry to ``DESTINATION_REGISTRY`` at the bottom of this file.
 """
 import logging as _logging
 from typing import Union
+
 import pandas as pd
-from ..tables import TableOutput
+
 from ...exceptions import OutputError
+from ..tables import TableOutput
 from .abstract import AbstractDestination
 
 _pkg_logger = _logging.getLogger(__name__)
@@ -222,6 +224,22 @@ try:
 except ImportError:
     _pkg_logger.debug(
         "Table destination not available"
+    )
+
+try:
+    from querysource.queries.multi.destinations.table_delete import TableDeleteDestination
+    DESTINATION_REGISTRY["TableDelete"] = TableDeleteDestination
+except ImportError:
+    _pkg_logger.debug(
+        "TableDelete destination not available"
+    )
+
+try:
+    from querysource.queries.multi.destinations.execute_sql import ExecuteSQLDestination
+    DESTINATION_REGISTRY["ExecuteSQL"] = ExecuteSQLDestination
+except ImportError:
+    _pkg_logger.debug(
+        "ExecuteSQL destination not available"
     )
 
 try:

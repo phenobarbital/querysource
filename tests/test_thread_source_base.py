@@ -1,9 +1,14 @@
 """Unit tests for ThreadSource base class (TASK-644)."""
 import asyncio
+import threading
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
 
+from querysource.exceptions import DataNotFound, DriverError
+from querysource.interfaces import source_hooks
+from querysource.interfaces.source_hooks import GuardedSQLError, SourceHooks, SourceHooksMixin
 from querysource.queries.multi.sources.base import ThreadSource
 
 
@@ -93,3 +98,99 @@ class TestThreadSource:
         source.start()
         source.join()
         assert source.exc is None
+
+
+class _RecordingSource(ThreadSource):
+    """Records fetch() into a shared event list; outcome configurable."""
+
+    def __init__(self, *args, events: list, fetch_exc: Exception | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._events = events
+        self._fetch_exc = fetch_exc
+
+    async def fetch(self) -> pd.DataFrame:
+        self._events.append("fetch")
+        if self._fetch_exc is not None:
+            raise self._fetch_exc
+        return pd.DataFrame({"a": [1]})
+
+
+_HOOKS = SourceHooks(pre=("UPDATE t SET a = 1",), post=("INSERT INTO l VALUES (1)",))
+
+
+def _run(source) -> None:
+    source.start()
+    source.join()
+
+
+def _recording_exec(events: list, fail_on: str | None = None):
+    async def _exec(statements, **_kw):
+        kind = "pre" if statements == list(_HOOKS.pre) else "post"
+        if kind == fail_on:
+            raise GuardedSQLError("boom", category="infra")
+        events.append(kind)
+        return ["OK 1"]
+
+    return AsyncMock(side_effect=_exec)
+
+
+class TestThreadSourceHooks:
+    def test_fetch_with_hooks_order(self):
+        events: list = []
+        src = _RecordingSource("s", {}, None, asyncio.Queue(), events=events)
+        src.set_hooks(_HOOKS)
+        with patch.object(source_hooks, "execute_guarded", _recording_exec(events)):
+            _run(src)
+        assert src.exc is None
+        assert events == ["pre", "fetch", "post"]
+
+    def test_pre_hook_failure_skips_fetch(self):
+        events: list = []
+        queue: asyncio.Queue = asyncio.Queue()
+        src = _RecordingSource("s", {}, None, queue, events=events)
+        src.set_hooks(_HOOKS)
+        with patch.object(source_hooks, "execute_guarded", _recording_exec(events, fail_on="pre")):
+            _run(src)
+        assert events == []
+        assert isinstance(src.exc, GuardedSQLError)
+        assert queue.empty()
+
+    def test_post_hook_skipped_on_fetch_failure(self):
+        events: list = []
+        src = _RecordingSource("s", {}, None, asyncio.Queue(), events=events, fetch_exc=DriverError("x"))
+        src.set_hooks(_HOOKS)
+        with patch.object(source_hooks, "execute_guarded", _recording_exec(events)) as ex:
+            _run(src)
+        assert ex.await_count == 1
+        assert events == ["pre", "fetch"]
+        assert isinstance(src.exc, DriverError)
+
+    def test_post_hook_runs_on_empty_result(self):
+        events: list = []
+        src = _RecordingSource("s", {}, None, asyncio.Queue(), events=events, fetch_exc=DataNotFound("empty"))
+        src.set_hooks(_HOOKS)
+        with patch.object(source_hooks, "execute_guarded", _recording_exec(events)):
+            _run(src)
+        assert events == ["pre", "fetch", "post"]
+        assert isinstance(src.exc, DataNotFound)
+
+    def test_post_hook_error_on_empty_result(self):
+        events: list = []
+        src = _RecordingSource("s", {}, None, asyncio.Queue(), events=events, fetch_exc=DataNotFound("empty"))
+        src.set_hooks(_HOOKS)
+        with patch.object(source_hooks, "execute_guarded", _recording_exec(events, fail_on="post")):
+            _run(src)
+        assert isinstance(src.exc, GuardedSQLError)
+        assert not isinstance(src.exc, DataNotFound)
+
+    def test_no_hooks_unchanged(self):
+        events: list = []
+        src = _RecordingSource("s", {}, None, asyncio.Queue(), events=events)
+        with patch.object(source_hooks, "execute_guarded", AsyncMock()) as ex:
+            _run(src)
+        ex.assert_not_awaited()
+        assert src.exc is None and events == ["fetch"]
+
+    def test_mixin_mro(self):
+        mro = ThreadSource.__mro__
+        assert mro.index(SourceHooksMixin) < mro.index(threading.Thread)

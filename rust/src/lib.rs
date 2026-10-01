@@ -19,6 +19,7 @@ mod pgsql_unnest;
 mod rethink_parser;
 mod safe_dict;
 mod soql_parser;
+mod sql_guard;
 mod sql_parser;
 mod validators;
 
@@ -30,6 +31,7 @@ mod validators;
 /// - Validators: field_components, quote_string, is_valid, strtobool, etc.
 /// - ParseQS: is_parseable, parse_list, parse_tuple
 /// - SafeDict: safe_format_map (placeholder replacement)
+/// - SqlGuard: sql_guard (split a script + reject destructive statements, FEAT-156)
 /// - SQL: filter_conditions, group_by, order_by, limiting, process_fields, build_sql
 #[pymodule]
 fn _qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -55,6 +57,9 @@ fn _qs_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // -- SafeDict --
     m.add_function(wrap_pyfunction!(safe_dict::safe_format_map, m)?)?;
     m.add_function(wrap_pyfunction!(safe_dict::safe_format_map_validated, m)?)?;
+
+    // -- SQL Guard (FEAT-156) --
+    m.add_function(wrap_pyfunction!(sql_guard::sql_guard, m)?)?;
 
     // -- SQL Parser --
     m.add_function(wrap_pyfunction!(sql_parser::filter_conditions, m)?)?;

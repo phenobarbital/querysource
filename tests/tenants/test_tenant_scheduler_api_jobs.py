@@ -244,7 +244,7 @@ async def test_crud_commit_then_sync_failure_header() -> None:
     class _FakeDefRepo:
         registry = tenant_registry
 
-        async def patch(self, identity: QueryIdentity, data: dict):
+        async def patch(self, identity: QueryIdentity, data: dict, **_run_as):
             return {"query_slug": identity.slug, **data}
 
     class _RaisingScheduler:
