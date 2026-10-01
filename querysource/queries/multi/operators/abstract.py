@@ -6,11 +6,11 @@ This module contains the abstract class for operators.
 Operators are the main building blocks of a query. They are responsible for making basic transformations
 as Join, Melt, Concat or Filter.
 """
-from abc import abstractmethod
 import logging
+from abc import abstractmethod
 
 import pandas as pd
-from ....exceptions import QueryException
+
 from ..abstract import AbstractMulti
 
 

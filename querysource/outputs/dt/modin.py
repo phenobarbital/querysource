@@ -1,5 +1,6 @@
-from .abstract import OutputFormat
 from querysource.exceptions import QueryException
+
+from .abstract import OutputFormat
 
 
 class modinFormat(OutputFormat):
