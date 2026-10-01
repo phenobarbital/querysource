@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-01T00:21:45+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-01T00:52:46+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -51,12 +51,12 @@
       "feature_id": "FEAT-179",
       "feature": "jsonb-not-or-operators",
       "spec": "sdd/specs/jsonb-not-or-operators.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "assigned_to": null,
       "started_at": "2026-10-01T00:32:37+00:00",
-      "completed_at": null,
+      "completed_at": "2026-10-01T00:52:46+00:00",
       "id": "TASK-833",
       "slug": "jsonb-negation-dual-path-tests",
       "title": "Dual-path tests for @!/@$ and version bump",
@@ -66,7 +66,8 @@
       ],
       "parallel": true,
       "parallelism_notes": "needs jsonb_none_of_condition/jsonb_not_all_condition from TASK-831 (querysource/parsers/pgsql.pyx, Cython path) and their twins from TASK-832 (rust/src/pgsql_parser.rs, rust path); the tests render through both",
-      "file": "sdd/tasks/active/TASK-833-jsonb-negation-dual-path-tests.md"
+      "file": "sdd/tasks/completed/TASK-833-jsonb-negation-dual-path-tests.md",
+      "verification": "verified"
     }
   ]
 }
