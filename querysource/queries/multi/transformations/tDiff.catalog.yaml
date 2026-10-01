@@ -1,0 +1,131 @@
+display_name: tDiff
+category: Transformations
+icon: diff
+
+description: >-
+  Detect changes between two DataFrames that share a primary key. Rows are
+  classified as new, modified, deleted, or unchanged so downstream steps can
+  filter on them.
+
+usage: >-
+  ``pk`` is the primary key column(s). The input data dict must contain exactly
+  two DataFrames — the first is the current snapshot (A), the second is the
+  previous (B). Use ``current`` and ``previous`` to override the dict key order.
+  ``compare_columns`` restricts which columns are diffed; ``ignore_columns``
+  excludes columns. ``include`` controls which change types appear in the output.
+
+attributes:
+  - name: pk
+    type: str | list[str]
+    required: true
+    description: Primary key column name or list of column names (composite key).
+  - name: compare_columns
+    type: list[str]
+    required: false
+    default: null
+    description: >-
+      Columns whose change marks a row as modified. Default: all common columns
+      minus pk and ``ignore_columns``.
+  - name: ignore_columns
+    type: list[str]
+    required: false
+    default: []
+    description: Columns that are never compared.
+  - name: include
+    type: list[str]
+    required: false
+    default: ["new", "modified", "deleted"]
+    description: >-
+      Change types emitted: ``new``, ``modified``, ``deleted``, ``unchanged``.
+  - name: change_column
+    type: str
+    required: false
+    default: _change
+    description: Name of the label column added to the output.
+  - name: changed_columns
+    type: bool | str
+    required: false
+    default: false
+    description: >-
+      When ``true``, adds a ``_changed_columns`` list column on modified rows;
+      a string names that column.
+  - name: method
+    type: str
+    required: false
+    default: compare
+    description: >-
+      ``compare`` (vectorised per-column, default) or ``hash`` (per-row hash).
+  - name: float_tolerance
+    type: dict
+    required: false
+    default: null
+    description: >-
+      Dict with ``rtol`` and ``atol`` for ``numpy.isclose`` on float columns.
+      Incompatible with ``method: hash``.
+    schema:
+      type: object
+      properties:
+        rtol:
+          type: number
+          description: Relative tolerance.
+        atol:
+          type: number
+          description: Absolute tolerance.
+  - name: strip_strings
+    type: bool
+    required: false
+    default: false
+    description: Strip whitespace before comparing (output values unchanged).
+  - name: case_sensitive
+    type: bool
+    required: false
+    default: true
+    description: >-
+      When ``false``, strings are compared with ``casefold()``.
+  - name: dtype_policy
+    type: str
+    required: false
+    default: strict
+    description: >-
+      ``strict`` fails on incompatible dtypes; ``coerce`` casts B to A's dtype.
+  - name: raise_on_empty
+    type: bool
+    required: false
+    default: false
+    description: >-
+      Raise ``DataNotFound`` when the result has no rows.
+  - name: current
+    type: str
+    required: false
+    default: null
+    description: >-
+      Dict key identifying the current (A) DataFrame. When omitted, the first
+      dict entry is used.
+  - name: previous
+    type: str
+    required: false
+    default: null
+    description: >-
+      Dict key identifying the previous (B) DataFrame. When omitted, the second
+      dict entry is used.
+
+schema:
+  title: tDiff
+  description: >-
+    Detect changes between two DataFrames. ``pk`` is required. Input data must
+    be a dict of exactly two DataFrames.
+  required: [pk]
+  additionalProperties: true
+
+example: |-
+  {
+    "Transform": [
+      {
+        "tDiff": {
+          "pk": "user_id",
+          "compare_columns": ["nombre", "email"],
+          "include": ["new", "modified", "deleted"]
+        }
+      }
+    ]
+  }
