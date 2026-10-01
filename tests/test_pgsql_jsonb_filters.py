@@ -110,6 +110,36 @@ def _where(sql: str) -> Optional[str]:
         """(attrs @> E'\\x7b"a":1\\x7d'::jsonb OR attrs @> E'\\x7b"b":2\\x7d'::jsonb)""",
     ),
     ({"tags": {"@>|": [["x"]]}}, """tags @> '["x"]'::jsonb"""),
+    # @! none-of: NOT of the OR-ed containment checks
+    (
+        {"attrs": {"@!": [{"status": "active"}, {"status": "pending"}]}},
+        """NOT (attrs @> E'\\x7b"status":"active"\\x7d'::jsonb"""
+        """ OR attrs @> E'\\x7b"status":"pending"\\x7d'::jsonb)""",
+    ),
+    ({"tags": {"@!": [["x"]]}}, """NOT (tags @> '["x"]'::jsonb)"""),
+    # @$ not-all: OR of the negated containment checks
+    (
+        {"attrs": {"@$": [{"status": "active"}, {"status": "pending"}]}},
+        """((NOT attrs @> E'\\x7b"status":"active"\\x7d'::jsonb)"""
+        """ OR (NOT attrs @> E'\\x7b"status":"pending"\\x7d'::jsonb))""",
+    ),
+    ({"tags": {"@$": [["x"]]}}, """NOT (tags @> '["x"]'::jsonb)"""),
+    (
+        {
+            "graduation_details": {
+                "@!": [{"course": "Pilates Studio"}, {"course": "Pilates Mat"}],
+                "@$": [{"course": "Pilates Studio"}, {"course": "Pilates Mat"}],
+            }
+        },
+        """(NOT (graduation_details @> E'\\x7b"course":"Pilates Studio"\\x7d'::jsonb"""
+        """ OR graduation_details @> E'\\x7b"course":"Pilates Mat"\\x7d'::jsonb)"""
+        """ AND ((NOT graduation_details @> E'\\x7b"course":"Pilates Studio"\\x7d'::jsonb)"""
+        """ OR (NOT graduation_details @> E'\\x7b"course":"Pilates Mat"\\x7d'::jsonb)))""",
+    ),
+    (
+        {"attrs": {"@!": ['{"a": 1}', {"b": 2}]}},
+        """NOT (attrs @> E'\\x7b"a":1\\x7d'::jsonb OR attrs @> E'\\x7b"b":2\\x7d'::jsonb)""",
+    ),
     # key suffixes carry no meaning for JSONB filters and are stripped
     ({"attrs|": {"status": "active"}}, """attrs @> E'\\x7b"status":"active"\\x7d'::jsonb"""),
     ({"attrs!": {"@>": ["x"]}}, """attrs @> '["x"]'::jsonb"""),
@@ -142,6 +172,13 @@ async def test_jsonb_values_are_escaped(path: str) -> None:
     {"attrs": {"@>|": []}},  # empty list
     {"attrs": {"@>|": '[{"a": 1}]'}},  # JSON text is not a list of operands
     {"attrs": {"@>|": [{"a": 1}, "not json"]}},  # one invalid item drops all
+    {"attrs": {"@!": []}},  # empty list: dropped (no filter)
+    {"attrs": {"@$": []}},  # empty list: dropped (no filter), not logical FALSE
+    {"attrs": {"@!": {"a": 1}}},  # needs a list of operands
+    {"attrs": {"@$": '[{"a": 1}]'}},  # JSON text is not a list of operands
+    {"attrs": {"@!": [{"a": 1}, "not json"]}},  # one invalid item drops all
+    {"attrs": {"@!": [{"a": 1}], "@$": []}},  # one bad group drops the whole dict
+    {"attrs": {"@!": [{"a": 1}], ">=": 5}},  # mixed comparison/JSONB tokens
 ])
 async def test_invalid_jsonb_filters_are_dropped(path: str, filter_: dict) -> None:
     assert _where(await _render(path, filter_)) is None
@@ -211,3 +248,42 @@ async def test_build_query_any_of_is_grouped(use_rust: bool, monkeypatch) -> Non
     assert isinstance(where, exp.And)
     assert isinstance(where.right, exp.Paren)
     assert isinstance(where.right.this, exp.Or)
+
+
+@pytest.mark.parametrize("use_rust", [
+    pytest.param(
+        True, marks=pytest.mark.skipif(not pgsql.HAS_RUST, reason="qs_parsers not built")
+    ),
+    False,
+])
+async def test_build_query_negation_is_grouped(use_rust: bool, monkeypatch) -> None:
+    """``@!``/``@$`` groups stay parenthesized next to the other AND-ed conditions."""
+    monkeypatch.setattr(pgsql, "HAS_RUST", use_rust)
+    operands = [{"course": "Pilates Studio"}, {"course": "Pilates Mat"}]
+    filter_ = {
+        "country": "United States",
+        "graduation_details": {"@!": operands, "@$": operands},
+    }
+    sql = await _make_parser(SQL, filter_).build_query(querylimit=10)
+    assert "{" not in sql and "}" not in sql
+    tree = sqlglot.parse_one(sql, read="postgres")
+    where = tree.args["where"].this
+    assert isinstance(where, exp.And)
+    assert isinstance(where.right, exp.Paren)
+    combined = where.right.this
+    assert isinstance(combined, exp.And)
+    assert isinstance(combined.left, exp.Not)
+    assert isinstance(combined.left.this, exp.Paren)
+    assert isinstance(combined.left.this.this, exp.Or)
+    assert isinstance(combined.right, exp.Paren)
+    not_all = combined.right.this
+    assert isinstance(not_all, exp.Or)
+    for term in (not_all.left, not_all.right):
+        assert isinstance(term, exp.Paren)
+        assert isinstance(term.this, exp.Not)
+
+    escaping_filter = {"attrs": {"@!": [{"name": "x'; --", "path": r"a\b{c}"}]}}
+    escaped_sql = await _make_parser(SQL, escaping_filter).build_query(querylimit=10)
+    assert "NOT (attrs @> " in escaped_sql
+    assert "{" not in escaped_sql and "}" not in escaped_sql
+    sqlglot.parse_one(escaped_sql, read="postgres")
