@@ -1,0 +1,134 @@
+{
+  "feature": "pandas3-migration",
+  "feature_id": "FEAT-161",
+  "spec": "sdd/specs/pandas3-migration.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-02T00:43:14+02:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-834",
+      "slug": "pandas3-deps",
+      "title": "Dependencias: pandas>=3.0, modin a extra, extras analytics aislados",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "exclusive: edits pyproject.toml and uv.lock and re-syncs the shared .venv (pandas 2.2 -> 3.x); every other task needs pandas 3 installed",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-834-pandas3-deps.md"
+    },
+    {
+      "id": "TASK-835",
+      "slug": "pandas3-modin-optional",
+      "title": "Modin opcional: fallback a pandas y error claro en modinFormat",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-834"
+      ],
+      "parallel": true,
+      "parallelism_notes": "needs the `querysource[modin]` extra name created by TASK-834 (pyproject.toml) for the error message, and modin uninstalled from the env by TASK-834",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-835-pandas3-modin-optional.md"
+    },
+    {
+      "id": "TASK-836",
+      "slug": "pandas3-transforms-cow",
+      "title": "transforms.py: corregir Copy-on-Write y astype sin asignar",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-834"
+      ],
+      "parallel": true,
+      "parallelism_notes": "needs pandas 3 installed by TASK-834 (pyproject.toml/uv.lock) so the CoW no-op in to_json is observable",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-836-pandas3-transforms-cow.md"
+    },
+    {
+      "id": "TASK-837",
+      "slug": "pandas3-multiqs-operators",
+      "title": "MultiQS: string dtype y datetime en FilterCols/Filter + tests de operadores",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-834"
+      ],
+      "parallel": true,
+      "parallelism_notes": "needs pandas 3 installed by TASK-834 (uv.lock) — the default `str` dtype that breaks `col.dtype == object` only exists there",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-837-pandas3-multiqs-operators.md"
+    },
+    {
+      "id": "TASK-838",
+      "slug": "pandas3-tableoutput-tests",
+      "title": "TableOutput: tests pandas 3 con driver mockeado",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-834"
+      ],
+      "parallel": true,
+      "parallelism_notes": "needs pandas 3 installed by TASK-834 (uv.lock) to exercise str/NA/us-datetime frames through TableOutput",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-838-pandas3-tableoutput-tests.md"
+    },
+    {
+      "id": "TASK-839",
+      "slug": "pandas3-regression-sweep",
+      "title": "Barrido de regresión: suite completa vs baseline y corrección de residuales",
+      "feature_id": "FEAT-161",
+      "feature": "pandas3-migration",
+      "spec": "sdd/specs/pandas3-migration.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "L",
+      "depends_on": [
+        "TASK-835",
+        "TASK-836",
+        "TASK-837",
+        "TASK-838"
+      ],
+      "parallel": false,
+      "parallelism_notes": "exclusive: runs the full suite on the shared env and may edit any module; consumes baseline.txt from TASK-834 and the bug list in TASK-838's Completion Note, after the fixes land: TASK-835 (querysource/queries/multi/operators/abstract.py), TASK-836 (querysource/types/dt/transforms.py), TASK-837 (querysource/queries/multi/transformations/FilterCols.py, querysource/queries/multi/operators/filter/flt.py) — the suite diff is only meaningful once those are in",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-839-pandas3-regression-sweep.md"
+    }
+  ]
+}
