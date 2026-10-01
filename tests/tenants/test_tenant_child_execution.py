@@ -84,8 +84,10 @@ async def test_parent_explicit_null_and_named_child_owner() -> None:
     created_threads = []
     
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None):
-            super().__init__(name, query, request, queue, remote_config=remote_config, store=store)
+        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+            super().__init__(
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+            )
             created_threads.append(self)
 
     with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
@@ -218,7 +220,8 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
     local_exec = LocalExecutor()
     
     class FakeQueryObject:
-        def __init__(self, name, query, queue, request, loop, tenant=None):
+        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None):
+            self.definition = definition
             self.name = name
             self.query_dict = query
             self.queue = queue
@@ -330,8 +333,10 @@ async def test_raw_query_child_skips_ownership_preflight_no_slug_required() -> N
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None):
-            super().__init__(name, query, request, queue, remote_config=remote_config, store=store)
+        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+            super().__init__(
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+            )
             created_threads.append(self)
 
     with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
@@ -435,8 +440,10 @@ async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None):
-            super().__init__(name, query, request, queue, remote_config=remote_config, store=store)
+        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+            super().__init__(
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+            )
             created_threads.append(self)
 
     with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
@@ -454,3 +461,91 @@ async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
     get_slug_mock.assert_awaited_once_with(slug="dashboard", tenant="tenant1")
     assert len(created_threads) == 1
     assert created_threads[0]._store == store_tenant1
+    # The preflight's load is handed to the thread, so its QueryObject never re-reads it.
+    assert created_threads[0]._definition is loaded_dashboard
+
+
+@pytest.mark.asyncio
+async def test_preloaded_single_query_slug_is_loaded_once_and_handed_to_the_thread() -> None:
+    """A definition already loaded for the top-level slug is never re-read: not by the child preflight,
+    and not by the thread's QueryObject (which gets it via ThreadQuery → LocalExecutor)."""
+    store_tenant1 = _tenant_store("tenant1", "tenant")
+    ident = QueryIdentity(store=store_tenant1, slug="dashboard")
+    loaded = LoadedDefinition(
+        identity=ident,
+        runtime=QueryModel(query_slug="dashboard", program_slug="tenant1", provider="db"),
+        revision="rev1",
+    )
+
+    class FakeRegistry:
+        def resolve(self, tenant):
+            return store_tenant1
+
+    class FakeRepo:
+        registry = FakeRegistry()
+
+        async def get(self, ident):
+            raise AssertionError(f"repo.get() must not re-read an already loaded definition: {ident}")
+
+    multi_qs = MultiQS(slug="dashboard", tenant="tenant1", definition=loaded)
+
+    async def fake_get_definition_repository():
+        return FakeRepo()
+
+    multi_qs.get_definition_repository = fake_get_definition_repository
+    created_threads = []
+
+    class FakeThreadQuery(ThreadQuery):
+        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+            super().__init__(
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+            )
+            created_threads.append(self)
+
+    with mock.patch("querysource.queries.multi.ThreadQuery", FakeThreadQuery):
+        with mock.patch.object(ThreadQuery, "start", lambda self: None), \
+             mock.patch.object(ThreadQuery, "join", lambda self, timeout=None: None), \
+             mock.patch.object(ThreadQuery, "is_alive", lambda self: False), \
+             mock.patch.object(ThreadQuery, "exc", create=True, new_callable=mock.PropertyMock(return_value=None)):
+            async def fake_get(*args, **kwargs):
+                return {"dashboard": pd.DataFrame([{"col": 1}])}
+
+            with mock.patch.object(asyncio.Queue, "empty", side_effect=[False, True]), \
+                 mock.patch.object(asyncio.Queue, "get", fake_get):
+                await multi_qs.query()
+
+    assert len(created_threads) == 1
+    assert created_threads[0]._definition is loaded
+
+
+@pytest.mark.asyncio
+async def test_local_executor_forwards_the_loaded_definition_to_query_object() -> None:
+    """LocalExecutor hands the child's loaded definition to QueryObject (reused instead of re-read)."""
+    store_tenant = _tenant_store("tenant1", "tenant")
+    loaded = LoadedDefinition(
+        identity=QueryIdentity(store=store_tenant, slug="q1"),
+        runtime=QueryModel(query_slug="q1", program_slug="tenant1", provider="db"),
+        revision="rev1",
+    )
+    created = []
+
+    class FakeQueryObject:
+        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None):
+            self.name = name
+            self.queue = queue
+            self.definition = definition
+            created.append(self)
+
+        async def build_provider(self):
+            pass
+
+        async def query(self):
+            await self.queue.put({self.name: "result_data"})
+
+    with mock.patch("querysource.queries.multi.sources.executors.QueryObject", FakeQueryObject):
+        await LocalExecutor().execute(
+            name="alias1", query={"slug": "q1"}, queue=asyncio.Queue(), request=None,
+            store=store_tenant, definition=loaded,
+        )
+
+    assert created[0].definition is loaded

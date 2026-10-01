@@ -22,6 +22,8 @@ class pgProvider(sqlProvider):
     """
 
     __parser__ = pgSQLParser
+    #: FEAT-157: sources on this provider (and dbProvider) may declare pre/post-hooks.
+    sql_hooks_dialect = "postgres"
     capabilities = sqlProvider.capabilities | {qsurl_caps.TEXT_MATCH}
 
     def __init__(

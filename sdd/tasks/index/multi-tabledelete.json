@@ -1,0 +1,72 @@
+{
+  "feature": "multi-tabledelete",
+  "feature_id": "FEAT-155",
+  "spec": "sdd/specs/multi-tabledelete.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-09-30T16:51:16+00:00",
+  "completed_at": "2026-09-30T18:16:47+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-815",
+      "slug": "table-delete-destination",
+      "title": "TableDeleteDestination (delete target rows by pk tuple)",
+      "feature_id": "FEAT-155",
+      "feature": "multi-tabledelete",
+      "spec": "sdd/specs/multi-tabledelete.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Root task: creates querysource/queries/multi/destinations/table_delete.py and tests/test_destination_table_delete.py only; no shared files, no rebuild; runs concurrently with TASK-817.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:51+00:00",
+      "completed_at": "2026-09-30T18:15:51+00:00",
+      "file": "sdd/tasks/completed/TASK-815-table-delete-destination.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-816",
+      "slug": "table-delete-registry",
+      "title": "Register the TableDelete step in DESTINATION_REGISTRY",
+      "feature_id": "FEAT-155",
+      "feature": "multi-tabledelete",
+      "spec": "sdd/specs/multi-tabledelete.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-815"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Imports TableDeleteDestination from TASK-815 (querysource/queries/multi/destinations/table_delete.py) into querysource/outputs/destinations/__init__.py; FEAT-156 edits the same registry file later (merge FEAT-155 first).",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:51+00:00",
+      "completed_at": "2026-09-30T18:16:47+00:00",
+      "file": "sdd/tasks/completed/TASK-816-table-delete-registry.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-817",
+      "slug": "write-destinations-pbac-gate",
+      "title": "PBAC gate for write-capable Output destinations",
+      "feature_id": "FEAT-155",
+      "feature": "multi-tabledelete",
+      "spec": "sdd/specs/multi-tabledelete.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "Root task: only modifies querysource/queries/multi/__init__.py (_preflight_principal) and creates tests/test_multiqs_write_gate.py; matches the step-name string 'TableDelete', never imports TASK-815's class.",
+      "assigned_to": null,
+      "started_at": "2026-09-30T18:15:51+00:00",
+      "completed_at": "2026-09-30T18:16:35+00:00",
+      "file": "sdd/tasks/completed/TASK-817-write-destinations-pbac-gate.md",
+      "verification": "verified"
+    }
+  ]
+}

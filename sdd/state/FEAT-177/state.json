@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-177",
+  "feature_slug": "parquet-multiqs-source",
+  "started_at": "2026-09-30T14:10:55Z",
+  "updated_at": "2026-09-30T14:30:12.865641+00:00",
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "raw_path": "sdd/state/FEAT-177/source.md",
+    "fetched_at": "2026-09-30T14:10:55Z",
+    "summary_oneline": "Parquet-based MultiQS source reading from local filesystem, S3 or GCS, modelled on the existing S3 source"
+  },
+  "mode": "auto",
+  "phase": "committed",
+  "phases": {
+    "source": {
+      "status": "completed"
+    },
+    "plan": {
+      "status": "completed",
+      "queries_total": 13,
+      "approved_by_user": true,
+      "edited_by_user": false,
+      "plan_path": "sdd/state/FEAT-177/research_plan.json",
+      "wiki_available": true,
+      "base_branch": "dev"
+    },
+    "research": {
+      "status": "completed",
+      "queries_executed": 13,
+      "queries_skipped": 0,
+      "depth_reached": 0,
+      "files_read": 14,
+      "grep_calls": 9,
+      "git_calls": 3,
+      "truncated": false,
+      "findings_total": 11
+    },
+    "synthesis": {
+      "status": "completed",
+      "synthesis_path": "sdd/state/FEAT-177/synthesis.json",
+      "overall_confidence": "medium",
+      "claims_total": 7,
+      "claims_high_conf": 5,
+      "claims_medium_conf": 2,
+      "claims_low_conf": 0,
+      "unknowns_count": 4,
+      "lint_passed": true,
+      "lint_iterations": 1,
+      "review_approved_by_user": true
+    },
+    "qa": {
+      "status": "completed",
+      "questions_total": 4,
+      "questions_answered": 4,
+      "completed_at": "2026-09-30T14:30:12.865641+00:00"
+    },
+    "output": {
+      "status": "completed",
+      "proposal_path": "sdd/proposals/parquet-multiqs-source.proposal.md",
+      "next_command_recommended": "sdd-spec",
+      "next_command_rationale": "High-confidence localization; Q&A settled I/O layer, class layout, credentials and scope."
+    }
+  },
+  "budget": {
+    "profile": "default",
+    "max_files_read": 40,
+    "max_grep_calls": 25,
+    "max_git_calls": 10,
+    "max_depth": 2,
+    "max_wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 14,
+    "grep_calls": 9,
+    "git_calls": 3,
+    "wall_seconds": 0
+  },
+  "errors": [],
+  "resume_hint": {
+    "next_phase": "complete",
+    "next_action": "Recommended next command: /sdd-spec FEAT-177."
+  },
+  "detected_mode": "enrichment"
+}

@@ -84,6 +84,15 @@ class _MockConn:
         write_keywords = ("INSERT", "UPDATE", "DELETE")
         return any(keyword in sql.upper() for keyword in write_keywords)
 
+    async def transaction(self):
+        return self
+
+    async def commit(self):
+        return None
+
+    async def rollback(self):
+        return None
+
     async def fetch_one(self, sql, *args, **kwargs):
         self.calls.append(("fetch_one", sql, args))
         if self._should_error(sql):

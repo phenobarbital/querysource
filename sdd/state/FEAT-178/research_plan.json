@@ -1,0 +1,19 @@
+{
+  "feat_id": "FEAT-178",
+  "mode_hint": "enrichment",
+  "wiki_available": true,
+  "queries": [
+    {"id": "Q001", "type": "wiki_query", "params": {"q": "MultiQuery SharePoint source"}, "intent": "orient on SharePoint source and its origin", "priority": 1},
+    {"id": "Q002", "type": "read", "params": {"path": "querysource/queries/multi/sources/sharepoint.py"}, "intent": "reference implementation to mirror", "priority": 1},
+    {"id": "Q003", "type": "read", "params": {"path": "querysource/queries/multi/sources/base.py"}, "intent": "source base contract", "priority": 1},
+    {"id": "Q004", "type": "read", "params": {"path": "querysource/queries/multi/sources/__init__.py"}, "intent": "registration / exports", "priority": 1},
+    {"id": "Q005", "type": "grep", "params": {"pattern": "onedrive|OneDrive|one_drive", "path": "querysource/ pyproject.toml"}, "intent": "prior OneDrive support", "priority": 1},
+    {"id": "Q006", "type": "grep", "params": {"pattern": "SharepointSource|sharepoint", "path": "querysource/queries/multi/"}, "intent": "how source dispatch/introspection references SharePoint", "priority": 1},
+    {"id": "Q007", "type": "read", "params": {"path": "querysource/queries/multi/sources/query.catalog.yaml"}, "intent": "catalog/docs for sources", "priority": 2},
+    {"id": "Q008", "type": "grep", "params": {"pattern": "msal|office365|Office365|graph.microsoft|azure", "path": "querysource/ pyproject.toml"}, "intent": "available MS auth/Graph deps and interfaces", "priority": 1},
+    {"id": "Q009", "type": "read", "params": {"path": "querysource/outputs/destinations/sharepoint.py"}, "intent": "second SharePoint client for credential patterns", "priority": 2},
+    {"id": "Q010", "type": "glob", "params": {"pattern": "tests/**/*sharepoint*"}, "intent": "test patterns", "priority": 2},
+    {"id": "Q011", "type": "git_log", "params": {"path": "querysource/queries/multi/sources/sharepoint.py", "since": "180 days"}, "intent": "origin feature and recent activity", "priority": 2},
+    {"id": "Q012", "type": "grep", "params": {"pattern": "sharepoint|SharePoint", "path": "querysource/conf.py"}, "intent": "config keys for MS credentials", "priority": 2}
+  ]
+}

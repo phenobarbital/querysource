@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
+from collections.abc import Mapping
 from importlib import import_module
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 from asyncdb.exceptions import NoDataFound
@@ -17,6 +19,13 @@ from ...exceptions import (
     QueryException,
     SlugNotFound,
 )
+from ...interfaces.source_hooks import (
+    HOOK_KEYS,
+    GuardedSQLError,
+    SourceHooks,
+    build_hooks,
+    pop_hooks,
+)
 from ...ownership_logging import ownership_fields
 from ...tenant_errors import TenantError
 from ..base import BaseQuery
@@ -28,6 +37,7 @@ from .transformations import (
 )
 
 if TYPE_CHECKING:
+    from ...auth.identity_tokens import SourceIdentityContext
     from ...auth.principal import QSPrincipal
     from ...tenants import LoadedDefinition, QueryStore, TenantRegistry
 
@@ -49,6 +59,16 @@ _INFRA_ERROR_TYPES = frozenset({
 })
 
 
+# FEAT-157: raw ``queries`` drivers whose sources may declare pre/post-hooks.
+PG_HOOK_DRIVERS: frozenset[str] = frozenset({"pg", "postgres", "postgresql"})
+_HOOKS_LOCATION_ERROR = "hooks are only supported on PostgreSQL 'queries' entries"
+
+
+def _declares_hooks(cfg: object) -> bool:
+    """True when a source entry dict carries a ``pre-hook`` or ``post-hook`` key."""
+    return isinstance(cfg, dict) and any(key in cfg for key in HOOK_KEYS)
+
+
 def classify_output_error(exc: BaseException) -> str | None:
     """Classify a destination failure as ``"data"`` or ``"infra"``.
 
@@ -64,6 +84,110 @@ def classify_output_error(exc: BaseException) -> str | None:
     if type_name in _INFRA_ERROR_TYPES:
         return "infra"
     return None
+
+
+# FEAT-155: Output step names that modify data on the full-access DB* connection.
+# A MultiQuery using any of them requires ``datasource:use`` on ``pg_admin``
+# (FEAT-091) at pre-flight. FEAT-156 added "ExecuteSQL".
+WRITE_DESTINATIONS: frozenset[str] = frozenset({"TableDelete", "ExecuteSQL"})
+
+
+def _output_step_names(output: object) -> set[str]:
+    """Return the step names of an ``Output`` list (``[{name: cfg}, …]``); ignore malformed entries.
+
+    Args:
+        output: The raw ``Output`` option (normally a list of single-key dicts).
+
+    Returns:
+        The set of step names; empty when ``output`` is not a list/tuple.
+    """
+    if not isinstance(output, (list, tuple)):
+        return set()
+    return {
+        name
+        for step in output
+        if isinstance(step, dict)
+        for name in step
+        if isinstance(name, str)
+    }
+
+
+# FEAT-160: source-hook keys that run SQL with the full-access DB* connection.
+# FEAT-160 name kept as an alias of FEAT-157's canonical ``HOOK_KEYS`` (single source of truth).
+SOURCE_HOOK_KEYS: tuple[str, str] = HOOK_KEYS
+
+
+def _as_mapping(value: object) -> Mapping[str, Any] | None:
+    """Return ``value`` as a mapping: a mapping as-is, a JSON-object string parsed.
+
+    Args:
+        value: A mapping, a JSON string, or anything else.
+
+    Returns:
+        The mapping, or ``None`` for malformed JSON, non-object JSON and other types.
+    """
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, Mapping) else None
+    return None
+
+
+def pipeline_requires_write_grant(pipeline: object) -> bool:
+    """Tell whether a MultiQuery pipeline can write with the DB* credentials.
+
+    Args:
+        pipeline: The parsed MultiQuery payload (``{"queries": …, "Output": […]}``).
+
+    Returns:
+        True when ``Output`` uses a ``WRITE_DESTINATIONS`` step or any ``queries``
+        entry declares a ``SOURCE_HOOK_KEYS`` key; False otherwise, including for
+        malformed shapes.
+    """
+    if not isinstance(pipeline, Mapping):
+        return False
+    if _output_step_names(pipeline.get("Output")) & WRITE_DESTINATIONS:
+        return True
+    queries = pipeline.get("queries")
+    if not isinstance(queries, Mapping):
+        return False
+    return any(
+        isinstance(entry, Mapping) and any(key in entry for key in SOURCE_HOOK_KEYS)
+        for entry in queries.values()
+    )
+
+
+def definition_requires_scheduler_grant(definition: Mapping[str, Any]) -> bool:
+    """Tell whether saving/syncing this definition needs ``datasource:use`` on ``pg_admin``.
+
+    Args:
+        definition: A definition row or merged change with ``provider``,
+            ``attributes`` (mapping or JSON string) and ``query_raw`` (JSON string
+            or mapping).
+
+    Returns:
+        True only for a ``provider == "multi"`` definition with a truthy
+        ``attributes.scheduler`` whose ``query_raw`` pipeline is write-capable.
+        A non-empty ``query_raw`` that ``json.loads`` cannot turn into an object
+        also returns True (fail closed): the runtime decodes ``query_raw`` with a
+        different decoder, so an unparseable payload here could still run write
+        steps there. An empty/missing ``query_raw`` returns False.
+    """
+    if not isinstance(definition, Mapping) or definition.get("provider") != "multi":
+        return False
+    attributes = _as_mapping(definition.get("attributes"))
+    if not attributes or not attributes.get("scheduler"):
+        return False
+    raw = definition.get("query_raw")
+    pipeline = _as_mapping(raw)
+    if pipeline is None:
+        # Fail closed on a scheduled multi whose pipeline we cannot inspect.
+        return isinstance(raw, str) and bool(raw.strip())
+    return pipeline_requires_write_grant(pipeline)
 
 
 def get_operator_module(clsname: str):
@@ -118,6 +242,7 @@ class MultiQS(BaseQuery):
             tenant: str | None = None,
             definition: "LoadedDefinition | None" = None,
             principal: "QSPrincipal | None" = None,
+            identity_context: "SourceIdentityContext | None" = None,
             **kwargs
     ):
         super().__init__(
@@ -160,6 +285,8 @@ class MultiQS(BaseQuery):
             )
         # PBAC: store user session for downstream driver credential resolution (TASK-637).
         self._user_session = user_session
+        # FEAT-159: delegated-credential context resolved by sources' prepare() on this loop.
+        self._identity_context = identity_context
         # FEAT-101: track names of queries dispatched to remote qworker.
         self._remote_queries: list = []
 
@@ -237,6 +364,67 @@ class MultiQS(BaseQuery):
         else:
             child_tenant = parent_tenant
         return child_tenant, registry.resolve(child_tenant)
+    def _hooks_target_same_database(self) -> bool:
+        """True when hooks (``DB*``) and ``db``/``pg`` reads (``PG_*``) hit the same database."""
+        hook_target = (str(conf.DBHOST), str(conf.DBPORT), str(conf.DBNAME))
+        read_target = (str(conf.PG_HOST), str(conf.PG_PORT), str(conf.PG_DATABASE))
+        return hook_target == read_target
+
+    def _validate_source_hooks(
+        self,
+        name: str,
+        query: dict,
+        definition: "LoadedDefinition | None",
+        pre: object,
+        post: object,
+    ) -> "SourceHooks | None":
+        """Apply spec §2 validation 2-4 for one ``queries`` entry.
+
+        Args:
+            name: The entry alias (DataFrame name).
+            query: The merged entry (hook keys already popped).
+            definition: The preloaded slug definition (``None`` for raw children).
+            pre: Raw ``pre-hook`` value, or ``None``.
+            post: Raw ``post-hook`` value, or ``None``.
+
+        Returns:
+            ``None`` when no hook is declared, else the guard-approved hooks.
+
+        Raises:
+            DriverError: unsupported provider/driver, DB mismatch, or guard rejection.
+        """
+        if pre is None and post is None:
+            return None
+        if "slug" in query:
+            provider = None
+            dialect = None
+            if definition is not None:
+                provider = getattr(definition.runtime, "provider", None) or "db"
+                try:
+                    dialect = getattr(self.load_provider(provider), "sql_hooks_dialect", None)
+                except QueryException:
+                    dialect = None
+            supported = dialect == "postgres"
+            target = provider
+        else:
+            target = str(query.get("driver") or "").lower()
+            supported = target in PG_HOOK_DRIVERS and "datasource" not in query
+            if "datasource" in query:
+                target = f"datasource {query.get('datasource')!r}"
+        if not supported:
+            raise DriverError(
+                f"{name}: hooks are not supported for provider/driver {target!r}"
+            )
+        if not self._hooks_target_same_database():
+            raise DriverError(
+                f"{name}: hooks run on DB* credentials but DB* and PG_* point at "
+                "different databases; refusing to run them"
+            )
+        try:
+            return build_hooks(pre, post)
+        except GuardedSQLError as err:
+            raise DriverError(f"{name}: {err}") from err
+
     async def _preflight_principal(self) -> None:
         """With a principal: enforce slug:execute for every stored child slug in self._queries,
         slug:execute for every self._files entry, and raw_query:execute once when any child
@@ -269,6 +457,20 @@ class MultiQS(BaseQuery):
                 tenant=self._tenant_selector, logger=self._logger,
             )
 
+        # FEAT-155: a write-capable Output step needs the admin-datasource grant.
+        if _output_step_names((self._options or {}).get("Output")) & WRITE_DESTINATIONS:
+            await enforce_principal(
+                self._principal, ResourceType.DATASOURCE, "pg_admin", "datasource:use",
+                tenant=self._tenant_selector, logger=self._logger,
+            )
+
+        # FEAT-157: pre/post-hooks run with full-access DB* credentials.
+        if any(_declares_hooks(cfg) for cfg in (self._queries or {}).values()):
+            await enforce_principal(
+                self._principal, ResourceType.DATASOURCE, "pg_admin", "datasource:use",
+                tenant=self._tenant_selector, logger=self._logger,
+            )
+
         if has_raw_child:
             await enforce_principal(
                 self._principal, ResourceType.RAW_QUERY, "raw_query", "raw_query:execute",
@@ -279,7 +481,12 @@ class MultiQS(BaseQuery):
         """Deep-copy pipeline config; resolve stored children to parent/explicit owner before dispatch; preserve output aliases and preflight real identities."""
         import copy
 
-        from querysource.tenants import QueryIdentity
+        from querysource.tenants import LoadedDefinition, QueryIdentity
+
+        # Definitions already read by this request, handed to each child thread so its
+        # QueryObject does not re-read them over a fresh, loop-local connection.
+        top_definition: LoadedDefinition | None = None
+        child_definitions: dict[str, LoadedDefinition] = {}
 
         # Deep-copy pipeline config to avoid mutating input config
         self._queries = copy.deepcopy(self._queries)
@@ -310,6 +517,7 @@ class MultiQS(BaseQuery):
                 query = preloaded.runtime
                 self._definition_identity = preloaded.identity
                 self._definition_revision = preloaded.revision
+                top_definition = preloaded
             else:
                 # get_query_slug (interfaces/connections.py) stashes
                 # _definition_identity/_definition_revision on self before
@@ -322,6 +530,12 @@ class MultiQS(BaseQuery):
                     ):
                         raise QueryAccessDenied() from ex
                     raise
+                if self._definition_identity is not None and self._definition_revision is not None:
+                    top_definition = LoadedDefinition(
+                        identity=self._definition_identity,
+                        runtime=query,
+                        revision=self._definition_revision,
+                    )
             slug_data = None
             query_raw = getattr(query, 'query_raw', None) or ''
             if isinstance(query_raw, str) and query_raw.strip():
@@ -355,6 +569,10 @@ class MultiQS(BaseQuery):
                     if isinstance(self._conditions, dict)
                     else {}
                 )
+                if _declares_hooks(slug_conditions):
+                    raise DriverError(
+                        "'pre-hook'/'post-hook' cannot be passed as request conditions"
+                    )
                 self._queries = {
                     self.slug: {"slug": self.slug, **slug_conditions}
                 }
@@ -433,7 +651,11 @@ class MultiQS(BaseQuery):
                 # Preflight policy check: verify the definition exists in the resolved store
                 try:
                     ident = QueryIdentity(store=child_store, slug=child_slug)
-                    await repo.get(ident)
+                    if top_definition is not None and ident == top_definition.identity:
+                        # A single-query slug wrapped as its own child: already loaded above.
+                        child_definitions[name] = top_definition
+                    else:
+                        child_definitions[name] = await repo.get(ident)
                 except TenantError as ex:
                     if self._principal is not None and ex.error_code in _COLLAPSED_OWNER_ERRORS:
                         raise QueryAccessDenied() from ex
@@ -450,6 +672,14 @@ class MultiQS(BaseQuery):
         if self._queries:
             for name, query in self._queries.items():
                 conditions = self._conditions.pop(name, {})
+                # FEAT-157: hook SQL only from the pipeline entry, never from request
+                # conditions; popped BEFORE the merge so it never reaches QueryObject.
+                if _declares_hooks(conditions):
+                    raise DriverError(
+                        f"{name}: 'pre-hook'/'post-hook' cannot be passed as request conditions"
+                    )
+                query = dict(query)  # do not mutate self._queries (gate re-scans it)
+                pre_hook, post_hook = pop_hooks(query)
                 # those conditions be applied to the query
                 query = {**conditions, **query}
                 # FEAT-101: detect remote execution directive and resolve worker.
@@ -459,6 +689,9 @@ class MultiQS(BaseQuery):
                 worker_addr = query.pop("worker", None)
                 # Also pop tenant key so it doesn't reach QueryObject or database driver
                 query.pop("tenant", None)
+                hooks = self._validate_source_hooks(
+                    name, query, child_definitions.get(name), pre_hook, post_hook
+                )
                 remote_config = None
                 if is_remote:
                     if worker_addr:
@@ -508,6 +741,8 @@ class MultiQS(BaseQuery):
                         # dispatch with store=None (the existing, unowned
                         # legacy dispatch path) instead of raising KeyError.
                         store=resolved_stores.get(name),
+                        definition=child_definitions.get(name),
+                        hooks=hooks,
                     )
                 except Exception as ex:
                     raise self.Error(
@@ -517,6 +752,8 @@ class MultiQS(BaseQuery):
                 tasks[name] = t
         if self._files:
             for name, file in self._files.items():
+                if _declares_hooks(file):
+                    raise DriverError(f"{name}: {_HOOKS_LOCATION_ERROR}")
                 t = FileSource(
                     name, file, self._request, self._queue
                 )
@@ -525,6 +762,8 @@ class MultiQS(BaseQuery):
             from .sources import SOURCE_REGISTRY
             for entry in self._sources:
                 for source_type, config in entry.items():
+                    if _declares_hooks(config):
+                        raise DriverError(f"{source_type}: {_HOOKS_LOCATION_ERROR}")
                     cls = SOURCE_REGISTRY.get(source_type)
                     if cls is None:
                         raise DriverError(
@@ -537,6 +776,7 @@ class MultiQS(BaseQuery):
                     )
                     name = source_type if idx == 0 else f"{source_type}_{idx}"
                     t = cls(name, config, self._request, self._queue)
+                    await t.prepare(self._identity_context)
                     tasks[name] = t
 
         ## then, run all jobs:
@@ -553,7 +793,9 @@ class MultiQS(BaseQuery):
                         t.start()
                     active.append(t)
                 for t in list(active):
-                    t.join(timeout=timeout)
+                    # Join off the event loop: a blocking t.join() here froze the HTTP loop for the
+                    # whole thread run, serialising every concurrent request on the server.
+                    await asyncio.to_thread(t.join, timeout)
                     if t.is_alive():
                         raise self.Error(
                             message=f"Source {t.slug!r} timed out after {timeout} seconds.",

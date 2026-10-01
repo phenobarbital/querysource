@@ -14,6 +14,7 @@ from aiohttp import web
 from navconfig.logging import logging
 
 from ..exceptions import DataNotFound, ParserError, QueryException, RawQueryPlaceholderError
+from ..interfaces.source_hooks import SourceHooksMixin
 from ..models import QueryModel
 from ..parsers.abstract import AbstractParser
 from ..qsurl import capabilities as qsurl_caps
@@ -31,7 +32,7 @@ RAW_DEFINITION_REASON = (
 RAW_QUERY_REASON = "no value was supplied for them in the conditions"
 
 
-class BaseProvider(ABC):
+class BaseProvider(SourceHooksMixin, ABC):
 
     __parser__: AbstractParser = None
     _parser_options: dict = {}

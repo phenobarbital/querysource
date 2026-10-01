@@ -1,0 +1,29 @@
+MultiQS needs a `OneDriveSource` that downloads a single CSV/Excel file from
+OneDrive and exposes it as a named DataFrame, just as
+`querysource/queries/multi/sources/sharepoint.py::SharepointSource` does for
+SharePoint libraries. Research shows that everything in `SharepointSource`
+except site→drive resolution is drive-agnostic: app-only Graph auth, `/shares`
+URL resolution, download via `@microsoft.graph.downloadUrl`, and parsing
+(`_parse_file_content`). The recommendation is to extract that shared logic
+into a Graph drive-item base that both sources extend. `OneDriveSource`
+resolves either a user's drive (Business, app-only) or the signed-in user's
+drive (personal, delegated OAuth), and is registered in `SOURCE_REGISTRY`.
+For personal OneDrive, the user logs in through a UI and the captured
+refresh token is saved into their session vault. querysource doesn't
+implement either piece today, but the `navigator-auth` dependency already
+provides both. Its "Identity Vault" link flow
+(`/api/v1/user/identities/link/{provider}` plus the `/manage` page) runs the
+Microsoft OAuth login. It stores the tokens encrypted and caches them in the
+`navigator_session` session vault under `identity:{provider}`. It also
+refreshes and persists rotated tokens (`IdentityCredentialHandler`).
+`OneDriveSource`'s delegated mode therefore consumes that linked identity
+instead of building a new token flow. querysource does not enable the
+existing `azure` provider, and that provider is the corporate SSO login, so
+a new link-only **`onedrive` identity provider** is added to navigator-auth
+(cross-repo work). Scheduled runs have no session. They read the tokens from
+`auth.user_identities` for the user who registered the job. That
+`user_id` is saved in a dedicated `scheduler_run_as_user_id` column, and
+every change to it is recorded in an append-only audit table.
+
+Origin:
+> onedrive-multiqs-source -- Using the Sharepoint source as example for creating a MS OneDrive source for MultiQS
