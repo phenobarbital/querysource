@@ -51,7 +51,7 @@ class FilterCols(AbstractTransform):
     def __init__(self, data: Union[dict, pd.DataFrame], **kwargs) -> None:
         # Pop expression BEFORE super().__init__ so introspection works
         self.expression: str = kwargs.pop('expression', None)
-        super(FilterCols, self).__init__(data, **kwargs)
+        super().__init__(data, **kwargs)
         # Tracks whether start() has been called; prevents a redundant second
         # call when using ``async with obj as o: await o.run()``.
         self._started: bool = False

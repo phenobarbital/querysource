@@ -4,11 +4,11 @@ import pandas as pd
 import pytest
 
 from querysource.queries.multi.operators.Concat import Concat
+from querysource.queries.multi.operators.filter.flt import Filter
 from querysource.queries.multi.operators.GroupBy import GroupBy
 from querysource.queries.multi.operators.Join import Join
 from querysource.queries.multi.operators.Melt import Melt
 from querysource.queries.multi.operators.Merge import Merge
-from querysource.queries.multi.operators.filter.flt import Filter
 from querysource.queries.multi.transformations.FilterCols import FilterCols
 from querysource.queries.multi.transformations.pivot import pivot
 
