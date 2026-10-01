@@ -146,10 +146,14 @@ modin = ["modin>=0.37.1", "distributed"]
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
+**Completed by**: sdd-worker (manual; attempt 1 on gpt-5.6-terra delivered only an invalid baseline)
+**Date**: 2026-10-02
 **Notes**:
+- `pandas>=3.0,<4` added to base deps; `modin==0.32.0` removed; extra `modin = ["modin>=0.37.1", "distributed"]` added.
+- `uv lock` resolves (pandas 3.0.6). No analytics package blocked it, so NO `analytics-legacy` extra was needed; numpy range unchanged.
+- Added `"pandas>=3.0,<4"` to `[tool.uv] override-dependencies`: modin>=0.37.1 pins pandas<2.4 and otherwise makes the lock unsatisfiable.
+- pandas 3 requires Python>=3.11, so `requires-python` raised to `>=3.11,<3.14` and the 3.10 classifier removed.
+- `baseline.txt` is a "baseline unavailable" note: a valid pandas 2.2 run was not possible (see file).
+- Validation: `pytest tests/unit/test_multiqs_output_raise.py` fails 5/5 from the main checkout (`_FakeThread.__init__() got an unexpected keyword argument 'definition'`), a test-double mismatch unrelated to pandas; it cannot be collected in a worktree (unbuilt Cython extensions).
 
-**Deviations from spec**: none
+**Deviations from spec**: requires-python bump, uv override-dependencies, baseline not captured.
