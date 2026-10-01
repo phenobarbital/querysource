@@ -285,4 +285,6 @@ pgsql._rs.pgsql_filter_conditions("SELECT * FROM t {where_cond}",
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 144.4s · Tokens: n/a
+
+Implemented `@!`/`@$` in `rust/src/pgsql_parser.rs`, mirroring TASK-831 (tokens, helpers, multi-key AND, mixed-class rejection). Diff reviewed against spec; `cargo check --offline` passes. `cargo test` fails at link time (pyo3 extension-module, not caused by this change); behavior is covered by TASK-833. No corrections needed.

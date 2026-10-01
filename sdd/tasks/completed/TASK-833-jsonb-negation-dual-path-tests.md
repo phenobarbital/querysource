@@ -237,4 +237,6 @@ See the blueprint blocks above. They are the test scaffold.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 2 (attempt 1 on gpt-5.6-terra: empty_delivery) · Duration: 454.4s · Tokens: n/a
+
+Added dual-path (Cython + Rust) cases for `@!`/`@$` to `tests/test_pgsql_jsonb_filters.py` and bumped `querysource/version.py` to 5.1.5. Verified after building both extensions in-worktree (`setup.py build_ext --inplace`; `maturin build` with the .so copied into the gitignored `querysource/qs_parsers/`): `pytest tests/test_pgsql_jsonb_filters.py` → 100 passed. No corrections needed (review feedback recorded).
