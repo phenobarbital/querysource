@@ -9,12 +9,11 @@ Tests cover:
 - Async context manager usage
 - Integration: registry discovery, introspection schema, transform chain
 """
-import pytest
 import pandas as pd
+import pytest
 
-from querysource.queries.multi.transformations.tExplode import tExplode
 from querysource.exceptions import DataNotFound, DriverError, QueryException
-
+from querysource.queries.multi.transformations.tExplode import tExplode
 
 # ---------------------------------------------------------------------------
 # Fixtures (from spec §4)
@@ -414,3 +413,22 @@ class TestTExplodeIntegration:
     def test_texplode_category(self):
         """tExplode has the correct category from AbstractTransform."""
         assert tExplode._category == "Transformations"
+
+
+class TestTExplodeMixedItems:
+    async def test_texplode_advanced_mixed_dict_and_scalar_items(self):
+        """Dict items are normalised while scalar items in the same column survive."""
+        df = pd.DataFrame({
+            "id": [1, 2],
+            "items": [[{"k": "v1"}], ["plain"]],
+        })
+        obj = tExplode(
+            data=df, column="items", advanced_mode=True, explode_dataset=True
+        )
+        async with obj as t:
+            result = await t.run()
+
+        # 2 parent rows + 2 exploded child rows
+        assert len(result) == 4
+        assert "v1" in result["k"].dropna().tolist()
+        assert "plain" in result["items"].tolist()

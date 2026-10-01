@@ -1,0 +1,8 @@
+BASELINE UNAVAILABLE (TASK-834)
+The pandas 2.2 baseline could not be captured: the first attempt ran in a sub-worktree
+without the built Cython extensions (144 collection errors, no signal), and the shared
+.venv was upgraded to pandas 3.0.6 before a valid run existed.
+Later tasks must compare against failures observed at the dev tip, not against this file.
+Known pre-existing, non-pandas failure seen from the main checkout under pandas 3.0.6:
+  tests/unit/test_multiqs_output_raise.py (5 failed): _FakeThread.__init__() got an
+  unexpected keyword argument 'definition'.
