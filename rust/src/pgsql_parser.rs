@@ -365,6 +365,15 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
     if operators > 0 {
         if let Ok(op) = op_obj.extract::<String>() {
             if COMPARISON_TOKENS.contains(&op.as_str()) {
+                // Mixed comparison + JSONB operators: dropped, never handed off.
+                let has_jsonb = dict.keys().iter().any(|k| {
+                    k.extract::<String>()
+                        .map(|k| JSONB_OPERATORS.contains(&k.as_str()))
+                        .unwrap_or(false)
+                });
+                if has_jsonb {
+                    return JsonbOutcome::Skip;
+                }
                 return JsonbOutcome::NotJsonb;
             }
         }

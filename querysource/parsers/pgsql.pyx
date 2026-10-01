@@ -273,13 +273,14 @@ cdef tuple jsonb_condition(str col, dict value):
         # `operators`, so this would otherwise fall through to that branch).
         return (False, None)
     if operators and op in COMPARISON_TOKENS:
+        if any(k in JSONB_OPERATORS for k in value):
+            # Mixed comparison + JSONB operators: dropped, never handed off.
+            return (True, None)
         return (False, None)
     try:
         if operators == 0:
             return (True, f"{col} @> {pg_literal(jsonb_dumps(value))}::jsonb")
         if operators != len(value):
-            return (True, None)
-        if any(k in COMPARISON_TOKENS for k in value):
             return (True, None)
         groups = []
         for op, operand in value.items():
