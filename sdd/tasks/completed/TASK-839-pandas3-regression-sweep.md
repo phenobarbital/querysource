@@ -119,10 +119,8 @@ Baseline (pandas 2.2): <N> failed · pandas 3: <M> failed · new: <K>
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (manual: Nova seats unavailable, full suite needs built extensions)
+**Date**: 2026-10-02
+**Notes**: See sdd/state/FEAT-161/regression.md. Files touched beyond the listed one: querysource/queries/multi/transformations/tExplode.py (json_normalize only for dicts), pyproject.toml/uv.lock (statsmodels>=0.14.6). Shared venv still has statsmodels 0.14.2 until `uv sync`. ~165 other failures are identical on the dev tip and unrelated to pandas.
 
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none
+**Deviations from spec**: no pandas 2.2 baseline; compared against dev tip on pandas 3.
