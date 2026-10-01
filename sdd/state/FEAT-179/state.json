@@ -1,0 +1,58 @@
+{
+  "feat_id": "FEAT-179",
+  "phase": "proposal_drafted",
+  "started_at": "2026-10-01T01:34:18+02:00",
+  "updated_at": "2026-10-01T01:45:00+02:00",
+  "mode": "enrichment",
+  "type": "feature",
+  "base_branch": "dev",
+  "wiki_available": true,
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "summary_oneline": "Add NOT (@!) and OR-if-not-exists (@$) operator support to JSONB where_cond filtering (AND/OR already exist)"
+  },
+  "budget": {
+    "profile": "default",
+    "files_read": 40,
+    "grep_calls": 25,
+    "git_calls": 10,
+    "depth": 2,
+    "wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 3,
+    "grep_calls": 4,
+    "git_calls": 2,
+    "wiki_calls": 5,
+    "depth_reached": 1
+  },
+  "phases": {
+    "plan": {"status": "complete", "approved_by_user": true, "queries_total": 11},
+    "research": {
+      "status": "complete",
+      "queries_executed": 11,
+      "queries_skipped": 0,
+      "truncated": false,
+      "truncation_reason": null,
+      "findings": ["F001", "F002", "F003", "F004", "F005"]
+    },
+    "synthesis": {
+      "status": "complete",
+      "overall_confidence": "medium",
+      "claims_high": 5,
+      "claims_medium": 2,
+      "claims_low": 1,
+      "unknowns": 3,
+      "lint": "pass"
+    },
+    "qa": {"status": "complete", "questions_total": 3, "questions_answered": 3},
+    "output": {
+      "status": "drafted",
+      "proposal_path": "sdd/proposals/jsonb-not-or-operators.proposal.md",
+      "commit_sha": null
+    }
+  },
+  "resume_hint": {"next_phase": "committed", "next_action": "commit proposal + state"},
+  "errors": []
+}

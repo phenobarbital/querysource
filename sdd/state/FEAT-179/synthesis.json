@@ -1,0 +1,235 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-179",
+  "mode": "enrichment",
+  "summary_oneline": "Add NOT (@!) and OR-if-not-exists (@$) JSONB dict-filter operators to the PostgreSQL parser, mirroring the @>| pattern across the Cython and Rust builders.",
+
+  "localization": [
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "JSONB_OPERATORS",
+      "lines": "30",
+      "role": "operator-token whitelist for dict-typed filter values (Cython); @! and @$ must be added here",
+      "evidence": ["F002", "F004"]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "jsonb_condition",
+      "lines": "151-199",
+      "role": "dispatch that maps an operator key to rendered SQL; needs @! and @$ branches",
+      "evidence": ["F002"]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "jsonb_any_of_condition",
+      "lines": "86-113",
+      "role": "existing OR (@>|) renderer — the template for the new NOT renderer(s)",
+      "evidence": ["F002", "F004"]
+    },
+    {
+      "path": "rust/src/pgsql_parser.rs",
+      "symbol": "JSONB_OPERATORS",
+      "lines": "82",
+      "role": "operator-token whitelist (Rust twin); must be extended in the same change",
+      "evidence": ["F003"]
+    },
+    {
+      "path": "rust/src/pgsql_parser.rs",
+      "symbol": "jsonb_condition",
+      "lines": "290-340",
+      "role": "Rust dispatch twin; needs the same @! / @$ branches",
+      "evidence": ["F003"]
+    },
+    {
+      "path": "rust/src/pgsql_parser.rs",
+      "symbol": "jsonb_any_of_condition",
+      "lines": "219-235",
+      "role": "Rust OR renderer — template for the Rust NOT renderer(s)",
+      "evidence": ["F003"]
+    },
+    {
+      "path": "tests/test_pgsql_jsonb_filters.py",
+      "symbol": "test_jsonb_condition",
+      "lines": null,
+      "role": "dual-path (rust+cython) parametrized test harness where @!/@$ cases are added",
+      "evidence": ["F001", "F005"]
+    },
+    {
+      "path": "querysource/models.py",
+      "symbol": "QueryObject.where_cond",
+      "lines": "38",
+      "role": "request surface; untyped Optional[dict], no operator whitelist upstream",
+      "evidence": ["F005"]
+    }
+  ],
+
+  "constraints": [
+    {
+      "statement": "JSONB operators are keys INSIDE a column's dict value ({\"col\": {\"@op\": ...}}), never top-level where_cond keys; the caller loop validates each where_cond key as a safe SQL identifier and silently skips non-identifier keys such as a literal \"@!\".",
+      "evidence": ["F002", "F005"],
+      "implication": "the ticket's literal example shape ({\"@!\": [...]} at top level) does not fit the existing mechanism; the consistent shape is {\"<jsonb_col>\": {\"@!\": [...]}}"
+    },
+    {
+      "statement": "filter_conditions() prefers the Rust fast-path and silently falls back to Cython only on exception; a mis-rendered (not raising) Rust path wins.",
+      "evidence": ["F003"],
+      "implication": "both builders must learn @!/@$ in the same change, and the Rust crate must be rebuilt (maturin develop) before tests"
+    },
+    {
+      "statement": "jsonb_condition dispatches on the FIRST operator key only and drops dicts mixing operator and plain keys (operators != len(value)); a dict carrying both @! and @$ renders only the first today.",
+      "evidence": ["F002", "F003"],
+      "implication": "supporting the ticket example (both operators in one dict) requires either multi-operator AND-composition or documenting single-operator-per-dict"
+    },
+    {
+      "statement": "All rendered conditions are joined with AND; values go through pg_literal (brace/backslash-safe E'...' quoting) to survive later format_map passes.",
+      "evidence": ["F002"],
+      "implication": "new renderers must reuse pg_literal/jsonb_operand exactly like jsonb_any_of_condition"
+    },
+    {
+      "statement": "Every existing JSONB filter case is tested through BOTH code paths via PATHS parametrization; commit 8936386 (the AND/OR support) is the exact structural precedent.",
+      "evidence": ["F004", "F005"],
+      "implication": "the change must ship dual-path tests in tests/test_pgsql_jsonb_filters.py, same as the @>| commit"
+    }
+  ],
+
+  "investigation": null,
+
+  "enrichment": {
+    "new": [
+      "Operator token '@!' (NOT / none-of containment) in both JSONB_OPERATORS constants",
+      "Operator token '@$' (semantics to confirm — 'OR if not exists') in both constants",
+      "Cython helper mirroring jsonb_any_of_condition for the negated form(s) (querysource/parsers/pgsql.pyx)",
+      "Rust helper twin (rust/src/pgsql_parser.rs)",
+      "Dispatch branches in both jsonb_condition implementations",
+      "Parametrized dual-path test cases in tests/test_pgsql_jsonb_filters.py"
+    ],
+    "modified": [
+      {"path": "querysource/parsers/pgsql.pyx", "evidence": ["F002"]},
+      {"path": "rust/src/pgsql_parser.rs", "evidence": ["F003"]},
+      {"path": "tests/test_pgsql_jsonb_filters.py", "evidence": ["F005"]},
+      {"path": "querysource/version.py", "evidence": ["F004"]}
+    ],
+    "untouched": [
+      "querysource/models.py — where_cond is already an untyped dict; no schema change needed",
+      "querysource/parsers/abstract.pyx — where_cond→filter plumbing is operator-agnostic",
+      "Other dialect parsers (sql.pyx, bigquery.pyx, sqlserver.pyx, ...) — JSONB is PostgreSQL-only",
+      "querysource/handlers/ and providers/ — no upstream operator validation exists"
+    ],
+    "patterns_to_follow": [
+      {"pattern": "commit 8936386: token + helper + dispatch branch per builder + dual-path tests", "evidence": ["F004"]},
+      {"pattern": "TASK-769 (ILIKE/NOT ILIKE): dual Rust+Cython operator discipline", "evidence": ["F001", "F004"]}
+    ],
+    "risks": [
+      {"risk": "Rust extension not rebuilt after the change → Rust path silently renders old behavior in any env with qs_parsers built", "evidence": ["F003"]},
+      {"risk": "Ticket example shape (top-level @! key) diverges from the existing per-column mechanism; implementing it literally would touch the caller loops and the FEAT-103 identifier validation", "evidence": ["F002", "F005"]}
+    ]
+  },
+
+  "confidence_map": [
+    {
+      "id": "C1",
+      "statement": "The JSONB operator dispatch to extend lives in jsonb_condition in querysource/parsers/pgsql.pyx:151-199 and rust/src/pgsql_parser.rs:290-340.",
+      "evidence": ["F002", "F003"],
+      "confidence": "high",
+      "reasoning": "Both functions read directly."
+    },
+    {
+      "id": "C2",
+      "statement": "Existing 'OR support' is the @>| any-of operator (jsonb_any_of_condition); 'AND support' is implicit multi-key containment via a single @> check.",
+      "evidence": ["F002", "F004"],
+      "confidence": "high",
+      "reasoning": "Code read + commit 8936386 diff confirms both."
+    },
+    {
+      "id": "C3",
+      "statement": "Both builders must be changed in lockstep because the Rust path wins silently whenever the extension is importable.",
+      "evidence": ["F003"],
+      "confidence": "high",
+      "reasoning": "filter_conditions() try/except-pass read directly at pgsql.pyx:209-217."
+    },
+    {
+      "id": "C4",
+      "statement": "Commit 8936386 is the exact structural template (files, helpers, tests) for this feature.",
+      "evidence": ["F004"],
+      "confidence": "high",
+      "reasoning": "git show inspected; same operator family, same files."
+    },
+    {
+      "id": "C5",
+      "statement": "No layer above the parser validates where_cond operator tokens, so only the two builders and tests need changes.",
+      "evidence": ["F005"],
+      "confidence": "high",
+      "reasoning": "models.py:38 is Optional[dict]; abstract.pyx:311 passes it through untouched."
+    },
+    {
+      "id": "C6",
+      "statement": "The ticket's literal shape (top-level '@!' key in where_cond) would be silently skipped today by the FEAT-103 identifier validation, so the intended shape is per-column: {\"col\": {\"@!\": [...]}}.",
+      "evidence": ["F002", "F005"],
+      "confidence": "medium",
+      "reasoning": "The skipping behavior is directly read; the 'intended shape' is an inference the user must confirm."
+    },
+    {
+      "id": "C7",
+      "statement": "@! should render negated any-of containment: NOT (col @> a OR col @> b), the exact dual of @>|.",
+      "evidence": ["F002"],
+      "confidence": "medium",
+      "reasoning": "Consistent with 'NOT' naming and the @>| precedent, but the ticket does not spell out the SQL."
+    },
+    {
+      "id": "C8",
+      "statement": "@$ means OR-ed negated containment ((NOT col @> a) OR (NOT col @> b)).",
+      "evidence": [],
+      "confidence": "low",
+      "reasoning": "'OR if not exists' is ambiguous; no codebase evidence can resolve author intent."
+    }
+  ],
+
+  "unknowns": [
+    {
+      "id": "U1",
+      "question": "What exact SQL semantics should '@$' ('OR if not exists') have for {\"col\": {\"@$\": [a, b]}}?",
+      "blocks_claims": ["C8"],
+      "plausible_answers": [
+        "(NOT col @> a) OR (NOT col @> b) — row lacks at least one of the operands (dual of @!)",
+        "col IS NULL OR col = '{}'::jsonb OR (col @> a OR col @> b) — match if the JSONB is absent/empty, else behave like @>|",
+        "NOT (col @> a AND col @> b) — row does not contain ALL operands"
+      ],
+      "ask_user": true,
+      "user_answer": "OR-of-NOT: {\"col\": {\"@$\": [a, b]}} renders ((NOT col @> 'a'::jsonb) OR (NOT col @> 'b'::jsonb)); additionally, one dict may carry both @! and @$, with the rendered groups AND-ed (dispatch extended to iterate all operator keys)."
+    },
+    {
+      "id": "U2",
+      "question": "Is the intended filter shape per-column ({\"course_data\": {\"@!\": [...]}}) — consistent with @>/@>| — or literally top-level operator keys in where_cond as the ticket example shows (which would require extending the caller loop and identifier validation)?",
+      "blocks_claims": ["C6"],
+      "plausible_answers": [
+        "per-column, like the existing operators — the example omitted the column name",
+        "top-level grouping keys — a new mechanism spanning multiple columns"
+      ],
+      "ask_user": true,
+      "user_answer": "Per-column, like the existing operators — the ticket example omitted the column name. Only jsonb_condition (both builders) changes."
+    },
+    {
+      "id": "U3",
+      "question": "Must one dict be able to carry BOTH @! and @$ simultaneously (as in the example), AND-ing the two rendered groups, or is one operator per dict acceptable (current dispatch uses only the first key)?",
+      "blocks_claims": ["C7"],
+      "plausible_answers": [
+        "both in one dict, AND-ed — extend dispatch to iterate all operator keys",
+        "one operator per dict is fine — document the restriction"
+      ],
+      "ask_user": true,
+      "user_answer": "Both in one dict, AND-ed — extend the dispatch to iterate all operator keys instead of only the first. @! renders the none-of form NOT (col @> a OR col @> b)."
+    }
+  ],
+
+  "recommended_next_command": {
+    "command": "sdd-spec",
+    "rationale": "Localization is high-confidence and the change is a well-bounded mirror of commit 8936386; only operator semantics need user confirmation, which Phase 5 Q&A resolves."
+  },
+
+  "overall_confidence": "medium",
+
+  "meta": {
+    "findings_used": ["F001", "F002", "F003", "F004", "F005"],
+    "findings_unused": [],
+    "notes": "Median claim confidence is high but scope confidence is medium (operator semantics unresolved), bounding overall at medium per rule 4. Budget not truncated."
+  }
+}

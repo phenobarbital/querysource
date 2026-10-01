@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "mode_hint": "enrichment",
+  "rationale": "Source says 'we added AND and OR support, but we need to add NOT' — feature-shaped extension of an existing mechanism. Named entities: where_cond, JSONB columns, operator tokens '@!' and '@$'. Plan emphasizes locating the existing AND/OR JSONB operator implementation and mirroring it.",
+  "queries": [
+    {
+      "id": "Q001",
+      "intent": "Orient: find where where_cond JSONB filtering is parsed/rendered in the knowledge graph.",
+      "type": "wiki_query",
+      "priority": 0,
+      "params": {"question": "where_cond jsonb filter conditions parser"}
+    },
+    {
+      "id": "Q002",
+      "intent": "Orient: locate the existing AND/OR operator support for JSONB columns.",
+      "type": "wiki_query",
+      "priority": 0,
+      "params": {"question": "jsonb AND OR operators where clause SQL generation"}
+    },
+    {
+      "id": "Q003",
+      "intent": "Read the top-ranked page (likely the SQL parser) for API outline and summary.",
+      "type": "wiki_page",
+      "priority": 0,
+      "params": {"page_id": "<top id from Q001/Q002>"}
+    },
+    {
+      "id": "Q004",
+      "intent": "Follow typed edges from the parser page to find neighbouring modules (providers, tests) that participate in where_cond handling.",
+      "type": "wiki_related",
+      "priority": 0,
+      "params": {"page_id": "<top id from Q001/Q002>"}
+    },
+    {
+      "id": "Q005",
+      "intent": "Locate the literal operator tokens already implemented (the '@' prefix family: AND/OR) to find the exact dispatch site to extend.",
+      "type": "grep",
+      "priority": 1,
+      "params": {"pattern": "\"@", "path": "querysource/parsers/", "case_sensitive": true, "max_results": 40}
+    },
+    {
+      "id": "Q006",
+      "intent": "Find all JSONB-specific SQL rendering (->>, @>, jsonb) in the parsers to understand how a condition on a jsonb column is emitted.",
+      "type": "grep",
+      "priority": 1,
+      "params": {"pattern": "jsonb|->>", "path": "querysource/parsers/", "case_sensitive": false, "max_results": 40}
+    },
+    {
+      "id": "Q007",
+      "intent": "Read the parser file that implements the '@' operator dispatch (path resolved by Q005/Q006).",
+      "type": "read",
+      "priority": 1,
+      "params": {"path": "<resolved from Q005>", "lines": null}
+    },
+    {
+      "id": "Q008",
+      "intent": "Recent commits that added the AND/OR JSONB support — the pattern to mirror and its author intent.",
+      "type": "git_log",
+      "priority": 2,
+      "params": {"path": "querysource/parsers/", "since": "6 months ago", "max_results": 20}
+    },
+    {
+      "id": "Q009",
+      "intent": "Find existing tests covering where_cond JSONB operators to extend for NOT.",
+      "type": "grep",
+      "priority": 2,
+      "params": {"pattern": "where_cond|jsonb", "path": "tests/", "case_sensitive": false, "max_results": 30}
+    },
+    {
+      "id": "Q010",
+      "intent": "Read the test file covering JSONB where_cond operators (path resolved by Q009).",
+      "type": "read",
+      "priority": 2,
+      "params": {"path": "<resolved from Q009>", "lines": null}
+    },
+    {
+      "id": "Q011",
+      "intent": "Find who consumes/normalizes where_cond upstream of the parser (QS dispatch, models) to check for operator whitelisting/validation.",
+      "type": "grep",
+      "priority": 3,
+      "params": {"pattern": "where_cond", "path": "querysource/", "case_sensitive": true, "max_results": 30}
+    }
+  ],
+  "expected_findings": [
+    "Exact file/function implementing the '@' operator family for JSONB where_cond (AND/OR)",
+    "SQL emitted for each existing operator (the pattern NOT must mirror)",
+    "Semantics of the existing OR token vs the requested '@$' (OR-if-not-exists)",
+    "Any operator validation/whitelist that must also learn '@!' / '@$'",
+    "Test coverage to extend",
+    "Recent commits that introduced AND/OR support"
+  ],
+  "meta": {
+    "source_signals": {
+      "named_entities": ["where_cond", "jsonb", "@!", "@$"],
+      "verbs": ["add", "support"],
+      "polarity": "positive"
+    },
+    "estimated_budget_use": {
+      "wiki_queries": 4,
+      "files_read": 2,
+      "grep_calls": 5,
+      "git_calls": 1
+    }
+  }
+}
