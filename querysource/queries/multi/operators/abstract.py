@@ -32,10 +32,12 @@ class AbstractOperator(AbstractMulti):
                 import modin.pandas as mpd
 
                 self._pd = mpd
-            except ImportError:
+            except Exception as exc:  # modin may fail on import against pandas 3
                 logging.getLogger(__name__).warning(
                     "Modin backend requested but modin is not installed "
-                    "(pip install querysource[modin]); falling back to pandas."
+                    "or not importable (pip install querysource[modin]): %s; "
+                    "falling back to pandas.",
+                    exc,
                 )
                 self._backend = 'pandas'
                 self._pd = pd

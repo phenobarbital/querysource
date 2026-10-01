@@ -11,9 +11,10 @@ class modinFormat(OutputFormat):
         try:
             import modin.config as modin_cfg
             from distributed import Client
-        except ImportError as exc:
+        except Exception as exc:  # modin may fail on import against pandas 3
             raise QueryException(
-                "modinFormat requires modin: pip install querysource[modin]"
+                "modinFormat requires a working modin install "
+                f"(pip install querysource[modin]; modin is best-effort on pandas 3): {exc}"
             ) from exc
         from ...conf import MODIN_SERVER
 
