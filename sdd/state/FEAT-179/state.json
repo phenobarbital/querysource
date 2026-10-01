@@ -1,6 +1,6 @@
 {
   "feat_id": "FEAT-179",
-  "phase": "proposal_drafted",
+  "phase": "committed",
   "started_at": "2026-10-01T01:34:18+02:00",
   "updated_at": "2026-10-01T01:45:00+02:00",
   "mode": "enrichment",
@@ -48,9 +48,9 @@
     },
     "qa": {"status": "complete", "questions_total": 3, "questions_answered": 3},
     "output": {
-      "status": "drafted",
+      "status": "committed",
       "proposal_path": "sdd/proposals/jsonb-not-or-operators.proposal.md",
-      "commit_sha": null
+      "commit_sha": "babac8c973ccef206a4b66da1f96d4984e5589fd"
     }
   },
   "resume_hint": {"next_phase": "committed", "next_action": "commit proposal + state"},
