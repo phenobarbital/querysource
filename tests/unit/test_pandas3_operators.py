@@ -41,7 +41,10 @@ async def test_flt_datetime_any_resolution(df_pandas3):
     result = await Filter(df_pandas3, clean_dates=True).run()
 
     assert "ts" in result.columns
-    assert str(result["ts"].dtype) == "datetime64[us]"
+    # clean_dates turns NaT into None (object column); only reachable when the
+    # datetime64[us] column is selected, which datetime64[ns]-only selection missed.
+    assert result["ts"].iloc[1] is None
+    assert result["ts"].iloc[0] == pd.Timestamp("2026-01-01")
 
 
 @pytest.mark.asyncio
@@ -91,6 +94,7 @@ async def test_melt_pandas3():
         },
         using="wide",
         id="id",
+        args={"var_name": "column_name"},
     )
 
     await operator.start()
