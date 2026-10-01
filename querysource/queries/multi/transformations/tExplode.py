@@ -326,7 +326,11 @@ class tExplode(AbstractTransform):
         valid_mask = exploded_df[self.column].notna()
         valid_items = exploded_df.loc[valid_mask, self.column]
 
-        if not valid_items.empty:
+        # pandas 3 json_normalize raises on non-dict items; only normalise dicts
+        # (scalar list items stay as values of the exploded column).
+        if not valid_items.empty and valid_items.map(
+            lambda item: isinstance(item, dict)
+        ).all():
             normalized_df = json_normalize(valid_items.tolist())
             normalized_df.index = valid_items.index
 
