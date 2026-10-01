@@ -1,0 +1,6 @@
+querysource/parsers/pgsql.pyx
+rust/src/pgsql_parser.rs
+tests/test_pgsql_jsonb_filters.py
+querysource/models.py
+querysource/parsers/abstract.pyx
+querysource/version.py
