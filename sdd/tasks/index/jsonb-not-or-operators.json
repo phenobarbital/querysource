@@ -32,19 +32,20 @@
       "feature_id": "FEAT-179",
       "feature": "jsonb-not-or-operators",
       "spec": "sdd/specs/jsonb-not-or-operators.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "assigned_to": null,
       "started_at": "2026-10-01T00:32:37+00:00",
-      "completed_at": null,
+      "completed_at": "2026-10-01T00:41:14+00:00",
       "id": "TASK-832",
       "slug": "rust-jsonb-negation-operators",
       "title": "Rust JSONB negation operators (@!, @$) and multi-operator dispatch",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "exclusive: rebuilds the qs_parsers Rust extension into the shared venv (make build-rust / maturin develop)",
-      "file": "sdd/tasks/active/TASK-832-rust-jsonb-negation-operators.md"
+      "file": "sdd/tasks/completed/TASK-832-rust-jsonb-negation-operators.md",
+      "verification": "verified"
     },
     {
       "feature_id": "FEAT-179",
