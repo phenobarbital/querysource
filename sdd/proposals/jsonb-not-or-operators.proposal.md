@@ -4,7 +4,7 @@ title: Add NOT (@!) and OR-of-NOT (@$) JSONB dict-filter operators to the Postgr
 slug: jsonb-not-or-operators
 type: feature
 mode: enrichment
-status: review
+status: accepted
 source:
   kind: inline
   jira_key: null
