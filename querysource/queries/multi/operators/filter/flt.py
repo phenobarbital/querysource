@@ -99,7 +99,7 @@ class Filter(AbstractOperator):
                 ["nan", np.nan], 0, regex=True
             )
         if hasattr(self, "clean_dates"):
-            u = self.data.select_dtypes(include=["datetime64[ns]"])
+            u = self.data.select_dtypes(include=["datetime", "datetimetz"])
             self.data[u.columns] = self.data[u.columns].replace({np.nan: None})
             # df[u.columns] = df[u.columns].astype('datetime64[ns]')
         if hasattr(self, "drop_empty"):
@@ -107,7 +107,6 @@ class Filter(AbstractOperator):
             # does not contain any data
             self.data.dropna(how="all")
             # removing empty cols
-            self.data.is_copy = None
             self.data.dropna(axis=1, how="all")
             self.data.dropna(axis=0, how="all")
         if hasattr(self, "dropna"):

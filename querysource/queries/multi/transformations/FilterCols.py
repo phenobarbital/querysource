@@ -80,7 +80,7 @@ class FilterCols(AbstractTransform):
             # df.replace("", pd.NA) on mixed-dtype DataFrames in pandas 2.x.
             def _is_all_null_or_empty(col: pd.Series) -> bool:
                 null_mask = col.isnull()
-                if col.dtype == object:
+                if col.dtype == object or pd.api.types.is_string_dtype(col):
                     null_mask = null_mask | (col == "")
                 return bool(null_mask.all())
 
