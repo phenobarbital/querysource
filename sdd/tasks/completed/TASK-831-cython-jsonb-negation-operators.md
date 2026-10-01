@@ -342,4 +342,6 @@ p.filter = {"g": {"@!": [{"a": 1}, {"b": 2}]}}
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 219.9s · Tokens: n/a
+
+Implemented `@!`/`@$` in `querysource/parsers/pgsql.pyx` (tokens, `jsonb_none_of_condition`, `jsonb_not_all_condition`, multi-key AND dispatch, mixed-class rejection). Reviewed against spec; no corrections (review feedback_id coder-review:a240f6d8b032caa1273e47ba). Merge-tier validation selected no pytest targets; behavior is covered by TASK-833. Extension not rebuilt (shared env read-only).
