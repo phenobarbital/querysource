@@ -79,7 +79,7 @@ const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "
 
 /// JSONB operators accepted as the key of a dict-typed filter value.
 /// `@>|` is the any-of form: a list of containment operands OR-ed together.
-const JSONB_OPERATORS: &[&str] = &["@>", "<@", "@>|", "->", "->>"];
+const JSONB_OPERATORS: &[&str] = &["@>", "<@", "@>|", "@!", "@$", "->", "->>"];
 
 /// Key suffixes (negation, overlap, ...) carry no meaning for JSONB filters
 /// and are stripped from the column name.
@@ -234,6 +234,54 @@ fn jsonb_any_of_condition(col: &str, operand: &Bound<'_, PyAny>) -> PyResult<Opt
     }
 }
 
+/// Render each item of a list operand as `col @> '<json>'::jsonb`.
+/// Returns `None` when the operand is not a non-empty list.
+fn jsonb_containment_terms(col: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
+    let Ok(items) = operand.cast::<PyList>() else {
+        return Ok(None);
+    };
+    if items.is_empty() {
+        return Ok(None);
+    }
+    let mut parts: Vec<String> = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        parts.push(format!("{} @> {}::jsonb", col, pg_literal(&jsonb_operand(&item)?)));
+    }
+    Ok(Some(parts))
+}
+
+/// Render `{"@!": [a, b, ...]}` as `NOT (col @> a OR col @> b ...)` (none-of).
+/// An empty or non-list operand yields `None`: the condition is dropped.
+fn jsonb_none_of_condition(col: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    Ok(jsonb_containment_terms(col, operand)?.map(|parts| format!("NOT ({})", parts.join(" OR "))))
+}
+
+/// Render `{"@$": [a, b, ...]}` as `((NOT col @> a) OR (NOT col @> b) ...)` (not-all).
+/// One operand renders `NOT (col @> a)`. An empty or non-list operand yields
+/// `None`: the condition is dropped (no filter, not a logical FALSE).
+fn jsonb_not_all_condition(col: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    Ok(jsonb_containment_terms(col, operand)?.map(|parts| {
+        if parts.len() == 1 {
+            format!("NOT ({})", parts[0])
+        } else {
+            let negated: Vec<String> = parts.iter().map(|part| format!("(NOT {})", part)).collect();
+            format!("({})", negated.join(" OR "))
+        }
+    }))
+}
+
+/// Render one `op: operand` pair of a JSONB filter dict.
+fn jsonb_operator_condition(col: &str, op: &str, operand: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    match op {
+        "@>" | "<@" => jsonb_operand(operand)
+            .map(|json| Some(format!("{} {} {}::jsonb", col, op, pg_literal(&json)))),
+        "@>|" => jsonb_any_of_condition(col, operand),
+        "@!" => jsonb_none_of_condition(col, operand),
+        "@$" => jsonb_not_all_condition(col, operand),
+        _ => jsonb_path_condition(col, op, operand),
+    }
+}
+
 /// Render `{"->>": {"path": value, ...}}` / `{"->": {...}}` as key comparisons.
 ///
 /// `->>` compares the text of the key (non-string values are compared by
@@ -281,8 +329,13 @@ fn jsonb_path_condition(col: &str, op: &str, operand: &Bound<'_, PyAny>) -> PyRe
 ///   operand is a dict/list/scalar or a JSON text string.
 /// * `{"@>|": [operand, ...]}`: any-of containment, the checks are OR-ed
 ///   (see [`jsonb_any_of_condition`]).
+/// * `{"@!": [operand, ...]}`: none-of containment, the checks are OR-ed
+///   inside a `NOT (...)` group.
+/// * `{"@$": [operand, ...]}`: not-all containment, OR-ed negated checks.
 /// * `{"->>": {...}}` / `{"->": {...}}`: key comparisons (see
 ///   [`jsonb_path_condition`]).
+/// * Multiple JSONB operators render groups that are AND-ed; any invalid
+///   group drops the whole condition.
 /// * A first key that is a comparison token is left to the generic path;
 ///   dicts mixing operator and plain keys are dropped.
 ///
@@ -297,7 +350,7 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
             .unwrap_or(false)
     };
     let operators = dict.keys().iter().filter(|k| is_operator(k)).count();
-    let Some((op_obj, operand)) = dict.iter().next() else {
+    let Some((op_obj, _)) = dict.iter().next() else {
         return JsonbOutcome::NotJsonb;
     };
     if let Ok(op) = op_obj.extract::<String>() {
@@ -325,12 +378,34 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
     } else if operators != dict.len() {
         Ok(None)
     } else {
-        let op: String = op_obj.extract().unwrap_or_default();
-        match op.as_str() {
-            "@>" | "<@" => jsonb_operand(&operand)
-                .map(|j| Some(format!("{} {} {}::jsonb", col, op, pg_literal(&j)))),
-            "@>|" => jsonb_any_of_condition(&col, &operand),
-            _ => jsonb_path_condition(&col, &op, &operand),
+        // Reject mixed comparison/JSONB operator dicts deterministically.
+        if dict.iter().any(|(op_obj, _)| {
+            op_obj
+                .extract::<String>()
+                .map(|op| COMPARISON_TOKENS.contains(&op.as_str()))
+                .unwrap_or(false)
+        }) {
+            Ok(None)
+        } else {
+            let mut groups: Vec<String> = Vec::with_capacity(dict.len());
+            let mut failed = false;
+            for (op_obj, operand) in dict.iter() {
+                let op: String = op_obj.extract().unwrap_or_default();
+                match jsonb_operator_condition(&col, &op, &operand) {
+                    Ok(Some(condition)) => groups.push(condition),
+                    _ => {
+                        failed = true;
+                        break;
+                    }
+                }
+            }
+            if failed {
+                Ok(None)
+            } else if groups.len() == 1 {
+                Ok(groups.pop())
+            } else {
+                Ok(Some(format!("({})", groups.join(" AND "))))
+            }
         }
     };
     match rendered {
