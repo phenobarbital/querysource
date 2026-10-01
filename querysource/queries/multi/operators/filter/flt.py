@@ -1,13 +1,12 @@
-from pandas import DataFrame
 import numpy as np
-from .....exceptions import (
-    DataNotFound,
-    DriverError
-)
+from pandas import DataFrame
+
+from .....exceptions import DataNotFound, DriverError
 from .....types import is_empty
 from .....types.dt import filters as dffunctions
 from .....types.dt.filters import create_filter
 from ..abstract import AbstractOperator
+
 
 class Filter(AbstractOperator):
     """Filter rows in a DataFrame based on declarative conditions or field mappings.
@@ -69,7 +68,7 @@ class Filter(AbstractOperator):
         self.filter_conditions: dict = {}
         self._applied: list = []
         self._operator: str = kwargs.get('operator', '&')
-        super(Filter, self).__init__(data, **kwargs)
+        super().__init__(data, **kwargs)
 
     async def start(self):
         if isinstance(self.data, dict):
@@ -99,7 +98,7 @@ class Filter(AbstractOperator):
                 ["nan", np.nan], 0, regex=True
             )
         if hasattr(self, "clean_dates"):
-            u = self.data.select_dtypes(include=["datetime64[ns]"])
+            u = self.data.select_dtypes(include=["datetime", "datetimetz"])
             self.data[u.columns] = self.data[u.columns].replace({np.nan: None})
             # df[u.columns] = df[u.columns].astype('datetime64[ns]')
         if hasattr(self, "drop_empty"):
@@ -107,7 +106,6 @@ class Filter(AbstractOperator):
             # does not contain any data
             self.data.dropna(how="all")
             # removing empty cols
-            self.data.is_copy = None
             self.data.dropna(axis=1, how="all")
             self.data.dropna(axis=0, how="all")
         if hasattr(self, "dropna"):

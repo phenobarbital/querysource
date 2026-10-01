@@ -2,27 +2,29 @@
 Function Tree for Pandas-related row/column transformations.
 
 """
-from typing import Any, Dict, List, Optional, Union
 import ast
+import calendar
 import datetime
 import decimal
-from bs4 import BeautifulSoup
-from datetime import timedelta, datetime as dtime
-from functools import reduce
-import traceback
-import orjson
 import json
-import calendar
-import phonenumbers
-from zoneinfo import ZoneInfo
 import locale
+import traceback
+from datetime import timedelta
+from functools import reduce
+from typing import Any, Dict, List, Optional, Union
+from zoneinfo import ZoneInfo
+
 import numpy as np
+import orjson
 import pandas as pd
-from pandas.tseries.offsets import MonthEnd
+import phonenumbers
+from bs4 import BeautifulSoup
 from navconfig.logging import logging
+from pandas.tseries.offsets import MonthEnd
+
+from ...conf import DEFAULT_TIMEZONE
 from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
-from ...conf import DEFAULT_TIMEZONE
 
 
 def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):
@@ -202,10 +204,10 @@ def math_operation(df: pd.DataFrame, field: str, columns: list, operation: str):
         df[field] = df[col1] / df[col2].replace(0, float('nan'))
     else:
         raise ValueError(
-            (
+            
                 f"Unsupported operation: {operation}. Supported operations are 'add'"
                 " 'subtract', 'multiply', 'divide'."
-            )
+            
         )
     return df
 
@@ -657,7 +659,7 @@ def normalize_strings(
         if clean_strings:
             charsToRemove = [",", ".", r"\.", r"\'"]
             df[field] = df[field].str.replace(
-                r"{}".format(charsToRemove), replacement, regex=True
+                rf"{charsToRemove}", replacement, regex=True
             )
         if lowercase:
             df[field] = df[field].str.lower()
@@ -768,7 +770,7 @@ def split(
         # store the resulting split values in a new column
         try:
             idx = int(idx)
-        except (ValueError, TypeError) as ex:
+        except (ValueError, TypeError):
             idx = 0
         if not field:
             field = column + "_" + str(idx)
@@ -1365,7 +1367,7 @@ def to_json(df: pd.DataFrame, field: str):
     """
     try:
         # remove Nan
-        df[field].fillna("[]", inplace=True)
+        df[field] = df[field].fillna("[]")
         df[field] = df[field].str.replace("'", '"', regex=True)
         df[field] = df[field].apply(orjson.loads)
     except Exception as err:
@@ -1566,7 +1568,6 @@ def string_to_date(df: pd.DataFrame, field: str, column="", format="%Y-%m-%d"):
     """
     df[field] = pd.to_datetime(df[column], format=format, errors="coerce")
     df[field] = df[field].replace({pd.NaT: None})
-    df[field].astype("datetime64[ns]")
     return df
 
 
@@ -1596,7 +1597,6 @@ def epoch_to_date(
             df[field] = pd.to_datetime(df[field], unit=unit, errors="coerce")
         except Exception as err:
             logging.error(err)
-    df[field].astype("datetime64[ns]")
     return df
 
 
@@ -1768,7 +1768,7 @@ def to_percentile(df: pd.DataFrame, field: str, symbol="%", divisor=None, remove
     """
     df[field] = (
         df[field]
-        .replace("[\\{},) ]".format(symbol), "", regex=True)
+        .replace(f"[\\{symbol},) ]", "", regex=True)
         .replace("[(]", "-", regex=True)
         .replace("[ ]+", np.nan, regex=True)
         .str.strip(",")
@@ -2471,7 +2471,7 @@ def extract_json_data(row, field: str, column: str):
             return result
         else:
             return None
-    except (KeyError, TypeError, AttributeError) as e:
+    except (KeyError, TypeError, AttributeError):
         # Return None if any error occurs
         return None
 

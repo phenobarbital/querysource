@@ -19,7 +19,7 @@ license = {text = "BSD-3-Clause"}
 # Upper-bounded at <3.14: Python 3.14 only ships cryptography>=48 (cffi>=2).
 # Without this cap, downstream universal resolvers attempt 3.14 and fail to
 # find a solution.
-requires-python = ">=3.10.1,<3.14"
+requires-python = ">=3.11,<3.14"
 keywords = ["querysource", "database", "query", "aiohttp", "web service"]
 
 classifiers = [
@@ -28,8 +28,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Software Development :: Build Tools",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -82,7 +80,7 @@ dependencies = [
     "jinja2-time==0.2.0",
     "jinja2-humanize-extension==0.4.0",
     # Scientific computing - compatible versions
-    "statsmodels==0.14.2",
+    "statsmodels>=0.14.6",
     "scikit-learn>=1.6.1",
     "pygal==3.0.5",
     "pandas_bokeh==0.5.5",
@@ -107,7 +105,7 @@ dependencies = [
     "nltk>=3.9.3",
     "wordcloud==1.9.4",
     "thefuzz==0.22.1",
-    "modin==0.32.0",
+    "pandas>=3.0,<4",
     "WeasyPrint>=65.0",
     "groq>=0.30.0",
     "alphashape==1.3.1",
@@ -120,6 +118,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# modin is optional (FEAT-161): modin<=0.37.1 pins pandas<2.4, so it cannot be
+# co-installed with pandas>=3 until upstream ships pandas 3 support.
+modin = ["modin>=0.37.1", "distributed"]
+
 analytics = [
     "pygwalker>=0.4.8.9",
     "numpy>=2.0.0,<2.4",
@@ -243,10 +245,10 @@ filterwarnings = [
 # fixes the remaining findings in the files a feature touches.
 [tool.black]
 line-length = 120
-# Floor of requires-python (>=3.10.1) plus the venv's 3.11; formatting for
+# Floor of requires-python (>=3.11); formatting for
 # 3.10 is valid on every supported interpreter and keeps black's AST safety
 # check on when run from an older venv.
-target-version = ["py310", "py311"]
+target-version = ["py311"]
 extend-exclude = '''
 /(
     \.claude/worktrees
@@ -314,7 +316,9 @@ known-first-party = ["querysource"]
 [tool.uv]
 link-mode = "copy"
 # FEAT-158: asyncdb[boto3] pins aiobotocore==2.15.2 and aioboto3==13.2.0, which conflict with s3fs>=2026.9.
-override-dependencies = ["aiobotocore>=2.25,<2.26", "aioboto3>=15"]
+# FEAT-161: modin<=0.37.1 declares pandas<2.4; override so the optional [modin]
+# extra stays lockable alongside pandas>=3 (modin is opt-in and unsupported on pandas 3).
+override-dependencies = ["aiobotocore>=2.25,<2.26", "aioboto3>=15", "pandas>=3.0,<4"]
 
 [tool.uv.sources]
 # navigator-auth = { path = "../../navigator/navigator-auth", editable = true }
