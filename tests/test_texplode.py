@@ -9,12 +9,11 @@ Tests cover:
 - Async context manager usage
 - Integration: registry discovery, introspection schema, transform chain
 """
-import pytest
 import pandas as pd
+import pytest
 
-from querysource.queries.multi.transformations.tExplode import tExplode
 from querysource.exceptions import DataNotFound, DriverError, QueryException
-
+from querysource.queries.multi.transformations.tExplode import tExplode
 
 # ---------------------------------------------------------------------------
 # Fixtures (from spec §4)
