@@ -40,7 +40,6 @@ classifiers = [
 
 dependencies = [
     # Core dependencies - compatible versions
-    "LivePopularTimes==1.3",
     "hubspot-api-client==10.0.0",
     "httpx[http2]>=0.26.0",
     "h2>=4.2.0",
