@@ -23,13 +23,40 @@ global-exclude .venv
 recursive-exclude querysource/parsers *.so
 recursive-exclude querysource/types *.so
 recursive-exclude querysource/utils *.so
+# setuptools-scm adds every git-tracked file to the sdist, so anything not
+# needed to build querysource from source must be pruned explicitly.
+# Agent / SDD tooling
+prune .agent
+prune .agents
+prune .claude
+prune .codex
+prune .parrot
+prune agents
+prune sdd
+# Repository tooling and CI
+prune .github
+prune .jupyter
+prune bin
+prune scripts
+# Docs, samples and local development assets
 prune docs
 prune samples
 prune examples
 prune settings
 prune plugins
-prune sdd
 prune my_prompts
 prune lab
-prune rust/target
+prune generated
+prune policies
+prune reference
+prune static
+prune templates
+# Rust crates are prebuilt into querysource/qs_parsers and querysource/qsurl
+# by the release workflow; setup.py does not build them from the sdist.
+prune rust
+# Dev-only root files
+exclude CLAUDE.md AGENTS.md JOIN_CONDITIONS_*.md
+exclude app.py run.py nav.py gunicorn_config.py
+exclude uv.lock tox.ini mypy.ini .pylintrc .isort.cfg
+exclude .pre-commit-config.yaml .bumpversion.cfg
 global-exclude __pycache__/*
