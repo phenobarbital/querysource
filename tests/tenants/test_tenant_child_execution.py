@@ -84,7 +84,7 @@ async def test_parent_explicit_null_and_named_child_owner() -> None:
     created_threads = []
     
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
             super().__init__(
                 name, query, request, queue, remote_config=remote_config, store=store, definition=definition
             )
@@ -333,7 +333,7 @@ async def test_raw_query_child_skips_ownership_preflight_no_slug_required() -> N
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
             super().__init__(
                 name, query, request, queue, remote_config=remote_config, store=store, definition=definition
             )
@@ -440,7 +440,7 @@ async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
             super().__init__(
                 name, query, request, queue, remote_config=remote_config, store=store, definition=definition
             )
@@ -496,7 +496,7 @@ async def test_preloaded_single_query_slug_is_loaded_once_and_handed_to_the_thre
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, store=None, definition=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
             super().__init__(
                 name, query, request, queue, remote_config=remote_config, store=store, definition=definition
             )

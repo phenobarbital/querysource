@@ -36,7 +36,7 @@ from querysource.queries.multi import MultiQS
 class _FakeThread:
     """Stand-in for ThreadQuery: synchronously seeds the result queue."""
 
-    def __init__(self, name, query, request, queue, remote_config=None, store=None):
+    def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
         self._name = name
         self._queue = queue
         self.exc = None
