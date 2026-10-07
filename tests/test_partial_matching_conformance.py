@@ -20,13 +20,15 @@ except Exception:
 
 from querysource.exceptions import ParserError
 from querysource.models import QueryObject
-from querysource.parsers import bigquery as bqmod, pgsql, sql as sqlmod, sqlserver as mssqlmod
+from querysource.parsers import bigquery as bqmod
+from querysource.parsers import pgsql
+from querysource.parsers import sql as sqlmod
+from querysource.parsers import sqlserver as mssqlmod
 from querysource.parsers.bigquery import BigQueryParser
 from querysource.parsers.partial_matching import PARTIAL_MATCH_OPERATORS
 from querysource.parsers.pgsql import pgSQLParser
 from querysource.parsers.sql import SQLParser
 from querysource.parsers.sqlserver import msSQLParser
-
 
 SQL = "SELECT n FROM t {where_cond}"
 OPERATORS = tuple(PARTIAL_MATCH_OPERATORS)
