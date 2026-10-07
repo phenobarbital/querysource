@@ -313,7 +313,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [
@@ -323,8 +323,9 @@
       "parallelism_notes": "the docs test imports PARTIAL_MATCH_OPERATORS from TASK-840 (querysource/parsers/partial_matching.py) to prove every operator is documented",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-854-filter-operators-docs-and-version.md"
+      "completed_at": "2026-10-07T16:22:57+00:00",
+      "file": "sdd/tasks/completed/TASK-854-filter-operators-docs-and-version.md",
+      "verification": "verified"
     }
   ]
 }
