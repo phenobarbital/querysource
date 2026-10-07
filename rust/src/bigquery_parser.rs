@@ -27,6 +27,11 @@ const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "
 static JSON_DOT_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9_]+)\.([a-zA-Z0-9_.]+)$").unwrap());
 
+/// Dotted JSON member path allowed inside `JSON_VALUE(f, '$.<member>')` (FEAT-162):
+/// `region`, `address.city`. Rejects anything that could close the string literal.
+static JSON_MEMBER_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$").unwrap());
+
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
 // ---------------------------------------------------------------------------
@@ -138,18 +143,40 @@ fn extract_filter_value(obj: &Bound<'_, pyo3::types::PyAny>) -> FilterValue {
 // Per-entry condition builder (runs in parallel via rayon)
 // ---------------------------------------------------------------------------
 
+/// Validate and produce a safe column key (FEAT-162; the FEAT-103 rule of
+/// `bigquery.pyx` and `pg_safe_identifier_key` in `pgsql_parser.rs`).
+///
+/// Suffix markers (`|!~#@:`) are ignored for the check. Numeric keys are
+/// double-quoted, alphanumeric/underscore/dot keys pass through unchanged, and
+/// anything else — including a key that is empty once stripped — is rejected.
+fn bq_safe_identifier_key(key: &str) -> Option<String> {
+    let stripped = key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'));
+    if stripped.is_empty() {
+        return None;
+    }
+    if stripped.parse::<i64>().is_ok() || is_integer(stripped) {
+        return Some(format!("\"{}\"", key));
+    }
+    if stripped.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        Some(key.to_string())
+    } else {
+        None
+    }
+}
+
+/// True when `member` may be interpolated into `JSON_VALUE(f, '$.<member>')`.
+fn bq_safe_json_member(member: &str) -> bool {
+    JSON_MEMBER_PATTERN.is_match(member)
+}
+
 /// Process a single filter entry into a WHERE condition string.
 fn process_entry(entry: &FilterEntry) -> Option<String> {
     let key = &entry.key;
     let value = &entry.value;
     let format_hint = entry.format_hint.as_deref();
 
-    // Quote numeric keys
-    let quoted_key = if key.parse::<i64>().is_ok() || is_integer(key) {
-        format!("\"{}\"", key)
-    } else {
-        key.clone()
-    };
+    // SECURITY (FEAT-162): the key must be a safe identifier; an unsafe key drops the condition.
+    let quoted_key = bq_safe_identifier_key(key)?;
 
     // Get field components for suffix detection
     let components = field_components(key);
@@ -218,6 +245,10 @@ fn process_dict_value(
     // JSON_VALUE(field, '$.key') = value
     if entries.len() == 1 {
         let val_str = v.as_str();
+        // SECURITY (FEAT-162): `op` lands inside a string literal — only an identifier path may be rendered.
+        if !bq_safe_json_member(op) {
+            return None;
+        }
         let json_expr = format!("JSON_VALUE({}, '$.{}')", field_expr, op);
         return Some(format!("{} = {}", json_expr, bq_quote_string(&val_str)));
     }
@@ -674,6 +705,82 @@ mod tests {
             process_entry(&entry),
             Some("JSON_VALUE(config, '$')=\"active\"".to_string())
         );
+    }
+
+    // -- FEAT-162 key hardening (all named test_bqkey_* for the cargo filter) --
+
+    #[test]
+    fn test_bqkey_identifier_plain() {
+        assert_eq!(bq_safe_identifier_key("name").as_deref(), Some("name"));
+        assert_eq!(bq_safe_identifier_key("meta.region").as_deref(), Some("meta.region"));
+        assert_eq!(bq_safe_identifier_key("col!").as_deref(), Some("col!"));
+        assert_eq!(bq_safe_identifier_key("col|").as_deref(), Some("col|"));
+        assert_eq!(bq_safe_identifier_key("123").as_deref(), Some("\"123\""));
+    }
+
+    #[test]
+    fn test_bqkey_identifier_rejects() {
+        for key in ["a b", "a;drop", "x') OR 1=1 --", "", "!", "||", "n) = 1 OR 1=1 --", "a\"b"] {
+            assert!(bq_safe_identifier_key(key).is_none(), "accepted {key:?}");
+        }
+    }
+
+    #[test]
+    fn test_bqkey_json_member() {
+        for member in ["region", "a.b.c", "_x1", "A9"] {
+            assert!(bq_safe_json_member(member), "rejected {member:?}");
+        }
+        for member in ["x') = \"\" OR TRUE OR ('", "a-b", ".a", "a.", "", "a b", "9a", "a..b", "a'b"] {
+            assert!(!bq_safe_json_member(member), "accepted {member:?}");
+        }
+    }
+
+    #[test]
+    fn test_bqkey_entry_unsafe_key_dropped() {
+        let hostile = "n) = 1 OR 1=1 --";
+        let values = vec![
+            FilterValue::Str("v".to_string()),
+            FilterValue::Dict(vec![("contains".to_string(), FilterValue::Str("abc".to_string()))]),
+            FilterValue::Dict(vec![(">".to_string(), FilterValue::Int(1))]),
+            FilterValue::List(vec![FilterValue::Str("a".to_string())]),
+            FilterValue::Int(1),
+        ];
+        for value in values {
+            let entry = FilterEntry { key: hostile.to_string(), value, format_hint: None };
+            assert!(process_entry(&entry).is_none());
+        }
+    }
+
+    #[test]
+    fn test_bqkey_dict_unsafe_member_dropped() {
+        let entry = FilterEntry {
+            key: "meta".to_string(),
+            value: FilterValue::Dict(vec![(
+                "x') = \"\" OR TRUE OR ('".to_string(),
+                FilterValue::Str("v".to_string()),
+            )]),
+            format_hint: None,
+        };
+        assert!(process_entry(&entry).is_none());
+        let safe = FilterEntry {
+            key: "meta".to_string(),
+            value: FilterValue::Dict(vec![("region".to_string(), FilterValue::Str("us".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&safe).as_deref(),
+            Some("JSON_VALUE(meta, '$.region') = \"us\"")
+        );
+    }
+
+    #[test]
+    fn test_bqkey_partial_match_safe_key_renders() {
+        let entry = FilterEntry {
+            key: "n".to_string(),
+            value: FilterValue::Dict(vec![("contains".to_string(), FilterValue::Str("abc".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry).as_deref(), Some("n LIKE \"%abc%\""));
     }
 
     #[test]

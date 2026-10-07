@@ -1,6 +1,8 @@
 """FEAT-180: PostgreSQL partial-matching operators — Rust and Cython builders agree."""
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from querysource.exceptions import ParserError
@@ -100,3 +102,22 @@ async def test_pg_legacy_ilike_and_suffix_untouched() -> None:
     """FEAT-152 ILIKE and the legacy field suffix retain their old rendering."""
     assert _where_body(await _render("cython", {"city": {"ILIKE": "'%san%'"}})) == "city ILIKE '%san%'"
     assert _where_body(await _render("cython", {"name~": "'ab'"})) == "name ILIKE '''ab%'"
+
+
+async def test_pgsql_rust_failure_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unexpected Rust failure is logged at WARNING before the Cython fallback renders."""
+    class RustFailure:
+        """Stand in for a Rust extension that fails unexpectedly."""
+
+        @staticmethod
+        def pgsql_filter_conditions(*args: object) -> str:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(pgsql, "_rs", RustFailure())
+    monkeypatch.setattr(pgsql, "HAS_RUST", True)
+    with caplog.at_level(logging.WARNING, logger="QS.Parser.pgSQLParser"):
+        rendered = await _make_parser({"n": {"startswith": "andre"}}).filter_conditions(SQL)
+    assert _where_body(rendered) == "n LIKE 'andre%'"
+    assert "Rust pgsql_filter_conditions failed, falling back to Cython: boom" in caplog.text
