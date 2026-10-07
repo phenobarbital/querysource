@@ -160,7 +160,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -171,8 +171,9 @@
       "parallelism_notes": "imports validate_partial_match_dict/build_like_pattern/like_escape_bang/mssql_like_literal from TASK-840 (querysource/parsers/partial_matching.py); reads self.supports_regex_filter declared by TASK-842 (abstract.pxd); exclusive: rebuilds the Cython sqlserver extension in place (make build-inplace)",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-847-mssql-cython-partial-matching.md"
+      "completed_at": "2026-10-07T16:15:14+00:00",
+      "file": "sdd/tasks/completed/TASK-847-mssql-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-848",
