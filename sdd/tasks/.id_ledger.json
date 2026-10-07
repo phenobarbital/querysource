@@ -1,6 +1,6 @@
 {
-  "next_task_id": 840,
+  "next_task_id": 855,
   "next_feature_id": 162,
-  "updated_at": "2026-10-01T22:40:46+00:00",
-  "updated_by": "pandas3-migration"
+  "updated_at": "2026-10-07T09:15:49+00:00",
+  "updated_by": "filter-with-partial-matching"
 }
