@@ -6,22 +6,17 @@ Default QS database.
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any, Union
+
 from aiohttp import web
+from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 from datamodel.typedefs import SafeDict
-from asyncdb.exceptions import (
-    DriverError,
-    NoDataFound,
-    ProviderError
-)
-from ..exceptions import (
-    DataNotFound,
-    ParserError,
-    QueryException
-)
+
+from ..exceptions import DataNotFound, ParserError, QueryException
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
-from ..qsurl import capabilities as qsurl_caps
 from ..qs_parsers import HAS_RUST
+from ..qsurl import capabilities as qsurl_caps
+
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from .abstract import BaseProvider
@@ -54,7 +49,7 @@ class mysqlProvider(BaseProvider):
         request: web.Request = None,
         **kwargs
     ):
-        super(mysqlProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,
@@ -92,7 +87,7 @@ class mysqlProvider(BaseProvider):
     async def prepare_connection(self) -> Callable:
         """Signal run before connection is made.
         """
-        await super(mysqlProvider, self).prepare_connection()
+        await super().prepare_connection()
         if not self._connection:
             raise QueryException(
                 "Connection Object Missing for this Provider."

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import re
 
-from . import capabilities as caps
 from ..exceptions import ParserError
 from ..parsers.partial_matching import like_escape, validate_partial_match  # noqa: F401 (like_escape re-exported)
+from . import capabilities as caps
 from .errors import QSUrlError
 from .plan import ResidualPlan
 

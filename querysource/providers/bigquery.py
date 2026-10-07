@@ -4,23 +4,16 @@ Google BigQuery Provider.
 This module provides a Database provider for Google BigQuery.
 """
 from typing import Any, Union
+
 from aiohttp import web
-from asyncdb.exceptions import (
-    ProviderError,
-    NoDataFound,
-    DriverError
-)
+from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
+
+from ..exceptions import DataNotFound, ParserError, QueryException
 from ..models import QueryModel
-from ..parsers.sql import SQLParser
 from ..parsers.bigquery import BigQueryParser
-from ..types.validators import is_empty
-from ..exceptions import (
-    DataNotFound,
-    ParserError,
-    QueryException
-)
-from .sql import sqlProvider
 from ..qsurl import capabilities as qsurl_caps
+from ..types.validators import is_empty
+from .sql import sqlProvider
 
 
 class bigqueryProvider(sqlProvider):
@@ -45,7 +38,7 @@ class bigqueryProvider(sqlProvider):
         **kwargs
     ):
         self.is_raw = False
-        super(bigqueryProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,

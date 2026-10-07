@@ -4,12 +4,12 @@ from __future__ import annotations
 import pytest
 
 from querysource.providers.abstract import BaseProvider
-from querysource.providers.cassandra import cassandraProvider
 from querysource.providers.bigquery import bigqueryProvider
+from querysource.providers.cassandra import cassandraProvider
 from querysource.providers.mysql import mysqlProvider
-from querysource.providers.sqlserver import sqlserverProvider
 from querysource.providers.pg import pgProvider
 from querysource.providers.sql import sqlProvider
+from querysource.providers.sqlserver import sqlserverProvider
 from querysource.qsurl import capabilities as caps
 
 

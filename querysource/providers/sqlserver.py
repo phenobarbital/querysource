@@ -2,20 +2,20 @@
 
 Microsoft SQL Server Driver for QuerySource.
 """
-from typing import (
-    Any,
-    Union
-)
 from collections import defaultdict
 from functools import partial
+from typing import Any, Union
+
 from aiohttp import web
+from asyncdb.exceptions import NoDataFound, ProviderError, StatementError
 from datamodel.typedefs import SafeDict
-from asyncdb.exceptions import StatementError, ProviderError, NoDataFound
-from ..exceptions import DriverError, ParserError, DataNotFound
+
+from ..exceptions import DataNotFound, DriverError, ParserError
 from ..models import QueryModel
 from ..parsers.sqlserver import msSQLParser
-from ..qsurl import capabilities as qsurl_caps
 from ..qs_parsers import HAS_RUST
+from ..qsurl import capabilities as qsurl_caps
+
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
 from .abstract import BaseProvider
@@ -49,7 +49,7 @@ class sqlserverProvider(BaseProvider):
                 }
         except (TypeError, AttributeError, KeyError):
             pass
-        super(sqlserverProvider, self).__init__(
+        super().__init__(
             slug=slug,
             query=query,
             qstype=qstype,
@@ -112,7 +112,7 @@ class sqlserverProvider(BaseProvider):
         )
 
     async def prepare_connection(self):
-        await super(sqlserverProvider, self).prepare_connection()
+        await super().prepare_connection()
         if not self._connection:
             # TODO: get a new connection
             raise DriverError(
