@@ -95,6 +95,7 @@ cdef class AbstractParser:
         self._safe_substitution = False
         self.c_length = 0
         self.supports_regex_filter = False
+        self.supports_partial_match = False
 
     cdef void define_conditions(self, object conditions):
         """Build the options needed by every query in QuerySource."""
@@ -571,7 +572,9 @@ cdef class AbstractParser:
                 return key, value
             # FEAT-180: partial-matching operators are validated before any builder runs and
             # passed through raw — the dialect builder quotes them exactly once.
-            if validate_partial_match_dict(key, value, supports_regex=self.supports_regex_filter) is not None:
+            if self.supports_partial_match and validate_partial_match_dict(
+                key, value, supports_regex=self.supports_regex_filter
+            ) is not None:
                 return key, dict(value)
             # Read the (last) operator without popitem(): the dict belongs to the caller, who may reuse it
             # (e.g. a linked dashboard re-sending the same filter); mutating it empties the filter.

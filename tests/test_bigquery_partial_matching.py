@@ -111,3 +111,12 @@ async def test_bq_regex_raises(operator: str) -> None:
     """BigQuery rejects every regex operator through the Cython fallback."""
     with pytest.raises(ParserError):
         await _render("cython", {"n": {operator: "^andre"}})
+
+
+@pytest.mark.parametrize("path", PATHS)
+@pytest.mark.parametrize("operand", [None, 5, ["a"]])
+@pytest.mark.parametrize("operator", ["like", "startswith"])
+async def test_bq_non_string_operand_rejected(path: str, operator: str, operand: object) -> None:
+    """A non-string operand (notably None) is rejected, never rendered as the string 'None'."""
+    with pytest.raises((ParserError, ValueError)):
+        await _render(path, {"n": {operator: operand}})

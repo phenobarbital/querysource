@@ -334,19 +334,20 @@ pub fn bq_filter_conditions(
                 .flatten()
                 .and_then(|v| v.extract().ok());
             let value = extract_filter_value(&value_obj);
-            if let FilterValue::Dict(dict_entries) = &value {
-                let partial_entries: Vec<(&str, Option<&str>)> = dict_entries
+            // Validate against the raw Python operands: `extract_filter_value` renders `None` as the
+            // string "None", which would pass for a valid string operand.
+            if let Ok(raw) = value_obj.cast::<PyDict>() {
+                let pairs: Vec<(String, Option<String>)> = raw
                     .iter()
-                    .map(|(op, value)| {
+                    .map(|(k, v)| {
                         (
-                            op.as_str(),
-                            match value {
-                                FilterValue::Str(operand) => Some(operand.as_str()),
-                                _ => None,
-                            },
+                            k.extract::<String>().unwrap_or_default(),
+                            v.extract::<String>().ok(),
                         )
                     })
                     .collect();
+                let partial_entries: Vec<(&str, Option<&str>)> =
+                    pairs.iter().map(|(k, v)| (k.as_str(), v.as_deref())).collect();
                 check_entries(&key, &partial_entries, false)?;
             }
             Ok(FilterEntry {

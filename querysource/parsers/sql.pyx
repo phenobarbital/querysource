@@ -119,6 +119,8 @@ cdef class SQLParser(AbstractParser):
             *args,
             **kwargs
         )
+        # FEAT-180: only the SQL dialects understand the partial-matching dict operators.
+        self.supports_partial_match = True
         self.valid_operators: tuple = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
         self.tablename: str = '{schema}.{table}'
         self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
