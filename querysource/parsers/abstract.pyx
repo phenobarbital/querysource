@@ -17,6 +17,7 @@ from ..models import QueryObject, QueryModel
 from ..exceptions import EmptySentence
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
+from .partial_matching import validate_partial_match_dict
 from ..utils.parseqs import is_parseable
 
 
@@ -93,6 +94,7 @@ cdef class AbstractParser:
         self._add_fields = False
         self._safe_substitution = False
         self.c_length = 0
+        self.supports_regex_filter = False
 
     cdef void define_conditions(self, object conditions):
         """Build the options needed by every query in QuerySource."""
@@ -567,6 +569,10 @@ cdef class AbstractParser:
         if isinstance(value, dict):
             if not value:
                 return key, value
+            # FEAT-180: partial-matching operators are validated before any builder runs and
+            # passed through raw — the dialect builder quotes them exactly once.
+            if validate_partial_match_dict(key, value, supports_regex=self.supports_regex_filter) is not None:
+                return key, dict(value)
             # Read the (last) operator without popitem(): the dict belongs to the caller, who may reuse it
             # (e.g. a linked dashboard re-sending the same filter); mutating it empties the filter.
             op, v = next(reversed(value.items()))

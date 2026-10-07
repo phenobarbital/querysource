@@ -48,6 +48,7 @@ cdef class AbstractParser:
     cdef public dict _qry_options
     cdef public bint _safe_substitution
     cdef public bint string_literal
+    cdef public bint supports_regex_filter
 
     # methods:
     cpdef object sentence(self, str sentence)
