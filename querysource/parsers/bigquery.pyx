@@ -31,6 +31,10 @@ else:
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
 
+# SECURITY (FEAT-162 / TASK-857): dotted JSON member path allowed inside JSON_VALUE(f, '$.<member>');
+# identical to JSON_MEMBER_PATTERN in rust/src/bigquery_parser.rs.
+_JSON_MEMBER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+
 
 cdef str bq_quote_string(object value):
     """Quote a string value for BigQuery using double-quote delimiters.
@@ -244,6 +248,10 @@ cdef class BigQueryParser(SQLParser):
                         where_cond.append(f"{field_expr} {op} {bq_quote_string(str(v))}")
                     else:
                         # BigQuery: JSON extraction via dict key
+                        # SECURITY (FEAT-162 / TASK-857): the member key lands inside a string
+                        # literal — skip the entry unless it is a dotted identifier path.
+                        if not (isinstance(op, str) and _JSON_MEMBER_PATTERN.match(op)):
+                            continue
                         json_expr = f"JSON_VALUE({field_expr}, '$.{op}')"
                         where_cond.append(
                             f"{json_expr} = {bq_quote_string(str(v))}"
