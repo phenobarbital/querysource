@@ -111,7 +111,10 @@ def _leaf_mask(df: pd.DataFrame, leaf: dict) -> pd.Series:
         _check_regex_safety(value)
         try:
             return col.astype("string").str.contains(value, case=(expr == "regex"), na=False, regex=True)
-        except re.error as err:
+        except (re.error, ValueError) as err:
+            # ``re.error`` comes from the Python regex engine; pandas 3's
+            # Arrow-backed string columns raise ``pyarrow.ArrowInvalid`` (a
+            # ``ValueError`` subclass) for the same malformed pattern.
             raise QSUrlError("lower", f"invalid regex `{value}`: {err}") from err
 
     raise QSUrlError("lower", f"unsupported expression `{expr}`")

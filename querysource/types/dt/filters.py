@@ -264,13 +264,13 @@ def drop_columns(df: pd.DataFrame, columns: list = None, endswith: list = None, 
     :return: The DataFrame with specified columns dropped.
     """
     if columns and isinstance(columns, list):
-        df.drop(axis=1, columns=columns, inplace=True, errors="ignore")
+        df = df.drop(columns=columns, errors="ignore")
     elif endswith and isinstance(endswith, list):
-        cols_to_drop = [col for col in df.columns if col.endswith(tuple(endswith))]
-        dataframe = df.drop(columns=cols_to_drop)
+        cols_to_drop = [col for col in df.columns if str(col).endswith(tuple(endswith))]
+        df = df.drop(columns=cols_to_drop)
     elif startswith and isinstance(startswith, list):
-        cols_to_drop = [col for col in df.columns if col.startswith(tuple(startswith))]
-        dataframe = df.drop(columns=cols_to_drop)
+        cols_to_drop = [col for col in df.columns if str(col).startswith(tuple(startswith))]
+        df = df.drop(columns=cols_to_drop)
     return df
 
 

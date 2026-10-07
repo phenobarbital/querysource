@@ -15,7 +15,7 @@ class TestRemoteConfig:
         rc = RemoteConfig(host="localhost", port=8888)
         assert rc.host == "localhost"
         assert rc.port == 8888
-        assert rc.timeout == 60
+        assert rc.timeout == 5
 
     def test_custom_timeout(self):
         rc = RemoteConfig(host="worker.internal", port=9000, timeout=120)

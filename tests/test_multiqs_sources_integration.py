@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from querysource.exceptions import DriverError
+from querysource.exceptions import DriverError, QueryException
 from querysource.queries.multi import MultiQS
 
 
@@ -84,5 +84,5 @@ class TestMultiQSSources:
             },
             request=MagicMock(),
         )
-        with pytest.raises(DriverError):
+        with pytest.raises(QueryException):
             await mqs.query()

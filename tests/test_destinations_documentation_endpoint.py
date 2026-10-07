@@ -38,7 +38,8 @@ def test_all_four_migrated_destinations_present_in_catalog():
     from querysource.queries.multi.registry import ComponentRegistry
     ComponentRegistry.discover_all.cache_clear()
     catalog_names = {ci.name for ci in ComponentRegistry.get_catalog()}
-    for name in ("ToSharepoint", "ToS3", "TableDestination", "DWHDestination"):
+    # TableDestination publishes itself under its display name ``Table``.
+    for name in ("ToSharepoint", "ToS3", "Table", "DWHDestination"):
         assert name in catalog_names, f"Expected {name} in catalog; found: {sorted(catalog_names)}"
 
 
@@ -46,8 +47,9 @@ def test_table_output_adapter_present_and_destinations_category():
     from querysource.queries.multi.registry import ComponentRegistry
     ComponentRegistry.discover_all.cache_clear()
     catalog = {ci.name: ci for ci in ComponentRegistry.get_catalog()}
-    assert "TableOutputAdapter" in catalog
-    assert catalog["TableOutputAdapter"].category == "Destinations"
+    # The adapter publishes itself under the YAML step name ``TableOutput``.
+    assert "TableOutput" in catalog
+    assert catalog["TableOutput"].category == "Destinations"
 
 
 def test_backward_compat_imports():

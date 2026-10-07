@@ -175,3 +175,27 @@ async def qs_app_pbac_off():
         yield app, client
     finally:
         await client.close()
+
+# --- aioresponses / aiohttp >= 3.14 compatibility -------------------------
+# aiohttp 3.14 made ``stream_writer`` a required keyword of ClientResponse and
+# reads ``stream_writer.output_size`` when ``writer`` is None (the mocked
+# path). aioresponses 0.7.x (latest on PyPI) still builds responses without
+# it, so every mocked request fails before reaching the test. Give aioresponses
+# a response class that supplies a no-op stream writer when one is missing.
+try:
+    import inspect as _inspect
+    from types import SimpleNamespace as _SimpleNamespace
+
+    import aioresponses.core as _aioresponses_core
+    from aiohttp import ClientResponse as _ClientResponse
+
+    if "stream_writer" in _inspect.signature(_ClientResponse.__init__).parameters:
+
+        class _CompatClientResponse(_ClientResponse):
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("stream_writer", _SimpleNamespace(output_size=0))
+                super().__init__(*args, **kwargs)
+
+        _aioresponses_core.ClientResponse = _CompatClientResponse
+except ImportError:  # aioresponses is a dev-only dependency
+    pass
