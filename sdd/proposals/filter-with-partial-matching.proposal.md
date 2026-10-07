@@ -4,7 +4,7 @@ title: Partial-matching operators (like, ilike, startswith, endswith, contains, 
 slug: filter-with-partial-matching
 type: feature
 mode: enrichment
-status: review
+status: accepted
 source:
   kind: inline
   jira_key: null
@@ -356,7 +356,7 @@ no failure described).
 
 **Gates**: the plan-approval and review gates were auto-passed (autonomous run). The Q&A
 gate ran interactively on 2026-10-07: 6 questions (U1–U6, U6 raised as a follow-up to
-U2), 6 answered. `status` is `review` pending explicit acceptance.
+U2), 6 answered. `status` was set to `accepted` by the requester on 2026-10-07.
 
 ---
 
