@@ -1,0 +1,21 @@
+{
+  "feat_id": "FEAT-180",
+  "mode_detected": "enrichment",
+  "wiki_available": false,
+  "budget_profile": "default",
+  "queries": [
+    {"id": "Q001", "type": "grep", "intent": "locate where_cond/filter dict rendering in WHERE builders", "pattern": "where_cond|'filter'", "paths": ["querysource/parsers/*.pyx"], "priority": 1},
+    {"id": "Q002", "type": "read", "intent": "generic SQLParser Cython dict-value branch", "path": "querysource/parsers/sql.pyx", "lines": "113-245", "priority": 1},
+    {"id": "Q003", "type": "read", "intent": "pgSQLParser Cython dict-value branch, operator constants, JSONB dispatch", "path": "querysource/parsers/pgsql.pyx", "lines": "26-40,234-313,355-452", "priority": 1},
+    {"id": "Q004", "type": "read", "intent": "Rust dispatch wrapper error handling", "path": "querysource/parsers/pgsql.pyx", "lines": "305-313", "priority": 1},
+    {"id": "Q005", "type": "read", "intent": "Rust pgsql builder operator allowlist and dict processing", "path": "rust/src/pgsql_parser.rs", "lines": "37-90,139-194,343-400,474-537,603-625", "priority": 1},
+    {"id": "Q006", "type": "read", "intent": "Rust generic SQL builder dict processing", "path": "rust/src/sql_parser.rs", "lines": "14-57,240-275", "priority": 2},
+    {"id": "Q007", "type": "read", "intent": "shared Rust filter helpers (mssql/bq) dict support", "path": "rust/src/filter_common.rs", "lines": "55-133", "priority": 2},
+    {"id": "Q008", "type": "read", "intent": "pre-dispatch filter value processing (is_valid pre-quoting)", "path": "querysource/parsers/abstract.pyx", "lines": "406-470,564-609", "priority": 1},
+    {"id": "Q009", "type": "grep", "intent": "existing startswith/contains/endswith/regex vocabulary in the package", "pattern": "startswith|ILIKE|text_match|like_escape", "paths": ["querysource/qsurl", "querysource", "docs"], "priority": 2},
+    {"id": "Q010", "type": "read", "intent": "test conventions for dual-path dict operators (FEAT-152)", "path": "tests/qsurl/test_pg_ilike.py", "lines": "1-60", "priority": 2},
+    {"id": "Q011", "type": "git_log", "intent": "recent activity on WHERE builders", "paths": ["querysource/parsers/pgsql.pyx", "querysource/parsers/sql.pyx", "rust/src/pgsql_parser.rs", "rust/src/sql_parser.rs", "rust/src/filter_common.rs"], "since": "90 days", "priority": 3},
+    {"id": "Q012", "type": "read", "intent": "in-memory filter vocabulary naming precedent", "path": "querysource/types/dt/filters.py", "lines": "70-135", "priority": 3},
+    {"id": "Q013", "type": "tree", "intent": "parser/Rust layout and build toolchain", "paths": ["querysource/parsers", "rust/src", "Makefile"], "priority": 3}
+  ]
+}
