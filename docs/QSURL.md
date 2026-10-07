@@ -85,11 +85,13 @@ s?nullable=1&topic=1&distinctive=1
 | `=` / `==` | `==` | synonyms |
 | `!=` | `!=` | |
 | `<` `<=` `>` `>=` | `<` `<=` `>` `>=` | comparison with the column on either side is flipped to put the column first |
-| `~` | `contains` | case-insensitive on every engine |
-| `!~` | `not_contains` | case-insensitive |
-| `^=` | `startswith` | case-insensitive |
-| `$=` | `endswith` | case-insensitive |
+| `~` | `contains` | case-sensitive (FEAT-180) |
+| `~*` | `icontains` | case-insensitive |
+| `!~` / `!~*` | `not_contains` / `not_icontains` | case-sensitive / case-insensitive |
+| `^=` / `^=*` | `startswith` / `istartswith` | case-sensitive / case-insensitive |
+| `$=` / `$=*` | `endswith` / `iendswith` | case-sensitive / case-insensitive |
 | `=~` | `regex` | always evaluated in the residual stage, never pushed down |
+| `=~*` | `iregex` | case-insensitive regex; always residual |
 | `col=null` | `is_null` | sugar |
 | `col!=null` | `not_null` | sugar |
 | bare `col` | `not_null` | `?active` means "active is not null/truthy" |
@@ -171,15 +173,23 @@ filter → sort → project → distinct → offset → limit → rename.
 | Provider | `capabilities` | `residual_scan` |
 |---|---|---|
 | `BaseProvider` (default; unaudited providers) | `select, filter, in_list, null_check` | `True` |
-| `sqlProvider` (MySQL, MSSQL, Oracle, SQLite...) | base + `alias, sort, limit, offset` | `True` |
+| `sqlProvider` (Oracle, SQLite...) | base + `alias, sort, limit, offset` | `True` |
+| `mysqlProvider`, `sqlserverProvider` | base + `text_match` | `True` |
+| `bigqueryProvider` | sql + `text_match` | `True` |
 | `pgProvider` | sql + `text_match` | `True` |
 | `cassandraProvider` | `select, filter, in_list, null_check, limit` | `False` |
 
-Text operators (`~ !~ ^= $=`) are case-insensitive on **every** engine:
-PostgreSQL pushes them down as `ILIKE`/`NOT ILIKE` (with `%`/`_`/`\` escaped
-before reaching the pattern); every other provider evaluates them in the
-residual stage with a lower-cased comparison. `=~` (`regex`) is always
-residual — no provider declares the `regex` capability.
+Text operators (`~ !~ ^= $=` and their `*` case-insensitive forms) are pushed
+down as table operators with the raw value (`{'city': {'contains': 'san'}}`)
+on providers declaring `text_match` (PostgreSQL, MySQL, SQL Server, BigQuery);
+the dialect builder escapes and quotes the value. Plain forms are
+case-sensitive, `*` forms case-insensitive; the in-memory residual evaluation
+follows the same rules. A `contains`-family operand shorter than 3 characters
+is evaluated in memory. `=~`/`=~*` (`regex`/`iregex`) are always residual — no
+provider declares the `regex` capability.
+
+**Migration (FEAT-180):** `~ !~ ^= $=` are now case-sensitive; use `~* !~* ^=* $=*`
+for the previous case-insensitive behaviour.
 
 ```python
 >>> from querysource.qsurl import parse
@@ -187,7 +197,7 @@ residual — no provider declares the `regex` capability.
 >>> from querysource.providers.pg import pgProvider
 >>> conditions, plan = split(parse("s?city~'san'"), pgProvider.capabilities, residual_scan=True)
 >>> conditions
-{'filter': {'city': {'ILIKE': '%san%'}}}
+{'filter': {'city': {'contains': 'san'}}}
 >>> plan.is_empty()
 True
 ```

@@ -4,23 +4,17 @@ from __future__ import annotations
 import re
 
 from . import capabilities as caps
+from ..exceptions import ParserError
+from ..parsers.partial_matching import like_escape, validate_partial_match  # noqa: F401 (like_escape re-exported)
 from .errors import QSUrlError
 from .plan import ResidualPlan
 
 IDENT_RE: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CMP = ("<", "<=", ">", ">=")
-_TEXT_PATTERNS: dict[str, tuple[str, str, str]] = {
-    # expression: (operator, prefix, suffix)
-    "startswith": ("ILIKE", "", "%"),
-    "contains": ("ILIKE", "%", "%"),
-    "endswith": ("ILIKE", "%", ""),
-    "not_contains": ("NOT ILIKE", "%", "%"),
-}
-
-
-def like_escape(value: str) -> str:
-    """Escape ``\\``, ``%`` and ``_`` for use inside an ILIKE pattern (quoting is the builder's job)."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+_TEXT_OPS: frozenset[str] = frozenset({
+    "contains", "not_contains", "icontains", "not_icontains",
+    "startswith", "istartswith", "endswith", "iendswith",
+})
 
 
 def _leaf_pushdown(leaf: dict, capabilities: frozenset[str]) -> tuple[str, object] | None:
@@ -66,11 +60,14 @@ def _leaf_pushdown(leaf: dict, capabilities: frozenset[str]) -> tuple[str, objec
             return None
         return col, "!null"
 
-    if expr in _TEXT_PATTERNS:
+    if expr in _TEXT_OPS:
         if caps.TEXT_MATCH not in capabilities or not isinstance(value, str):
             return None
-        op, prefix, suffix = _TEXT_PATTERNS[expr]
-        return col, {op: f"{prefix}{like_escape(value)}{suffix}"}
+        try:
+            validate_partial_match(col, expr, value, supports_regex=False)
+        except ParserError:
+            return None  # e.g. contains shorter than 3 chars: evaluated in memory instead
+        return col, {expr: value}
 
     # "regex" and anything unrecognised is never pushed down.
     return None

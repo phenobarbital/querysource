@@ -101,7 +101,7 @@ async def test_text_match_pushdown_pg(monkeypatch):
     )
     sql, plan = await _render(ir, pgProvider.capabilities, pgProvider.residual_scan)
     assert plan.is_empty()
-    assert "city ILIKE '%san%'" in sql
+    assert "city LIKE '%san%'" in sql
 
 
 async def test_text_match_pushdown_pg_with_internal_quote(monkeypatch):
@@ -119,7 +119,18 @@ async def test_text_match_pushdown_pg_with_internal_quote(monkeypatch):
     )
     sql, plan = await _render(ir, pgProvider.capabilities, pgProvider.residual_scan)
     assert plan.is_empty()
-    assert "name ILIKE '%o''brien%'" in sql
+    assert "name LIKE '%o''brien%'" in sql
+
+
+async def test_text_match_icontains_pg(monkeypatch):
+    monkeypatch.setattr(pgsql, "HAS_RUST", False)
+    ir = _ir(
+        filter={"and": [{"column": "city", "expression": "icontains", "value": "san"}]},
+        requires=["select", "filter", "text_match"],
+    )
+    sql, plan = await _render(ir, pgProvider.capabilities, pgProvider.residual_scan)
+    assert plan.is_empty()
+    assert "city ILIKE '%san%'" in sql
 
 
 async def test_or_filter_is_residual_on_pg():

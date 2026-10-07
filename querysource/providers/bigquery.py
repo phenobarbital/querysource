@@ -20,6 +20,7 @@ from ..exceptions import (
     QueryException
 )
 from .sql import sqlProvider
+from ..qsurl import capabilities as qsurl_caps
 
 
 class bigqueryProvider(sqlProvider):
@@ -30,6 +31,8 @@ class bigqueryProvider(sqlProvider):
     """
 
     __parser__ = BigQueryParser
+    #: FEAT-180: parser renders the partial-matching operators.
+    capabilities = sqlProvider.capabilities | {qsurl_caps.TEXT_MATCH}
 
     def __init__(
         self,

@@ -14,6 +14,7 @@ from asyncdb.exceptions import StatementError, ProviderError, NoDataFound
 from ..exceptions import DriverError, ParserError, DataNotFound
 from ..models import QueryModel
 from ..parsers.sqlserver import msSQLParser
+from ..qsurl import capabilities as qsurl_caps
 from ..qs_parsers import HAS_RUST
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
@@ -26,6 +27,8 @@ class sqlserverProvider(BaseProvider):
     Querysource Provider for MS SQL Server.
     """
     __parser__ = msSQLParser
+    #: FEAT-180: parser renders the partial-matching operators.
+    capabilities = BaseProvider.capabilities | {qsurl_caps.TEXT_MATCH}
 
     def __init__(
         self,

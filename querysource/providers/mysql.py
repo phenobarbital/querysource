@@ -20,6 +20,7 @@ from ..exceptions import (
 )
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
+from ..qsurl import capabilities as qsurl_caps
 from ..qs_parsers import HAS_RUST
 if HAS_RUST:
     from ..qs_parsers import _qs_parsers as _rs
@@ -40,6 +41,8 @@ class mysqlProvider(BaseProvider):
     }
 
     __parser__ = SQLParser
+    #: FEAT-180: parser renders the partial-matching operators.
+    capabilities = BaseProvider.capabilities | {qsurl_caps.TEXT_MATCH}
 
     def __init__(
         self,
