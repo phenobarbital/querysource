@@ -1,0 +1,32 @@
+{
+  "feature": "fixgroup-34032c139334",
+  "feature_id": "FEAT-162",
+  "spec": "sdd/specs/fixgroup-34032c139334.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-07T21:06:32+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-855",
+      "slug": "bigquery-rust-key-hardening",
+      "title": "BigQuery Rust builder: validate column and JSON member keys before rendering",
+      "feature_id": "FEAT-162",
+      "feature": "fixgroup-34032c139334",
+      "spec": "sdd/specs/fixgroup-34032c139334.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "single task; modifies only rust/src/bigquery_parser.rs and creates two test files, no shared state",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "discovered_from": "issue:aa699dd75abf",
+      "file": "sdd/tasks/active/TASK-855-bigquery-rust-key-hardening.md"
+    }
+  ]
+}
