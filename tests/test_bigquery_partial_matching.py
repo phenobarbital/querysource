@@ -10,7 +10,7 @@ import pytest
 try:
     import navconfig.logging  # noqa: F401
 except Exception:
-    setattr(stdlib_logging.Logger, "notice", stdlib_logging.Logger.info)
+    stdlib_logging.Logger.notice = stdlib_logging.Logger.info
     fake_navconfig_logging = types.ModuleType("navconfig.logging")
     fake_navconfig_logging.logging = stdlib_logging
     sys.modules["navconfig.logging"] = fake_navconfig_logging
