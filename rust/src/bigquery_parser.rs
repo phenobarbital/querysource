@@ -519,6 +519,7 @@ mod tests {
 
     #[test]
     fn test_pm_bq_invalid_operands_are_rejected_in_phase_one() {
+        Python::initialize();
         Python::attach(|py| {
             let filters = PyDict::new(py);
             let contains = PyDict::new(py);
