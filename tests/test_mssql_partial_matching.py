@@ -1,6 +1,7 @@
 """FEAT-180: SQL Server partial-matching operators (Rust and Cython paths)."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -97,3 +98,22 @@ async def test_mssql_other_dicts_unchanged() -> None:
     filter_ = {"n": {">=": 5}}
     expected = f"n = {Entity.escapeString(filter_['n'])}"
     assert _where_body(await _render("cython", filter_)) == expected
+
+
+async def test_mssql_rust_failure_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unexpected Rust failure is logged at WARNING before the Cython fallback renders."""
+    class RustFailure:
+        """Stand in for a Rust extension that fails unexpectedly."""
+
+        @staticmethod
+        def mssql_filter_conditions(*args: object) -> str:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(mssqlmod, "_rs", RustFailure())
+    monkeypatch.setattr(mssqlmod, "HAS_RUST", True)
+    with caplog.at_level(logging.WARNING, logger="QS.Parser.msSQLParser"):
+        rendered = await _make_parser({"n": {"startswith": "andre"}}).filter_conditions(SQL)
+    assert _where_body(rendered) == "n LIKE 'andre%' ESCAPE '!'"
+    assert "Rust mssql_filter_conditions failed, falling back to Cython: boom" in caplog.text

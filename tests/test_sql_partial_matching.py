@@ -134,3 +134,22 @@ async def test_sql_rust_error_falls_through(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(sqlmod, "HAS_RUST", True)
     with pytest.raises(ParserError, match="requires a string operand"):
         await _make_parser({"n": {"startswith": 1}}).filter_conditions(SQL)
+
+
+async def test_sql_rust_failure_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unexpected Rust failure is logged at WARNING before the Cython fallback renders."""
+    class RustFailure:
+        """Stand in for a Rust extension that fails unexpectedly."""
+
+        @staticmethod
+        def filter_conditions(*args: object) -> str:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sqlmod, "_rs", RustFailure())
+    monkeypatch.setattr(sqlmod, "HAS_RUST", True)
+    with caplog.at_level(stdlib_logging.WARNING, logger="QS.Parser.SQLParser"):
+        rendered = await _make_parser({"n": {"startswith": "andre"}}).filter_conditions(SQL)
+    assert _where_body(rendered) == "n LIKE 'andre%' ESCAPE '!'"
+    assert "Rust filter_conditions failed, falling back to Cython: boom" in caplog.text
