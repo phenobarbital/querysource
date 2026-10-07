@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
 use crate::validators::{escape_string, field_components, is_camel_case, is_integer, quote_string};
+use crate::partial_match::{build_like_pattern, check_entries, like_escape, MatchKind, PartialMatchOp};
 
 // ---------------------------------------------------------------------------
 // Security helpers (PgSQL-specific)
@@ -358,6 +359,9 @@ fn jsonb_condition(key: &str, dict: &Bound<'_, PyDict>) -> JsonbOutcome {
         // never as implicit JSONB containment (they are not in `is_operator`, so
         // `operators` would otherwise stay 0 and fall through to the containment
         // branch below).
+        if crate::partial_match::lookup(&op).is_some() {
+            return JsonbOutcome::NotJsonb;
+        }
         if PG_TEXT_OPERATORS.contains(&op.as_str()) {
             return JsonbOutcome::NotJsonb;
         }
@@ -699,6 +703,36 @@ fn process_str_value(
 // Public PyO3 function
 // ---------------------------------------------------------------------------
 
+/// Render one partial-matching operator for PostgreSQL (FEAT-180, spec §2).
+fn pg_partial_match_condition(col: &str, op: &PartialMatchOp, operand: &str) -> String {
+    if op.kind == MatchKind::Regex {
+        let sql_op = format!("{}{}", if op.negated { "!~" } else { "~" }, if op.insensitive { "*" } else { "" });
+        return format!("{} {} {}", col, sql_op, pg_literal(operand));
+    }
+    let base = if op.insensitive { "ILIKE" } else { "LIKE" };
+    let sql_op = if op.negated { format!("NOT {}", base) } else { base.to_string() };
+    format!("{} {} {}", col, sql_op, pg_literal(&build_like_pattern(op, operand, like_escape)))
+}
+
+/// Return a rendered partial-matching condition, or `None` for a non-table dict.
+fn pg_partial_match_from_dict(key: &str, dict: &Bound<'_, PyDict>) -> PyResult<Option<FilterValue>> {
+    let entries: Vec<(String, Option<String>)> = dict
+        .iter()
+        .map(|(op_obj, operand_obj)| (op_obj.extract().unwrap_or_default(), operand_obj.extract().ok()))
+        .collect();
+    let borrowed: Vec<(&str, Option<&str>)> = entries
+        .iter()
+        .map(|(op, operand)| (op.as_str(), operand.as_deref()))
+        .collect();
+    let Some((op, operand)) = check_entries(key, &borrowed, true)? else {
+        return Ok(None);
+    };
+    let Some(safe_key) = pg_safe_identifier_key(key) else {
+        return Ok(Some(FilterValue::Null));
+    };
+    Ok(Some(FilterValue::Condition(pg_partial_match_condition(&safe_key, op, operand))))
+}
+
 /// PostgreSQL-specific filter_conditions with parallel processing.
 ///
 /// 1. Extracts filter entries from Python dict into Rust-native structs (GIL)
@@ -722,20 +756,23 @@ pub fn pgsql_filter_conditions(
                 .flatten()
                 .and_then(|v| v.extract().ok());
             let value = match value_obj.cast::<PyDict>() {
-                Ok(dict) => match jsonb_condition(&key, dict) {
-                    JsonbOutcome::NotJsonb => extract_filter_value(&value_obj),
-                    JsonbOutcome::Skip => FilterValue::Null,
-                    JsonbOutcome::Condition(cond) => FilterValue::Condition(cond),
+                Ok(dict) => match pg_partial_match_from_dict(&key, dict)? {
+                    Some(v) => v,
+                    None => match jsonb_condition(&key, dict) {
+                        JsonbOutcome::NotJsonb => extract_filter_value(&value_obj),
+                        JsonbOutcome::Skip => FilterValue::Null,
+                        JsonbOutcome::Condition(cond) => FilterValue::Condition(cond),
+                    },
                 },
                 Err(_) => extract_filter_value(&value_obj),
             };
-            FilterEntry {
+            Ok(FilterEntry {
                 key,
                 value,
                 format_hint,
-            }
+            })
         })
-        .collect();
+        .collect::<PyResult<Vec<FilterEntry>>>()?;
 
     // Phase 2: Process in parallel (no GIL, pure Rust)
     let where_cond: Vec<String> = entries
@@ -805,6 +842,46 @@ mod tests {
             pg_literal(r#"{"a":"x\"y'z"}"#),
             r#"E'\x7b"a":"x\\"y''z"\x7d'"#
         );
+    }
+
+    #[test]
+    fn test_pm_pg_all_operators() {
+        let cases = [
+            ("like", "value", "full_name LIKE 'value'"),
+            ("not_like", "value", "full_name NOT LIKE 'value'"),
+            ("ilike", "value", "full_name ILIKE 'value'"),
+            ("not_ilike", "value", "full_name NOT ILIKE 'value'"),
+            ("startswith", "value", "full_name LIKE 'value%'"),
+            ("not_startswith", "value", "full_name NOT LIKE 'value%'"),
+            ("istartswith", "value", "full_name ILIKE 'value%'"),
+            ("not_istartswith", "value", "full_name NOT ILIKE 'value%'"),
+            ("endswith", "value", "full_name LIKE '%value'"),
+            ("not_endswith", "value", "full_name NOT LIKE '%value'"),
+            ("iendswith", "value", "full_name ILIKE '%value'"),
+            ("not_iendswith", "value", "full_name NOT ILIKE '%value'"),
+            ("contains", "value", "full_name LIKE '%value%'"),
+            ("not_contains", "value", "full_name NOT LIKE '%value%'"),
+            ("icontains", "value", "full_name ILIKE '%value%'"),
+            ("not_icontains", "value", "full_name NOT ILIKE '%value%'"),
+            ("regex", "^value$", "full_name ~ '^value$'"),
+            ("not_regex", "^value$", "full_name !~ '^value$'"),
+            ("iregex", "^value$", "full_name ~* '^value$'"),
+            ("not_iregex", "^value$", "full_name !~* '^value$'"),
+        ];
+
+        for (name, operand, expected) in cases {
+            assert_eq!(pg_partial_match_condition("full_name", crate::partial_match::lookup(name).unwrap(), operand), expected);
+        }
+    }
+
+    #[test]
+    fn test_pm_pg_escaping_corpus() {
+        let op = crate::partial_match::lookup("startswith").unwrap();
+        assert_eq!(pg_partial_match_condition("full_name", op, "o'brien"), "full_name LIKE 'o''brien%'");
+        assert_eq!(pg_partial_match_condition("full_name", op, "50%"), r"full_name LIKE E'50\\%%'");
+        assert_eq!(pg_partial_match_condition("full_name", op, "a_b"), r"full_name LIKE E'a\\_b%'");
+        assert_eq!(pg_partial_match_condition("full_name", op, r"a\b"), r"full_name LIKE E'a\\\\b%'");
+        assert_eq!(pg_partial_match_condition("full_name", op, "{x}"), r"full_name LIKE E'\x7bx\x7d%'");
     }
 
     #[test]
