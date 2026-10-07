@@ -346,10 +346,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 413s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Five case-insensitive tokens added to Rust (ast/parser/ir), grammar.lark and _fallback.py, plus corpus cases and test_case_insensitive_tokens.py. Verified: cargo test 13/13; pytest qsurl token/parity/gbnf/fallback 38 passed (after rebuilding the _qsurl .so into the worktree; the engine validation selector rejected the non-test path, so validation was run by hand). Review: zero corrections (coder-review:14a6c1b169e605b78faf8f5c).
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
