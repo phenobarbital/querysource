@@ -318,7 +318,7 @@ link-mode = "copy"
 # FEAT-158: asyncdb[boto3] pins aiobotocore==2.15.2 and aioboto3==13.2.0, which conflict with s3fs>=2026.9.
 # FEAT-161: modin<=0.37.1 declares pandas<2.4; override so the optional [modin]
 # extra stays lockable alongside pandas>=3 (modin is opt-in and unsupported on pandas 3).
-override-dependencies = ["aiobotocore>=2.25,<2.26", "aioboto3>=15", "pandas>=3.0,<4"]
+override-dependencies = ["aiobotocore[boto3]>=2.25,<2.26", "aioboto3>=15", "pandas>=3.0,<4"]
 
 [tool.uv.sources]
 # navigator-auth = { path = "../../navigator/navigator-auth", editable = true }

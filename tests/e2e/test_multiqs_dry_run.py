@@ -23,7 +23,7 @@ from querysource.exceptions import DriverError, QueryException
 from querysource.queries.multi import MultiQS
 from querysource.queries.multi.sources.executors import LocalExecutor
 from querysource.queries.obj import QueryObject
-from querysource.tenants import QueryStore
+from querysource.tenants import LoadedDefinition, QueryStore
 
 _STORES = pd.DataFrame({"store_id": [1, 2, 3], "region": ["EMEA", "EMEA", "APAC"]})
 _SALES = pd.DataFrame({"store_id": [1, 1, 2, 3], "amount": [10.0, 20.0, 5.0, 7.0]})
@@ -44,6 +44,7 @@ def rendered(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         request: web.Request,
         *,
         store: QueryStore | None = None,
+        definition: LoadedDefinition | None = None,
     ) -> None:
         obj = QueryObject(
             name,

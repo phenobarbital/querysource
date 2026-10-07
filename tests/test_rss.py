@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from unittest.mock import patch
 import json
 import numpy as np
 import xml.etree.ElementTree as ET
@@ -92,15 +93,11 @@ class TestableRssApp(rssapp):
 class TestNegativeKeywordsBehavior(unittest.IsolatedAsyncioTestCase):
     async def test_negative_keywords_behavior(self):
         bundle_id = "test_bundle_neg"
-        keywords_result = {
-            "SELECT keywords, vector FROM rssapp.bundles_keywords WHERE bundle_id = $1;":
-                {"keywords": ["anything"], "vector": None}
+        # load_keywords fetches keywords and negative_keywords in one query.
+        result_map = {
+            "SELECT keywords, negative_keywords, vector FROM rssapp.bundles_keywords WHERE bundle_id = $1;":
+                {"keywords": ["anything"], "negative_keywords": ["bad"], "vector": None}
         }
-        negative_result = {
-            "SELECT negative_keywords FROM rssapp.bundles_keywords WHERE bundle_id = $1;":
-                {"negative_keywords": ["bad"]}
-        }
-        result_map = {**keywords_result, **negative_result}
         dummy_db = DummyDB(result_map)
         dummy_vector_model = DummyVectorModel()
         request = DummyRequest(bundle_id, dummy_db, dummy_vector_model)
@@ -123,9 +120,11 @@ class TestNegativeKeywordsBehavior(unittest.IsolatedAsyncioTestCase):
             self._parser = ET.ElementTree(ET.fromstring(xml_str)).getroot()
             return asyncio.sleep(0)
 
-        app_instance = TestableRssApp(definition=None, conditions=None, request=request)
+        # rssapp builds a Groq client eagerly in __post_init__, which needs an
+        # API key; this test never calls the LLM, so stub the client class.
+        with patch("querysource.providers.sources.rssapp.Groq"):
+            app_instance = TestableRssApp(definition=None, conditions=None, request=request)
         await app_instance.load_keywords(bundle_id, dummy_vector_model)
-        await app_instance.load_negative_keywords(bundle_id)
         app_instance.aquery = custom_dummy_aquery.__get__(app_instance)
         result_xml = await app_instance.get_bundle()
         root = ET.fromstring(result_xml)
