@@ -1,8 +1,10 @@
 """Residual evaluator semantics (spec §3 M7, AC11/AC13/AC14)."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import querysource.qsurl.residual as residual
@@ -122,3 +124,61 @@ def test_safe_regex_still_matches(stores_df):
     mask = residual.evaluate(stores_df, {"and": [{"column": "city", "expression": "regex", "value": "^San.*"}]})
     matched = sorted(stores_df.loc[mask, "store_id"].tolist())
     assert matched
+
+
+BYPASS_PATTERNS = ["(a|a)+$", "(a|aa)*b$", "((a+))+$", "(a+){2,}$", "(.*a){25}$"]
+
+
+@pytest.mark.parametrize("pattern", BYPASS_PATTERNS)
+def test_screen_bypass_patterns_run_in_linear_time(pattern):
+    """Ledger issue:2241b8e60919: patterns the static screen misses stay linear on RE2."""
+    df = pd.DataFrame({"city": ["a" * 5000 + "!"] * 50})
+    started = time.perf_counter()
+    mask = residual.evaluate(df, {"column": "city", "expression": "regex", "value": pattern})
+    assert time.perf_counter() - started < 1.0
+    assert not mask.any()
+
+
+@pytest.mark.parametrize("pattern", ["(?=a)(a|a)+$", "(?!x)a", "(?<=a)b", r"(a)\1"])
+def test_lookaround_and_backreference_are_rejected(pattern):
+    """Lookaround/backrefs used to force pandas onto Python `re`; RE2 rejects them."""
+    df = pd.DataFrame({"city": ["a" * 26 + "!"]})
+    started = time.perf_counter()
+    with pytest.raises(QSUrlError) as exc:
+        residual.evaluate(df, {"column": "city", "expression": "regex", "value": pattern})
+    assert time.perf_counter() - started < 1.0
+    assert exc.value.kind == "lower"
+    assert exc.value.message.startswith("invalid regex")
+
+
+def test_regex_never_uses_python_re_engine(stores_df, monkeypatch):
+    """The regex leaves never reach `str.contains`, whose engine the pattern controls."""
+    def _forbidden(*args, **kwargs):
+        raise AssertionError("str.contains must not evaluate a user regex")
+
+    monkeypatch.setattr(pd.core.strings.accessor.StringMethods, "contains", _forbidden)
+    for expr, pattern in (("regex", "^San"), ("iregex", "^SAN ")):
+        mask = residual.evaluate(stores_df, {"column": "city", "expression": expr, "value": pattern})
+        assert mask.any()
+
+
+def test_regex_fails_closed_without_pyarrow(stores_df, monkeypatch):
+    """Without pyarrow the leaf refuses to run instead of falling back to Python `re`."""
+    monkeypatch.setattr(residual, "pc", None)
+    with pytest.raises(QSUrlError) as exc:
+        residual.evaluate(stores_df, {"column": "city", "expression": "regex", "value": "^San"})
+    assert exc.value.kind == "lower"
+    assert "pyarrow" in exc.value.message
+
+
+def test_regex_mask_semantics():
+    """Search semantics, case handling, nulls and index alignment match the old behaviour."""
+    df = pd.DataFrame({"city": ["San Jose", "SAN DIEGO", None, "x"]}, index=[10, 11, 12, 13])
+    mask = residual.evaluate(df, {"column": "city", "expression": "regex", "value": "^SAN "})
+    assert mask.tolist() == [False, True, False, False]
+    assert mask.index.tolist() == [10, 11, 12, 13]
+    mask = residual.evaluate(df, {"column": "city", "expression": "iregex", "value": "^SAN "})
+    assert mask.tolist() == [True, True, False, False]
+    numbers = pd.DataFrame({"n": [1, 22, None]})
+    mask = residual.evaluate(numbers, {"column": "n", "expression": "regex", "value": "2"})
+    assert mask.tolist() == [False, True, False]
