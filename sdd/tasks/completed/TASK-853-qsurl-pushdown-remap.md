@@ -428,10 +428,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet · Backend: native · Model: sonnet · Attempts: 1 · Duration: 115s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: qsurl pushdown remap: translate.py, residual.py (case-sensitive plain forms, i* forms, iregex), provider capabilities (mysql/sqlserver/bigquery), docs/QSURL.md, tests. Validated by hand with fresh binaries in the worktree: tests/qsurl + tests/e2e/test_qsurl_dry_run.py = 137 passed, 2 failed. Both failures are pre-existing on this branch's base: test_bad_regex_is_lower_error (pandas 3 raises ArrowInvalid; fixed on dev by d96a7ea2) and test_perf (fails on the unmodified primary too). Not done by the coder: the FEAT-152 paragraph in the e2e module docstring was not updated (cosmetic). Review: zero corrections. Residual lint B904 in providers/bigquery.py:95 and mysql.py:171 left for /sdd-done.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
