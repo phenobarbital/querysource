@@ -76,7 +76,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -87,8 +87,9 @@
       "parallelism_notes": "imports PARTIAL_MATCH_OPERATORS/validate_partial_match_dict/build_like_pattern/like_escape from TASK-840 (querysource/parsers/partial_matching.py); reads and sets self.supports_regex_filter declared by TASK-842 (querysource/parsers/abstract.pxd); exclusive: rebuilds the Cython pgsql extension in place (make build-inplace)",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-843-pgsql-cython-partial-matching.md"
+      "completed_at": "2026-10-07T15:52:58+00:00",
+      "file": "sdd/tasks/completed/TASK-843-pgsql-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-844",
