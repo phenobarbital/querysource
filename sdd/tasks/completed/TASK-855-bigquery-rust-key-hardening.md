@@ -355,8 +355,17 @@ When you pick up this task:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: agent:sdd-fix (Claude Code session 5141c3af)
+**Date**: 2026-10-07
+**Notes**: Implemented in commit 3b4e28db. Added `JSON_MEMBER_PATTERN`, `bq_safe_identifier_key`
+and `bq_safe_json_member` to `rust/src/bigquery_parser.rs`; `process_entry` now uses
+`bq_safe_identifier_key(key)?` and the JSON-extraction branch of `process_dict_value` is
+guarded by `bq_safe_json_member(op)`. Six `test_bqkey_*` cargo tests (module total 31 passed +
+the pre-existing `test_process_str_negation` failure, unchanged). Validation in the worktree
+after `python setup.py build_ext --inplace` and staging a freshly built `_qs_parsers` wheel:
+`pytest tests/test_bigquery_key_hardening.py tests/test_rust_bqkey_units.py
+tests/test_rust_pm_bq_units.py tests/test_bigquery_partial_matching.py -q` → 62 passed, 0 skipped.
+Sibling Cython hole filed as `issue:f5d0b4764384`.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none (test operands use a 3-character `contains` value because
+FEAT-180 pre-validation rejects shorter ones).
