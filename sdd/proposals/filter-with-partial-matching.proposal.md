@@ -4,7 +4,7 @@ title: Partial-matching operators (like, ilike, startswith, endswith, contains, 
 slug: filter-with-partial-matching
 type: feature
 mode: enrichment
-status: discussion
+status: review
 source:
   kind: inline
   jira_key: null
@@ -14,7 +14,7 @@ source:
 overall_confidence: medium
 base_branch: dev
 projects: [parsers, rust-parsers]
-tags: [where-cond, partial-matching, like, ilike, regex, postgresql]
+tags: [where-cond, partial-matching, like, ilike, regex, postgresql, sqlserver, bigquery]
 research_state: sdd/state/FEAT-180/
 created: 2026-10-07
 updated: 2026-10-07
@@ -23,7 +23,7 @@ updated: 2026-10-07
 # FEAT-180 — Partial-matching operators for `where_cond` / `filter` dict values
 
 > **Mode**: enrichment
-> **Confidence**: medium (localization high; dialect scope and operator semantics still open)
+> **Confidence**: medium (localization high; all six open questions resolved by the requester on 2026-10-07, see §5)
 > **Source**: `inline`
 > **Audit**: [`sdd/state/FEAT-180/`](../state/FEAT-180/)
 
@@ -71,7 +71,11 @@ and Rust, and qsurl (`querysource/qsurl/translate.py`) already maps
 recommendation is to extend that allowlist with the new vocabulary in both builders,
 escape wildcards before quoting, exempt the new names in `jsonb_condition`, and raise
 the "contains too short" error in `AbstractParser._where_element` (the only hook that
-runs before both paths, because the pgsql Rust dispatch swallows exceptions).
+runs before both paths, because the pgsql Rust dispatch swallows exceptions). Per the
+resolved questions (§5) the scope covers every SQL dialect: case-sensitive and `i*`
+case-insensitive variants with a full `not_*` family, `LOWER(col) LIKE LOWER(pattern)`
+on dialects without ILIKE, and regex (`~`, `~*`, `!~`, `!~*`, bounded length) on
+PostgreSQL only.
 
 ---
 
@@ -158,21 +162,34 @@ the direct template for this feature.
 ### What's New
 
 - **Partial-matching operator vocabulary** accepted as the single key of a dict-typed
-  `where_cond`/`filter` value. Proposed set and PostgreSQL rendering:
+  `where_cond`/`filter` value (resolved U1, U3, U5, U6). Every operator has a `not_`
+  twin; the LIKE-based ones have a case-sensitive form and an `i`-prefixed
+  case-insensitive form:
 
-  | Operator | Operand handling | Renders (PostgreSQL) |
-  |----------|------------------|----------------------|
-  | `like` / `not_like` | raw pattern, user supplies `%`/`_` | `col LIKE 'pat'` / `col NOT LIKE 'pat'` |
-  | `ilike` / `not_ilike` | raw pattern | `col ILIKE 'pat'` (alias of existing `ILIKE`) |
-  | `startswith` | `like_escape(v) + '%'` | `col ILIKE 'v%'` (case-sensitivity pending U1) |
-  | `endswith` | `'%' + like_escape(v)` | `col ILIKE '%v'` |
-  | `contains` / `not_contains` | `'%' + like_escape(v) + '%'`; **len(v) ≥ 3 else error** | `col ILIKE '%v%'` |
-  | `regex` (`iregex`, `not_regex` pending U3) | pattern quoted by `pg_literal`, bounded length | `col ~ 'pat'` / `col ~* 'pat'` / `col !~ 'pat'` |
+  | Operator (+ `not_` twin) | Operand handling | PostgreSQL | Generic SQL / SQL Server / BigQuery |
+  |--------------------------|------------------|------------|-------------------------------------|
+  | `like` | raw pattern, user supplies `%`/`_` | `col LIKE 'pat'` | `col LIKE 'pat'` |
+  | `ilike` | raw pattern | `col ILIKE 'pat'` (alias of existing `ILIKE`) | `LOWER(col) LIKE LOWER('pat')` |
+  | `startswith` | `like_escape(v) + '%'` | `col LIKE 'v%'` | `col LIKE 'v%'` |
+  | `istartswith` | same | `col ILIKE 'v%'` | `LOWER(col) LIKE LOWER('v%')` |
+  | `endswith` | `'%' + like_escape(v)` | `col LIKE '%v'` | `col LIKE '%v'` |
+  | `iendswith` | same | `col ILIKE '%v'` | `LOWER(col) LIKE LOWER('%v')` |
+  | `contains` | `'%' + like_escape(v) + '%'`; **len(v) ≥ 3 else `ParserError`** | `col LIKE '%v%'` | `col LIKE '%v%'` |
+  | `icontains` | same (same length rule) | `col ILIKE '%v%'` | `LOWER(col) LIKE LOWER('%v%')` |
+  | `regex` | pattern quoted by `pg_literal`; max length guard | `col ~ 'pat'` | `ParserError` (PostgreSQL only) |
+  | `iregex` | same | `col ~* 'pat'` | `ParserError` |
+  | `not_regex` / `not_iregex` | same | `col !~ 'pat'` / `col !~* 'pat'` | `ParserError` |
 
-- **Pre-dispatch validator** in `AbstractParser._where_element`: when the dict operator is
-  a partial-matching name, require a `str` operand and enforce the `contains` minimum
-  length, raising `ParserError` (a `QueryException`) so the error surfaces on both the
-  Rust and Cython paths.
+  `not_` twins render `NOT LIKE` / `NOT ILIKE` / `NOT (LOWER(col) LIKE LOWER(...))`.
+  The `%`/`_`/`\` escaping of `startswith`/`endswith`/`contains` operands needs an
+  `ESCAPE '\'` clause on dialects whose default escape differs (SQL Server has none by
+  default; BigQuery uses `\` natively; PostgreSQL and MySQL default to `\`).
+
+- **Pre-dispatch validator** in `AbstractParser._where_element` (resolved U4): when the
+  dict operator is a partial-matching name, require a `str` operand, enforce the
+  `contains`/`icontains`/`not_contains`/`not_icontains` minimum length (≥ 3), and cap the
+  regex pattern length, raising `ParserError` (a `QueryException`) so the error surfaces
+  on both the Rust and Cython paths. `startswith`, `endswith` and `like` accept any length.
 - **Shared LIKE-escape helper** reachable from the Cython builders (reuse
   `querysource.qsurl.translate.like_escape` or lift it to `querysource/types/validators`)
   with a Rust twin in `pgsql_parser.rs`.
@@ -187,9 +204,16 @@ the direct template for this feature.
   same change in Rust, with unit tests in the module's `#[cfg(test)]` block.  *Evidence*: F006, F004
 - **`querysource/parsers/abstract.pyx`::`_where_element`** — operator/operand validation
   before `is_valid` pre-quoting.  *Evidence*: F009, F005
-- **`querysource/parsers/sql.pyx` + `rust/src/sql_parser.rs` (dict branch)** — *conditional
-  on U2*: LIKE-based `like`/`startswith`/`endswith`/`contains` for the generic dialect
-  (no `ILIKE`, no regex).  *Evidence*: F002, F007
+- **`querysource/parsers/sql.pyx` + `rust/src/sql_parser.rs` (dict branch)** — resolved U2
+  (all SQL dialects): LIKE-based operators plus the `LOWER(col) LIKE LOWER(...)` form for
+  `i*` variants; `regex*` raises `ParserError`.  *Evidence*: F002, F007
+- **`querysource/parsers/sqlserver.pyx` + `rust/src/mssql_parser.rs` / `rust/src/filter_common.rs`** —
+  resolved U2: add a dict-value branch (none exists today; `filter_common.rs` needs a
+  `Dict` variant in `FilterValue` and `extract_filter_value`) rendering the same LIKE /
+  `LOWER()` forms with an explicit `ESCAPE '\'` clause.  *Evidence*: F008
+- **`querysource/parsers/bigquery.pyx` + `rust/src/bigquery_parser.rs` (dict branch)** —
+  resolved U2: extend the existing COMPARISON_TOKENS-only dict branch with the LIKE /
+  `LOWER()` forms using `bq_quote_string`.  *Evidence*: F008
 - **Tests** — new `tests/test_pg_partial_matching.py` parametrized over rust/cython like
   `tests/qsurl/test_pg_ilike.py`; extend `tests/test_rust_parsers.py`; a full-flow test
   (through `set_options`/`build_query`) asserting the `contains` error is raised even
@@ -201,8 +225,9 @@ the direct template for this feature.
 
 - qsurl grammar / pushdown rules (it already emits ILIKE dicts; declaring a `regex`
   pushdown capability is a separate decision).
-- SQL Server, BigQuery, CQL, Mongo, Elastic partial matching (no dict text-operator
-  branch exists today; `mssql` has no dict variant at all — F008).
+- Non-SQL dialects (CQL, Mongo, Elastic, ArangoDB, Rethink, Influx) — SQL dialects only
+  (PostgreSQL, generic SQL, SQL Server, BigQuery) per U2.
+- Regex on dialects other than PostgreSQL (BigQuery `REGEXP_CONTAINS` could follow later).
 - The legacy `field~` / `field!~` key-suffix prefix match (kept as-is).
 - Multi-operator dicts such as `{"startswith": "a", "endswith": "z"}`.
 - `column_filter` / DataFrame post-filtering vocabulary in `types/dt/filters.py`.
@@ -232,6 +257,14 @@ the direct template for this feature.
 - **Stale compiled extension**: tests silently exercise old Rust code. *Mitigation*:
   stale-extension skip guard plus `make build-rust && make stage-rust` in the task's
   acceptance commands.  *Evidence*: F011, F014
+- **Four-dialect scope (U2) multiplies the surface**: SQL Server has no dict branch in
+  either language and `filter_common.rs` has no `Dict` variant, so mssql is net-new code
+  rather than an extension. *Mitigation*: decompose by dialect (PostgreSQL first, then
+  generic SQL, BigQuery, SQL Server) with one shared operator table and escaping helper
+  so semantics cannot drift.  *Evidence*: F008
+- **LIKE escape character differs per dialect**: `like_escape` emits `\`-escapes; SQL
+  Server needs an explicit `ESCAPE '\'`. *Mitigation*: the dialect renderer owns the
+  `ESCAPE` clause; tests cover `%`, `_` and `\` in operands per dialect.  *Evidence*: F010
 
 ---
 
@@ -257,40 +290,35 @@ Distribution: **7** high, **3** medium, **1** low.
 
 ## 5. Open Questions
 
-### Resolved (during proposal phase)
+### Resolved (during proposal phase, with the requester on 2026-10-07)
 
-- *(none — autonomous run, no interactive Q&A; answer the items below in the spec or by editing this section)*
+- [x] **U1 — Are `startswith` / `endswith` / `contains` case-insensitive or case-sensitive?** — *Resolved*: **Both variants.** Plain names are case-sensitive (`LIKE`); `i`-prefixed names (`istartswith`, `iendswith`, `icontains`) are case-insensitive (`ILIKE` on PostgreSQL).
+  *Resolves claims*: C6
+- [x] **U2 — Which dialects are in scope?** — *Resolved*: **All SQL dialects** — PostgreSQL, generic `SQLParser` (MySQL/SQLite), SQL Server and BigQuery, in both Cython and Rust builders. Regex stays PostgreSQL-only.
+  *Resolves claims*: C7
+- [x] **U3 — `regex` semantics** — *Resolved*: `regex`→`~`, `iregex`→`~*`, `not_regex`→`!~` (`not_iregex`→`!~*`), with a maximum pattern length guard mirroring `_MAX_REGEX_PATTERN_LENGTH` in `querysource/qsurl/residual.py`.
+  *Resolves claims*: C11
+- [x] **U4 — Where does the ≥3-character rule apply and which exception?** — *Resolved*: **`contains` only** (and its `i`/`not_` forms), raised as `ParserError` pre-dispatch in `AbstractParser._where_element` so it surfaces on both Rust and Cython paths. `startswith`, `endswith`, `like` accept any length.
+  *Resolves claims*: C4, C8
+- [x] **U5 — Include the negated family?** — *Resolved*: **Full `not_*` family** for every operator (`not_like`, `not_ilike`, `not_startswith`, `not_istartswith`, `not_endswith`, `not_iendswith`, `not_contains`, `not_icontains`, `not_regex`, `not_iregex`).
+  *Resolves claims*: C6
+- [x] **U6 — How do `i*` variants render on dialects without ILIKE?** — *Resolved*: **`LOWER(col) LIKE LOWER(pattern)`**, explicit and collation-independent, on generic SQL, SQL Server and BigQuery.
+  *Resolves claims*: C7
 
 ### Unresolved (defer to spec / implementation)
 
-- [ ] **U1 — Are `startswith` / `endswith` / `contains` case-insensitive (ILIKE, as qsurl does) or case-sensitive (LIKE)?** — *Owner*: tbd
-  *Blocks claims*: C6
-  *Plausible answers*: a) case-insensitive ILIKE for all three, qsurl parity **(recommended)** · b) case-sensitive LIKE, `ilike` for insensitive · c) both (`startswith` / `istartswith`, …)
-
-- [ ] **U2 — Dialect scope: PostgreSQL only, or also the generic `SQLParser` (MySQL/SQLite via LIKE) in this feature?** — *Owner*: tbd
-  *Blocks claims*: C7
-  *Plausible answers*: a) PostgreSQL (Rust + Cython) plus generic `SQLParser` with LIKE-only ops; regex PG-only **(recommended)** · b) PostgreSQL only · c) every SQL dialect incl. SQL Server and BigQuery
-
-- [ ] **U3 — `regex` semantics: `~` (case-sensitive), `~*`, or both (`regex` / `iregex`)? Include `not_regex`? Apply a max pattern length?** — *Owner*: tbd
-  *Blocks claims*: C11
-  *Plausible answers*: a) `regex`→`~`, `iregex`→`~*`, `not_regex`→`!~`, bounded length **(recommended)** · b) `regex`→`~*` only · c) `regex`→`~` only
-
-- [ ] **U4 — Does the ≥3-character rule apply only to `contains` or to every partial operator? Exception class `ParserError`?** — *Owner*: tbd
-  *Blocks claims*: C4, C8
-  *Plausible answers*: a) `contains` only, raise `ParserError` in `_where_element` **(recommended)** · b) all of startswith/endswith/contains · c) contains and regex
-
-- [ ] **U5 — Include the negated family (`not_contains`, `not_startswith`, `not_endswith`, `not_like`, `not_ilike`)?** — *Owner*: tbd
-  *Blocks claims*: C6
-  *Plausible answers*: a) yes, full `not_*` family (qsurl + `dt/filters` parity) **(recommended)** · b) only `not_contains` / `not_like` / `not_ilike` · c) no negations
+- *(none)*
 
 ---
 
 ## 6. Recommended Next Step
 
-**`/sdd-spec FEAT-180`** — *Rationale*: localization is high-confidence (C1–C5) and the
-change extends an existing, recently exercised extension point (FEAT-152 ILIKE) in
-`pgsql.pyx` + `pgsql_parser.rs` plus a pre-dispatch validator; the open points are
-semantic choices that belong in the spec's Open Questions, not architectural forks.
+**`/sdd-spec FEAT-180`** — *Rationale*: localization is high-confidence (C1–C5), all six
+open questions are resolved, and the change extends an existing, recently exercised
+extension point (FEAT-152 ILIKE) plus a pre-dispatch validator. The four-dialect scope
+(U2) is large but mechanical: the spec should define one shared operator table and
+escaping helper, then decompose tasks per dialect (PostgreSQL → generic SQL → BigQuery →
+SQL Server) with Cython and Rust twins in each task.
 
 ### Alternatives
 
@@ -326,8 +354,9 @@ semantic choices that belong in the spec's Open Questions, not architectural for
 **Mode determination**: `auto` → resolved to `enrichment` (feature verbs "support", "add";
 no failure described).
 
-**Gates**: the plan-approval, review and Q&A gates were auto-passed (autonomous run);
-unknowns are carried unresolved in §5 and `status` is `discussion`.
+**Gates**: the plan-approval and review gates were auto-passed (autonomous run). The Q&A
+gate ran interactively on 2026-10-07: 6 questions (U1–U6, U6 raised as a follow-up to
+U2), 6 answered. `status` is `review` pending explicit acceptance.
 
 ---
 

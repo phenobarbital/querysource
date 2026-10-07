@@ -4,83 +4,493 @@
   "summary_oneline": "Add partial-matching dict operators (like, ilike, startswith, endswith, contains, regex) to the WHERE builders",
   "overall_confidence": "medium",
   "localization": [
-    {"path": "querysource/parsers/pgsql.pyx", "symbol": "PG_TEXT_OPERATORS", "lines": "27-36", "role": "operator allowlist for dict filter values (extend)", "evidence": ["F003"]},
-    {"path": "querysource/parsers/pgsql.pyx", "symbol": "pgSQLParser._filter_conditions_cy", "lines": "359-400", "role": "Cython dict-value renderer (add new operator branch)", "evidence": ["F003"]},
-    {"path": "querysource/parsers/pgsql.pyx", "symbol": "jsonb_condition", "lines": "234-296", "role": "must exempt new operators from implicit JSONB containment", "evidence": ["F004"]},
-    {"path": "querysource/parsers/pgsql.pyx", "symbol": "pgSQLParser.filter_conditions", "lines": "305-313", "role": "Rust dispatch; swallows exceptions", "evidence": ["F005"]},
-    {"path": "rust/src/pgsql_parser.rs", "symbol": "PG_TEXT_OPERATORS / pg_validate_operator / process_dict_value / jsonb_condition", "lines": "37-42,75-90,343-400,474-537", "role": "Rust fast-path twin of the Cython branch", "evidence": ["F006", "F004"]},
-    {"path": "querysource/parsers/sql.pyx", "symbol": "SQLParser.filter_conditions", "lines": "152-162", "role": "generic Cython dict branch (COMPARISON_TOKENS only)", "evidence": ["F002"]},
-    {"path": "rust/src/sql_parser.rs", "symbol": "validate_operator / filter_conditions", "lines": "14-57,246-258", "role": "generic Rust dict branch (COMPARISON_TOKENS only)", "evidence": ["F007"]},
-    {"path": "querysource/parsers/abstract.pyx", "symbol": "AbstractParser._where_element", "lines": "564-574", "role": "pre-dispatch hook: pre-quotes dict value; candidate for operator validation", "evidence": ["F009"]},
-    {"path": "querysource/qsurl/translate.py", "symbol": "_TEXT_PATTERNS / like_escape", "lines": "12-23", "role": "existing startswith/contains/endswith→ILIKE semantics and escaping helper to reuse", "evidence": ["F010"]},
-    {"path": "tests/qsurl/test_pg_ilike.py", "symbol": "PATHS / _render", "lines": "1-60", "role": "dual-path test pattern to copy", "evidence": ["F011"]}
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "PG_TEXT_OPERATORS",
+      "lines": "27-36",
+      "role": "operator allowlist for dict filter values (extend)",
+      "evidence": [
+        "F003"
+      ]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "pgSQLParser._filter_conditions_cy",
+      "lines": "359-400",
+      "role": "Cython dict-value renderer (add new operator branch)",
+      "evidence": [
+        "F003"
+      ]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "jsonb_condition",
+      "lines": "234-296",
+      "role": "must exempt new operators from implicit JSONB containment",
+      "evidence": [
+        "F004"
+      ]
+    },
+    {
+      "path": "querysource/parsers/pgsql.pyx",
+      "symbol": "pgSQLParser.filter_conditions",
+      "lines": "305-313",
+      "role": "Rust dispatch; swallows exceptions",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "path": "rust/src/pgsql_parser.rs",
+      "symbol": "PG_TEXT_OPERATORS / pg_validate_operator / process_dict_value / jsonb_condition",
+      "lines": "37-42,75-90,343-400,474-537",
+      "role": "Rust fast-path twin of the Cython branch",
+      "evidence": [
+        "F006",
+        "F004"
+      ]
+    },
+    {
+      "path": "querysource/parsers/sql.pyx",
+      "symbol": "SQLParser.filter_conditions",
+      "lines": "152-162",
+      "role": "generic Cython dict branch (COMPARISON_TOKENS only)",
+      "evidence": [
+        "F002"
+      ]
+    },
+    {
+      "path": "rust/src/sql_parser.rs",
+      "symbol": "validate_operator / filter_conditions",
+      "lines": "14-57,246-258",
+      "role": "generic Rust dict branch (COMPARISON_TOKENS only)",
+      "evidence": [
+        "F007"
+      ]
+    },
+    {
+      "path": "querysource/parsers/abstract.pyx",
+      "symbol": "AbstractParser._where_element",
+      "lines": "564-574",
+      "role": "pre-dispatch hook: pre-quotes dict value; candidate for operator validation",
+      "evidence": [
+        "F009"
+      ]
+    },
+    {
+      "path": "querysource/qsurl/translate.py",
+      "symbol": "_TEXT_PATTERNS / like_escape",
+      "lines": "12-23",
+      "role": "existing startswith/contains/endswith→ILIKE semantics and escaping helper to reuse",
+      "evidence": [
+        "F010"
+      ]
+    },
+    {
+      "path": "tests/qsurl/test_pg_ilike.py",
+      "symbol": "PATHS / _render",
+      "lines": "1-60",
+      "role": "dual-path test pattern to copy",
+      "evidence": [
+        "F011"
+      ]
+    }
   ],
   "constraints": [
-    {"title": "Two builders per dialect", "text": "Every operator added to pgsql.pyx must be mirrored in rust/src/pgsql_parser.rs (and sql.pyx ↔ sql_parser.rs); tests run both paths and skip Rust when the installed extension is stale.", "evidence": ["F006", "F011", "F014"]},
-    {"title": "JSONB dispatch runs first", "text": "jsonb_condition treats a dict without known operator keys as implicit containment; new operator names must be exempted there (Cython and Rust).", "evidence": ["F004"]},
-    {"title": "Rust errors are swallowed on pgsql", "text": "pgSQLParser.filter_conditions catches every Rust exception and re-renders via Cython, so a user-facing validation error must be raised before dispatch or identically in the Cython path.", "evidence": ["F005"]},
-    {"title": "is_valid pre-quoting invariant", "text": "_where_element wraps the dict operand in single quotes (and doubles embedded quotes) before builders run; builders must strip, then escape LIKE metacharacters, then quote via pg_literal.", "evidence": ["F009", "F003", "F006"]},
-    {"title": "Single operator per dict", "text": "_where_element keeps only the last (op, v) pair; Rust reads the first entry. Multi-key dicts are not a supported form for these operators.", "evidence": ["F009", "F006"]},
-    {"title": "Existing vocabulary", "text": "qsurl (translate.py) and DataFrame filters (types/dt/filters.py) already use startswith/endswith/contains/regex names with ILIKE semantics and a like_escape helper; parser-level operators should match.", "evidence": ["F010", "F013"]}
+    {
+      "title": "Two builders per dialect",
+      "text": "Every operator added to pgsql.pyx must be mirrored in rust/src/pgsql_parser.rs (and sql.pyx ↔ sql_parser.rs); tests run both paths and skip Rust when the installed extension is stale.",
+      "evidence": [
+        "F006",
+        "F011",
+        "F014"
+      ]
+    },
+    {
+      "title": "JSONB dispatch runs first",
+      "text": "jsonb_condition treats a dict without known operator keys as implicit containment; new operator names must be exempted there (Cython and Rust).",
+      "evidence": [
+        "F004"
+      ]
+    },
+    {
+      "title": "Rust errors are swallowed on pgsql",
+      "text": "pgSQLParser.filter_conditions catches every Rust exception and re-renders via Cython, so a user-facing validation error must be raised before dispatch or identically in the Cython path.",
+      "evidence": [
+        "F005"
+      ]
+    },
+    {
+      "title": "is_valid pre-quoting invariant",
+      "text": "_where_element wraps the dict operand in single quotes (and doubles embedded quotes) before builders run; builders must strip, then escape LIKE metacharacters, then quote via pg_literal.",
+      "evidence": [
+        "F009",
+        "F003",
+        "F006"
+      ]
+    },
+    {
+      "title": "Single operator per dict",
+      "text": "_where_element keeps only the last (op, v) pair; Rust reads the first entry. Multi-key dicts are not a supported form for these operators.",
+      "evidence": [
+        "F009",
+        "F006"
+      ]
+    },
+    {
+      "title": "Existing vocabulary",
+      "text": "qsurl (translate.py) and DataFrame filters (types/dt/filters.py) already use startswith/endswith/contains/regex names with ILIKE semantics and a like_escape helper; parser-level operators should match.",
+      "evidence": [
+        "F010",
+        "F013"
+      ]
+    }
   ],
   "recent_history": [
-    {"commit": "ec68025a", "when": "2026-09-24", "author": "Jesus Lara", "message": "feat(qsurl-parser): TASK-769 — PostgreSQL ILIKE / NOT ILIKE dict operator (Rust + Cython)", "evidence": ["F012"]},
-    {"commit": "f313e115", "when": "2026-09-25", "author": "Jesus Lara", "message": "docs(qsurl-parser): pin the is_valid() pre-quoting invariant the TASK-769 ILIKE fix depends on", "evidence": ["F012"]},
-    {"commit": "4d57a4af", "when": "2026-10-01", "author": "Jesus", "message": "fix(jsonb-not-or-operators): accept only list operands in Cython for Rust parity", "evidence": ["F012"]}
+    {
+      "commit": "ec68025a",
+      "when": "2026-09-24",
+      "author": "Jesus Lara",
+      "message": "feat(qsurl-parser): TASK-769 — PostgreSQL ILIKE / NOT ILIKE dict operator (Rust + Cython)",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "commit": "f313e115",
+      "when": "2026-09-25",
+      "author": "Jesus Lara",
+      "message": "docs(qsurl-parser): pin the is_valid() pre-quoting invariant the TASK-769 ILIKE fix depends on",
+      "evidence": [
+        "F012"
+      ]
+    },
+    {
+      "commit": "4d57a4af",
+      "when": "2026-10-01",
+      "author": "Jesus",
+      "message": "fix(jsonb-not-or-operators): accept only list operands in Cython for Rust parity",
+      "evidence": [
+        "F012"
+      ]
+    }
   ],
   "scope": {
     "whats_new": [
-      "A partial-matching operator vocabulary accepted as the key of a dict-typed where_cond/filter value: like, ilike, not_like, not_ilike (raw pattern), startswith, endswith, contains (escaped + wildcarded), regex (PostgreSQL ~ / ~*).",
+      "Partial-matching operator vocabulary as the single key of a dict-typed where_cond/filter value: like, ilike, startswith, istartswith, endswith, iendswith, contains, icontains, regex, iregex, each with a not_ twin. Plain names are case-sensitive, i* names case-insensitive (ILIKE on PostgreSQL, LOWER(col) LIKE LOWER(pattern) elsewhere). Regex (~, ~*, !~, !~*) is PostgreSQL-only.",
       "A pre-dispatch validator raising ParserError when a contains operand is shorter than 3 characters (and for non-string operands).",
       "A shared LIKE-metacharacter escaping helper usable from Cython (and a Rust twin)."
     ],
     "what_changes": [
-      {"target": "querysource/parsers/pgsql.pyx::PG_TEXT_OPERATORS + _filter_conditions_cy + jsonb_condition", "change": "extend allowlist; add branch rendering LIKE/ILIKE/~ with strip→escape→wildcard→pg_literal; exempt in jsonb_condition", "evidence": ["F003", "F004"]},
-      {"target": "rust/src/pgsql_parser.rs::PG_TEXT_OPERATORS + pg_validate_operator + process_dict_value + jsonb_condition", "change": "same as Cython, in Rust", "evidence": ["F006", "F004"]},
-      {"target": "querysource/parsers/abstract.pyx::_where_element", "change": "validate operator/operand before pre-quoting (contains min length) so the error is raised on both paths", "evidence": ["F009", "F005"]},
-      {"target": "querysource/parsers/sql.pyx + rust/src/sql_parser.rs (dict branch)", "change": "optional: LIKE-based startswith/endswith/contains/like for the generic SQL dialect (scope pending U2)", "evidence": ["F002", "F007"]},
-      {"target": "tests/ (new test_pg_partial_matching.py; extend tests/test_rust_parsers.py)", "change": "dual-path tests per operator incl. escaping and error cases", "evidence": ["F011"]}
+      {
+        "target": "querysource/parsers/pgsql.pyx::PG_TEXT_OPERATORS + _filter_conditions_cy + jsonb_condition",
+        "change": "extend allowlist; add branch rendering LIKE/ILIKE/~ with strip→escape→wildcard→pg_literal; exempt in jsonb_condition",
+        "evidence": [
+          "F003",
+          "F004"
+        ]
+      },
+      {
+        "target": "rust/src/pgsql_parser.rs::PG_TEXT_OPERATORS + pg_validate_operator + process_dict_value + jsonb_condition",
+        "change": "same as Cython, in Rust",
+        "evidence": [
+          "F006",
+          "F004"
+        ]
+      },
+      {
+        "target": "querysource/parsers/abstract.pyx::_where_element",
+        "change": "validate operator/operand before pre-quoting (contains min length) so the error is raised on both paths",
+        "evidence": [
+          "F009",
+          "F005"
+        ]
+      },
+      {
+        "target": "querysource/parsers/sql.pyx + rust/src/sql_parser.rs (dict branch)",
+        "change": "LIKE-based operators plus LOWER(col) LIKE LOWER(...) for i* variants; regex raises ParserError",
+        "evidence": [
+          "F002",
+          "F007"
+        ]
+      },
+      {
+        "target": "querysource/parsers/sqlserver.pyx + rust/src/mssql_parser.rs + rust/src/filter_common.rs",
+        "change": "new dict-value branch (Dict variant in FilterValue) rendering LIKE/LOWER() forms with explicit ESCAPE '\\\\'",
+        "evidence": [
+          "F008"
+        ]
+      },
+      {
+        "target": "querysource/parsers/bigquery.pyx + rust/src/bigquery_parser.rs (dict branch)",
+        "change": "extend COMPARISON_TOKENS-only dict branch with LIKE/LOWER() forms via bq_quote_string",
+        "evidence": [
+          "F008"
+        ]
+      },
+      {
+        "target": "tests/ (new test_pg_partial_matching.py; extend tests/test_rust_parsers.py)",
+        "change": "dual-path tests per operator incl. escaping and error cases",
+        "evidence": [
+          "F011"
+        ]
+      }
     ],
     "non_goals": [
       "qsurl grammar changes (qsurl already maps text expressions to ILIKE; regex pushdown capability stays out unless decided in spec).",
-      "SQL Server / BigQuery / CQL / Mongo partial matching (no dict branch today; separate feature).",
+      "Non-SQL dialects (CQL, Mongo, Elastic, ArangoDB, Rethink, Influx); regex on dialects other than PostgreSQL.",
       "Changing the legacy `field~` key-suffix prefix-match behaviour.",
       "Multi-operator dicts ({\"startswith\": ..., \"endswith\": ...}) — single-operator form only."
     ],
     "patterns_to_follow": [
-      {"pattern": "FEAT-152 ILIKE branch: strip is_valid pre-quote → pg_literal; identical comment block in Cython and Rust", "evidence": ["F003", "F006"]},
-      {"pattern": "like_escape from qsurl/translate.py for %, _ and \\ escaping before adding wildcards", "evidence": ["F010"]},
-      {"pattern": "pytest.param with skipif on stale extension; render via _rs.pgsql_filter_conditions and _filter_conditions_cy", "evidence": ["F011"]}
+      {
+        "pattern": "FEAT-152 ILIKE branch: strip is_valid pre-quote → pg_literal; identical comment block in Cython and Rust",
+        "evidence": [
+          "F003",
+          "F006"
+        ]
+      },
+      {
+        "pattern": "like_escape from qsurl/translate.py for %, _ and \\ escaping before adding wildcards",
+        "evidence": [
+          "F010"
+        ]
+      },
+      {
+        "pattern": "pytest.param with skipif on stale extension; render via _rs.pgsql_filter_conditions and _filter_conditions_cy",
+        "evidence": [
+          "F011"
+        ]
+      }
     ],
     "integration_risks": [
-      {"risk": "Operator name collision with JSONB implicit containment: a user filtering a JSONB column by a key literally named 'contains' would change behaviour.", "mitigation": "document reserved operator names; exemption only applies when the single key is a reserved operator and the operand is a string", "evidence": ["F004"]},
-      {"risk": "Error raised inside Rust is silently swallowed on pgsql; tests on the Rust path alone would pass while the user sees no error.", "mitigation": "raise in _where_element (pre-dispatch) and assert on the full parser flow in tests", "evidence": ["F005"]},
-      {"risk": "Unbounded user regex pushed to PostgreSQL may be expensive (ReDoS-like); residual.py already guards pattern length for in-memory regex.", "mitigation": "apply a max-length guard mirroring _MAX_REGEX_PATTERN_LENGTH", "evidence": ["F010"]},
-      {"risk": "Stale .so: tests see old Rust code unless make build-rust + stage-rust run.", "mitigation": "skip guard + CI rebuild step", "evidence": ["F011", "F014"]}
+      {
+        "risk": "Operator name collision with JSONB implicit containment: a user filtering a JSONB column by a key literally named 'contains' would change behaviour.",
+        "mitigation": "document reserved operator names; exemption only applies when the single key is a reserved operator and the operand is a string",
+        "evidence": [
+          "F004"
+        ]
+      },
+      {
+        "risk": "Error raised inside Rust is silently swallowed on pgsql; tests on the Rust path alone would pass while the user sees no error.",
+        "mitigation": "raise in _where_element (pre-dispatch) and assert on the full parser flow in tests",
+        "evidence": [
+          "F005"
+        ]
+      },
+      {
+        "risk": "Unbounded user regex pushed to PostgreSQL may be expensive (ReDoS-like); residual.py already guards pattern length for in-memory regex.",
+        "mitigation": "apply a max-length guard mirroring _MAX_REGEX_PATTERN_LENGTH",
+        "evidence": [
+          "F010"
+        ]
+      },
+      {
+        "risk": "Stale .so: tests see old Rust code unless make build-rust + stage-rust run.",
+        "mitigation": "skip guard + CI rebuild step",
+        "evidence": [
+          "F011",
+          "F014"
+        ]
+      }
     ]
   },
   "claims": [
-    {"id": "C1", "claim": "Dict-typed where_cond values are rendered in filter_conditions of sql.pyx / pgsql.pyx, each with a Rust fast path and a Cython fallback", "evidence": ["F001", "F002", "F003", "F006", "F007"], "confidence": "high", "reasoning": "direct reads of both implementations"},
-    {"id": "C2", "claim": "pgsql already exposes the extension point for text operators (PG_TEXT_OPERATORS: ILIKE/NOT ILIKE) in both Cython and Rust", "evidence": ["F003", "F006"], "confidence": "high", "reasoning": "FEAT-152 code and comments"},
-    {"id": "C3", "claim": "New operator names must be exempted in jsonb_condition or the dict is rendered as JSONB containment", "evidence": ["F004"], "confidence": "high", "reasoning": "operators==0 branch renders col @> json; FEAT-152 needed the same exemption"},
-    {"id": "C4", "claim": "pgsql Rust-path exceptions are swallowed, so the 'contains too short' error must be raised pre-dispatch or in Cython as well", "evidence": ["F005"], "confidence": "high", "reasoning": "bare except Exception: pass at pgsql.pyx:311"},
-    {"id": "C5", "claim": "Dict operands arrive pre-quoted by is_valid; builders must strip before escaping and quoting", "evidence": ["F009", "F003", "F006"], "confidence": "high", "reasoning": "pinned invariant (commit f313e115) and strip code in both builders"},
-    {"id": "C6", "claim": "qsurl already defines startswith/contains/endswith → ILIKE with like_escape; parser-level operators can reuse it", "evidence": ["F010"], "confidence": "high", "reasoning": "direct read of translate.py"},
-    {"id": "C7", "claim": "Generic SQL, mssql and BigQuery builders have no text-operator support; extending them is new work", "evidence": ["F002", "F007", "F008"], "confidence": "medium", "reasoning": "no LIKE handling found; mssql has no dict variant at all"},
-    {"id": "C8", "claim": "_where_element is the right single hook for pre-dispatch validation", "evidence": ["F009", "F005"], "confidence": "medium", "reasoning": "runs before both builders; but it currently never raises, so behaviour change is a design decision"},
-    {"id": "C9", "claim": "Tests must be dual-path with a stale-extension skip, and the .so must be rebuilt/staged", "evidence": ["F011", "F014"], "confidence": "high", "reasoning": "existing test file and memory note"},
-    {"id": "C10", "claim": "Legacy key-suffix form field~ already gives case-insensitive prefix match and must keep working", "evidence": ["F003", "F006"], "confidence": "medium", "reasoning": "code present in both builders; no tests located for it"},
-    {"id": "C11", "claim": "Pushing user regex to PostgreSQL needs a safety bound", "evidence": ["F010"], "confidence": "low", "reasoning": "inferred from residual.py precedent; no DB-side evidence gathered"}
+    {
+      "id": "C1",
+      "claim": "Dict-typed where_cond values are rendered in filter_conditions of sql.pyx / pgsql.pyx, each with a Rust fast path and a Cython fallback",
+      "evidence": [
+        "F001",
+        "F002",
+        "F003",
+        "F006",
+        "F007"
+      ],
+      "confidence": "high",
+      "reasoning": "direct reads of both implementations"
+    },
+    {
+      "id": "C2",
+      "claim": "pgsql already exposes the extension point for text operators (PG_TEXT_OPERATORS: ILIKE/NOT ILIKE) in both Cython and Rust",
+      "evidence": [
+        "F003",
+        "F006"
+      ],
+      "confidence": "high",
+      "reasoning": "FEAT-152 code and comments"
+    },
+    {
+      "id": "C3",
+      "claim": "New operator names must be exempted in jsonb_condition or the dict is rendered as JSONB containment",
+      "evidence": [
+        "F004"
+      ],
+      "confidence": "high",
+      "reasoning": "operators==0 branch renders col @> json; FEAT-152 needed the same exemption"
+    },
+    {
+      "id": "C4",
+      "claim": "pgsql Rust-path exceptions are swallowed, so the 'contains too short' error must be raised pre-dispatch or in Cython as well",
+      "evidence": [
+        "F005"
+      ],
+      "confidence": "high",
+      "reasoning": "bare except Exception: pass at pgsql.pyx:311"
+    },
+    {
+      "id": "C5",
+      "claim": "Dict operands arrive pre-quoted by is_valid; builders must strip before escaping and quoting",
+      "evidence": [
+        "F009",
+        "F003",
+        "F006"
+      ],
+      "confidence": "high",
+      "reasoning": "pinned invariant (commit f313e115) and strip code in both builders"
+    },
+    {
+      "id": "C6",
+      "claim": "qsurl already defines startswith/contains/endswith → ILIKE with like_escape; parser-level operators can reuse it",
+      "evidence": [
+        "F010"
+      ],
+      "confidence": "high",
+      "reasoning": "direct read of translate.py"
+    },
+    {
+      "id": "C7",
+      "claim": "Generic SQL, mssql and BigQuery builders have no text-operator support; extending them is new work",
+      "evidence": [
+        "F002",
+        "F007",
+        "F008"
+      ],
+      "confidence": "medium",
+      "reasoning": "no LIKE handling found; mssql has no dict variant at all"
+    },
+    {
+      "id": "C8",
+      "claim": "_where_element is the right single hook for pre-dispatch validation",
+      "evidence": [
+        "F009",
+        "F005"
+      ],
+      "confidence": "medium",
+      "reasoning": "runs before both builders; but it currently never raises, so behaviour change is a design decision"
+    },
+    {
+      "id": "C9",
+      "claim": "Tests must be dual-path with a stale-extension skip, and the .so must be rebuilt/staged",
+      "evidence": [
+        "F011",
+        "F014"
+      ],
+      "confidence": "high",
+      "reasoning": "existing test file and memory note"
+    },
+    {
+      "id": "C10",
+      "claim": "Legacy key-suffix form field~ already gives case-insensitive prefix match and must keep working",
+      "evidence": [
+        "F003",
+        "F006"
+      ],
+      "confidence": "medium",
+      "reasoning": "code present in both builders; no tests located for it"
+    },
+    {
+      "id": "C11",
+      "claim": "Pushing user regex to PostgreSQL needs a safety bound",
+      "evidence": [
+        "F010"
+      ],
+      "confidence": "low",
+      "reasoning": "inferred from residual.py precedent; no DB-side evidence gathered"
+    }
   ],
   "unknowns": [
-    {"id": "U1", "question": "Are startswith / endswith / contains case-insensitive (ILIKE, as qsurl does today) or case-sensitive (LIKE)?", "resolves_claims": ["C6"], "plausible_answers": ["a) case-insensitive ILIKE for all three (qsurl parity) — recommended", "b) case-sensitive LIKE; users use ilike for insensitive", "c) both: startswith/istartswith etc."], "user_answer": null},
-    {"id": "U2", "question": "Which dialects are in scope: PostgreSQL only, or also the generic SQLParser (MySQL/SQLite via LIKE) in the same feature?", "resolves_claims": ["C7"], "plausible_answers": ["a) PostgreSQL (Rust+Cython) plus generic SQLParser with LIKE-only ops; regex PG-only — recommended", "b) PostgreSQL only", "c) all SQL dialects incl. SQL Server and BigQuery"], "user_answer": null},
-    {"id": "U3", "question": "regex semantics: map `regex` to case-sensitive `~`, case-insensitive `~*`, or offer both (`regex` / `iregex`)? Should negations (`not_regex`) and a max pattern length apply?", "resolves_claims": ["C11"], "plausible_answers": ["a) regex→~, iregex→~*, not_regex→!~, bounded length — recommended", "b) regex→~* only", "c) regex→~ only"], "user_answer": null},
-    {"id": "U4", "question": "Does the minimum-length (≥3) rule apply only to contains, or to every partial-matching operator? Which exception: ParserError (QueryException subclass)?", "resolves_claims": ["C4", "C8"], "plausible_answers": ["a) contains only, raise ParserError before dispatch — recommended", "b) all of startswith/endswith/contains", "c) contains and regex"], "user_answer": null},
-    {"id": "U5", "question": "Include the negated family (not_contains, not_startswith, not_endswith, not_like, not_ilike) in this feature?", "resolves_claims": ["C6"], "plausible_answers": ["a) yes, full not_* family (qsurl and dt/filters parity) — recommended", "b) only not_contains / not_like / not_ilike", "c) no negations"], "user_answer": null}
+    {
+      "id": "U1",
+      "question": "Are startswith / endswith / contains case-insensitive (ILIKE, as qsurl does today) or case-sensitive (LIKE)?",
+      "resolves_claims": [
+        "C6"
+      ],
+      "plausible_answers": [
+        "a) case-insensitive ILIKE for all three (qsurl parity) — recommended",
+        "b) case-sensitive LIKE; users use ilike for insensitive",
+        "c) both: startswith/istartswith etc."
+      ],
+      "user_answer": "Both variants: plain names case-sensitive (LIKE), i-prefixed names case-insensitive (ILIKE / LOWER())."
+    },
+    {
+      "id": "U2",
+      "question": "Which dialects are in scope: PostgreSQL only, or also the generic SQLParser (MySQL/SQLite via LIKE) in the same feature?",
+      "resolves_claims": [
+        "C7"
+      ],
+      "plausible_answers": [
+        "a) PostgreSQL (Rust+Cython) plus generic SQLParser with LIKE-only ops; regex PG-only — recommended",
+        "b) PostgreSQL only",
+        "c) all SQL dialects incl. SQL Server and BigQuery"
+      ],
+      "user_answer": "All SQL dialects: PostgreSQL, generic SQLParser, SQL Server, BigQuery (Cython + Rust). Regex PostgreSQL-only."
+    },
+    {
+      "id": "U3",
+      "question": "regex semantics: map `regex` to case-sensitive `~`, case-insensitive `~*`, or offer both (`regex` / `iregex`)? Should negations (`not_regex`) and a max pattern length apply?",
+      "resolves_claims": [
+        "C11"
+      ],
+      "plausible_answers": [
+        "a) regex→~, iregex→~*, not_regex→!~, bounded length — recommended",
+        "b) regex→~* only",
+        "c) regex→~ only"
+      ],
+      "user_answer": "regex→~, iregex→~*, not_regex→!~ (not_iregex→!~*), bounded pattern length."
+    },
+    {
+      "id": "U4",
+      "question": "Does the minimum-length (≥3) rule apply only to contains, or to every partial-matching operator? Which exception: ParserError (QueryException subclass)?",
+      "resolves_claims": [
+        "C4",
+        "C8"
+      ],
+      "plausible_answers": [
+        "a) contains only, raise ParserError before dispatch — recommended",
+        "b) all of startswith/endswith/contains",
+        "c) contains and regex"
+      ],
+      "user_answer": "contains only (and i/not_ forms); ParserError raised pre-dispatch in _where_element."
+    },
+    {
+      "id": "U5",
+      "question": "Include the negated family (not_contains, not_startswith, not_endswith, not_like, not_ilike) in this feature?",
+      "resolves_claims": [
+        "C6"
+      ],
+      "plausible_answers": [
+        "a) yes, full not_* family (qsurl and dt/filters parity) — recommended",
+        "b) only not_contains / not_like / not_ilike",
+        "c) no negations"
+      ],
+      "user_answer": "Full not_* family for every operator."
+    },
+    {
+      "id": "U6",
+      "question": "How should the case-insensitive i* variants render on dialects without ILIKE (generic SQL/MySQL, SQL Server, BigQuery)?",
+      "resolves_claims": [
+        "C7"
+      ],
+      "plausible_answers": [
+        "a) LOWER(col) LIKE LOWER(pattern) — recommended",
+        "b) plain LIKE, rely on collation",
+        "c) reject i* on non-PG"
+      ],
+      "user_answer": "LOWER(col) LIKE LOWER(pattern), explicit and collation-independent."
+    }
   ],
   "recommended_next_command": {
     "command": "sdd-spec",
-    "rationale": "Localization is high-confidence and the change extends an existing, recently exercised extension point (FEAT-152 ILIKE) in pgsql.pyx + pgsql_parser.rs with a pre-dispatch validator; the open points are semantic choices that fit the spec's Open Questions section, not architectural forks."
+    "rationale": "Localization is high-confidence and all six open questions are resolved; the change extends the FEAT-152 ILIKE extension point plus a pre-dispatch validator. The four-dialect scope is large but mechanical: the spec should define one shared operator table and escaping helper and decompose per dialect with Cython/Rust twins."
   }
 }
