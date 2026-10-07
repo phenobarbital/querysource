@@ -35,7 +35,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -45,8 +45,9 @@
       "parallelism_notes": "needs PARTIAL_MATCH_OPERATORS from TASK-840 (querysource/parsers/partial_matching.py): the parity test in tests/test_rust_partial_match_units.py compares the Rust table against it; cargo test runs inside this sub-worktree's rust/target only, no shared venv rebuild",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-841-rust-partial-match-table.md"
+      "completed_at": "2026-10-07T16:23:45+00:00",
+      "file": "sdd/tasks/completed/TASK-841-rust-partial-match-table.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-842",

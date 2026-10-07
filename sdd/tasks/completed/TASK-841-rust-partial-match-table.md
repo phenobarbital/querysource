@@ -410,10 +410,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet · Backend: native · Model: sonnet · Attempts: 1 · Duration: 90s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Rust partial_match.rs (twin of the Python operator table), lib.rs wiring, cargo runner helper and parity/cargo tests. pytest 2 passed. Review: zero corrections. Residual lint B905 (zip strict) left for /sdd-done.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
