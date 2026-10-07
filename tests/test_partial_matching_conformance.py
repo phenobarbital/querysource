@@ -18,17 +18,17 @@ except Exception:
     fake_navconfig_logging.logging = logging
     sys.modules["navconfig.logging"] = fake_navconfig_logging
 
-from querysource.exceptions import ParserError
-from querysource.models import QueryObject
-from querysource.parsers import bigquery as bqmod
-from querysource.parsers import pgsql
-from querysource.parsers import sql as sqlmod
-from querysource.parsers import sqlserver as mssqlmod
-from querysource.parsers.bigquery import BigQueryParser
-from querysource.parsers.partial_matching import PARTIAL_MATCH_OPERATORS
-from querysource.parsers.pgsql import pgSQLParser
-from querysource.parsers.sql import SQLParser
-from querysource.parsers.sqlserver import msSQLParser
+from querysource.exceptions import ParserError  # noqa: E402
+from querysource.models import QueryObject  # noqa: E402
+from querysource.parsers import bigquery as bqmod  # noqa: E402
+from querysource.parsers import pgsql  # noqa: E402
+from querysource.parsers import sql as sqlmod  # noqa: E402
+from querysource.parsers import sqlserver as mssqlmod  # noqa: E402
+from querysource.parsers.bigquery import BigQueryParser  # noqa: E402
+from querysource.parsers.partial_matching import PARTIAL_MATCH_OPERATORS  # noqa: E402
+from querysource.parsers.pgsql import pgSQLParser  # noqa: E402
+from querysource.parsers.sql import SQLParser  # noqa: E402
+from querysource.parsers.sqlserver import msSQLParser  # noqa: E402
 
 SQL = "SELECT n FROM t {where_cond}"
 OPERATORS = tuple(PARTIAL_MATCH_OPERATORS)

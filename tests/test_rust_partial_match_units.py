@@ -16,7 +16,7 @@ ROW_RE = re.compile(
 def test_rust_table_matches_python():
     rows = ROW_RE.findall(RS.read_text(encoding="utf-8"))
     assert len(rows) == len(PARTIAL_MATCH_OPERATORS)
-    for row, py in zip(rows, PARTIAL_MATCH_OPERATORS.values()):
+    for row, py in zip(rows, PARTIAL_MATCH_OPERATORS.values(), strict=True):
         name, kind, neg, ins, prefix, suffix, esc, minlen = row
         minlen_v = 3 if minlen == "CONTAINS_MIN_LENGTH" else int(minlen)
         assert (name, kind.lower(), neg == "true", ins == "true", prefix, suffix, esc == "true", minlen_v) == (

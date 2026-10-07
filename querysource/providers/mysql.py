@@ -172,7 +172,7 @@ class mysqlProvider(BaseProvider):
                 "Query: Uncaught Error",
                 exception=err,
                 code=406
-            )
+            ) from err
 
     async def close(self):
         try:

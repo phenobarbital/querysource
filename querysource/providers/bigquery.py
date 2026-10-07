@@ -96,4 +96,4 @@ class bigqueryProvider(sqlProvider):
                 "Query: Error",
                 exception=err,
                 code=406
-            )
+            ) from err
