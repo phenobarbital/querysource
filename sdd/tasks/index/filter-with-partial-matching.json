@@ -249,7 +249,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -267,8 +267,9 @@
       "parallelism_notes": "tests the Cython builders from TASK-843 (querysource/parsers/pgsql.pyx), TASK-845 (querysource/parsers/sql.pyx), TASK-847 (querysource/parsers/sqlserver.pyx), TASK-849 (querysource/parsers/bigquery.pyx) and the Rust builders from TASK-844 (rust/src/pgsql_parser.rs), TASK-846 (rust/src/sql_parser.rs), TASK-848 (rust/src/mssql_parser.rs), TASK-850 (rust/src/bigquery_parser.rs) through the rebuilt extension; make stage-rust also builds rust/qsurl, so TASK-852's ast.rs/parser.rs/ir.rs must be merged first or the staged _qsurl would regress; exclusive: make build-rust (maturin develop into the shared .venv), make stage-rust and make build-inplace",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-851-partial-matching-rebuild-and-conformance.md"
+      "completed_at": "2026-10-07T16:45:30+00:00",
+      "file": "sdd/tasks/completed/TASK-851-partial-matching-rebuild-and-conformance.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-852",
