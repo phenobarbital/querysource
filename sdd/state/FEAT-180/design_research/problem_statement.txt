@@ -1,0 +1,35 @@
+> Querysource requires a way to support like, ilike and partial-matching (startswith,
+> endswith, contains, postgres regexp) in "where_cond"|"filter" options, when a field in
+> "where_cond" is a dictionary, like this:
+>
+> ```json
+> "where_cond": { "full_name": { "startswith": "andre" } }
+> ```
+>
+> we need to add a partial-matching expression in "WHERE" parser, the partial-matching
+> expressions will be:
+> - startswith: the "field" will starts with the value
+> - endswith: "field" will end with value
+> - "contains": word or phrase is contained by "field" value (with a length no less
+>   than 3, if length is 1 or 2, raise an error)
+> - "regex": field will match the regex
+
+The request is to let a dict-typed `where_cond`/`filter` value carry a partial-matching
+operator (`{"full_name": {"startswith": "andre"}}`) and have the WHERE builders render
+it as `LIKE` / `ILIKE` / PostgreSQL regex. The builders live in `filter_conditions` of
+`querysource/parsers/pgsql.pyx` and `querysource/parsers/sql.pyx`, each with a Rust fast
+path (`rust/src/pgsql_parser.rs`, `rust/src/sql_parser.rs`) and a Cython fallback. The
+PostgreSQL builder already has the exact extension point needed: FEAT-152 added
+`PG_TEXT_OPERATORS = ('ILIKE', 'NOT ILIKE')` as accepted dict operators in both Cython
+and Rust, and qsurl (`querysource/qsurl/translate.py`) already maps
+`startswith`/`contains`/`endswith` to ILIKE patterns with a `like_escape()` helper. The
+recommendation is to extend that allowlist with the new vocabulary in both builders,
+escape wildcards before quoting, exempt the new names in `jsonb_condition`, and raise
+the "contains too short" error in `AbstractParser._where_element` (the only hook that
+runs before both paths, because the pgsql Rust dispatch swallows exceptions). Per the
+resolved questions (§5) the scope covers every SQL dialect: case-sensitive and `i*`
+case-insensitive variants with a full `not_*` family, `LOWER(col) LIKE LOWER(pattern)`
+on dialects without ILIKE, and regex (`~`, `~*`, `!~`, `!~*`, bounded length) on
+PostgreSQL only.
+
+---
