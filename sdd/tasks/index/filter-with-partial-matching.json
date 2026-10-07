@@ -99,7 +99,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -109,8 +109,9 @@
       "parallelism_notes": "uses crate::partial_match::{check_entries, lookup, like_escape, build_like_pattern, PartialMatchOp, MatchKind} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); validation is cargo test in this sub-worktree only — no shared venv rebuild",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-844-pgsql-rust-partial-matching.md"
+      "completed_at": "2026-10-07T16:29:47+00:00",
+      "file": "sdd/tasks/completed/TASK-844-pgsql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-845",
@@ -141,7 +142,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -151,8 +152,9 @@
       "parallelism_notes": "uses crate::partial_match::{check_entries, build_like_pattern, like_escape_bang, sql_like_literal, PartialMatchOp, MatchKind} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-846-sql-rust-partial-matching.md"
+      "completed_at": "2026-10-07T16:29:52+00:00",
+      "file": "sdd/tasks/completed/TASK-846-sql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-847",
@@ -183,7 +185,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -193,8 +195,9 @@
       "parallelism_notes": "uses crate::partial_match::{check_entries, build_like_pattern, like_escape_bang, mssql_like_literal} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-848-mssql-rust-partial-matching.md"
+      "completed_at": "2026-10-07T16:29:56+00:00",
+      "file": "sdd/tasks/completed/TASK-848-mssql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-849",

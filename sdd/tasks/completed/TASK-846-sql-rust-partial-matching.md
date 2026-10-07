@@ -242,10 +242,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 1 · Duration: 181s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Rust dialect partial-matching implemented; cargo unit tests via the pytest wrapper pass. Review: zero corrections.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
