@@ -283,10 +283,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 1 · Duration: 309s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Pre-dispatch validation wired into AbstractParser._where_element (abstract.pyx/.pxd). Validated by hand (engine selector rejects non-test paths) after building Cython in-tree: 136 passed. One reviewer fix (544a2a9b): the coder's baseline-behaviour test asserted an invented quoted value. Feedback coder-feedback:3e8115afca074cc54a2d387f; review coder-review:07f99b62db3409583d7d7464.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

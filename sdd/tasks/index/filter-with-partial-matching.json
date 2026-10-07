@@ -55,7 +55,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -65,8 +65,9 @@
       "parallelism_notes": "needs validate_partial_match_dict from TASK-840 (querysource/parsers/partial_matching.py); exclusive: adds a field to the AbstractParser struct in abstract.pxd, so every Cython parser that cimports it must be rebuilt in place (make build-inplace) — a shared compiled-artifact change",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-842-where-element-prevalidation.md"
+      "completed_at": "2026-10-07T15:45:13+00:00",
+      "file": "sdd/tasks/completed/TASK-842-where-element-prevalidation.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-843",
