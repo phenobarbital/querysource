@@ -17,7 +17,7 @@ reuse_feature_id: FEAT-180
 **Feature ID**: FEAT-180
 **Date**: 2026-10-07
 **Author**: Jesus Lara (jesuslarag@gmail.com)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.2
 
 ---
@@ -25,7 +25,8 @@ reuse_feature_id: FEAT-180
 ## 1. Motivation & Business Requirements
 
 > Proposal: `sdd/proposals/filter-with-partial-matching.proposal.md` (accepted, all six
-> open questions resolved by the requester on 2026-10-07).
+> open questions resolved by the requester on 2026-10-07; spec questions Q1–Q3 resolved
+> and status set to approved by the requester the same day).
 > Research audit: `sdd/state/FEAT-180/`.
 
 ### Problem Statement
@@ -69,15 +70,23 @@ key suffix (prefix ILIKE). The request:
   before wildcards are added; `like`/`ilike` operands are raw patterns.
 - G7. Operator semantics live in **one shared table** (Python + Rust twin) so the eight
   builders cannot drift.
+- G8. **qsurl speaks the same vocabulary** (resolved Q3): the URL text operators are
+  remapped onto the table — plain `~ !~ ^= $=` become case-sensitive
+  `contains / not_contains / startswith / endswith`, new `~* !~* ^=* $=*` spellings mean
+  `icontains / not_icontains / istartswith / iendswith` (and `=~*` parses to `iregex`),
+  pushdown emits the table operators with raw values, and the in-memory residual stage
+  applies the same case rules.
 
 ### Non-Goals (explicitly out of scope)
 
-- qsurl grammar / pushdown rules (`querysource/qsurl/translate.py` keeps emitting
-  `{"ILIKE": ...}`; declaring a qsurl `regex` pushdown capability is a separate feature).
+- qsurl `regex` / `iregex` **pushdown**: the grammar learns `=~*`, but both regex
+  expressions keep being evaluated in the residual stage (no provider declares the
+  `regex` capability) — see §8 Q4.
 - Non-SQL dialects: CQL, Mongo, Elastic, ArangoDB, Rethink, Influx, Delta, Iceberg, SOQL.
 - Regex on dialects other than PostgreSQL (BigQuery `REGEXP_CONTAINS` may follow later).
 - The legacy `field~` / `field!~` key-suffix prefix match and the uppercase FEAT-152
-  `ILIKE` / `NOT ILIKE` operators: both stay byte-for-byte as they are.
+  `ILIKE` / `NOT ILIKE` builder branches: both stay byte-for-byte as they are (qsurl simply
+  stops emitting `ILIKE` dicts; the branch remains for direct callers).
 - Multi-operator dicts (`{"startswith": "a", "endswith": "z"}`): single-operator form only
   (the pre-dispatch hook keeps the last pair; Rust reads the first — unchanged).
 - DataFrame post-filters (`querysource/types/dt/filters.py`) and `column_filter`.
@@ -122,6 +131,20 @@ The request flows through three stages:
    that `pgSQLParser.filter_conditions` already has, so on every dialect a Rust error ends
    in the Cython path raising `ParserError`.
 
+**qsurl remap (M10, resolved Q3).** The URL mini-language gains case-insensitive
+spellings by a trailing `*` (the PostgreSQL `~*` precedent): `~*`, `!~*`, `^=*`, `$=*`,
+`=~*` parse to `icontains`, `not_icontains`, `istartswith`, `iendswith`, `iregex`; the
+existing `~ !~ ^= $=` keep their expression names but now mean **case-sensitive**
+matching everywhere (a documented behaviour change for qsurl users). `translate.split`
+pushes a text leaf as `{col: {<expression>: <raw value>}}` — the dialect builder escapes
+and quotes — whenever the provider declares `text_match` **and** the operand passes the
+M1 validator; a `contains` operand shorter than 3 characters is **not** an error on the
+URL path: the leaf stays residual and is evaluated in memory (qsurl's existing rule for
+anything unpushable). `residual.py` applies the same case rules (`str.contains(case=True)`
+for plain forms, `case=False` / lower-cased for `i*`). `text_match` is declared by the
+providers whose parsers M4–M7 cover: `pgProvider` (already), `mysqlProvider`,
+`sqlserverProvider`, `bigqueryProvider`.
+
 **Rendered forms (normative).** `E(v)` = backslash LIKE-escape (`\`→`\\`, `%`→`\%`,
 `_`→`\_`, the existing qsurl `like_escape` semantics); `B(v)` = bang LIKE-escape
 (`!`→`!!`, `%`→`!%`, `_`→`!_`); `Q` = the dialect's literal quoter.
@@ -157,13 +180,13 @@ Notes on the forms:
   PostgreSQL, an explicit `JSON_VALUE` field expression on BigQuery).
 - Escaping ownership is per operator and fixed by the table's `escape` flag: `like` /
   `ilike` / `regex` families receive a **ready pattern**; `startswith` / `endswith` /
-  `contains` families receive a **raw value** that the builder escapes. qsurl keeps
-  emitting the uppercase FEAT-152 `ILIKE` operator with an already-escaped pattern, so
-  qsurl input never enters the new branch and cannot be double-escaped.
-- Vocabulary note (design-research S1, escalated as §8 Q3): qsurl's URL expression
-  `startswith` is translated to a case-insensitive `ILIKE` dict, whereas the new
-  `where_cond` operator `startswith` is case-sensitive per U1. The two never meet inside
-  the parser, but the words differ in meaning across the two entry points.
+  `contains` families receive a **raw value** that the builder escapes. After M10 qsurl
+  emits table operators with **raw** values (it no longer pre-escapes), so one escaping
+  site exists per dialect and double-escaping is impossible; `translate.like_escape`
+  survives only as a re-export of M1's helper for backward compatibility.
+- Vocabulary alignment (design-research S1 → §8 Q3, resolved): after M10 the word
+  `startswith` means the same thing on the URL and in `where_cond` (case-sensitive), and
+  `istartswith` / `^=*` the same case-insensitive thing.
 
 ### Component Diagram
 ```
@@ -194,7 +217,12 @@ request where_cond ──► AbstractParser.set_where ──► _where_element (
 | `filter_common.rs::FilterValue` (`filter_common.rs:20`) | extends | new `Dict(Vec<(String, FilterValue)>)` variant; `process_entry` keeps returning `None` for it (SOQL unaffected); mssql handles it |
 | `BigQueryParser._filter_conditions_cy` (`bigquery.pyx:209`) | modifies | table names take precedence over `JSON_VALUE` key extraction |
 | `querysource.exceptions.ParserError` (`exceptions.py:86`) | uses | the single error type (HTTP 400) |
-| `querysource/qsurl/translate.py::like_escape` (`translate.py:21`) | mirrored, not imported | M1 re-declares the same semantics; qsurl untouched (non-goal) |
+| `querysource/qsurl/translate.py` (`_TEXT_PATTERNS` :12, `like_escape` :21, `_leaf_pushdown` text branch :69-73) | modifies | emits table operators with raw values; `like_escape` becomes a re-export of M1's |
+| `querysource/qsurl/residual.py` (`:95-103`) | modifies | plain forms case-sensitive; `i*` forms added |
+| `querysource/qsurl/_fallback.py` (`_OPS` :24-35, lowering :272) | modifies | new URL operators + expression names |
+| `querysource/qsurl/grammar.lark` (`CMP` :70) | modifies | new tokens (longest first); `gbnf.py` derives from it |
+| `rust/qsurl/src/ast.rs` (`CmpOp` :78-87, `as_str` :114-118), `rust/qsurl/src/parser.rs` (`cmp_op` :171-187) | modifies | five new variants / tokens |
+| `querysource/providers/mysql.py:29`, `sqlserver.py:23`, `bigquery.py:25` | extends | declare `qsurl_caps.TEXT_MATCH` (pg already does at `pg.py:27`) |
 
 ### Data Models
 ```python
@@ -243,7 +271,8 @@ existing `where_cond` / `filter` options.
 | M6: SQL Server builders | yes | `FilterValue::Dict` variant; mssql-only `process_mssql_entry`; Cython dict branch | — |
 | M7: BigQuery builders | yes, after §8 Q1 is answered by reading `bq_quote_string` | precedence rule over `JSON_VALUE`; forms §2 | — |
 | M8: Tests | yes | file names, case corpus and both-path harness fixed in §4 | — |
-| M9: Docs + version bump | yes | `docs/FILTER_OPERATORS.md`; `version.py:9` → `5.2.2` | — |
+| M9: Docs + version bump | yes | `docs/FILTER_OPERATORS.md`; `docs/QSURL.md` operator table; `version.py:9` → `5.2.2` | — |
+| M10: qsurl vocabulary remap | yes | token spellings, expression names, pushdown shape, residual case rules and provider capability list all fixed in §2/§3 | — |
 
 ### Module 1: Python operator table, escaping helpers and validator
 - **Path**: `querysource/parsers/partial_matching.py` (new, pure Python so Cython
@@ -482,9 +511,56 @@ existing `where_cond` / `filter` options.
 ### Module 9: Documentation and version bump
 - **Path**: `docs/FILTER_OPERATORS.md` (new), `querysource/version.py:9`
 - **Responsibility**: operator table, per-dialect rendering, reserved-name precedence,
-  error messages, examples; link from `docs/QSURL.md` text_match section is a non-goal
-  (qsurl untouched). Version `5.2.1` → `5.2.2`.
-- **Depends on**: none.
+  error messages, examples; `docs/QSURL.md` operators table and pushdown section updated
+  for M10 (new `*` spellings, case-sensitivity change, migration note). Version
+  `5.2.1` → `5.2.2`.
+- **Depends on**: M10 (for the qsurl section wording).
+
+### Module 10: qsurl vocabulary remap
+- **Path**: `rust/qsurl/src/ast.rs`, `rust/qsurl/src/parser.rs`, `querysource/qsurl/grammar.lark`,
+  `querysource/qsurl/_fallback.py`, `querysource/qsurl/translate.py`,
+  `querysource/qsurl/residual.py`, `querysource/providers/mysql.py`,
+  `querysource/providers/sqlserver.py`, `querysource/providers/bigquery.py`,
+  `tests/qsurl/corpus.json` (+ qsurl tests).
+- **Responsibility**: resolved Q3 — one vocabulary across URL and `where_cond`.
+- **Depends on**: M1 (`like_escape` re-export, `validate_partial_match` for pushdown
+  eligibility); M4–M7 must be merged before the provider capability lines land (a
+  provider must never declare `text_match` for a parser that drops the dict).
+- **Interface Skeleton**:
+  ```rust
+  // rust/qsurl/src/ast.rs  (modifies ast.rs:78-87 and :114-118)
+  pub enum CmpOp { ..., Contains, NotContains, StartsWith, EndsWith, Regex,
+      #[serde(rename = "icontains")] IContains, #[serde(rename = "not_icontains")] NotIContains,
+      #[serde(rename = "istartswith")] IStartsWith, #[serde(rename = "iendswith")] IEndsWith,
+      #[serde(rename = "iregex")] IRegex }                       // flipped() → None for all text ops (unchanged rule)
+  // rust/qsurl/src/parser.rs  (modifies cmp_op, parser.rs:171-187) — three-char tokens first:
+  //   "!~*"→NotIContains, "^=*"→IStartsWith, "$=*"→IEndsWith, "=~*"→IRegex, then "~*"→IContains, then today's list.
+  ```
+  ```python
+  # querysource/qsurl/grammar.lark:70
+  CMP: "!~*" | "^=*" | "$=*" | "=~*" | "~*" | "==" | "!=" | "!~" | "<=" | ">=" | "=~" | "^=" | "$=" | "<" | ">" | "=" | "~"
+
+  # querysource/qsurl/_fallback.py  (modifies _OPS :24-35 and the lowering branch :272)
+  _OPS = {..., "~*": "icontains", "!~*": "not_icontains", "^=*": "istartswith", "$=*": "iendswith", "=~*": "iregex"}
+  # lowering: ("regex", "iregex") → capabilities.REGEX; the eight text names → capabilities.TEXT_MATCH
+
+  # querysource/qsurl/translate.py  (modifies :12-23 and :69-73)
+  from ..parsers.partial_matching import like_escape, validate_partial_match  # like_escape re-exported for compat
+  _TEXT_OPS: frozenset[str] = frozenset({"contains", "not_contains", "icontains", "not_icontains",
+                                         "startswith", "istartswith", "endswith", "iendswith"})
+  def _leaf_pushdown(leaf: dict, capabilities: frozenset[str]) -> tuple[str, object] | None:
+      """... text leaf → (col, {expr: value}) when TEXT_MATCH in capabilities, value is a str and
+      validate_partial_match(col, expr, value, supports_regex=False) does not raise; otherwise None (residual).
+      regex / iregex: never pushed (Q4)."""
+
+  # querysource/qsurl/residual.py  (modifies :95-103)
+  # contains/not_contains/startswith/endswith → case-sensitive; icontains/not_icontains/istartswith/iendswith → case-insensitive;
+  # iregex → str.contains(value, case=False, regex=True) behind _check_regex_safety.
+
+  # providers (one line each, after the class attribute block):
+  capabilities = sqlProvider.capabilities | {qsurl_caps.TEXT_MATCH}   # bigquery.py (subclass of sqlProvider)
+  capabilities = BaseProvider.capabilities | {qsurl_caps.ALIAS, qsurl_caps.SORT, qsurl_caps.LIMIT, qsurl_caps.OFFSET, qsurl_caps.TEXT_MATCH}  # mysql.py, sqlserver.py (subclasses of BaseProvider; BaseProvider.capabilities verified: providers/abstract.py:41 = qsurl_caps.BASE)
+  ```
 
 ---
 
@@ -514,6 +590,11 @@ existing `where_cond` / `filter` options.
 | `test_bq_rendering[path, op]` | M7 | BigQuery column with plain and `JSON_VALUE` `field_expr`; `{"f": {"contains": "abc"}}` is LIKE, `{"f": {"other": "x"}}` is still `JSON_VALUE(f, '$.other') = 'x'` |
 | `test_builders_agree_on_every_case` (per dialect) | M4–M7 | rust vs cython `_where_body` equality for the full corpus |
 | `cargo test -p qs_parsers partial_match` | M2 | table size, escape helpers, validate errors, each dialect's rendering function |
+| `test_qsurl_parse_case_insensitive_tokens[rust, fallback]` | M10 | `s?name^=*'an'&city~*'san'&code$=*'x'&n!~*'y'&r=~*'^a'` → expressions `istartswith`, `icontains`, `iendswith`, `not_icontains`, `iregex`; `requires` contains `text_match` (and `regex`) in the fixed order |
+| `test_qsurl_translate_emits_table_operators` | M10 | `city~'san'` on `pgProvider` → `{'filter': {'city': {'contains': 'san'}}}` (raw value, no `%`, no escaping); `city~*'san'` → `icontains`; `city~'sa'` stays residual (too short, no error) |
+| `test_qsurl_residual_case_rules` | M10 | `contains`/`startswith`/`endswith` are case-sensitive in memory; `i*` forms are not; `iregex` ignores case |
+| `test_qsurl_corpus_parity` (existing `tests/qsurl/test_parity.py` + new corpus cases) | M10 | Rust and fallback parsers agree on every new token |
+| `test_qsurl_gbnf_lists_new_tokens` | M10 | `to_gbnf()` output contains `"~*"`, `"!~*"`, `"^=*"`, `"$=*"`, `"=~*"` |
 
 ### Integration Tests
 | Test | Description |
@@ -524,6 +605,7 @@ existing `where_cond` / `filter` options.
 | `test_build_query_sqlglot_valid[dialect, op]` | full `build_query()` output parses with `sqlglot` for the dialect (pattern from `tests/test_sql_parser_combinations.py`) |
 | `test_build_query_pg_regex_grouping` | `~`, `~*`, `!~`, `!~*` conditions combined with a scalar filter AND-join correctly |
 | `test_conformance_matrix[dialect, path, op, operand_kind]` | parametrized over 4 dialects × 2 paths × 20 operators × operand kinds {plain, wildcard chars, quote, backslash, pre-quoted-looking, non-str, too-short, multi-key}: expected SQL body or expected `ParserError` message |
+| `test_qsurl_dry_run_text_ops[provider]` | extends `tests/e2e/test_qsurl_dry_run.py`: `s?city~*'san'` on pg renders `city ILIKE '%san%'`; on mysql/sqlserver renders the `LOWER(...) LIKE LOWER(...) ESCAPE '!'` form; `city~'san'` renders `LIKE` |
 | `test_proposal_example_end_to_end` | `{"full_name": {"startswith": "andre"}}` on `pgSQLParser` renders `full_name LIKE 'andre%'` through `set_where` + `build_query` |
 
 ### Test Data / Fixtures
@@ -569,7 +651,8 @@ OPERATOR_CORPUS = [  # (filter, expected WHERE body on PostgreSQL)
 - [ ] AC10. With `HAS_RUST` true, a Rust-side validation error on any dialect (including `SQLParser`) surfaces as `ParserError`, never as a raw `ValueError`/`PyValueError`.
 - [ ] AC11. `cargo test --manifest-path rust/Cargo.toml` and `make build-rust && make stage-rust && pytest tests/ -q` pass; `ruff check querysource/parsers/partial_matching.py tests/` is clean.
 - [ ] AC12. `docs/FILTER_OPERATORS.md` documents the 20 operators, per-dialect rendering, the reserved-name precedence and the error messages; `querysource/version.py` is `5.2.2`.
-- [ ] AC13. No change to `querysource/qsurl/` and to the SOQL/CQL/Mongo/Elastic/Arango/Rethink builders (`git diff --stat` on those paths is empty); `filter_common::process_entry` returns `None` for the new `Dict` variant so SOQL/CQL output is unchanged.
+- [ ] AC13. No change to the SOQL/CQL/Mongo/Elastic/Arango/Rethink builders (`git diff --stat` on those paths is empty); `filter_common::process_entry` returns `None` for the new `Dict` variant so SOQL/CQL output is unchanged.
+- [ ] AC15. qsurl (M10): the Rust and fallback parsers both accept `~* !~* ^=* $=* =~*` with identical IR; `translate.split` pushes text leaves as table operators with raw values on every provider declaring `text_match` (pg, mysql, sqlserver, bigquery) and keeps too-short `contains` operands and all regex leaves residual; `residual.py` matches case-sensitively for plain forms and case-insensitively for `i*` forms; `tests/qsurl/` and `tests/e2e/test_qsurl_dry_run.py` are green after `make build-rust && make stage-rust` (which also rebuilds `rust/qsurl`).
 - [ ] AC14. A dict that combines a table operator with any other key (`{"startswith": "a", "endswith": "z"}`, `{"contains": "abc", ">=": 1}`) raises `ParserError("one operator per field ...")` from `set_where()` and from every Cython builder; dicts without a table operator keep today's first/last-key behaviour untouched.
 
 ---
@@ -666,8 +749,29 @@ class QueryException(Exception)                                                #
 class ParserError(QueryException): default_code = 400                          # line 86-87
 
 # querysource/qsurl
-def like_escape(value: str) -> str                                             # translate.py:21 (semantics mirrored by M1; NOT imported by parsers)
-_MAX_REGEX_PATTERN_LENGTH = 200                                                # residual.py:35 (bound mirrored by M1)
+_TEXT_PATTERNS: dict[str, tuple[str, str, str]]                               # translate.py:12-18 (replaced by _TEXT_OPS in M10)
+def like_escape(value: str) -> str                                             # translate.py:21 (moves to M1; translate re-exports it)
+def _leaf_pushdown(leaf: dict, capabilities: frozenset[str]) -> tuple[str, object] | None  # translate.py:26; text branch :69-73; regex never pushed :75-76
+def split(ir: dict, capabilities: frozenset[str], *, residual_scan: bool = True) -> tuple[dict, ResidualPlan]  # translate.py:138
+_MAX_REGEX_PATTERN_LENGTH = 200                                                # residual.py:35; _NESTED_QUANTIFIER_RE :36; _check_regex_safety :39
+# residual.py leaf evaluation: `if expr == "contains":` :95 … `if expr == "regex":` :105 (case-insensitive today for text ops)
+_OPS: dict[str, str]                                                           # _fallback.py:24-35 (URL token → expression); lowering branch `elif op in ("contains", ...)` :272
+CMP: "==" | "!=" | "!~" | "<=" | ">=" | "=~" | "^=" | "$=" | "<" | ">" | "=" | "~"   # grammar.lark:70 (gbnf.py derives to_gbnf() from it)
+TEXT_MATCH = "text_match"; REGEX = "regex"                                     # capabilities.py:15-16
+# providers
+class sqlProvider: capabilities = qsurl_caps.BASE | {ALIAS, SORT, LIMIT, OFFSET}  # providers/sql.py:44
+class pgProvider(sqlProvider): capabilities = sqlProvider.capabilities | {qsurl_caps.TEXT_MATCH}  # providers/pg.py:17,27
+class bigqueryProvider(sqlProvider)                                            # providers/bigquery.py:25 (no capabilities override today)
+class sqlserverProvider(BaseProvider)                                          # providers/sqlserver.py:23 (no capabilities override today)
+class mysqlProvider(BaseProvider)                                              # providers/mysql.py:29 (no capabilities override today)
+```
+```rust
+// rust/qsurl/src/ast.rs
+pub enum CmpOp { Eq, Ne, Lt, Le, Gt, Ge, Contains, NotContains, StartsWith, EndsWith, Regex }  // lines ~66-87 (serde renames)
+pub fn flipped(self) -> Option<CmpOp>                                          // line ~95 (text ops → None)
+pub fn as_str(self) -> &'static str                                            // line ~108-119
+// rust/qsurl/src/parser.rs
+fn cmp_op<'a>() -> impl Parser<'a, &'a str, CmpOp, Err<'a>> + Clone           // line 171; choice((...)) two-char tokens first :173-186
 ```
 ```rust
 // rust/src/pgsql_parser.rs
@@ -742,7 +846,9 @@ mod filter_common; ... mod validators;                                         /
 - ~~`AbstractParser.supports_regex_filter`~~ — added by M3 (`abstract.pxd`); absent today.
 - ~~`FilterValue::Dict` in `rust/src/filter_common.rs`~~ — absent today (only `pgsql_parser.rs` and `bigquery_parser.rs` have a private `Dict` variant); added by M6.
 - ~~`querysource.parsers.sql.PG_TEXT_OPERATORS`~~ / ~~`LIKE_OPERATORS`~~ / ~~`TEXT_OPERATORS`~~ — the only text-operator constant is `pgsql.pyx:36 PG_TEXT_OPERATORS`.
-- ~~`querysource.types.validators.like_escape`~~ — `like_escape` lives only in `querysource/qsurl/translate.py:21`; parsers do not import qsurl.
+- ~~`querysource.types.validators.like_escape`~~ — today `like_escape` lives only in `querysource/qsurl/translate.py:21`; after M1 the implementation is `querysource/parsers/partial_matching.py` and `translate.py` re-exports it. Parsers never import qsurl (the dependency direction is qsurl → parsers).
+- ~~`CmpOp::IContains` / `"icontains"` expression~~ and ~~URL tokens `~*`, `^=*`, `$=*`, `!~*`, `=~*`~~ — absent today in `rust/qsurl/src/ast.rs`, `parser.rs`, `grammar.lark`, `_fallback.py`; added by M10.
+- ~~`mysqlProvider.capabilities` / `sqlserverProvider.capabilities` / `bigqueryProvider.capabilities` overrides~~ — none today; added by M10.
 - ~~`Entity.pg_literal`~~ — `pg_literal` is a module-level `cdef` in `pgsql.pyx:41`, not an `Entity` method.
 - ~~`msSQLParser` dict-value branch~~ — `sqlserver.pyx` has no `isinstance(value, dict)` today.
 - ~~`_rs.sql_filter_conditions`~~ — the generic Rust entry point is `_rs.filter_conditions` (`lib.rs:65`).
@@ -793,6 +899,19 @@ Verified against: `2f82509b`
 | `tests/test_partial_matching_prevalidation.py` | CREATE | — | — | — |
 | `docs/FILTER_OPERATORS.md` | CREATE | — | — | — |
 | `querysource/version.py` | MODIFY | `__version__ = '5.2.1'` | `version.py:9` | 1 |
+| `rust/qsurl/src/ast.rs` | MODIFY (variants after) | `    #[serde(rename = "regex")]` | `ast.rs:86` | 1 |
+| `rust/qsurl/src/parser.rs` | MODIFY (tokens before) | `        just("!~").to(CmpOp::NotContains),` | `parser.rs:176` | 1 |
+| `querysource/qsurl/grammar.lark` | MODIFY | `CMP: "==" \| "!=" \| "!~" \| "<=" \| ">=" \| "=~" \| "^=" \| "$=" \| "<" \| ">" \| "=" \| "~"` | `grammar.lark:70` | 1 |
+| `querysource/qsurl/_fallback.py` | MODIFY (entries after) | `    "=~": "regex",` | `_fallback.py:34` | 1 |
+| `querysource/qsurl/_fallback.py` | MODIFY (lowering) | `    elif op in ("contains", "not_contains", "startswith", "endswith"):` | `_fallback.py:272` | 1 |
+| `querysource/qsurl/translate.py` | MODIFY (table + helper) | `_TEXT_PATTERNS: dict[str, tuple[str, str, str]] = {` | `translate.py:12` | 1 |
+| `querysource/qsurl/translate.py` | MODIFY (pushdown branch) | `    if expr in _TEXT_PATTERNS:` | `translate.py:69` | 1 |
+| `querysource/qsurl/residual.py` | MODIFY (case rules) | `    if expr == "contains":` | `residual.py:95` | 1 |
+| `querysource/providers/mysql.py` | MODIFY (add capabilities) | `class mysqlProvider(BaseProvider):` | `mysql.py:29` | 1 |
+| `querysource/providers/sqlserver.py` | MODIFY (add capabilities) | `class sqlserverProvider(BaseProvider):` | `sqlserver.py:23` | 1 |
+| `querysource/providers/bigquery.py` | MODIFY (add capabilities) | `class bigqueryProvider(sqlProvider):` | `bigquery.py:25` | 1 |
+| `docs/QSURL.md` | MODIFY (operators table + pushdown section) | `| \`~\` | \`contains\` | case-insensitive on every engine |` | `QSURL.md:88` | 1 |
+| `tests/qsurl/corpus.json` | MODIFY (append cases) | — (JSON list of 17 cases, `id`/`input`/`ir_json`) | `corpus.json` | — |
 
 ---
 
@@ -852,10 +971,16 @@ Verified against: `2f82509b`
   the nested-quantifier rejection, `residual.py:35-52`) in M1 and M2; PostgreSQL's engine
   is less backtracking-prone than Python's, but one policy for both entry points is
   simpler to explain and test (design-research S8).
-- **qsurl vocabulary divergence** (design-research S1, §8 Q3): the qsurl URL expression
-  `startswith` means case-insensitive (translated to `ILIKE`), the new `where_cond`
-  operator `startswith` means case-sensitive (U1). No code path mixes them; whether qsurl
-  should later be re-mapped onto the new table (e.g. `istartswith`) is a separate decision.
+- **qsurl behaviour change** (design-research S1 → §8 Q3, resolved as a remap): `~ !~ ^= $=`
+  become case-sensitive on every engine; existing URLs that relied on case-insensitive
+  matching must switch to `~* !~* ^=* $=*`. `docs/QSURL.md` carries a migration note and
+  the corpus/parity tests pin both parsers. Too-short `contains` operands from a URL are
+  evaluated in memory rather than rejected (qsurl keeps its "unpushable ⇒ residual" rule).
+- **Provider capability must trail the builder**: declaring `text_match` on a provider
+  whose parser still drops dict operators would silently ignore a filter. M10's provider
+  lines depend on M4–M7 (Worktree Strategy) and the e2e dry-run test covers each provider.
+- **Two Rust extensions**: `rust/qsurl` is a separate crate (`_qsurl.so`); `make build-rust`
+  rebuilds both, and M10's parser change is invisible until it runs.
 - **Existing dict-operator tests depend on `is_valid` pre-quoting**: M3 only bypasses
   `is_valid` for table operators; `{">=": ...}` and FEAT-152 `ILIKE` keep the pre-quote
   (regression test `test_where_element_keeps_is_valid_for_other_dicts`).
@@ -880,9 +1005,10 @@ Verified against: `2f82509b`
 - [x] **U4 — where the ≥3-character rule applies and which exception** — *Resolved in proposal*: `contains` only (and its `i`/`not_` forms), raised as `ParserError` pre-dispatch in `AbstractParser._where_element` so it surfaces on both Rust and Cython paths. `startswith`, `endswith`, `like` accept any length.
 - [x] **U5 — negated family** — *Resolved in proposal*: Full `not_*` family for every operator.
 - [x] **U6 — `i*` variants on dialects without ILIKE** — *Resolved in proposal*: `LOWER(col) LIKE LOWER(pattern)`, explicit and collation-independent, on generic SQL, SQL Server and BigQuery.
-- [ ] **Q1 — Does `bq_quote_string` (`bigquery.pyx:31`, and its Rust twin in `bigquery_parser.rs`) preserve a backslash so that `like_escape` output reaches BigQuery as `\%`?** — *Owner: M7 implementer* (decide by reading the function; if it does not double `\`, double it in `bq_partial_match_condition` before quoting). Does not block M1–M6.
-- [ ] **Q3 — qsurl vocabulary alignment (design-research S1)**: qsurl's `startswith` / `contains` / `endswith` are case-insensitive (`ILIKE`) while the new `where_cond` operators of the same name are case-sensitive (U1). Keep the divergence documented (default; qsurl is a non-goal here), or open a follow-up feature to re-map qsurl onto `istartswith` / `icontains` / `iendswith`? — *Owner: Jesus Lara*. Does not block implementation.
-- [ ] **Q2 — Should `like_escape_bang` also escape `[` for SQL Server (`![`)?** — *Owner: Jesus Lara*. §7 records the default decision **yes** (T-SQL treats `[...]` as a character class in `LIKE`); confirm or revert before M6 lands.
+- [x] **Q1 — Does `bq_quote_string` preserve a backslash so that `like_escape` output reaches BigQuery as `\%`?** — *Resolved by requester (2026-10-07)*: yes. M7 still asserts it in the BigQuery escaping corpus (`test_bq_rendering` with `a\b` and `50%` operands) so the assumption is executable.
+- [x] **Q2 — Should `like_escape_bang` also escape `[` for SQL Server (`![`)?** — *Resolved by requester (2026-10-07)*: yes. `like_escape_bang` escapes `!`, `%`, `_` and `[` (M1/M2 + `test_like_escape_bang_escapes_bracket`).
+- [x] **Q3 — qsurl vocabulary alignment (design-research S1)** — *Resolved by requester (2026-10-07)*: remap qsurl to match the proposal — `startswith` (case-sensitive) / `istartswith` (case-insensitive) and the rest of the family. Implemented as M10 (`~* !~* ^=* $=* =~*` spellings, pushdown of table operators with raw values, residual case rules, provider capabilities, docs migration note).
+- [ ] **Q4 — qsurl `regex` / `iregex` pushdown to PostgreSQL (`~` / `~*`)?** — *Owner: Jesus Lara*. Default **no**: both stay residual and no provider declares the `regex` capability (the grammar still learns `=~*` so the IR is ready). Can be enabled later by declaring `qsurl_caps.REGEX` on `pgProvider` and letting `_leaf_pushdown` emit `{col: {"regex": pat}}`. Does not block implementation.
 
 ---
 
@@ -896,7 +1022,7 @@ Verified against: `2f82509b`
 
 | # | Suggestion (kind) | Disposition | Reason | Landed in |
 |---|---|---|---|---|
-| S1 | Resolve case sensitivity before adding aliases — qsurl maps bare `startswith`/`contains`/`endswith` to ILIKE while the table makes them case-sensitive (api) | ESCALATE | U1 is a requester decision (both variants, plain = sensitive) and the proposal wins over the reviewer; the entry points never share a code path, but the cross-entry-point meaning of the word differs — the human decides whether qsurl is re-mapped later | §8 Q3, §2 vocabulary note, §7 risk |
+| S1 | Resolve case sensitivity before adding aliases — qsurl maps bare `startswith`/`contains`/`endswith` to ILIKE while the table makes them case-sensitive (api) | ESCALATE → resolved | U1 is a requester decision (both variants, plain = sensitive); escalated as §8 Q3 and answered the same day: qsurl is remapped onto the table (M10) so the word means the same thing on both entry points | §8 Q3 (resolved), §3 M10, §2 qsurl remap, §7 risk |
 | S2 | Define an explicit JSON-dict collision policy for PG containment and BigQuery `JSON_VALUE` (api) | CONFIRM | real behaviour change for keys literally named like an operator; policy fixed: table names win on every dialect, alternatives documented | §2 reserved-name note, §7 risk, §5 AC8 |
 | S3 | Enforce single-key partial-match dictionaries (first-vs-last entry divergence) (api) | CONFIRM | Rust reads the first entry, `_where_element` the last; multi-key dicts with a table name are now rejected in M3 and in every Cython builder | §2 stage 1, §3 M1 `validate_partial_match_dict`, §5 AC14, §4 tests |
 | S4 | Do not rely solely on `_where_element`; validation must be a reusable non-rendering validator invoked before dispatch and from the lifecycle (risk) | CONFIRM | exactly the M1 validator + M3 pre-dispatch + builder re-validation design; Rust `Err` → Cython fallback → `ParserError` is the uniform outcome (M5 adds the missing `SQLParser` wrapper) | §2 stage 3, §3 M1/M3/M5, §5 AC6/AC10 |
@@ -906,7 +1032,7 @@ Verified against: `2f82509b`
 | S8 | Reuse the existing regex safety policy including the nested-quantifier rejection (risk) | CONFIRM | U3 asked for a bounded length; adding the residual.py nested-quantifier check keeps one policy for both entry points at no design cost | §3 M1 `NESTED_QUANTIFIER_RE`, §5 AC5, §7 risk |
 | S9 | Build a full dialect × path × operator conformance matrix incl. errors, JSON collisions, multi-key input and extension staging (testing) | CONFIRM | added as a single parametrized matrix test on top of the per-dialect files; AC11 pins `make build-rust && make stage-rust` | §4 `test_conformance_matrix`, §5 AC11 |
 
-Summary: **8** confirmed · **0** rejected · **1** escalated.
+Summary: **8** confirmed · **0** rejected · **1** escalated (resolved by the requester into M10).
 
 ---
 
@@ -920,15 +1046,21 @@ Summary: **8** confirmed · **0** rejected · **1** escalated.
   - M4, M5, M6, M7 → M1 (Cython halves import M1) and → M2 (Rust halves `use crate::partial_match`).
   - M4, M5, M6, M7 → M3 (`supports_regex_filter` flag; M4 sets it True).
   - M8 → M1–M7 (tests render through every builder and `set_where`).
-  - M9 independent (docs + version).
+  - M10 → M1 (`like_escape` re-export, `validate_partial_match`); M10's provider
+    capability lines → M4, M5, M6, M7 (a provider may declare `text_match` only once its
+    parser renders the operators); M10's grammar/translate/residual parts have no code
+    dependency on M4–M7 but are kept in the same module to land atomically.
+  - M9 → M10 (docs describe the final qsurl vocabulary); version bump independent.
   - M1 ∥ M2 (twin contracts, different languages); M4 ∥ M5 ∥ M6 ∥ M7 (distinct files)
     once M1–M3 are merged — expected to run concurrently.
 - **Shared files**: `rust/src/lib.rs` (M2 only); `rust/src/filter_common.rs` (M6 only);
-  `querysource/parsers/abstract.pyx` / `abstract.pxd` (M3 only). No file is modified by
-  two modules.
+  `querysource/parsers/abstract.pyx` / `abstract.pxd` (M3 only); `querysource/qsurl/*`,
+  `rust/qsurl/*` and the three provider files (M10 only); `docs/QSURL.md` (M9 only). No
+  file is modified by two modules.
 - **Exclusive resources**: the compiled extensions — the Cython rebuild after M3's `.pxd`
-  change and `make build-rust && make stage-rust` after M2/M4–M7 must not run concurrently
-  with test runs; the tasks carrying a rebuild are `parallel: false`.
+  change, `make build-rust && make stage-rust` after M2/M4–M7, and the `rust/qsurl`
+  rebuild after M10 must not run concurrently with test runs; the tasks carrying a
+  rebuild are `parallel: false`.
 - **Cross-feature dependencies**: none open on these files (FEAT-179 JSONB operators is
   merged on `dev` at `4d57a4af`).
 
@@ -939,3 +1071,4 @@ Summary: **8** confirmed · **0** rejected · **1** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-10-07 | Jesus Lara + Claude Fable 5.1 | Initial draft from accepted proposal FEAT-180 (U1–U6 resolved) |
+| 0.2 | 2026-10-07 | Jesus Lara + Claude Fable 5.1 | Q1–Q3 resolved by requester; M10 qsurl vocabulary remap added; Q4 opened; status approved |
