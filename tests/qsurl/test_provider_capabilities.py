@@ -4,9 +4,12 @@ from __future__ import annotations
 import pytest
 
 from querysource.providers.abstract import BaseProvider
+from querysource.providers.bigquery import bigqueryProvider
 from querysource.providers.cassandra import cassandraProvider
+from querysource.providers.mysql import mysqlProvider
 from querysource.providers.pg import pgProvider
 from querysource.providers.sql import sqlProvider
+from querysource.providers.sqlserver import sqlserverProvider
 from querysource.qsurl import capabilities as caps
 
 
@@ -35,6 +38,13 @@ from querysource.qsurl import capabilities as caps
             True,
         ),
         (cassandraProvider, {"select", "filter", "in_list", "null_check", "limit"}, False),
+        (mysqlProvider, {"select", "filter", "in_list", "null_check", "text_match"}, True),
+        (sqlserverProvider, {"select", "filter", "in_list", "null_check", "text_match"}, True),
+        (
+            bigqueryProvider,
+            {"select", "filter", "in_list", "null_check", "alias", "sort", "limit", "offset", "text_match"},
+            True,
+        ),
     ],
 )
 def test_capability_sets(cls, expected, scan):

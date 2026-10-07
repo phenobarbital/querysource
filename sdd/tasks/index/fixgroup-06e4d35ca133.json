@@ -1,0 +1,33 @@
+{
+  "feature": "fixgroup-06e4d35ca133",
+  "feature_id": "FEAT-163",
+  "spec": "sdd/specs/fixgroup-06e4d35ca133.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-07T21:14:19+00:00",
+  "completed_at": "2026-10-07T21:19:45+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-856",
+      "slug": "log-rust-fallback-cython-parsers",
+      "title": "Log swallowed Rust fast-path failures in the SQL, PostgreSQL and SQL Server parsers",
+      "feature_id": "FEAT-163",
+      "feature": "fixgroup-06e4d35ca133",
+      "spec": "sdd/specs/fixgroup-06e4d35ca133.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "single task; exclusive because it edits .pyx sources and runs make build-inplace, which rebuilds shared compiled extensions in the worktree",
+      "assigned_to": "agent:sdd-fix",
+      "started_at": "2026-10-07T21:15:23+00:00",
+      "completed_at": "2026-10-07T21:19:45+00:00",
+      "discovered_from": "issue:dc4ca6c5475c",
+      "file": "sdd/tasks/completed/TASK-856-log-rust-fallback-cython-parsers.md",
+      "verification": "verified"
+    }
+  ]
+}

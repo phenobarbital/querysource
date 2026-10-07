@@ -207,7 +207,7 @@ class TestTableDestinationParentProtocol:
 
         to_sql_calls = []
 
-        def fake_to_sql(name, con, **kwargs):
+        def fake_to_sql(_frame, name, con, **kwargs):
             to_sql_calls.append({
                 "name": name,
                 "method": kwargs.get("method"),
@@ -215,8 +215,8 @@ class TestTableDestinationParentProtocol:
                 "schema": kwargs.get("schema"),
             })
 
-        with patch.object(sample_df, "to_sql", side_effect=fake_to_sql):
-            import asyncio as _asyncio
+        # _write_to_table works on a copy of the frame, so patch the class.
+        with patch.object(type(sample_df), "to_sql", new=fake_to_sql):
             await dest._write_to_table(sample_df, mock_engine)
 
         assert len(to_sql_calls) == 1

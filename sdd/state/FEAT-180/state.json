@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "feat_id": "FEAT-180",
+  "feature_slug": "filter-with-partial-matching",
+  "started_at": "2026-10-07T00:00:00Z",
+  "updated_at": "2026-10-07T01:10:00Z",
+  "source": {
+    "kind": "inline",
+    "jira_key": null,
+    "jira_url": null,
+    "file_path": null,
+    "raw_path": "sdd/state/FEAT-180/source.md",
+    "fetched_at": "2026-10-07T00:00:00Z",
+    "summary_oneline": "Support like/ilike and partial-matching operators (startswith, endswith, contains, regex) in where_cond/filter dict fields"
+  },
+  "mode": "auto",
+  "detected_mode": "enrichment",
+  "phase": "committed",
+  "phases": {
+    "source": {
+      "status": "completed",
+      "started_at": "2026-10-07T00:00:00Z",
+      "completed_at": "2026-10-07T00:01:00Z",
+      "duration_seconds": 60
+    },
+    "plan": {
+      "status": "completed",
+      "started_at": "2026-10-07T00:01:00Z",
+      "completed_at": "2026-10-07T00:04:00Z",
+      "duration_seconds": 180,
+      "queries_total": 13,
+      "approved_by_user": false,
+      "edited_by_user": false,
+      "plan_path": "sdd/state/FEAT-180/research_plan.json",
+      "wiki_available": false,
+      "gate_note": "autonomous run: plan executed without interactive approval"
+    },
+    "research": {
+      "status": "completed",
+      "started_at": "2026-10-07T00:04:00Z",
+      "completed_at": "2026-10-07T00:19:00Z",
+      "duration_seconds": 900,
+      "queries_executed": 13,
+      "queries_skipped": 0,
+      "depth_reached": 1,
+      "files_read": 21,
+      "grep_calls": 18,
+      "git_calls": 1,
+      "truncated": false,
+      "truncation_reason": null
+    },
+    "synthesis": {
+      "status": "completed",
+      "started_at": "2026-10-07T00:19:00Z",
+      "completed_at": "2026-10-07T00:28:00Z",
+      "duration_seconds": 540,
+      "synthesis_path": "sdd/state/FEAT-180/synthesis.json",
+      "thinking_path": null,
+      "overall_confidence": "medium",
+      "claims_total": 11,
+      "claims_high_conf": 7,
+      "claims_medium_conf": 3,
+      "claims_low_conf": 1,
+      "unknowns_count": 5,
+      "lint_passed": true,
+      "lint_iterations": 0
+    },
+    "qa": {
+      "status": "completed",
+      "started_at": "2026-10-07T01:00:00Z",
+      "completed_at": "2026-10-07T01:10:00Z",
+      "duration_seconds": 600,
+      "questions_total": 6,
+      "questions_answered": 6,
+      "skipped_reason": null
+    },
+    "output": {
+      "status": "completed",
+      "started_at": "2026-10-07T00:28:00Z",
+      "completed_at": "2026-10-07T00:35:00Z",
+      "duration_seconds": 420,
+      "proposal_path": "sdd/proposals/filter-with-partial-matching.proposal.md",
+      "commit_sha": "b2ebe0dea15a47c08eae2d24ebebec9645cc79ce",
+      "next_command_recommended": "sdd-spec",
+      "next_command_rationale": "high-confidence localization extending the FEAT-152 ILIKE extension point; remaining unknowns are semantic choices for the spec"
+    }
+  },
+  "budget": {
+    "profile": "default",
+    "max_files_read": 40,
+    "max_grep_calls": 25,
+    "max_git_calls": 10,
+    "max_depth": 2,
+    "max_wall_seconds": 300
+  },
+  "consumed": {
+    "files_read": 21,
+    "grep_calls": 18,
+    "git_calls": 1,
+    "wall_seconds": 900
+  },
+  "errors": [],
+  "resume_hint": {
+    "next_phase": "done",
+    "next_action": "run /sdd-spec FEAT-180"
+  }
+}

@@ -1,0 +1,38 @@
+- **Two builders per dialect.** Every operator added to `pgsql.pyx` must be mirrored in
+  `rust/src/pgsql_parser.rs` (and `sql.pyx` ↔ `sql_parser.rs` if the generic dialect is in
+  scope). Tests render both paths and skip the Rust one when the installed `.so` is stale;
+  Python loads the source-tree `_qs_parsers` `.so`, so `make build-rust` followed by
+  `make stage-rust` is required before tests see Rust changes.
+  *Evidence*: F006, F011, F014
+
+- **JSONB dispatch runs first.** `jsonb_condition` counts known operator keys; a dict with
+  none is rendered as implicit containment `col @> '<json>'::jsonb`. FEAT-152 had to add an
+  early exemption for `PG_TEXT_OPERATORS`; the new names need the same, in Cython and Rust.
+  *Evidence*: F004
+
+- **Rust errors are swallowed on pgsql.** `pgSQLParser.filter_conditions` catches every
+  Rust exception and re-renders through Cython. A user-facing validation error (contains
+  shorter than 3) raised only inside Rust would vanish. It must be raised either in
+  `_where_element` (pre-dispatch) or identically in the Cython path. The generic
+  `SQLParser.filter_conditions` has no such guard.
+  *Evidence*: F005
+
+- **`is_valid` pre-quoting invariant.** `_where_element` replaces the dict operand with
+  `is_valid(key, v)`, which wraps non-numeric strings in `'...'` and doubles embedded
+  quotes (pinned by commit `f313e115`). Builders must strip that pair, *then* escape
+  LIKE metacharacters, *then* add wildcards and quote via `pg_literal`.
+  *Evidence*: F009, F003, F006
+
+- **Single operator per dict.** `_where_element` keeps only the *last* `(op, v)` pair;
+  Rust reads the *first*. The feature must specify single-operator dicts only.
+  *Evidence*: F009, F006
+
+- **Existing vocabulary.** qsurl and the DataFrame post-filters already use the names
+  `startswith`, `endswith`, `contains`, `regex` (plus a `not_*` family) with
+  case-insensitive semantics for the LIKE-based ones. Parser-level operators should
+  match to avoid two meanings for one word.
+  *Evidence*: F010, F013
+
+- **Legacy key-suffix prefix match.** `{"name~": "v"}` already renders
+  `name ILIKE 'v%'` in both builders (str branch). It must keep working untouched.
+  *Evidence*: F003, F006

@@ -17,6 +17,10 @@ if TYPE_CHECKING:
 class ParquetFileSource(ParquetSource):
     """Read Parquet from the local filesystem (a file, directory or glob).
 
+    Use as a Source step when the Parquet data already lives on a disk the
+    service can reach. ``source.path`` may point to a single file, a directory
+    of part files or a glob, and supports date masks resolved at run time.
+
     Configuration dict shape::
 
         {

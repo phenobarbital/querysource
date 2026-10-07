@@ -10,8 +10,11 @@ import re
 from typing import Union
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
-from ..exceptions import EmptySentence
+from ..exceptions import EmptySentence, ParserError
 from ..types.validators import Entity, field_components
+from .partial_matching import (
+    build_like_pattern, like_escape_bang, sql_like_literal, validate_partial_match_dict,
+)
 from .abstract cimport AbstractParser
 
 # Try to import Rust extension for accelerated parsing
@@ -82,6 +85,29 @@ cdef Py_ssize_t _find_first_kw_at_depth(str sql, tuple keywords, int target_dept
     return best
 
 
+cdef str sql_partial_match_condition(str col, object entry, str operand):
+    """Render one partial-matching operator for generic SQL (FEAT-180, spec §2).
+
+    Uses ``ESCAPE '!'`` for escaped operators and ``LOWER()`` folding for ``i*``.
+    A backslash in an operand is doubled (MySQL-safe); on engines that read it
+    literally it matches two backslashes.
+
+    Raises:
+        ParserError: for regex operators (PostgreSQL only).
+    """
+    cdef str like
+    cdef str lit
+    cdef str esc
+    if entry.kind == 'regex':
+        raise ParserError(f"{entry.name} on '{col}': regex operators are not supported by this query parser")
+    like = 'NOT LIKE' if entry.negated else 'LIKE'
+    lit = sql_like_literal(build_like_pattern(entry, operand, escaper=like_escape_bang))
+    esc = " ESCAPE '!'" if entry.escape else ""
+    if entry.insensitive:
+        return f"LOWER({col}) {like} LOWER({lit}){esc}"
+    return f"{col} {like} {lit}{esc}"
+
+
 cdef class SQLParser(AbstractParser):
     """ SQL Parser. """
     def __init__(
@@ -93,6 +119,8 @@ cdef class SQLParser(AbstractParser):
             *args,
             **kwargs
         )
+        # FEAT-180: only the SQL dialects understand the partial-matching dict operators.
+        self.supports_partial_match = True
         self.valid_operators: tuple = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
         self.tablename: str = '{schema}.{table}'
         self._base_sql: str = 'SELECT {fields} FROM {tablename} {filter} {grouping} {offset} {limit}'
@@ -116,7 +144,13 @@ cdef class SQLParser(AbstractParser):
         """
         # Rust fast path: delegate entire WHERE-building to Rust
         if HAS_RUST and self.filter:
-            return _rs.filter_conditions(sql, dict(self.filter), dict(self.cond_definition))
+            try:
+                return _rs.filter_conditions(sql, dict(self.filter), dict(self.cond_definition))
+            except Exception as exc:
+                # fall through to the Cython implementation (raises ParserError on invalid operands)
+                self.logger.warning(
+                    "Rust filter_conditions failed, falling back to Cython: %s", exc
+                )
         # --- Cython fallback (FEAT-103 hardened) ---
         _sql = sql
         if self.filter:
@@ -151,6 +185,14 @@ cdef class SQLParser(AbstractParser):
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
                     if not value:
+                        continue
+                    entry = validate_partial_match_dict(
+                        key, value, supports_regex=self.supports_regex_filter
+                    )
+                    if entry is not None:
+                        where_cond.append(
+                            sql_partial_match_condition(key, entry, next(iter(value.values())))
+                        )
                         continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     # SECURITY: Operator must be in allowlist

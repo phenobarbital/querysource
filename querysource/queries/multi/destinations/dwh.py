@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from querysource.exceptions import DriverError, OutputError
 from querysource.outputs.destinations.abstract import AbstractDestination
+from querysource.utils.dataframes import df_to_records
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +235,10 @@ class DWHDestination(AbstractDestination):
         if creds.get("tlsCAFile"):
             params["tlsCAFile"] = creds["tlsCAFile"]
 
-        records = df.to_dict(orient="records")
+        # df_to_records turns NaN/NaT/pd.NA into None so Mongo stores null
+        # instead of a NaN double (pandas 3 string columns use NaN as the
+        # missing marker).
+        records = df_to_records(df)
 
         try:
             db = AsyncDB("mongo", params=params)

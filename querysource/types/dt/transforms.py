@@ -123,7 +123,7 @@ def convert_to_integer(
         if fix_negatives is True:
             df[field] = df[field].apply(num_formatter)  # .astype('float')
         df[field] = pd.to_numeric(df[field], errors="coerce")
-        df[field] = df[field].astype("Int64", copy=False)
+        df[field] = df[field].astype("Int64")
     except Exception as err:
         print(field, "->", err)
     if not_null is True:
@@ -1586,14 +1586,14 @@ def epoch_to_date(
     if column:
         # using another column instead current:
         try:
-            df[column] = df[column].astype("Int64", copy=False)
+            df[column] = df[column].astype("Int64")
             df[field] = pd.to_datetime(df[column], unit=unit, errors="coerce")
         except Exception as err:
             logging.error(err)
     else:
         try:
             df[field] = pd.to_numeric(df[field], errors="coerce")
-            df[field] = df[field].astype("Int64", copy=False)
+            df[field] = df[field].astype("Int64")
             df[field] = pd.to_datetime(df[field], unit=unit, errors="coerce")
         except Exception as err:
             logging.error(err)
@@ -1636,7 +1636,7 @@ def to_integer(df: pd.DataFrame, field: str):
     """
     try:
         df[field] = pd.to_numeric(df[field], errors="coerce")
-        df[field] = df[field].astype("Int64", copy=False)
+        df[field] = df[field].astype("Int64")
     except TypeError as err:
         print(f"TO Integer {field}: Unable to safely cast non-equivalent float to int.")
         df[field] = np.floor(pd.to_numeric(df[field], errors="coerce")).astype(
@@ -1692,8 +1692,7 @@ def convert_to_boolean(
             if preserve_nulls is True:
                 df[field] = df[field].map(boolDict).where(df[field].notna(), df[field])
             else:
-                pd.set_option('future.no_silent_downcasting', True)
-                df[field] = df[field].fillna(nan).astype(str).replace(boolDict).infer_objects(copy=False)
+                df[field] = df[field].fillna(nan).astype(str).replace(boolDict).infer_objects()
                 df[field] = df[field].astype(bool)
     except Exception as err:
         print("TO Boolean Error: ", err)
@@ -2239,7 +2238,7 @@ def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integ
             df[field] = df[field].str.replace(r"\D+", "", regex=True)
         df[field] = pd.to_numeric(df[field], errors="coerce")
         if to_integer is True:
-            df[field] = df[field].astype("Int64", copy=False)
+            df[field] = df[field].astype("Int64")
     except Exception as err:
         print(f"TO Integer {field}:", err)
     return df
@@ -2566,17 +2565,20 @@ def autoincrement_by_group(df: pd.DataFrame, field: str, group_column: str) -> p
         pd.DataFrame: Dataframe with the new autoincremented column.
     """
     try:
-        # Apply a group function to every row in group:
-        def auto_group_function(group):
-            i = 1
-            for idx in group.index:
-                if pd.isna(group.at[idx, field]) or group.at[idx, field] == "":
-                    group.at[idx, field] = i
-                    i += 1
-            return group
-
-        # Apply the group function to the dataframe
-        df = df.groupby(group_column).apply(auto_group_function).reset_index(drop=True)
+        # Rows whose field is missing or an empty string get a per-group
+        # running counter (1, 2, 3, ...) in the frame's original order.
+        # Computed vectorially instead of via ``groupby().apply()``: pandas 3
+        # excludes the grouping column from each group (``include_groups``),
+        # which made the old implementation drop ``group_column`` entirely.
+        missing = df[field].isna() | (df[field] == "")
+        if not missing.any():
+            return df
+        counter = missing.groupby(df[group_column], dropna=False).cumsum()
+        if not pd.api.types.is_numeric_dtype(df[field]):
+            # pandas 3 ``str`` columns reject integer values; widen to object
+            # so the counters can coexist with the existing text values.
+            df[field] = df[field].astype(object)
+        df.loc[missing, field] = counter[missing]
         return df
     except Exception as err:
         print(f"Error on autoincrement_by_group {field}:", err)

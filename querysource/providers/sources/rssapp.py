@@ -119,6 +119,11 @@ class rssapp(httpSource):
                     # Handle case where no row is found
                     self.logger.warning(f"No row found for bundle_id={bundle_id}")
                     return None
+            # Negative keywords are plain lowercase strings for every search
+            # backend; they are matched literally (regex/fuzzy), never by vector.
+            self._negative_keywords[bundle_id] = [
+                kw.lower() for kw in (result.get('negative_keywords') or [])
+            ]
             if self.use_gesim:
                 # vectors and keywords:
                 db_keywords = result['keywords']       # This should be a list of strings
@@ -152,8 +157,6 @@ class rssapp(httpSource):
                     """
                     await conn.execute(update_sql, vector_json, bundle_id)
             else:
-                if result['negative_keywords']:
-                    self._negative_keywords[bundle_id] = [kw.lower() for kw in result.get('negative_keywords', [])]
                 self._keywords[bundle_id] = [kw.lower() for kw in result['keywords']]
             return True
         except Exception as err:
@@ -189,7 +192,7 @@ class rssapp(httpSource):
                 else:
                     if self.use_gesim:
                         matched = self._search_gesim(combined_text, keywords)
-                        negative_matched = self._search_gesim(combined_text, negative_keywords)
+                        negative_matched = self._search_regex(combined_text, negative_keywords)
                     else:
                         matched = self._search_fuzzy(combined_text, keywords)
                         negative_matched = self._search_fuzzy(combined_text, negative_keywords)

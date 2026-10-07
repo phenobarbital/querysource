@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use crate::filter_common::apply_where_clause;
+use crate::partial_match::{bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, MatchKind, PartialMatchOp};
 use crate::safe_dict::safe_format_map_rust;
 use crate::validators::{bq_quote_string, field_components, is_integer};
 
@@ -25,6 +26,11 @@ const VALID_OPERATORS: &[&str] = &["<", ">", ">=", "<=", "<>", "!=", "IS NOT", "
 /// Regex for detecting JSON dot-notation fields (e.g., `metadata.region`).
 static JSON_DOT_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9_]+)\.([a-zA-Z0-9_.]+)$").unwrap());
+
+/// Dotted JSON member path allowed inside `JSON_VALUE(f, '$.<member>')` (FEAT-162):
+/// `region`, `address.city`. Rejects anything that could close the string literal.
+static JSON_MEMBER_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$").unwrap());
 
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
@@ -137,18 +143,40 @@ fn extract_filter_value(obj: &Bound<'_, pyo3::types::PyAny>) -> FilterValue {
 // Per-entry condition builder (runs in parallel via rayon)
 // ---------------------------------------------------------------------------
 
+/// Validate and produce a safe column key (FEAT-162; the FEAT-103 rule of
+/// `bigquery.pyx` and `pg_safe_identifier_key` in `pgsql_parser.rs`).
+///
+/// Suffix markers (`|!~#@:`) are ignored for the check. Numeric keys are
+/// double-quoted, alphanumeric/underscore/dot keys pass through unchanged, and
+/// anything else — including a key that is empty once stripped — is rejected.
+fn bq_safe_identifier_key(key: &str) -> Option<String> {
+    let stripped = key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'));
+    if stripped.is_empty() {
+        return None;
+    }
+    if stripped.parse::<i64>().is_ok() || is_integer(stripped) {
+        return Some(format!("\"{}\"", key));
+    }
+    if stripped.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        Some(key.to_string())
+    } else {
+        None
+    }
+}
+
+/// True when `member` may be interpolated into `JSON_VALUE(f, '$.<member>')`.
+fn bq_safe_json_member(member: &str) -> bool {
+    JSON_MEMBER_PATTERN.is_match(member)
+}
+
 /// Process a single filter entry into a WHERE condition string.
 fn process_entry(entry: &FilterEntry) -> Option<String> {
     let key = &entry.key;
     let value = &entry.value;
     let format_hint = entry.format_hint.as_deref();
 
-    // Quote numeric keys
-    let quoted_key = if key.parse::<i64>().is_ok() || is_integer(key) {
-        format!("\"{}\"", key)
-    } else {
-        key.clone()
-    };
+    // SECURITY (FEAT-162): the key must be a safe identifier; an unsafe key drops the condition.
+    let quoted_key = bq_safe_identifier_key(key)?;
 
     // Get field components for suffix detection
     let components = field_components(key);
@@ -178,6 +206,18 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
     }
 }
 
+/// Render one partial-matching operator for BigQuery (FEAT-180, spec section 2). Regex never reaches
+/// here (rejected in Phase 1 with supports_regex = false).
+fn bq_partial_match_condition(field_expr: &str, op: &PartialMatchOp, operand: &str) -> String {
+    let like = if op.negated { "NOT LIKE" } else { "LIKE" };
+    let lit = bq_like_literal(&build_like_pattern(op, operand, like_escape));
+    if op.insensitive {
+        format!("LOWER({}) {} LOWER({})", field_expr, like, lit)
+    } else {
+        format!("{} {} {}", field_expr, like, lit)
+    }
+}
+
 /// Handle dict-typed filter values: comparison tokens and JSON extraction.
 fn process_dict_value(
     field_expr: &str,
@@ -189,6 +229,13 @@ fn process_dict_value(
 
     let (op, v) = &entries[0];
 
+    if entries.len() == 1 {
+        if let (Some(pm), FilterValue::Str(s)) = (lookup(op), v) {
+            debug_assert!(pm.kind == MatchKind::Like);
+            return Some(bq_partial_match_condition(field_expr, pm, s));
+        }
+    }
+
     // Standard comparison tokens
     if COMPARISON_TOKENS.contains(&op.as_str()) {
         return Some(format!("{} {} {}", field_expr, op, v.as_str()));
@@ -198,6 +245,10 @@ fn process_dict_value(
     // JSON_VALUE(field, '$.key') = value
     if entries.len() == 1 {
         let val_str = v.as_str();
+        // SECURITY (FEAT-162): `op` lands inside a string literal — only an identifier path may be rendered.
+        if !bq_safe_json_member(op) {
+            return None;
+        }
         let json_expr = format!("JSON_VALUE({}, '$.{}')", field_expr, op);
         return Some(format!("{} = {}", json_expr, bq_quote_string(&val_str)));
     }
@@ -314,13 +365,29 @@ pub fn bq_filter_conditions(
                 .flatten()
                 .and_then(|v| v.extract().ok());
             let value = extract_filter_value(&value_obj);
-            FilterEntry {
+            // Validate against the raw Python operands: `extract_filter_value` renders `None` as the
+            // string "None", which would pass for a valid string operand.
+            if let Ok(raw) = value_obj.cast::<PyDict>() {
+                let pairs: Vec<(String, Option<String>)> = raw
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.extract::<String>().unwrap_or_default(),
+                            v.extract::<String>().ok(),
+                        )
+                    })
+                    .collect();
+                let partial_entries: Vec<(&str, Option<&str>)> =
+                    pairs.iter().map(|(k, v)| (k.as_str(), v.as_deref())).collect();
+                check_entries(&key, &partial_entries, false)?;
+            }
+            Ok(FilterEntry {
                 key,
                 value,
                 format_hint,
-            }
+            })
         })
-        .collect();
+        .collect::<PyResult<Vec<FilterEntry>>>()?;
 
     // Phase 2: Process in parallel (no GIL, pure Rust)
     let where_cond: Vec<String> = entries
@@ -435,6 +502,77 @@ mod tests {
         let (expr, is_json) = resolve_json_field("territory_id", None);
         assert!(!is_json);
         assert_eq!(expr, "territory_id");
+    }
+
+    #[test]
+    fn test_pm_bq_like_family() {
+        let cases = [
+            ("like", "a_%", "n LIKE \"a_%\""),
+            ("not_like", "a_%", "n NOT LIKE \"a_%\""),
+            ("ilike", "a_%", "LOWER(n) LIKE LOWER(\"a_%\")"),
+            ("not_ilike", "a_%", "LOWER(n) NOT LIKE LOWER(\"a_%\")"),
+            ("startswith", "abc", "n LIKE \"abc%\""),
+            ("not_startswith", "abc", "n NOT LIKE \"abc%\""),
+            ("istartswith", "abc", "LOWER(n) LIKE LOWER(\"abc%\")"),
+            ("not_istartswith", "abc", "LOWER(n) NOT LIKE LOWER(\"abc%\")"),
+            ("endswith", "abc", "n LIKE \"%abc\""),
+            ("not_endswith", "abc", "n NOT LIKE \"%abc\""),
+            ("iendswith", "abc", "LOWER(n) LIKE LOWER(\"%abc\")"),
+            ("not_iendswith", "abc", "LOWER(n) NOT LIKE LOWER(\"%abc\")"),
+            ("contains", "abc", "n LIKE \"%abc%\""),
+            ("not_contains", "abc", "n NOT LIKE \"%abc%\""),
+            ("icontains", "abc", "LOWER(n) LIKE LOWER(\"%abc%\")"),
+            ("not_icontains", "abc", "LOWER(n) NOT LIKE LOWER(\"%abc%\")"),
+        ];
+
+        for (name, operand, expected) in cases {
+            let op = lookup(name).unwrap();
+            assert_eq!(bq_partial_match_condition("n", op, operand), expected);
+        }
+    }
+
+    #[test]
+    fn test_pm_bq_contains_percent() {
+        let op = lookup("contains").unwrap();
+        assert_eq!(bq_partial_match_condition("n", op, "50%"), r#"n LIKE "%50\\%%""#);
+    }
+
+    #[test]
+    fn test_pm_bq_dict_precedence() {
+        let partial = vec![("contains".to_string(), FilterValue::Str("abc".to_string()))];
+        assert_eq!(process_dict_value("f", &partial), Some("f LIKE \"%abc%\"".to_string()));
+
+        let json = vec![("other".to_string(), FilterValue::Str("x".to_string()))];
+        assert_eq!(
+            process_dict_value("f", &json),
+            Some("JSON_VALUE(f, '$.other') = \"x\"".to_string())
+        );
+    }
+
+    #[test]
+    fn test_pm_bq_invalid_operands_are_rejected_in_phase_one() {
+        Python::initialize();
+        Python::attach(|py| {
+            let filters = PyDict::new(py);
+            let contains = PyDict::new(py);
+            contains.set_item("contains", "ab").unwrap();
+            filters.set_item("n", contains).unwrap();
+            let definitions = PyDict::new(py);
+            let error = bq_filter_conditions("SELECT * FROM t", &filters, &definitions).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "ValueError: contains on 'n' requires at least 3 characters (got 2)"
+            );
+
+            let regex = PyDict::new(py);
+            regex.set_item("regex", "a.*").unwrap();
+            filters.set_item("n", regex).unwrap();
+            let error = bq_filter_conditions("SELECT * FROM t", &filters, &definitions).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "ValueError: regex on 'n': regex operators are not supported by this query parser"
+            );
+        });
     }
 
     // -- process_entry tests --
@@ -567,6 +705,82 @@ mod tests {
             process_entry(&entry),
             Some("JSON_VALUE(config, '$')=\"active\"".to_string())
         );
+    }
+
+    // -- FEAT-162 key hardening (all named test_bqkey_* for the cargo filter) --
+
+    #[test]
+    fn test_bqkey_identifier_plain() {
+        assert_eq!(bq_safe_identifier_key("name").as_deref(), Some("name"));
+        assert_eq!(bq_safe_identifier_key("meta.region").as_deref(), Some("meta.region"));
+        assert_eq!(bq_safe_identifier_key("col!").as_deref(), Some("col!"));
+        assert_eq!(bq_safe_identifier_key("col|").as_deref(), Some("col|"));
+        assert_eq!(bq_safe_identifier_key("123").as_deref(), Some("\"123\""));
+    }
+
+    #[test]
+    fn test_bqkey_identifier_rejects() {
+        for key in ["a b", "a;drop", "x') OR 1=1 --", "", "!", "||", "n) = 1 OR 1=1 --", "a\"b"] {
+            assert!(bq_safe_identifier_key(key).is_none(), "accepted {key:?}");
+        }
+    }
+
+    #[test]
+    fn test_bqkey_json_member() {
+        for member in ["region", "a.b.c", "_x1", "A9"] {
+            assert!(bq_safe_json_member(member), "rejected {member:?}");
+        }
+        for member in ["x') = \"\" OR TRUE OR ('", "a-b", ".a", "a.", "", "a b", "9a", "a..b", "a'b"] {
+            assert!(!bq_safe_json_member(member), "accepted {member:?}");
+        }
+    }
+
+    #[test]
+    fn test_bqkey_entry_unsafe_key_dropped() {
+        let hostile = "n) = 1 OR 1=1 --";
+        let values = vec![
+            FilterValue::Str("v".to_string()),
+            FilterValue::Dict(vec![("contains".to_string(), FilterValue::Str("abc".to_string()))]),
+            FilterValue::Dict(vec![(">".to_string(), FilterValue::Int(1))]),
+            FilterValue::List(vec![FilterValue::Str("a".to_string())]),
+            FilterValue::Int(1),
+        ];
+        for value in values {
+            let entry = FilterEntry { key: hostile.to_string(), value, format_hint: None };
+            assert!(process_entry(&entry).is_none());
+        }
+    }
+
+    #[test]
+    fn test_bqkey_dict_unsafe_member_dropped() {
+        let entry = FilterEntry {
+            key: "meta".to_string(),
+            value: FilterValue::Dict(vec![(
+                "x') = \"\" OR TRUE OR ('".to_string(),
+                FilterValue::Str("v".to_string()),
+            )]),
+            format_hint: None,
+        };
+        assert!(process_entry(&entry).is_none());
+        let safe = FilterEntry {
+            key: "meta".to_string(),
+            value: FilterValue::Dict(vec![("region".to_string(), FilterValue::Str("us".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&safe).as_deref(),
+            Some("JSON_VALUE(meta, '$.region') = \"us\"")
+        );
+    }
+
+    #[test]
+    fn test_bqkey_partial_match_safe_key_renders() {
+        let entry = FilterEntry {
+            key: "n".to_string(),
+            value: FilterValue::Dict(vec![("contains".to_string(), FilterValue::Str("abc".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry).as_deref(), Some("n LIKE \"%abc%\""));
     }
 
     #[test]

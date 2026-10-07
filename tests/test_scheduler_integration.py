@@ -9,10 +9,13 @@ class TestQuerySourceSchedulerIntegration:
         from querysource.services import ENABLE_QS_SCHEDULER
         assert isinstance(ENABLE_QS_SCHEDULER, bool)
 
-    def test_scheduler_not_imported_when_disabled(self):
-        """When disabled (default), scheduler module is not imported in setup."""
+    def test_scheduler_flag_mirrors_navconfig(self):
+        """conf.ENABLE_QS_SCHEDULER reflects navconfig (default False when unset)."""
+        from navconfig import config
+
         from querysource.conf import ENABLE_QS_SCHEDULER
-        assert ENABLE_QS_SCHEDULER is False
+        expected = config.getboolean("ENABLE_QS_SCHEDULER", fallback=False)
+        assert ENABLE_QS_SCHEDULER is expected
 
     def test_qsscheduler_registers_hooks(self):
         """QSScheduler.setup() appends to on_startup and on_shutdown."""

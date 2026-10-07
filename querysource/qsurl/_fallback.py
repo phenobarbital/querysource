@@ -32,6 +32,11 @@ _CMP_MAP: dict[str, str] = {
     "^=": "startswith",
     "$=": "endswith",
     "=~": "regex",
+    "~*": "icontains",
+    "!~*": "not_icontains",
+    "^=*": "istartswith",
+    "$=*": "iendswith",
+    "=~*": "iregex",
 }
 # Flippable (symmetric) comparison ops only; text ops have a fixed side (ir.rs CmpOp::flipped).
 _FLIPPED: dict[str, str] = {"==": "==", "!=": "!=", "<": ">", "<=": ">=", ">": "<", ">=": "<="}
@@ -265,11 +270,20 @@ def _leaf(column: tuple, op: str, value: tuple, requires: set[str]) -> dict:
         raise QSUrlError(
             "lower", f"operator `{op}` does not accept a list; use `=` or `!=` for membership"
         )
-    elif op == "regex":
+    elif op in ("regex", "iregex"):
         requires.add(capabilities.REGEX)
         m["expression"] = op
         m["value"] = _lower_operand(value, requires)
-    elif op in ("contains", "not_contains", "startswith", "endswith"):
+    elif op in (
+        "contains",
+        "not_contains",
+        "startswith",
+        "endswith",
+        "icontains",
+        "not_icontains",
+        "istartswith",
+        "iendswith",
+    ):
         requires.add(capabilities.TEXT_MATCH)
         m["expression"] = op
         m["value"] = _lower_operand(value, requires)

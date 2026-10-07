@@ -41,6 +41,15 @@
     "max_candidates": 3,
     "timeout_seconds": 60
   },
+  "schema": {
+    "enabled": true,
+    "sources": {},
+    "stale_after_days": {
+      "1": 30,
+      "2": 14,
+      "3": 7
+    }
+  },
   "sqlite_busy_timeout": 15.0,
   "sqlite_performance_pragmas": false
 }

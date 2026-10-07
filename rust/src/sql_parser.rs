@@ -8,6 +8,7 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
+use crate::partial_match::{build_like_pattern, check_entries, like_escape_bang, sql_like_literal, MatchKind, PartialMatchOp};
 use crate::validators::{escape_string, field_components, quote_string};
 
 /// Comparison tokens recognized in filter conditions.
@@ -200,6 +201,23 @@ fn before_placeholder_brace(sql: &str, pos: usize) -> usize {
     }
 }
 
+/// Render one partial-matching operator for generic SQL (FEAT-180, spec §2).
+fn sql_partial_match_condition(col: &str, op: &PartialMatchOp, operand: &str) -> PyResult<String> {
+    if op.kind == MatchKind::Regex {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{} on '{}': regex operators are not supported by this query parser", op.name, col
+        )));
+    }
+    let like = if op.negated { "NOT LIKE" } else { "LIKE" };
+    let lit = sql_like_literal(&build_like_pattern(op, operand, like_escape_bang));
+    let esc = if op.escape { " ESCAPE '!'" } else { "" };
+    Ok(if op.insensitive {
+        format!("LOWER({}) {} LOWER({}){}", col, like, lit, esc)
+    } else {
+        format!("{} {} {}{}", col, like, lit, esc)
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Individual SQL clause builders
 // ---------------------------------------------------------------------------
@@ -244,6 +262,21 @@ pub fn filter_conditions(
 
         // Handle different value types
         if let Ok(dict_val) = value_obj.cast::<PyDict>() {
+            // FEAT-180: partial-matching operators (validated; Err surfaces as ParserError via sql.pyx fallthrough)
+            let mut entries: Vec<(String, Option<String>)> = Vec::new();
+            for (op_obj, v_obj) in dict_val.iter() {
+                let op_name: String = op_obj.extract()?;
+                let operand = v_obj.extract::<String>().ok();
+                entries.push((op_name, operand));
+            }
+            let entry_refs: Vec<(&str, Option<&str>)> = entries
+                .iter()
+                .map(|(op_name, operand)| (op_name.as_str(), operand.as_deref()))
+                .collect();
+            if let Some((op, operand)) = check_entries(&key, &entry_refs, false)? {
+                where_cond.push(sql_partial_match_condition(&formatted_key, op, operand)?);
+                continue;
+            }
             // Dict value → comparison operator + value
             if let Some((op_obj, v_obj)) = dict_val.iter().next() {
                 let op: String = op_obj.extract()?;
@@ -623,6 +656,51 @@ pub fn build_sql(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_pm_sql_like_family() {
+        Python::initialize();
+        let cases = [
+            ("like", "an_re%", "n LIKE 'an_re%'"),
+            ("not_like", "an_re%", "n NOT LIKE 'an_re%'"),
+            ("ilike", "an_re%", "LOWER(n) LIKE LOWER('an_re%')"),
+            ("not_ilike", "an_re%", "LOWER(n) NOT LIKE LOWER('an_re%')"),
+            ("startswith", "andre", "n LIKE 'andre%' ESCAPE '!'"),
+            ("not_startswith", "andre", "n NOT LIKE 'andre%' ESCAPE '!'"),
+            ("istartswith", "andre", "LOWER(n) LIKE LOWER('andre%') ESCAPE '!'"),
+            ("not_istartswith", "andre", "LOWER(n) NOT LIKE LOWER('andre%') ESCAPE '!'"),
+            ("endswith", "andre", "n LIKE '%andre' ESCAPE '!'"),
+            ("not_endswith", "andre", "n NOT LIKE '%andre' ESCAPE '!'"),
+            ("iendswith", "andre", "LOWER(n) LIKE LOWER('%andre') ESCAPE '!'"),
+            ("not_iendswith", "andre", "LOWER(n) NOT LIKE LOWER('%andre') ESCAPE '!'"),
+            ("contains", "andre", "n LIKE '%andre%' ESCAPE '!'"),
+            ("not_contains", "andre", "n NOT LIKE '%andre%' ESCAPE '!'"),
+            ("icontains", "andre", "LOWER(n) LIKE LOWER('%andre%') ESCAPE '!'"),
+            ("not_icontains", "andre", "LOWER(n) NOT LIKE LOWER('%andre%') ESCAPE '!'"),
+        ];
+        for (name, operand, expected) in cases {
+            let op = crate::partial_match::lookup(name).unwrap();
+            assert_eq!(sql_partial_match_condition("n", op, operand).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_pm_sql_like_escaping() {
+        Python::initialize();
+        let op = crate::partial_match::lookup("contains").unwrap();
+        assert_eq!(
+            sql_partial_match_condition("n", op, "a!b%c_d[e").unwrap(),
+            "n LIKE '%a!!b!%c!_d![e%' ESCAPE '!'"
+        );
+    }
+
+    #[test]
+    fn test_pm_sql_regex_rejected() {
+        Python::initialize();
+        let op = crate::partial_match::lookup("regex").unwrap();
+        let error = sql_partial_match_condition("n", op, "^a").unwrap_err();
+        assert_eq!(error.to_string(), "ValueError: regex on 'n': regex operators are not supported by this query parser");
+    }
 
     #[test]
     fn test_build_string_condition_basic() {

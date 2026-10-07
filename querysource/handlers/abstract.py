@@ -159,6 +159,16 @@ class AbstractHandler(BaseHandler):
             code (int, optional): HTTP error code. Defaults to 400.
             detail (dict, optional): client-safe structured error; when given, ``message`` is
                 public in every mode and ``detail`` is emitted as the payload's ``detail``.
+
+        Warning:
+            Passing ``detail`` disables production redaction of ``message``:
+            both are sent to the client even when ``self.debug`` is False.
+            Only pass ``detail`` when ``message`` and ``detail`` are built
+            from client-safe, caller-authored text (e.g. validation errors
+            about the request itself). Never pass ``detail`` with a message
+            derived from ``str(exception)``, driver/DB errors, SQL text,
+            file paths, credentials or tracebacks — use ``exception=`` for
+            those so they are only logged server-side.
         """
         # Map HTTP status code to a formatter category
         if code == 404:
@@ -174,6 +184,8 @@ class AbstractHandler(BaseHandler):
             exception=exception,
             debug=self.debug,
             logger=self.logger,
+            # ``detail`` opts ``message`` into the public body in every mode;
+            # callers must keep both client-safe (see the Warning above).
             public_message=message if (self.debug or detail is not None) else None,
             public_detail=detail,
         )

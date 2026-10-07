@@ -153,19 +153,18 @@ class TestSchedulerJobsAPI:
         assert body["scheduler"]["running"] is False
         assert "error" in body
 
-    async def test_post_returns_405(
+    async def test_post_without_body_returns_400(
         self, client_with_jobs: TestClient
     ) -> None:
-        """POST /jobs returns 405 Method Not Allowed (aiohttp default for unimplemented verbs).
+        """POST /jobs is served by the class-based view and validates its body.
 
-        This proves the class-based view is wired correctly and that future
-        POST/PUT/PATCH/DELETE verbs can be added on the same class without
-        re-routing.
+        A 404 or 405 would mean the route is not registered for POST; the
+        view answers 400 when the body is not JSON.
         """
         resp = await client_with_jobs.post("/api/v1/qs/scheduler/jobs")
-        # MUST be 405, not 404 — a 404 would mean the route is not registered
-        # for POST, which would be wrong for a class-based view.
-        assert resp.status == 405
+        assert resp.status == 400
+        body = await resp.json()
+        assert "error" in body
 
     async def test_route_not_registered_when_flag_off(self) -> None:
         """Routes are absent when ENABLE_QS_SCHEDULER is False.

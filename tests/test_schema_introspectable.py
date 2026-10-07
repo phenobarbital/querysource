@@ -148,8 +148,9 @@ class TestDescribeClass:
             _category = "Destinations"
 
         desc = describe_class(_LiteralOnly)
-        assert "Output:" in desc["example"]
-        assert "bar: baz" in desc["example"]
+        # The YAML literal block is re-serialised as JSON for the UI.
+        import json
+        assert json.loads(desc["example"]) == {"Output": [{"Foo": {"bar": "baz"}}]}
         # The trailing prose should become usage.
         assert "Trailing prose paragraph" in desc["usage"]
 

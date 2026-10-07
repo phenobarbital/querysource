@@ -17,7 +17,7 @@ class TestRemoteExecutor:
         executor = RemoteExecutor(host="localhost", port=8888, timeout=30)
         expected_df = pd.DataFrame({"id": [1], "val": [10]})
 
-        with patch("querysource.queries.multi.sources.executors.QClient") as MockClient:
+        with patch("qw.client.QClient") as MockClient:
             mock_instance = AsyncMock()
             mock_instance.run.return_value = expected_df
             MockClient.return_value = mock_instance
@@ -36,7 +36,7 @@ class TestRemoteExecutor:
         queue = asyncio.Queue()
         executor = RemoteExecutor(host="bad-host", port=9999)
 
-        with patch("querysource.queries.multi.sources.executors.QClient") as MockClient:
+        with patch("qw.client.QClient") as MockClient:
             mock_instance = AsyncMock()
             mock_instance.run.side_effect = ConnectionError("refused")
             MockClient.return_value = mock_instance
@@ -50,7 +50,7 @@ class TestRemoteExecutor:
         queue = asyncio.Queue()
         executor = RemoteExecutor(host="host", port=8888)
 
-        with patch("querysource.queries.multi.sources.executors.QClient") as MockClient:
+        with patch("qw.client.QClient") as MockClient:
             mock_instance = AsyncMock()
             mock_instance.run.side_effect = TimeoutError("timed out")
             MockClient.return_value = mock_instance
@@ -65,7 +65,7 @@ class TestRemoteExecutor:
         queue = asyncio.Queue()
         executor = RemoteExecutor(host="localhost", port=8888)
 
-        with patch("querysource.queries.multi.sources.executors.QClient") as MockClient:
+        with patch("qw.client.QClient") as MockClient:
             mock_instance = AsyncMock()
             mock_instance.run.side_effect = SlugNotFound("no-such-slug")
             MockClient.return_value = mock_instance
@@ -79,7 +79,7 @@ class TestRemoteExecutor:
         queue = asyncio.Queue()
         executor = RemoteExecutor(host="localhost", port=8888)
 
-        with patch("querysource.queries.multi.sources.executors.QClient") as MockClient:
+        with patch("qw.client.QClient") as MockClient:
             mock_instance = AsyncMock()
             mock_instance.run.return_value = pd.DataFrame({"x": [1]})
             MockClient.return_value = mock_instance

@@ -169,8 +169,13 @@ fn literal<'a>() -> impl Parser<'a, &'a str, Literal, Err<'a>> + Clone {
 }
 
 fn cmp_op<'a>() -> impl Parser<'a, &'a str, CmpOp, Err<'a>> + Clone {
-    // Los de dos caracteres van primero.
+    // FEAT-180: three-character case-insensitive tokens first (longest match).
     choice((
+        just("!~*").to(CmpOp::NotIContains),
+        just("^=*").to(CmpOp::IStartsWith),
+        just("$=*").to(CmpOp::IEndsWith),
+        just("=~*").to(CmpOp::IRegex),
+        just("~*").to(CmpOp::IContains),
         just("==").to(CmpOp::Eq),
         just("!=").to(CmpOp::Ne),
         just("!~").to(CmpOp::NotContains),

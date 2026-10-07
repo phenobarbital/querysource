@@ -10,6 +10,10 @@ from typing import Union, Dict, Any, List, Tuple
 from datamodel.typedefs import NullDefault, SafeDict
 from .sql cimport SQLParser
 from ..types.validators import Entity, field_components
+from ..exceptions import ParserError
+from .partial_matching import (
+    bq_like_literal, build_like_pattern, like_escape, validate_partial_match_dict,
+)
 
 # Try to import Rust extension for accelerated parsing
 try:
@@ -26,6 +30,10 @@ else:
     _logger.warning("BigQuery Rust parser (qs_parsers) not available, using Cython fallback.")
 
 COMPARISON_TOKENS = ('>=', '<=', '<>', '!=', '<', '>',)
+
+# SECURITY (FEAT-162 / TASK-857): dotted JSON member path allowed inside JSON_VALUE(f, '$.<member>');
+# identical to JSON_MEMBER_PATTERN in rust/src/bigquery_parser.rs.
+_JSON_MEMBER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
 
 cdef str bq_quote_string(object value):
@@ -49,6 +57,23 @@ cdef str bq_quote_string(object value):
     # Escape any literal double quotes inside the string
     v = v.replace('"', '\\"')
     return f'"{v}"'
+
+
+cdef str bq_partial_match_condition(str field_expr, object entry, str operand):
+    """Render one partial-matching operator for BigQuery (FEAT-180, spec §2).
+
+    Raises:
+        ParserError: for regex operators (PostgreSQL only).
+    """
+    cdef str like
+    cdef str lit
+    if entry.kind == 'regex':
+        raise ParserError(f"{entry.name} on '{field_expr}': regex operators are not supported by this query parser")
+    like = 'NOT LIKE' if entry.negated else 'LIKE'
+    lit = bq_like_literal(build_like_pattern(entry, operand, escaper=like_escape))
+    if entry.insensitive:
+        return f"LOWER({field_expr}) {like} LOWER({lit})"
+    return f"{field_expr} {like} {lit}"
 
 
 cdef class BigQueryParser(SQLParser):
@@ -209,12 +234,24 @@ cdef class BigQueryParser(SQLParser):
                 if isinstance(value, dict):
                     if not value:
                         continue
+                    entry = validate_partial_match_dict(
+                        key, value, supports_regex=self.supports_regex_filter
+                    )
+                    if entry is not None:
+                        where_cond.append(
+                            bq_partial_match_condition(field_expr, entry, next(iter(value.values())))
+                        )
+                        continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
                         where_cond.append(f"{field_expr} {op} {bq_quote_string(str(v))}")
                     else:
                         # BigQuery: JSON extraction via dict key
+                        # SECURITY (FEAT-162 / TASK-857): the member key lands inside a string
+                        # literal — skip the entry unless it is a dotted identifier path.
+                        if not (isinstance(op, str) and _JSON_MEMBER_PATTERN.match(op)):
+                            continue
                         json_expr = f"JSON_VALUE({field_expr}, '$.{op}')"
                         where_cond.append(
                             f"{json_expr} = {bq_quote_string(str(v))}"
