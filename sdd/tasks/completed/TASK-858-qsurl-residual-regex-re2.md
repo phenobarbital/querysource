@@ -2,11 +2,11 @@
 
 **Feature**: FEAT-164 — qsurl residual regex on a linear-time engine (RE2)
 **Spec**: `sdd/specs/qsurl-residual-fixes.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
-**Assigned-to**: unassigned
+**Assigned-to**: agent:sdd-fix
 **discovered_from**: issue:2241b8e60919
 
 ---
@@ -273,8 +273,14 @@ def test_regex_mask_semantics():
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: agent:sdd-fix (Claude Opus 5.5)
+**Date**: 2026-10-08
+**Notes**: Implemented per blueprint in commit 9cbb4126. `tests/qsurl/test_residual.py`:
+34 passed. Against the pre-fix residual.py the lookaround/backref, no-`str.contains`
+and fail-closed tests fail (6 failures, 11.3 s run — the ReDoS itself). The full
+`tests/qsurl` + `tests/e2e/test_qsurl_dry_run.py` run shows 9 failures that are
+byte-identical before and after this change (Rust parity/token tests and PG text-match
+pushdown e2e — stale compiled `_qs_parsers`/pgsql extension, unrelated to residual.py).
+`ruff check` clean on both files.
 
 **Deviations from spec**: none
