@@ -7,6 +7,13 @@ import re
 
 import pandas as pd
 
+try:
+    import pyarrow as pa
+    import pyarrow.compute as pc
+except ImportError:  # pragma: no cover - pyarrow ships with the `parquet` extra
+    pa = None
+    pc = None
+
 from .errors import QSUrlError
 from .plan import ResidualPlan
 
@@ -20,18 +27,16 @@ _OPS = {
     ">=": operator.ge,
 }
 
-# Ledger issue:2241b8e60919 (code review, FEAT-152): the `regex` leaf runs an
-# attacker-controlled pattern against every row via `str.contains(...,
-# regex=True)`, synchronously, on the handler's event-loop thread — an
-# unbounded ReDoS vector. The spec (sdd/specs/qsurl-parser.spec.md §3 Module
-# 7) mandates this exact pandas call, so the mitigation is additive: reject
-# overly long patterns and the classic "nested quantifier" shape
-# (`(x+)+`, `(x*)+`, ...) that causes catastrophic backtracking in practice,
-# before the pattern ever reaches `str.contains`. This is a best-effort
-# static screen, not a proof of linear-time matching — a pattern-length cap
-# plus this heuristic bounds the most common real-world risk without a new
-# dependency or a signal/thread-based timeout around a vectorised,
-# whole-column pandas call (which cannot be interrupted per-row anyway).
+# Ledger issue:2241b8e60919 (FEAT-152 review, fixed by FEAT-164): the `regex`
+# / `iregex` leaves run an attacker-controlled pattern against every row,
+# synchronously, on the handler's event-loop thread. They are evaluated ONLY
+# with RE2 (`pyarrow.compute.match_substring_regex`, linear time) in
+# `_re2_contains` — never through `Series.str.contains(regex=True)`, because
+# pandas silently falls back to Python's backtracking `re` whenever a pattern
+# has lookaround or a backreference (`(?=a)(a|a)+$` blocked for 11 s on one
+# 27-char row). Without pyarrow the leaves fail closed. The length cap and
+# nested-quantifier screen below stay as defence in depth and keep parity
+# with the parser-level regex guard (FEAT-180).
 _MAX_REGEX_PATTERN_LENGTH = 200
 _NESTED_QUANTIFIER_RE = re.compile(r"\([^()]*[+*][^()]*\)[+*]")
 
@@ -53,6 +58,31 @@ def _check_regex_safety(pattern: str) -> None:
             "lower",
             f"regex pattern `{pattern}` has a nested quantifier that risks catastrophic backtracking",
         )
+
+
+def _re2_contains(col: pd.Series, pattern: str, ignore_case: bool) -> pd.Series:
+    """Search ``pattern`` in ``col`` with RE2 only (linear time, never Python ``re``).
+
+    Args:
+        col: column to match; non-string values are matched on their string form.
+        pattern: user-supplied regex (RE2 syntax).
+        ignore_case: True for ``iregex``.
+
+    Returns:
+        Boolean mask aligned to ``col.index``; nulls never match.
+
+    Raises:
+        QSUrlError: kind "lower" when pyarrow is unavailable or RE2 rejects the
+            pattern (lookaround, backreferences, malformed syntax).
+    """
+    if pc is None:
+        raise QSUrlError("lower", "regex filters require pyarrow (RE2 engine), which is not installed")
+    arrow = pa.array(col.astype(pd.StringDtype("pyarrow")))
+    try:
+        matched = pc.match_substring_regex(arrow, pattern=pattern, ignore_case=ignore_case)
+    except pa.ArrowInvalid as err:
+        raise QSUrlError("lower", f"invalid regex `{pattern}`: {err}") from err
+    return pd.Series(matched.fill_null(False).to_numpy(zero_copy_only=False), index=col.index, dtype=bool)
 
 
 def _column(df: pd.DataFrame, name: str) -> pd.Series:
@@ -109,13 +139,7 @@ def _leaf_mask(df: pd.DataFrame, leaf: dict) -> pd.Series:
 
     if expr in ("regex", "iregex"):
         _check_regex_safety(value)
-        try:
-            return col.astype("string").str.contains(value, case=(expr == "regex"), na=False, regex=True)
-        except (re.error, ValueError) as err:
-            # ``re.error`` comes from the Python regex engine; pandas 3's
-            # Arrow-backed string columns raise ``pyarrow.ArrowInvalid`` (a
-            # ``ValueError`` subclass) for the same malformed pattern.
-            raise QSUrlError("lower", f"invalid regex `{value}`: {err}") from err
+        return _re2_contains(col, value, ignore_case=(expr == "iregex"))
 
     raise QSUrlError("lower", f"unsupported expression `{expr}`")
 
