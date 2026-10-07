@@ -14,6 +14,9 @@ from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from .jsonb_unnest import is_plan_candidate, unnest_plan, unnest_wrap
 from ..types.validators import Entity, field_components, is_integer, is_camel_case, is_valid
+from .partial_matching import (
+    PARTIAL_MATCH_OPERATORS, build_like_pattern, like_escape, validate_partial_match_dict,
+)
 from .sql cimport SQLParser
 
 # Try to import Rust extension for accelerated parsing
@@ -231,6 +234,27 @@ cdef str jsonb_operator_condition(str col, str op, object operand):
     return jsonb_path_condition(col, op, operand)
 
 
+cdef str partial_match_condition(str col, object entry, str operand):
+    """Render one partial-matching operator for PostgreSQL (FEAT-180, spec §2).
+
+    Args:
+        col: column expression (the filter key, as the comparison branch uses it).
+        entry: the PartialMatchOp returned by validate_partial_match_dict.
+        operand: the raw string operand (never pre-quoted).
+
+    Returns:
+        ``col [NOT ]LIKE|ILIKE <literal>`` or ``col ~|~*|!~|!~* <literal>``.
+    """
+    cdef str sql_op
+    if entry.kind == 'regex':
+        sql_op = ('!~' if entry.negated else '~') + ('*' if entry.insensitive else '')
+        return f"{col} {sql_op} {pg_literal(operand)}"
+    sql_op = 'ILIKE' if entry.insensitive else 'LIKE'
+    if entry.negated:
+        sql_op = 'NOT ' + sql_op
+    return f"{col} {sql_op} {pg_literal(build_like_pattern(entry, operand, escaper=like_escape))}"
+
+
 cdef tuple jsonb_condition(str col, dict value):
     """Inspect a dict-typed filter value and render it as a JSONB condition.
 
@@ -267,6 +291,9 @@ cdef tuple jsonb_condition(str col, dict value):
         1 for k in value if k in COMPARISON_TOKENS or k in JSONB_OPERATORS
     )
     op, operand = next(iter(value.items()))
+    if op in PARTIAL_MATCH_OPERATORS:
+        # FEAT-180: partial-matching operators are rendered by the caller, never as JSONB containment.
+        return (False, None)
     if op in PG_TEXT_OPERATORS:
         # qsurl text-match operators (FEAT-152) are handled by the caller's dict
         # branch, never as implicit JSONB containment (they are not counted by
@@ -301,6 +328,7 @@ cdef class pgSQLParser(SQLParser):
     def __init__(self, *args, **kwargs):
         super(pgSQLParser, self).__init__(*args, **kwargs)
         self.schema_based = True
+        self.supports_regex_filter = True
 
     async def filter_conditions(self, sql):
         """Options for Filtering (PostgreSQL-specific, rayon-parallel Rust fast-path)."""
@@ -357,6 +385,14 @@ cdef class pgSQLParser(SQLParser):
                     end = None
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
+                    entry = validate_partial_match_dict(
+                        key, value, supports_regex=self.supports_regex_filter
+                    )
+                    if entry is not None:
+                        where_cond.append(
+                            partial_match_condition(key, entry, next(iter(value.values())))
+                        )
+                        continue
                     handled, cond = jsonb_condition(key, value)
                     if handled:
                         if cond:
