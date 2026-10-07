@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import re
 
-from querysource.parsers.partial_matching import PARTIAL_MATCH_OPERATORS
 from rust_cargo_runner import ROOT, run_cargo_lib_tests
+
+from querysource.parsers.partial_matching import PARTIAL_MATCH_OPERATORS
 
 RS = ROOT / "rust" / "src" / "partial_match.rs"
 ROW_RE = re.compile(
