@@ -1,0 +1,32 @@
+{
+  "feature": "qsurl-residual-fixes",
+  "feature_id": "FEAT-164",
+  "spec": "sdd/specs/qsurl-residual-fixes.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-07T22:05:00+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-858",
+      "slug": "qsurl-residual-regex-re2",
+      "title": "Evaluate qsurl residual regex leaves on RE2 only",
+      "feature_id": "FEAT-164",
+      "feature": "qsurl-residual-fixes",
+      "spec": "sdd/specs/qsurl-residual-fixes.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "single task; no dependencies; touches only querysource/qsurl/residual.py and tests/qsurl/test_residual.py (pure Python, no extension rebuild)",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "discovered_from": "issue:2241b8e60919",
+      "file": "sdd/tasks/active/TASK-858-qsurl-residual-regex-re2.md"
+    }
+  ]
+}
