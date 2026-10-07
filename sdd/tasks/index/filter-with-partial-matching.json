@@ -228,7 +228,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -238,8 +238,9 @@
       "parallelism_notes": "uses crate::partial_match::{check_entries, lookup, build_like_pattern, like_escape, bq_like_literal} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
       "started_at": "2026-10-07T15:22:45+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-850-bigquery-rust-partial-matching.md"
+      "completed_at": "2026-10-07T16:33:36+00:00",
+      "file": "sdd/tasks/completed/TASK-850-bigquery-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-851",
