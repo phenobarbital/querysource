@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-07T21:06:32+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-07T21:45:14+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -36,7 +36,7 @@
       "feature_id": "FEAT-162",
       "feature": "fixgroup-34032c139334",
       "spec": "sdd/specs/fixgroup-34032c139334.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -44,9 +44,10 @@
       "parallelism_notes": "independent of TASK-855: touches only querysource/parsers/bigquery.pyx and a new test file; no shared files",
       "assigned_to": "agent:sdd-fix",
       "started_at": "2026-10-07T21:42:10+00:00",
-      "completed_at": null,
+      "completed_at": "2026-10-07T21:45:14+00:00",
       "discovered_from": "issue:f5d0b4764384",
-      "file": "sdd/tasks/active/TASK-857-bigquery-cython-json-member-guard.md"
+      "file": "sdd/tasks/completed/TASK-857-bigquery-cython-json-member-guard.md",
+      "verification": "verified"
     }
   ]
 }

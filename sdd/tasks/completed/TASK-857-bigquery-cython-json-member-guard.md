@@ -219,8 +219,15 @@ async def test_cython_rejects_hostile_dict_member() -> None:
 
 *(Agent fills this in when done)*
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: agent:sdd-fix (Claude Code session 5141c3af)
+**Date**: 2026-10-07
+**Notes**: Implemented in commit ac4cd9c1. `_JSON_MEMBER_PATTERN` added below `COMPARISON_TOKENS`;
+the dict branch of `_filter_conditions_cy` skips the entry (`continue`) unless `op` is a `str`
+matching the pattern. Validation in the worktree after `python setup.py build_ext --inplace`:
+`pytest tests/test_bigquery_cython_key_hardening.py tests/test_bigquery_partial_matching.py
+tests/test_bigquery_key_hardening.py -q` → 72 passed, 0 skipped (Rust/Cython agreement test ran
+against the TASK-855 extension).
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: spec §9 lists `{"meta": {1: "v"}}` as "renders nothing"; in practice the
+builder declares the key as `cdef str`, so a non-string member raises `TypeError` before the guard
+(pre-existing, fail-closed). The test asserts that raise instead.
