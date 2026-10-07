@@ -282,10 +282,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet · Backend: native · Model: sonnet · Attempts: 1 · Duration: 77s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Rust dialect partial-matching implemented; cargo unit tests via the pytest wrapper pass. Review: zero corrections. Known gap: an unsafe key with an invalid dict raises in Rust but is silently skipped in Cython; to be checked in TASK-851.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -118,12 +118,13 @@ fn leaf(column: &Operand, op: CmpOp, value: &Operand, cx: &mut Ctx) -> Result<Va
                 op.as_str()
             )));
         }
-        (CmpOp::Regex, v) => {
+        (CmpOp::Regex | CmpOp::IRegex, v) => {
             cx.need(Feature::Regex);
             m.insert("expression".into(), json!(op.as_str()));
             m.insert("value".into(), lower_operand(v, cx));
         }
-        (CmpOp::Contains | CmpOp::NotContains | CmpOp::StartsWith | CmpOp::EndsWith, v) => {
+        (CmpOp::Contains | CmpOp::NotContains | CmpOp::StartsWith | CmpOp::EndsWith
+            | CmpOp::IContains | CmpOp::NotIContains | CmpOp::IStartsWith | CmpOp::IEndsWith, v) => {
             cx.need(Feature::TextMatch);
             m.insert("expression".into(), json!(op.as_str()));
             m.insert("value".into(), lower_operand(v, cx));

@@ -92,20 +92,25 @@ def _leaf_mask(df: pd.DataFrame, leaf: dict) -> pd.Series:
     if expr == "not_null":
         return ~(col.isnull() | (col == ""))
 
-    if expr == "contains":
-        return col.astype("string").str.contains(re.escape(value), case=False, na=False, regex=True)
-    if expr == "not_contains":
-        return ~col.astype("string").str.contains(re.escape(value), case=False, na=False, regex=True)
+    if expr in ("contains", "not_contains", "icontains", "not_icontains"):
+        mask = col.astype("string").str.contains(
+            re.escape(value), case=not expr.endswith("icontains"), na=False, regex=True
+        )
+        return ~mask if expr.startswith("not_") else mask
 
-    if expr == "startswith":
-        return col.astype("string").str.lower().str.startswith(value.lower(), na=False)
-    if expr == "endswith":
-        return col.astype("string").str.lower().str.endswith(value.lower(), na=False)
+    if expr in ("startswith", "endswith"):
+        text = col.astype("string")
+        return text.str.startswith(value, na=False) if expr == "startswith" else text.str.endswith(value, na=False)
+    if expr in ("istartswith", "iendswith"):
+        text = col.astype("string").str.lower()
+        if expr == "istartswith":
+            return text.str.startswith(value.lower(), na=False)
+        return text.str.endswith(value.lower(), na=False)
 
-    if expr == "regex":
+    if expr in ("regex", "iregex"):
         _check_regex_safety(value)
         try:
-            return col.astype("string").str.contains(value, case=True, na=False, regex=True)
+            return col.astype("string").str.contains(value, case=(expr == "regex"), na=False, regex=True)
         except (re.error, ValueError) as err:
             # ``re.error`` comes from the Python regex engine; pandas 3's
             # Arrow-backed string columns raise ``pyarrow.ArrowInvalid`` (a

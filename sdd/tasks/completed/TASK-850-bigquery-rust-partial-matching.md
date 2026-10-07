@@ -253,10 +253,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 143s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: BigQuery Rust partial-matching (bigquery_parser.rs) + cargo wrapper test. One reviewer fix (96009e6f): a Rust test lacked Python::initialize(). pytest 1 passed after the fix. Feedback recorded under pattern unrun-validation-command.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -219,10 +219,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 54s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: docs/FILTER_OPERATORS.md, docs-coverage test, version 5.2.1 -> 5.2.2. pytest 21 passed. Review: zero corrections.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

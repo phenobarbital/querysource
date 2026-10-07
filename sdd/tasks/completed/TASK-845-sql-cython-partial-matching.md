@@ -315,10 +315,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 451s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Generic SQL Cython partial-matching builder (sql.pyx) + tests. Validated by hand after in-tree Cython build: 170 passed, 42 skipped (Rust-variant cases guarded on stale _qs_parsers; TASK-851). Review: zero corrections.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

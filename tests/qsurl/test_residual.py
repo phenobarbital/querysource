@@ -22,7 +22,12 @@ def test_empty_plan_returns_rows_untouched(stores_df):
 @pytest.mark.parametrize(
     "leaf,expected_ids",
     [
-        ({"column": "city", "expression": "startswith", "value": "SAN"}, [1, 2]),
+        ({"column": "city", "expression": "istartswith", "value": "SAN"}, [1, 2]),
+        ({"column": "city", "expression": "startswith", "value": "SAN"}, []),
+        ({"column": "city", "expression": "startswith", "value": "San"}, [1]),
+        ({"column": "city", "expression": "contains", "value": "san"}, [2]),
+        ({"column": "city", "expression": "icontains", "value": "SAN"}, [1, 2]),
+        ({"column": "city", "expression": "iregex", "value": "^SAN "}, [1, 2]),
         ({"column": "city", "expression": "is_null"}, [3, 4]),
         ({"column": "city", "expression": "contains", "value": "a.b"}, []),
         (

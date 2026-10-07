@@ -366,10 +366,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 208s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Partial-matching operator table (querysource/parsers/partial_matching.py) and tests. pytest 30 passed, ruff clean. Engine selector rejected the non-test path, so validation was run by hand. Review: zero corrections.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

@@ -9,7 +9,10 @@ Build SQL-Queries for MS SQL Server, validation and parsing.
 """
 from datamodel.typedefs import SafeDict
 from ..types.validators import Entity, field_components
-from ..exceptions import EmptySentence
+from .partial_matching import (
+    build_like_pattern, like_escape_bang, mssql_like_literal, validate_partial_match_dict,
+)
+from ..exceptions import EmptySentence, ParserError
 from .sql cimport SQLParser
 
 # Try to import Rust extension for accelerated parsing
@@ -18,6 +21,25 @@ try:
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
+
+
+cdef str mssql_partial_match_condition(str col, object entry, str operand):
+    """Render one partial-matching operator for SQL Server (FEAT-180, spec §2).
+
+    Raises:
+        ParserError: for regex operators (PostgreSQL only).
+    """
+    cdef str like
+    cdef str lit
+    cdef str esc
+    if entry.kind == 'regex':
+        raise ParserError(f"{entry.name} on '{col}': regex operators are not supported by this query parser")
+    like = 'NOT LIKE' if entry.negated else 'LIKE'
+    lit = mssql_like_literal(build_like_pattern(entry, operand, escaper=like_escape_bang))
+    esc = " ESCAPE '!'" if entry.escape else ""
+    if entry.insensitive:
+        return f"LOWER({col}) {like} LOWER({lit}){esc}"
+    return f"{col} {like} {lit}{esc}"
 
 
 cdef class msSQLParser(SQLParser):
@@ -111,6 +133,16 @@ cdef class msSQLParser(SQLParser):
                 if key in self.cond_definition:
                     _format = self.cond_definition[key]
                 # if format is not defined, need to be determined
+                if isinstance(value, dict):
+                    entry = validate_partial_match_dict(
+                        key, value, supports_regex=self.supports_regex_filter
+                    )
+                    if entry is not None:
+                        where_cond.append(
+                            mssql_partial_match_condition(key, entry, next(iter(value.values())))
+                        )
+                        continue
+                    # other dicts keep today's fallthrough (final else branch)
                 if isinstance(value, list):
                     # is a list of values
                     val = ','.join(["{}".format(Entity.quoteString(v)) for v in value])  # pylint: disable=C0209

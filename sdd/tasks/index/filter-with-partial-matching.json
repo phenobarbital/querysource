@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-07T09:34:16+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-07T16:49:20+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "no dependencies: pure-Python leaf module (querysource/parsers/partial_matching.py) that every other FEAT-180 task imports or mirrors",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-840-partial-matching-operator-table.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T15:36:23+00:00",
+      "file": "sdd/tasks/completed/TASK-840-partial-matching-operator-table.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-841",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -43,9 +44,10 @@
       "parallel": true,
       "parallelism_notes": "needs PARTIAL_MATCH_OPERATORS from TASK-840 (querysource/parsers/partial_matching.py): the parity test in tests/test_rust_partial_match_units.py compares the Rust table against it; cargo test runs inside this sub-worktree's rust/target only, no shared venv rebuild",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-841-rust-partial-match-table.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:23:45+00:00",
+      "file": "sdd/tasks/completed/TASK-841-rust-partial-match-table.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-842",
@@ -54,7 +56,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -63,9 +65,10 @@
       "parallel": false,
       "parallelism_notes": "needs validate_partial_match_dict from TASK-840 (querysource/parsers/partial_matching.py); exclusive: adds a field to the AbstractParser struct in abstract.pxd, so every Cython parser that cimports it must be rebuilt in place (make build-inplace) — a shared compiled-artifact change",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-842-where-element-prevalidation.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T15:45:13+00:00",
+      "file": "sdd/tasks/completed/TASK-842-where-element-prevalidation.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-843",
@@ -74,7 +77,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,9 +87,10 @@
       "parallel": false,
       "parallelism_notes": "imports PARTIAL_MATCH_OPERATORS/validate_partial_match_dict/build_like_pattern/like_escape from TASK-840 (querysource/parsers/partial_matching.py); reads and sets self.supports_regex_filter declared by TASK-842 (querysource/parsers/abstract.pxd); exclusive: rebuilds the Cython pgsql extension in place (make build-inplace)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-843-pgsql-cython-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T15:52:58+00:00",
+      "file": "sdd/tasks/completed/TASK-843-pgsql-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-844",
@@ -95,7 +99,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -104,9 +108,10 @@
       "parallel": true,
       "parallelism_notes": "uses crate::partial_match::{check_entries, lookup, like_escape, build_like_pattern, PartialMatchOp, MatchKind} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); validation is cargo test in this sub-worktree only — no shared venv rebuild",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-844-pgsql-rust-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:29:47+00:00",
+      "file": "sdd/tasks/completed/TASK-844-pgsql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-845",
@@ -115,7 +120,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -125,9 +130,10 @@
       "parallel": false,
       "parallelism_notes": "imports validate_partial_match_dict/build_like_pattern/like_escape_bang/sql_like_literal from TASK-840 (querysource/parsers/partial_matching.py); reads self.supports_regex_filter declared by TASK-842 (abstract.pxd); exclusive: rebuilds the Cython sql extension in place (make build-inplace), which every SQLParser subclass cimports",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-845-sql-cython-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:01:21+00:00",
+      "file": "sdd/tasks/completed/TASK-845-sql-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-846",
@@ -136,7 +142,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -145,9 +151,10 @@
       "parallel": true,
       "parallelism_notes": "uses crate::partial_match::{check_entries, build_like_pattern, like_escape_bang, sql_like_literal, PartialMatchOp, MatchKind} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-846-sql-rust-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:29:52+00:00",
+      "file": "sdd/tasks/completed/TASK-846-sql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-847",
@@ -156,7 +163,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -166,9 +173,10 @@
       "parallel": false,
       "parallelism_notes": "imports validate_partial_match_dict/build_like_pattern/like_escape_bang/mssql_like_literal from TASK-840 (querysource/parsers/partial_matching.py); reads self.supports_regex_filter declared by TASK-842 (abstract.pxd); exclusive: rebuilds the Cython sqlserver extension in place (make build-inplace)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-847-mssql-cython-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:15:14+00:00",
+      "file": "sdd/tasks/completed/TASK-847-mssql-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-848",
@@ -177,7 +185,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -186,9 +194,10 @@
       "parallel": true,
       "parallelism_notes": "uses crate::partial_match::{check_entries, build_like_pattern, like_escape_bang, mssql_like_literal} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-848-mssql-rust-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:29:56+00:00",
+      "file": "sdd/tasks/completed/TASK-848-mssql-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-849",
@@ -197,7 +206,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -207,9 +216,10 @@
       "parallel": false,
       "parallelism_notes": "imports validate_partial_match_dict/build_like_pattern/like_escape/bq_like_literal from TASK-840 (querysource/parsers/partial_matching.py); reads self.supports_regex_filter declared by TASK-842 (abstract.pxd); exclusive: rebuilds the Cython bigquery extension in place (make build-inplace)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-849-bigquery-cython-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:21:20+00:00",
+      "file": "sdd/tasks/completed/TASK-849-bigquery-cython-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-850",
@@ -218,7 +228,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -227,9 +237,10 @@
       "parallel": true,
       "parallelism_notes": "uses crate::partial_match::{check_entries, lookup, build_like_pattern, like_escape, bq_like_literal} created by TASK-841 (rust/src/partial_match.rs) and the run_cargo_lib_tests helper from TASK-841 (tests/rust_cargo_runner.py); cargo test runs in this sub-worktree only",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-850-bigquery-rust-partial-matching.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:33:36+00:00",
+      "file": "sdd/tasks/completed/TASK-850-bigquery-rust-partial-matching.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-851",
@@ -238,7 +249,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -255,9 +266,10 @@
       "parallel": false,
       "parallelism_notes": "tests the Cython builders from TASK-843 (querysource/parsers/pgsql.pyx), TASK-845 (querysource/parsers/sql.pyx), TASK-847 (querysource/parsers/sqlserver.pyx), TASK-849 (querysource/parsers/bigquery.pyx) and the Rust builders from TASK-844 (rust/src/pgsql_parser.rs), TASK-846 (rust/src/sql_parser.rs), TASK-848 (rust/src/mssql_parser.rs), TASK-850 (rust/src/bigquery_parser.rs) through the rebuilt extension; make stage-rust also builds rust/qsurl, so TASK-852's ast.rs/parser.rs/ir.rs must be merged first or the staged _qsurl would regress; exclusive: make build-rust (maturin develop into the shared .venv), make stage-rust and make build-inplace",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-851-partial-matching-rebuild-and-conformance.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:45:30+00:00",
+      "file": "sdd/tasks/completed/TASK-851-partial-matching-rebuild-and-conformance.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-852",
@@ -266,16 +278,17 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "no code dependency (grammar and IR only); exclusive: rebuilds rust/qsurl into the shared .venv (make build-rust) and stages _qsurl (make stage-rust) so tests/qsurl/test_parity.py compares the new Rust grammar against the Lark fallback",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-852-qsurl-case-insensitive-tokens.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T15:32:05+00:00",
+      "file": "sdd/tasks/completed/TASK-852-qsurl-case-insensitive-tokens.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-853",
@@ -284,7 +297,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "L",
       "depends_on": [
@@ -295,9 +308,10 @@
       "parallel": true,
       "parallelism_notes": "imports like_escape/validate_partial_match from TASK-840 (querysource/parsers/partial_matching.py); emits the i* expressions parsed by TASK-852 (querysource/qsurl/_fallback.py, rust/qsurl); provider text_match declarations require the builders verified and the extension rebuilt by TASK-851 (a provider must never declare text_match for a parser whose Rust path still mis-renders the dict as JSONB)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-853-qsurl-pushdown-remap.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:49:20+00:00",
+      "file": "sdd/tasks/completed/TASK-853-qsurl-pushdown-remap.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-854",
@@ -306,7 +320,7 @@
       "feature_id": "FEAT-180",
       "feature": "filter-with-partial-matching",
       "spec": "sdd/specs/filter-with-partial-matching.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [
@@ -315,9 +329,10 @@
       "parallel": true,
       "parallelism_notes": "the docs test imports PARTIAL_MATCH_OPERATORS from TASK-840 (querysource/parsers/partial_matching.py) to prove every operator is documented",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-854-filter-operators-docs-and-version.md"
+      "started_at": "2026-10-07T15:22:45+00:00",
+      "completed_at": "2026-10-07T16:22:57+00:00",
+      "file": "sdd/tasks/completed/TASK-854-filter-operators-docs-and-version.md",
+      "verification": "verified"
     }
   ]
 }

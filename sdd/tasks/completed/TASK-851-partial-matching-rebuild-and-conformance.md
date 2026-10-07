@@ -264,10 +264,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 1 · Duration: 616s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: Conformance matrix + freshness check (tests/test_partial_matching_conformance.py). Validated by hand after staging fresh binaries into the worktree (maturin build to scratchpad, .so copied in-tree; the shared venv was not touched): all 5 declared pytest commands, 1904 passed, 0 skipped. Review: zero corrections. 11 residual lint findings left for /sdd-done.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: `make build-rust` (maturin develop) was not run because it installs into the shared venv; binaries were staged manually instead.

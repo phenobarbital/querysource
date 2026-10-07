@@ -43,13 +43,23 @@ def _leaf(col, expr, value=None, **extra) -> dict:
         (_leaf("a", "!=", ["x"]), "a!", ["x"]),
         (_leaf("a", "is_null"), "a", "null"),
         (_leaf("a", "not_null"), "a", "!null"),
-        (_leaf("a", "contains", "5%_off"), "a", {"ILIKE": "%5\\%\\_off%"}),
-        (_leaf("a", "not_contains", "x"), "a", {"NOT ILIKE": "%x%"}),
+        (_leaf("a", "contains", "5%_off"), "a", {"contains": "5%_off"}),
+        (_leaf("a", "not_contains", "xyz"), "a", {"not_contains": "xyz"}),
+        (_leaf("a", "icontains", "san"), "a", {"icontains": "san"}),
+        (_leaf("a", "istartswith", "S"), "a", {"istartswith": "S"}),
     ],
 )
 def test_leaf_table_on_pg(leaf, key, value):
     conditions, plan = split(_ir(filter={"and": [leaf]}), PG)
     assert conditions["filter"] == {key: value} and plan.filter is None
+
+
+@pytest.mark.parametrize("expr", ["contains", "not_contains"])
+def test_short_contains_stays_residual_on_pg(expr):
+    leaf = _leaf("a", expr, "ab")
+    conditions, plan = split(_ir(filter={"and": [leaf]}), PG)
+    assert "filter" not in conditions
+    assert plan.filter == {"and": [leaf]}
 
 
 def test_text_ops_residual_without_text_match():

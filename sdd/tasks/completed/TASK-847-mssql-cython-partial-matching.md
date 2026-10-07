@@ -252,10 +252,10 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+Seat: sonnet · Backend: native · Model: sonnet · Attempts: 1 · Duration: 786s · Tokens: n/a
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
+**Completed by**: sdd-worker (execution e22852df)
+**Date**: 2026-10-07
+**Notes**: SQL Server Cython partial-matching builder (sqlserver.pyx) + tests. Validated by hand after in-tree Cython build: 65 passed, 41 skipped (Rust-variant cases, TASK-851). Review: zero corrections.
 
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none

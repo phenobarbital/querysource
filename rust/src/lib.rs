@@ -14,6 +14,7 @@ mod flux_parser;
 mod mongo_parser;
 mod mssql_parser;
 mod parseqs;
+mod partial_match;
 mod pgsql_parser;
 mod pgsql_unnest;
 mod rethink_parser;

@@ -85,6 +85,16 @@ pub enum CmpOp {
     EndsWith,
     #[serde(rename = "regex")]
     Regex,
+    #[serde(rename = "icontains")]
+    IContains,
+    #[serde(rename = "not_icontains")]
+    NotIContains,
+    #[serde(rename = "istartswith")]
+    IStartsWith,
+    #[serde(rename = "iendswith")]
+    IEndsWith,
+    #[serde(rename = "iregex")]
+    IRegex,
 }
 
 impl CmpOp {
@@ -116,6 +126,11 @@ impl CmpOp {
             CmpOp::StartsWith => "startswith",
             CmpOp::EndsWith => "endswith",
             CmpOp::Regex => "regex",
+            CmpOp::IContains => "icontains",
+            CmpOp::NotIContains => "not_icontains",
+            CmpOp::IStartsWith => "istartswith",
+            CmpOp::IEndsWith => "iendswith",
+            CmpOp::IRegex => "iregex",
         }
     }
 }
