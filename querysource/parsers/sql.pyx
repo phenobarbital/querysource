@@ -146,8 +146,11 @@ cdef class SQLParser(AbstractParser):
         if HAS_RUST and self.filter:
             try:
                 return _rs.filter_conditions(sql, dict(self.filter), dict(self.cond_definition))
-            except Exception:
-                pass  # fall through to the Cython implementation (raises ParserError on invalid operands)
+            except Exception as exc:
+                # fall through to the Cython implementation (raises ParserError on invalid operands)
+                self.logger.warning(
+                    "Rust filter_conditions failed, falling back to Cython: %s", exc
+                )
         # --- Cython fallback (FEAT-103 hardened) ---
         _sql = sql
         if self.filter:

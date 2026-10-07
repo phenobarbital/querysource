@@ -336,8 +336,10 @@ cdef class pgSQLParser(SQLParser):
             try:
                 cond_def = self.cond_definition if self.cond_definition else {}
                 return _rs.pgsql_filter_conditions(sql, self.filter, cond_def)
-            except Exception:
-                pass  # fall through to Cython implementation
+            except Exception as exc:
+                self.logger.warning(
+                    "Rust pgsql_filter_conditions failed, falling back to Cython: %s", exc
+                )
         return await self._filter_conditions_cy(sql)
 
     async def _filter_conditions_cy(self, sql):

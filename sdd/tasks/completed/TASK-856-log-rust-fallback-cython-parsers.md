@@ -351,10 +351,18 @@ When you pick up this task:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: agent:sdd-fix (Claude Code, /sdd-fix issue:dc4ca6c5475c)
+**Date**: 2026-10-07
+**Notes**: Replaced the three bare `except Exception: pass` fallbacks in `SQLParser`,
+`pgSQLParser` and `msSQLParser.filter_conditions` with `except Exception as exc` +
+`self.logger.warning("Rust <fn> failed, falling back to Cython: %s", exc)`, mirroring
+`bigquery.pyx`. Added `test_sql_rust_failure_is_logged`, `test_pgsql_rust_failure_is_logged`
+and `test_mssql_rust_failure_is_logged` (stubbed `_rs`, `caplog`). Rebuilt Cython in place;
+validation: test_sql_partial_matching 50 passed, test_pgsql_partial_matching 44 passed,
+test_mssql_partial_matching 44 passed, test_bigquery_partial_matching 53 passed,
+test_partial_matching_conformance 1549 passed (0 skipped once `_qs_parsers.so` was staged
+into the worktree — a fresh worktree has no Rust extension; without it the Rust-path tests
+skip and the conformance suite fails, which is environmental, not a regression).
+`ruff check` on the three test files: clean.
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**: What was implemented, any deviations from scope, issues encountered.
-
-**Deviations from spec**: none | describe if any
+**Deviations from spec**: none
