@@ -260,6 +260,11 @@ cpdef bool_t is_array(object value):
     return isinstance(value,(list, dict, Sequence, ndarray))
 
 
+cpdef bool_t is_collection(object value):
+    """True for list, tuple, dict or numpy ndarray; False for str/bytes."""
+    return isinstance(value, (list, tuple, dict, ndarray))
+
+
 cpdef bool_t is_epoch(object value):
     try:
         # validate if unix epoch
@@ -457,8 +462,8 @@ cdef int to_unquoted(value):
 
 cdef dict type_validators = {
     "uuid": [ is_uuid, to_uuid ],
-    "array": [ is_array, to_unquoted ],
-    "json": [ is_array, to_unquoted ],
+    "array": [ is_collection, to_unquoted ],
+    "json": [ is_collection, to_unquoted ],
     # "object": is_object,
     "int": [is_integer, to_unquoted],
     "integer": [is_integer, to_unquoted],
