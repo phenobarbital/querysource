@@ -114,7 +114,7 @@
       "feature_id": "FEAT-165",
       "feature": "json-dialect-filter-fixes",
       "spec": "sdd/specs/json-dialect-filter-fixes.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [],
@@ -122,8 +122,9 @@
       "parallelism_notes": "No Python import edge. Exclusive: make build-rust && make stage-rust replaces the shared source-tree _qs_parsers .so used by every test.",
       "assigned_to": null,
       "started_at": "2026-10-09T17:42:44+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-864-rust-builder-parity.md"
+      "completed_at": "2026-10-09T17:58:10+00:00",
+      "file": "sdd/tasks/completed/TASK-864-rust-builder-parity.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-865",
