@@ -589,6 +589,11 @@ cdef class AbstractParser:
             cond_type in TYPED_FILTER_FORMATS
             or (cond_type in ('date', 'datetime') and isinstance(value, list) and len(value) == 2)
         ):
+            if isinstance(value, str):
+                # A BETWEEN string must never reach a builder unvalidated.
+                clause = parse_between(key, value)
+                if clause is not None:
+                    return base_key(key), clause.render()
             return key, value
 
         if isinstance(value, dict):

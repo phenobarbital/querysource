@@ -67,6 +67,8 @@ def _normalise_bound(key: str, bound: str) -> str:
     Raises:
         ParserError: the bound is outside the grammar.
     """
+    if any(marker in bound for marker in (";", "--", "/*")):
+        raise _invalid_between(key)
     if _NUMBER.fullmatch(bound):
         return bound
     if bound.startswith("'") and bound.endswith("'"):

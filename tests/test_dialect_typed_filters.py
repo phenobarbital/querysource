@@ -5,6 +5,8 @@ import logging as _stdlib_logging
 import sys
 import types
 
+import pytest
+
 try:
     import navconfig.logging  # noqa: F401
 except Exception:
@@ -12,6 +14,7 @@ except Exception:
     _fake.logging = _stdlib_logging
     sys.modules["navconfig.logging"] = _fake
 
+from querysource.exceptions import ParserError
 from querysource.models import QueryObject
 from querysource.parsers import pgsql
 from querysource.parsers.pgsql import pgSQLParser
@@ -120,3 +123,20 @@ async def test_flat_array_string_does_not_raise(monkeypatch):
     """A plain declared array string is safely dropped by preprocessing."""
     sql = await render({"tags": "vip", "cond_definition": {"tags": "array"}}, monkeypatch)
     assert sql == "SELECT * FROM public.t "
+
+
+@pytest.mark.parametrize("decl", ["array", "int4range"])
+async def test_typed_key_between_is_validated(decl: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typed key cannot smuggle an unvalidated BETWEEN clause to the builders."""
+    with pytest.raises(ParserError):
+        await render(
+            {"filter": {"k": "BETWEEN 1 AND 2) OR (1=1"}, "cond_definition": {"k": decl}},
+            monkeypatch,
+        )
+
+
+@pytest.mark.parametrize("value", ["BETWEEN 'a;b' AND 'c'", "BETWEEN a--b AND c"])
+async def test_between_bounds_reject_sql_markers(value: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bounds with statement/comment markers raise instead of silently dropping the filter."""
+    with pytest.raises(ParserError):
+        await render({"filter": {"d": value}}, monkeypatch)
