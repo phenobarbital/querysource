@@ -4,7 +4,6 @@ import pytest
 
 from querysource.parsers import bigquery, pgsql, sql, sqlserver
 
-
 SQL = "SELECT * FROM t {where_cond}"
 pytestmark = pytest.mark.skipif(
     not all((pgsql.HAS_RUST, sql.HAS_RUST, bigquery.HAS_RUST, sqlserver.HAS_RUST)),
