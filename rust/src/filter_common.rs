@@ -26,6 +26,16 @@ pub enum FilterValue {
     Null,
 }
 
+/// Column name without trailing key-suffix characters (`|!~#@:`).
+pub(crate) fn base_key(key: &str) -> &str {
+    key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'))
+}
+
+/// True for the canonical clause produced by the Python pre-processing.
+pub(crate) fn is_canonical_between(value: &str) -> bool {
+    value.starts_with("BETWEEN ") || value.starts_with("NOT BETWEEN ")
+}
+
 impl FilterValue {
     pub fn as_str(&self) -> String {
         match self {
@@ -172,10 +182,7 @@ pub fn process_list_value(
 /// Handle string-typed filter values with standard SQL syntax.
 pub fn process_str_value(key: &str, value: &str, name: &str, end: &str) -> Option<String> {
     // BETWEEN in value string
-    if value.contains("BETWEEN") {
-        if !value.contains('\'') {
-            return Some(format!("({} {})", key, quote_string(value, true)));
-        }
+    if is_canonical_between(value) {
         return Some(format!("({} {})", key, value));
     }
     // NULL checks
@@ -247,6 +254,14 @@ pub fn apply_where_clause(sql: &str, where_cond: &[String]) -> PyResult<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_base_key_and_canonical_between() {
+        assert_eq!(base_key("tags|"), "tags");
+        assert!(is_canonical_between("BETWEEN 1 AND 2"));
+        assert!(is_canonical_between("NOT BETWEEN 1 AND 2"));
+        assert!(!is_canonical_between("contains BETWEEN safely"));
+    }
 
     #[test]
     fn test_process_str_null() {
