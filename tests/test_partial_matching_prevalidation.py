@@ -53,10 +53,11 @@ async def test_comparison_operator_still_uses_existing_validation():
     assert parser.filter == {"n": {">=": "5"}}
 
 
-async def test_uppercase_ilike_still_uses_existing_validation():
+async def test_uppercase_ilike_reaches_builders_unmodified():
+    """FEAT-165: non-comparison dicts are passed raw; the builder quotes once."""
     parser = _parser()
     await parser.set_where({"city": {"ILIKE": "%san%"}}, None)
-    assert parser.filter == {"city": {"ILIKE": "'%san%'"}}
+    assert parser.filter == {"city": {"ILIKE": "%san%"}}
 
 
 def test_regex_filter_support_is_disabled_by_default():
