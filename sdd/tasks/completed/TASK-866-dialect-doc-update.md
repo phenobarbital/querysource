@@ -149,3 +149,7 @@ def test_doc_examples_are_verified():
 ## Validation Commands
 
 - `pytest tests/test_dialect_doc_examples.py -q`
+
+## Completion Note
+
+Attempts 1–2 failed (gpt-5.6-terra: empty_delivery; codex-spark: model unsupported on ChatGPT account — infrastructure, no feedback filed). Attempt 3 implemented by the orchestrator (docs-only, standard). Doc sections 5.3/5.4/5.5/7.1/8/13.3/15/16/18 updated; `tests/test_dialect_doc_examples.py` imports `PG_CORPUS` + the typed-filter parametrisation (the parity module has no `CORPUS`) and checks every SQL cell of 5.3/5.4/7.1/8. Test passes, ruff clean. No review recorded (no coder attempt to attribute).
