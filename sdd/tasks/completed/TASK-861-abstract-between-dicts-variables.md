@@ -248,3 +248,8 @@ async def test_between_numeric_is_normalised():
 - `pytest tests/test_partial_matching_prevalidation.py -q`
 - `pytest tests/test_pgsql_partial_matching.py -q`
 - `pytest tests/e2e/test_qs_dry_run.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 364s · Tokens: n/a.
+abstract.pyx: BETWEEN routing, comparison dicts, raw passthrough of other dicts, conflicting-filter and unknown-variable errors. Fix 506262c8: legacy test `test_uppercase_ilike_still_uses_existing_validation` (tests/test_partial_matching_prevalidation.py, outside task file list) pinned old pre-quoted ILIKE; updated to spec §2.2 (raw passthrough). Task's "existing suites unchanged" AC conflicted with spec here. Follow-up: verify ILIKE end-to-end for non-pgsql builders (TASK-865).

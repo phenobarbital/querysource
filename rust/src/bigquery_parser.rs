@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use crate::filter_common::apply_where_clause;
+use crate::filter_common::is_canonical_between;
 use crate::partial_match::{bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, MatchKind, PartialMatchOp};
 use crate::safe_dict::safe_format_map_rust;
 use crate::validators::{bq_quote_string, field_components, is_integer};
@@ -227,6 +228,21 @@ fn process_dict_value(
         return None;
     }
 
+    let all_comparisons = entries
+        .iter()
+        .all(|(op, _)| COMPARISON_TOKENS.contains(&op.as_str()));
+    if all_comparisons {
+        let rendered: Vec<String> = entries
+            .iter()
+            .map(|(op, v)| format!("{} {} {}", field_expr, op, bq_quote_string(&v.as_str())))
+            .collect();
+        return Some(if rendered.len() == 1 {
+            rendered[0].clone()
+        } else {
+            format!("({})", rendered.join(" AND "))
+        });
+    }
+
     let (op, v) = &entries[0];
 
     if entries.len() == 1 {
@@ -312,7 +328,7 @@ fn process_str_value(
     end: &str,
 ) -> Option<String> {
     // BETWEEN in value string
-    if value.contains("BETWEEN") {
+    if is_canonical_between(value) {
         return Some(format!("({} {})", field_expr, value));
     }
     // NULL checks
@@ -845,7 +861,23 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("age >= 18".to_string())
+            Some("age >= \"18\"".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_comparison_tokens_are_anded() {
+        let entry = FilterEntry {
+            key: "age".to_string(),
+            value: FilterValue::Dict(vec![
+                (">".to_string(), FilterValue::Str("18".to_string())),
+                ("<".to_string(), FilterValue::Str("65".to_string())),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("(age > \"18\" AND age < \"65\")".to_string())
         );
     }
 

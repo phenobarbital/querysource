@@ -159,3 +159,8 @@ async def test_pg_full_pipeline(path, conditions, expected, monkeypatch):
 ## Validation Commands
 
 - `pytest tests/test_dialect_filter_parity.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 298s · Tokens: n/a.
+Parity tests found real bugs, fixed in ba5d85d4 (outside the task's file list, required for ACs): sql_parser.rs lost Python int operands (feedback recorded for TASK-864/luna), pgsql.pyx typed-array `<@`/`&&` templates lacked the f-prefix (pre-existing), and numeric-quote normalisation added to the test. 64 parity tests pass, no Rust skips.

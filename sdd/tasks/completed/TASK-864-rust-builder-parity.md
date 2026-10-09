@@ -234,3 +234,8 @@ def test_pg_multi_operator():
 - `pytest tests/test_pgsql_partial_matching.py -q`
 - `pytest tests/test_sql_partial_matching.py -q`
 - `pytest tests/test_pgsql_jsonb_unnest_parity.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 1 · Duration: 271s · Tokens: n/a.
+Review fix f294ba4e: array branch used suffixed key (`ANY(tags|)`) → base_key; corrected a Rust test expectation. feedback coder-feedback:887b94282479bff6f70e4e68. pytest 261 passed; cargo: only the 4 pre-existing failures (bigquery negation, comparison_token, end_bang, field_components_no_prefix).

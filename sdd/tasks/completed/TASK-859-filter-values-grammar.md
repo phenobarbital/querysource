@@ -267,3 +267,8 @@ def test_parse_between_numbers():
 ## Test Specification
 
 See the `tests/test_filter_values.py` block above.
+
+## Completion Note
+
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 248s · Tokens: n/a.
+Created `querysource/parsers/filter_values.py` + tests; 17 passed, ruff clean. No review fixes.

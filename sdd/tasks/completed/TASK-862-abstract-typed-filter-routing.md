@@ -221,3 +221,8 @@ async def test_typed_array_scalar(monkeypatch):
 
 - `pytest tests/test_dialect_typed_filters.py -q`
 - `pytest tests/e2e/test_qs_dry_run.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-luna · Backend: codex · Model: gpt-5.6-luna · Attempts: 1 · Duration: 248s · Tokens: n/a.
+Typed explicit filters stay WHERE filters; ValueError in typed validation is now handled. 7 new tests + related suites pass. No review fixes.
