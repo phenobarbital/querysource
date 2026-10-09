@@ -9,6 +9,7 @@ Build SQL-Queries for MS SQL Server, validation and parsing.
 """
 from datamodel.typedefs import SafeDict
 from ..types.validators import Entity, field_components
+from .filter_values import base_key, is_comparison_dict
 from .partial_matching import (
     build_like_pattern, like_escape_bang, mssql_like_literal, validate_partial_match_dict,
 )
@@ -132,8 +133,8 @@ cdef class msSQLParser(SQLParser):
                         continue
                 _format = None
                 _, name, end = field_components(key)[0]
-                if key in self.cond_definition:
-                    _format = self.cond_definition[key]
+                if base_key(key) in self.cond_definition:
+                    _format = self.cond_definition[base_key(key)]
                 # if format is not defined, need to be determined
                 if isinstance(value, dict):
                     entry = validate_partial_match_dict(
@@ -167,7 +168,7 @@ cdef class msSQLParser(SQLParser):
                             )
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
-                    if "BETWEEN" in str_value:
+                    if str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
                         # SECURITY: Reject BETWEEN clauses with injection markers
                         upper_val = str_value.upper()
                         if ('--' in str_value or '/*' in str_value or ';' in str_value

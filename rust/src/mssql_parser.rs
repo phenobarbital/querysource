@@ -8,6 +8,7 @@ use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 use crate::filter_common::{apply_where_clause, extract_filter_value, process_entry, FilterEntry};
+use crate::filter_common::base_key;
 use crate::partial_match::{build_like_pattern, check_entries, like_escape_bang, mssql_like_literal, MatchKind, PartialMatchOp};
 
 // ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ pub fn mssql_filter_conditions(
             }
         }
         let format_hint: Option<String> = cond_definition
-            .get_item(&key)
+            .get_item(base_key(&key))
             .ok()
             .flatten()
             .and_then(|v| v.extract().ok());

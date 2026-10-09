@@ -180,12 +180,10 @@ clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info/
-	find . -name "*.pyc" -delete
-	find . -name "*.pyo" -delete
-	find . -name "*.so" -delete
-	find . -type d -name __pycache__ -delete
-	find . -type f -name "*.pyc" -delete
-	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	# Prune .venv: deleting its compiled .so files breaks installed deps
+	# (navconfig, datamodel, ...) and `uv sync` won't notice they're gone.
+	find . -path ./.venv -prune -o \( -name "*.pyc" -o -name "*.pyo" -o -name "*.so" \) -type f -print0 | xargs -0 rm -f
+	find . -path ./.venv -prune -o -name "__pycache__" -type d -print0 | xargs -0 rm -rf
 	@echo "Clean complete."
 
 # Remove virtual environment
