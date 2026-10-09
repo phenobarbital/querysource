@@ -10,7 +10,7 @@ tags: [filter, between, jsonb, cond-definition, json-dialect]
 **Feature ID**: FEAT-165
 **Date**: 2026-10-09
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.3.0
 
 ---
@@ -721,15 +721,15 @@ Verified against: `83136229`
 
 ## 8. Open Questions
 
-- [ ] Q1: Is any production slug or dashboard known to send unregistered
+- [x] Q1: Is any production slug or dashboard known to send unregistered
       `@name` values or malformed `BETWEEN` clauses (and therefore relying on
       the silent drop)? If so, should the 400 be gated behind a config flag
-      for one release? — *Owner: Jesus Lara*
-- [ ] Q2: Should flat (non-`filter`) declared keys without a template
+      for one release? — *Owner: Jesus Lara*: we need to do a research about this.
+- [x] Q2: Should flat (non-`filter`) declared keys without a template
       placeholder also become typed filters in a later feature, or stay
-      placeholder-only permanently? — *Owner: Jesus Lara*
+      placeholder-only permanently? — *Owner: Jesus Lara*: become typed filters
 - [x] Q3: Error type for invalid input in this layer — *Decided in spec*:
-      `ParserError` (HTTP 400), following the FEAT-180 precedent.
+      `ParserError` (HTTP 400), following the FEAT-180 precedent.: yes, ParserError
 
 ---
 
