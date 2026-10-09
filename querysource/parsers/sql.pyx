@@ -12,6 +12,7 @@ from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from ..types.validators import Entity, field_components
+from .filter_values import base_key, is_comparison_dict
 from .partial_matching import (
     build_like_pattern, like_escape_bang, sql_like_literal, validate_partial_match_dict,
 )
@@ -174,7 +175,7 @@ cdef class SQLParser(AbstractParser):
                     if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
                         continue
                 try:
-                    _format = self.cond_definition[key]
+                    _format = self.cond_definition[base_key(key)]
                 except KeyError:
                     _format = None
                 field_comp = field_components(key)
@@ -193,6 +194,13 @@ cdef class SQLParser(AbstractParser):
                         where_cond.append(
                             sql_partial_match_condition(key, entry, next(iter(value.values())))
                         )
+                        continue
+                    if is_comparison_dict(value):
+                        parts = [
+                            f"{key} {op} {Entity.quoteString(v) if isinstance(v, str) else str(v)}"
+                            for op, v in value.items()
+                        ]
+                        where_cond.append(parts[0] if len(parts) == 1 else '(' + ' AND '.join(parts) + ')')
                         continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     # SECURITY: Operator must be in allowlist
@@ -224,7 +232,7 @@ cdef class SQLParser(AbstractParser):
                             where_cond.append(f"{key} IN ({val})")
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
-                    if "BETWEEN" in str_value:
+                    if str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
                         # SECURITY: Validate BETWEEN clause for injection markers
                         upper_val = str_value.upper()
                         if ('--' in str_value or '/*' in str_value or ';' in str_value

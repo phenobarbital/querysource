@@ -14,6 +14,7 @@ from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from .jsonb_unnest import is_plan_candidate, unnest_plan, unnest_wrap
 from ..types.validators import Entity, field_components, is_integer, is_camel_case, is_valid
+from .filter_values import base_key, is_comparison_dict
 from .partial_matching import (
     PARTIAL_MATCH_OPERATORS, build_like_pattern, like_escape, validate_partial_match_dict,
 )
@@ -372,7 +373,7 @@ cdef class pgSQLParser(SQLParser):
                     if not all(c.isalnum() or c == '_' or c == '.' for c in stripped):
                         continue
                 try:
-                    _format = self.cond_definition[key]
+                    _format = self.cond_definition[base_key(key)]
                 except KeyError:
                     _format = None
                 try:
@@ -401,6 +402,13 @@ cdef class pgSQLParser(SQLParser):
                             where_cond.append(cond)
                         continue
                     if not value:
+                        continue
+                    if is_comparison_dict(value):
+                        parts = [
+                            f"{key} {op} {Entity.quoteString(v) if isinstance(v, str) else str(v)}"
+                            for op, v in value.items()
+                        ]
+                        where_cond.append(parts[0] if len(parts) == 1 else '(' + ' AND '.join(parts) + ')')
                         continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
@@ -487,7 +495,7 @@ cdef class pgSQLParser(SQLParser):
                         base = str_value[:-1].replace("'", "''")
                         val = f"'{base}%'"
                         where_cond.append(f"{name} NOT ILIKE {val}")
-                    elif "BETWEEN" in str_value:
+                    elif str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
                         # SECURITY: Reject BETWEEN clauses with injection markers
                         upper_val = str_value.upper()
                         if ('--' in str_value or '/*' in str_value or ';' in str_value

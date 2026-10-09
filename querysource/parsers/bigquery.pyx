@@ -10,6 +10,7 @@ from typing import Union, Dict, Any, List, Tuple
 from datamodel.typedefs import NullDefault, SafeDict
 from .sql cimport SQLParser
 from ..types.validators import Entity, field_components
+from .filter_values import base_key, is_comparison_dict
 from ..exceptions import ParserError
 from .partial_matching import (
     bq_like_literal, build_like_pattern, like_escape, validate_partial_match_dict,
@@ -242,6 +243,10 @@ cdef class BigQueryParser(SQLParser):
                             bq_partial_match_condition(field_expr, entry, next(iter(value.values())))
                         )
                         continue
+                    if is_comparison_dict(value):
+                        parts = [f"{field_expr} {op} {bq_quote_string(str(v))}" for op, v in value.items()]
+                        where_cond.append(parts[0] if len(parts) == 1 else '(' + ' AND '.join(parts) + ')')
+                        continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
@@ -282,7 +287,7 @@ cdef class BigQueryParser(SQLParser):
 
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
-                    if "BETWEEN" in str_value:
+                    if str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
                         # SECURITY: Reject BETWEEN clauses with injection markers
                         upper_val = str_value.upper()
                         if ('--' in str_value or '/*' in str_value or ';' in str_value
