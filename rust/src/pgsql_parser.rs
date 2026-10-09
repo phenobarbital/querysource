@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
+use crate::filter_common::{base_key, is_canonical_between};
 use crate::validators::{escape_string, field_components, is_camel_case, is_integer, quote_string};
 use crate::partial_match::{build_like_pattern, check_entries, like_escape, MatchKind, PartialMatchOp};
 
@@ -484,6 +485,28 @@ fn process_dict_value(
         return None;
     }
 
+    let all_comparisons = entries
+        .iter()
+        .all(|(op, _)| COMPARISON_TOKENS.contains(&op.as_str()));
+    if all_comparisons {
+        let rendered: Vec<String> = entries
+            .iter()
+            .map(|(op, v)| {
+                format!(
+                    "{} {} {}",
+                    key,
+                    op,
+                    quote_string(&escape_string(&v.as_str()), true)
+                )
+            })
+            .collect();
+        return Some(if rendered.len() == 1 {
+            rendered[0].clone()
+        } else {
+            format!("({})", rendered.join(" AND "))
+        });
+    }
+
     let (op, v) = &entries[0];
 
     // SECURITY: Operator must be in allowlist
@@ -626,7 +649,7 @@ fn process_str_value(
         return Some(format!("{} NOT ILIKE {}", name, val));
     }
     // BETWEEN in value string — validate for injection
-    if value.contains("BETWEEN") {
+    if is_canonical_between(value) {
         if !pg_validate_between(value) {
             return None; // reject unsafe BETWEEN
         }
@@ -660,7 +683,7 @@ fn process_str_value(
             if safe_val.parse::<i64>().is_ok() {
                 Some(format!("{} = ANY({})", safe_val, key))
             } else {
-                Some(format!("{}::character varying = ANY({})", safe_val, key))
+                Some(format!("{}::character varying = ANY({})", pg_literal(value), key))
             }
         }
         Some("numrange") => {
@@ -680,12 +703,10 @@ fn process_str_value(
         }
         Some("tsrange") | Some("tstzrange") => {
             // Escape timestamp values
-            let safe_val = escape_string(value);
-            Some(format!("{}::timestamptz <@ {}::tstzrange", safe_val, key))
+            Some(format!("{}::timestamptz <@ {}::tstzrange", pg_literal(value), key))
         }
         Some("daterange") => {
-            let safe_val = escape_string(value);
-            Some(format!("{}::date <@ {}::daterange", safe_val, key))
+            Some(format!("{}::date <@ {}::daterange", pg_literal(value), key))
         }
         _ => {
             // Default: quote and escape value, handle CamelCase key quoting
@@ -751,7 +772,7 @@ pub fn pgsql_filter_conditions(
         .map(|(key_obj, value_obj)| {
             let key: String = key_obj.extract().unwrap_or_default();
             let format_hint: Option<String> = cond_definition
-                .get_item(&key)
+                .get_item(base_key(&key))
                 .ok()
                 .flatten()
                 .and_then(|v| v.extract().ok());
@@ -965,7 +986,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("foo::character varying = ANY(tags)".to_string())
+            Some("'foo'::character varying = ANY(tags)".to_string())
         );
     }
 
@@ -991,7 +1012,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("2024-01-15::date <@ date_range::daterange".to_string())
+            Some("'2024-01-15'::date <@ date_range::daterange".to_string())
         );
     }
 
@@ -1004,7 +1025,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("2024-01-15 12:00::timestamptz <@ valid_range::tstzrange".to_string())
+            Some("'2024-01-15 12:00'::timestamptz <@ valid_range::tstzrange".to_string())
         );
     }
 
@@ -1081,6 +1102,35 @@ mod tests {
         assert_eq!(
             process_entry(&entry),
             Some("age >= 18".to_string())
+        );
+    }
+
+    #[test]
+    fn test_process_comparison_tokens_are_anded() {
+        let entry = FilterEntry {
+            key: "age".to_string(),
+            value: FilterValue::Dict(vec![
+                (">".to_string(), FilterValue::Str("18".to_string())),
+                ("<".to_string(), FilterValue::Str("65".to_string())),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("(age > 18 AND age < 65)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_between_word_inside_value_is_equality() {
+        let entry = FilterEntry {
+            key: "note".to_string(),
+            value: FilterValue::Str("contains BETWEEN safely".to_string()),
+            format_hint: None,
+        };
+        assert_eq!(
+            process_entry(&entry),
+            Some("note='contains BETWEEN safely'".to_string())
         );
     }
 

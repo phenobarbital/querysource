@@ -8,6 +8,7 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
+use crate::filter_common::{base_key, is_canonical_between};
 use crate::partial_match::{build_like_pattern, check_entries, like_escape_bang, sql_like_literal, MatchKind, PartialMatchOp};
 use crate::validators::{escape_string, field_components, quote_string};
 
@@ -249,7 +250,7 @@ pub fn filter_conditions(
 
         // Get format hint from cond_definition
         let _format: Option<String> = cond_definition
-            .get_item(&key)?
+            .get_item(base_key(&key))?
             .and_then(|v| v.extract().ok());
 
         // Parse field_components for the key (suffix detection)
@@ -278,16 +279,37 @@ pub fn filter_conditions(
                 continue;
             }
             // Dict value → comparison operator + value
-            if let Some((op_obj, v_obj)) = dict_val.iter().next() {
-                let op: String = op_obj.extract()?;
+            let entries: Vec<(String, String)> = dict_val
+                .iter()
+                .map(|(op_obj, v_obj)| {
+                    Ok((op_obj.extract()?, v_obj.extract().unwrap_or_default()))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            if entries
+                .iter()
+                .all(|(op, _)| COMPARISON_TOKENS.contains(&op.as_str()))
+            {
+                let rendered: Vec<String> = entries
+                    .iter()
+                    .filter_map(|(op, v)| validate_operator(op).ok().map(|_| {
+                        format!("{formatted_key} {op} {}", safe_scalar_value(v))
+                    }))
+                    .collect();
+                if rendered.len() == entries.len() {
+                    where_cond.push(if rendered.len() == 1 {
+                        rendered[0].clone()
+                    } else {
+                        format!("({})", rendered.join(" AND "))
+                    });
+                }
+            } else if let Some((op, v)) = entries.first() {
                 // SECURITY: Operator must be in allowlist
-                if validate_operator(&op).is_err() {
+                if validate_operator(op).is_err() {
                     // Discard unknown/unsafe operators (same behavior as before: skip)
                     continue;
                 }
                 // SECURITY: Escape the comparison value
-                let v: String = v_obj.extract().unwrap_or_default();
-                let safe_v = safe_scalar_value(&v);
+                let safe_v = safe_scalar_value(v);
                 where_cond.push(format!("{formatted_key} {op} {safe_v}"));
             }
         } else if let Ok(list_val) = value_obj.extract::<Vec<String>>() {
@@ -356,7 +378,7 @@ fn build_string_condition(
     end: &str,
     where_cond: &mut Vec<String>,
 ) -> PyResult<()> {
-    if value.contains("BETWEEN") {
+    if is_canonical_between(value) {
         // SECURITY: validate the BETWEEN clause for injection markers
         validate_between_clause(value)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
@@ -744,6 +766,13 @@ mod tests {
             conds[0],
             "(date BETWEEN '2024-01-01' AND '2024-12-31')"
         );
+    }
+
+    #[test]
+    fn test_build_string_condition_between_word_is_equality() {
+        let mut conds = Vec::new();
+        build_string_condition("note", "contains BETWEEN safely", "note", "", &mut conds).unwrap();
+        assert_eq!(conds[0], "note='contains BETWEEN safely'");
     }
 
     #[test]
