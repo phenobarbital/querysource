@@ -50,6 +50,45 @@
       "3": 7
     }
   },
+  "standup": {
+    "default_language": "en",
+    "horizon_days": 7,
+    "timezone": null,
+    "week_start": "monday",
+    "out_dir": null,
+    "me": {
+      "wiki": null,
+      "jira_account_id": null,
+      "jira_display_name": null,
+      "aliases": []
+    },
+    "ticket_status_map": {
+      "To Do": "open",
+      "Open": "open",
+      "Backlog": "open",
+      "In Progress": "in-progress",
+      "Blocked": "blocked",
+      "In Review": "in-review",
+      "Code Review": "in-review",
+      "Done": "closed",
+      "Closed": "closed",
+      "Resolved": "closed"
+    },
+    "project_map": {},
+    "stale_ticket_days": 10,
+    "stale_decision_days": 14,
+    "llm_env": "WIKI_LIGHTWEIGHT_MODEL"
+  },
   "sqlite_busy_timeout": 15.0,
-  "sqlite_performance_pragmas": false
+  "sqlite_performance_pragmas": false,
+  "inbox": {
+    "dir": "inbox",
+    "archive_dir": ".parrot/archive",
+    "rejected_subdir": "rejected",
+    "markdown_dir": null,
+    "date_format": "%Y-%m-%d",
+    "stage_git": true,
+    "max_candidates": 20,
+    "lock_timeout": 30.0
+  }
 }
