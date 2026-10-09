@@ -470,12 +470,12 @@ cdef class pgSQLParser(SQLParser):
                                 if _format == 'array':
                                     if end == '|':
                                         where_cond.append(
-                                            "ARRAY[{val}]::character varying[]  && {name}::character varying[]"
+                                            f"ARRAY[{val}]::character varying[]  && {name}::character varying[]"
                                         )
                                     else:
                                         # I need to build a query based array fields
                                         where_cond.append(
-                                            "ARRAY[{val}]::character varying[]  <@ {key}::character varying[]"
+                                            f"ARRAY[{val}]::character varying[]  <@ {key}::character varying[]"
                                         )
                                 else:
                                     where_cond.append(f"{key} IN ({val})")

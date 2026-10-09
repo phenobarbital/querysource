@@ -282,7 +282,13 @@ pub fn filter_conditions(
             let entries: Vec<(String, String)> = dict_val
                 .iter()
                 .map(|(op_obj, v_obj)| {
-                    Ok((op_obj.extract()?, v_obj.extract().unwrap_or_default()))
+                    Ok((
+                        op_obj.extract()?,
+                        v_obj
+                            .extract::<String>()
+                            .or_else(|_| v_obj.str().map(|s| s.to_string()))
+                            .unwrap_or_default(),
+                    ))
                 })
                 .collect::<PyResult<Vec<_>>>()?;
             if entries

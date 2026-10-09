@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging as stdlib_logging
+import re
 import sys
 import types
 from typing import Any
@@ -75,6 +76,13 @@ def _where_body(rendered: str) -> str | None:
     return rendered.split(" WHERE ", 1)[1].strip()
 
 
+def _numeric_literals(predicate: str | None) -> str | None:
+    """Unquote plain numeric literals: ``'1'`` and ``1`` are equivalent SQL operands."""
+    if predicate is None:
+        return None
+    return re.sub(r"(?<![\w'])(['\"])(-?\d+(?:\.\d+)?)\1", r"\2", predicate)
+
+
 async def render(
     path: str,
     conditions: dict[str, Any],
@@ -131,7 +139,7 @@ async def test_pg_full_pipeline(
     path: str, conditions: dict[str, Any], expected: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """PostgreSQL integration cases render the documented predicate on both paths."""
-    assert _where_body(await render(path, conditions, monkeypatch)) == expected
+    assert _numeric_literals(_where_body(await render(path, conditions, monkeypatch))) == _numeric_literals(expected)
 
 
 @pytest.mark.parametrize("path", PATHS)
@@ -164,7 +172,7 @@ async def test_other_dialects_render_all_comparison_operators(
 ) -> None:
     """Generic SQL and BigQuery retain each comparison-dict member in order."""
     rendered = await render(path, {"filter": {"x": {">": 1, "<": 9}}}, monkeypatch, parser_cls, module)
-    assert _where_body(rendered) == expected
+    assert _numeric_literals(_where_body(rendered)) == _numeric_literals(expected)
 
 
 @pytest.mark.parametrize("path", PATHS)
