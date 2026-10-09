@@ -16,7 +16,7 @@
       "feature_id": "FEAT-165",
       "feature": "json-dialect-filter-fixes",
       "spec": "sdd/specs/json-dialect-filter-fixes.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "No dependencies: pure-Python new module, no rebuild; provides base_key/parse_between/is_comparison_dict/TYPED_FILTER_FORMATS consumed by TASK-861, TASK-862, TASK-863.",
       "assigned_to": null,
       "started_at": "2026-10-09T17:42:44+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-859-filter-values-grammar.md"
+      "completed_at": "2026-10-09T18:02:56+00:00",
+      "file": "sdd/tasks/completed/TASK-859-filter-values-grammar.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-860",
