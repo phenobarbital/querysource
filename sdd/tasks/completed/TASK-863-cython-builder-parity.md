@@ -228,3 +228,8 @@ async def test_pg_multi_operator():
 - `pytest tests/test_mssql_partial_matching.py -q`
 - `pytest tests/test_bigquery_partial_matching.py -q`
 - `pytest tests/test_sql_parser_combinations.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 331s · Tokens: n/a.
+Cython builders (pgsql/sql/sqlserver/bigquery) fixed; 16 new tests, 327 related tests pass. No review fixes.

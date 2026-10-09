@@ -153,3 +153,8 @@ def test_is_valid_array_rejects_str():
 ## Validation Commands
 
 - `pytest tests/test_validators_array_type.py -q`
+
+## Completion Note
+
+Seat: gpt-5.6-terra · Backend: codex · Model: gpt-5.6-terra · Attempts: 1 · Duration: 225s · Tokens: n/a.
+Added `is_collection`, swapped into `array`/`json` rows; `is_array` unchanged. 4 tests passed after in-place rebuild. Review: no fixes (coder-review:663930f4193446797f7f07ea).

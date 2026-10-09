@@ -327,28 +327,39 @@ qty >= '10' AND deleted_at IS null
 Allowed operators: `<`, `>`, `>=`, `<=`, `<>`, `!=`, `IS`, `IS NOT`. A list whose
 first item is not one of these is an `IN` list.
 
-> A dict holds **one** comparison per column: if it carries several operators
-> only the **last** one is kept (`{">": 1, "<": 9}` renders `x < '9'`). To
-> express a range, use a pair of typed placeholders in the slug template (see
-> 3.1), or the JSONB-aggregation element filters, which accept several
-> operators.
->
+A dict may carry **several** operators for the same column: every comparison is
+kept and they are joined with `AND` (PostgreSQL, generic SQL and BigQuery):
+
+| Request | SQL |
+|---|---|
+| `{"x": {">": 1, "<": 9}}` | `(x > '1' AND x < '9')` |
+| `{"qty": {">": 0}}` | `qty > '0'` |
+
 > On PostgreSQL, a dict whose key is not a recognised operator is treated as
 > implicit JSONB containment (chapter 7), not as an error.
 
-### 5.4 `BETWEEN` (known issue)
+### 5.4 `BETWEEN`
 
-The parser has a branch that renders a string value containing `BETWEEN` as a
-range predicate (`{"amount": "BETWEEN 100 AND 500"}` → `(amount BETWEEN 100 AND 500)`)
-and drops clauses containing `;`, `--`, `/*`, `UNION` or `SELECT`.
+A string value that starts with `BETWEEN` or `NOT BETWEEN` renders a range
+predicate. The `!` key suffix negates it.
 
-> **Currently broken.** Value preprocessing quotes the whole string before the
-> filter builder sees it, so the request above renders invalid SQL:
-> `(amount 'BETWEEN 100 AND 500')`. Do not use the `BETWEEN` value form until
-> this is fixed.
+| Request | SQL |
+|---|---|
+| `{"amount": "BETWEEN 100 AND 500"}` | `(amount BETWEEN 100 AND 500)` |
+| `{"created_at": "BETWEEN '2025-01-01' AND 2025-12-31"}` | `(created_at BETWEEN '2025-01-01' AND '2025-12-31')` |
+| `{"amount!": "BETWEEN 1 AND 5"}` | `(amount NOT BETWEEN 1 AND 5)` |
+| `{"note": "IN BETWEEN"}` | `note='IN BETWEEN'` |
 
-For ranges, use a pair of typed placeholders in the slug template
-(`WHERE sale_date BETWEEN {firstdate} AND {lastdate}`, see 3.1).
+Bound grammar (each bound is validated, never passed through verbatim):
+
+- numbers (`100`, `-2.5`) are kept as numeric literals;
+- quoted strings (`'2025-01-01'`) are unescaped and re-quoted;
+- bare tokens (letters, digits, `_ : . / + -`) are resolved through the date
+  keywords (`FDOM`, `TODAY`, ...) and otherwise quoted.
+
+Anything else (`;`, `--`, `/*`, extra keywords, a missing `AND`) raises
+`ParserError("invalid BETWEEN clause for '<column>'")`, an HTTP 400. A value that
+merely *contains* the word (`IN BETWEEN`) is an ordinary equality.
 
 ### 5.5 Key suffixes
 
@@ -357,7 +368,8 @@ is stripped from the column name.
 
 | Suffix | Meaning |
 |---|---|
-| `!` | negation: `!=`, `NOT IN`; `<>` / `NOT IN` / `IS NOT NULL` on JSONB element paths (chapter 12) |
+| `!` | negation: `!=`, `NOT IN`, `NOT BETWEEN` (5.4); `<>` / `NOT IN` / `IS NOT NULL` on JSONB element paths (chapter 12) |
+| `\|` | array overlap `&&` on an `array`-typed column (chapter 8); `OR` semantics on JSONB containment lists |
 
 Keys must be identifier-safe: after stripping the suffix characters
 (`| ! ~ # @ :`) only letters, digits, `_` and `.` may remain. A dotted key
@@ -456,28 +468,19 @@ operator is treated as a JSONB filter on a `jsonb` column. JSON operands are
 serialised safely (`'...'::jsonb` literals; braces are escaped as `E'\x7b...'`
 so later template passes cannot break them).
 
-### 7.1 Containment: always use explicit `@>`
+### 7.1 Containment
 
-Send the object to match as the operand of `@>`:
+Send the object to match as the operand of `@>` (recommended explicit form), or
+pass a plain dict, which is treated as implicit containment with every key kept:
 
-```json
-{"filter": {"attributes": {"@>": {"status": "active", "tier": "gold"}}}}
-```
-
-```sql
-attributes @> E'\x7b"status":"active","tier":"gold"\x7d'::jsonb
-```
+| Request | SQL |
+|---|---|
+| `{"attributes": {"@>": {"status": "active"}}}` | `attributes @> E'\x7b"status":"active"\x7d'::jsonb` |
+| `{"attributes": {"status": "active", "tier": "gold"}}` | `attributes @> E'\x7b"status":"active","tier":"gold"\x7d'::jsonb` |
 
 (`\x7b` / `\x7d` are the escaped `{` / `}`; PostgreSQL reads the literal as
-`'{"status":"active","tier":"gold"}'`.)
-
-> **Implicit containment is unreliable.** The parser also treats a dict with
-> plain keys (`{"attributes": {"status": "active"}}`) as containment, but value
-> preprocessing keeps only the **last** key of the dict and wraps string values
-> in extra quotes, so the request above matches the JSON string `"'active'"`
-> instead of `"active"`. Only a single key with a non-string value works
-> (`{"attributes": {"level": 5}}` → `attributes @> '{"level":5}'::jsonb`).
-> Always use the explicit `@>` form.
+`'{"status":"active","tier":"gold"}'`.) Prefer the explicit `@>` form: it
+states the intent and keeps working when a key collides with an operator name.
 
 ### 7.2 JSONB operators
 
@@ -544,18 +547,24 @@ The PostgreSQL filter builder has special renderings for columns whose
 `tsrange` / `tstzrange` or `daterange` (for example `'vip'::character varying = ANY(tags)`,
 `12.5::numeric <@ price_band`, or the `|` key suffix for array overlap `&&`).
 
-> **Not reachable from a request today.** Every key declared in
-> `cond_definition` is classified as a *placeholder value* (2.2) before filters
-> are built, so these renderings are never used:
->
-> - a `numrange` / `daterange` / `date` key is consumed as a placeholder; if the
->   template has no `{name}` placeholder, the condition silently disappears;
-> - an `array` key with a string value raises `ValueError` and the request
->   fails.
->
-> Until this is fixed, filter array columns through the slug template
-> (e.g. `WHERE {tag} = ANY(tags)` with a typed placeholder), or store the data
-> as `jsonb` and use the JSONB operators of chapter 7.
+Typed columns work when they are filtered through `filter` / `where_cond` **and**
+the key is not a `{placeholder}` of the slug template (a key used as a
+placeholder keeps its placeholder semantics, 2.2). Flat, non-`filter` typed keys
+are not rendered as typed filters.
+
+| Request (`cond_definition`) | SQL |
+|---|---|
+| `{"tags": "vip"}` (`tags: array`) | `'vip'::character varying = ANY(tags)` |
+| `{"tags": ["a", "b"]}` (`tags: array`) | `ARRAY['a','b']::character varying[]  <@ tags::character varying[]` |
+| `{"tags\|": ["a", "b"]}` (`tags: array`) | `ARRAY['a','b']::character varying[]  && tags::character varying[]` |
+| `{"score": "5"}` (`score: numrange`) | `5::numeric <@ score` |
+| `{"rank": "5"}` (`rank: int4range`) | `5::integer <@ rank::int4range` |
+| `{"seen": "2025-01-01"}` (`seen: tstzrange`) | `'2025-01-01'::timestamptz <@ seen::tstzrange` |
+| `{"day": "2025-01-01"}` (`day: daterange`) | `'2025-01-01'::date <@ day::daterange` |
+| `{"d": ["2025-01-01", "2025-02-01"]}` (`d: date`) | `d BETWEEN '2025-01-01' AND '2025-02-01'` |
+| `{"d!": ["2025-01-01", "2025-02-01"]}` (`d: date`) | `d NOT BETWEEN '2025-01-01' AND '2025-02-01'` |
+
+The suffixed key (`tags|`, `d!`) resolves the type of its base column.
 
 ---
 
@@ -746,8 +755,8 @@ A value that starts with `@` calls a **deployment variable function**:
 The available `@` names are registered in the deployment's settings
 (`QUERYSOURCE_VARIABLES`, a map of name → dotted import path). Each function is
 called as `fn(key, value)` and its return value replaces the `@name` value (it
-is then validated and quoted as usual). An unregistered `@name` makes the
-condition **silently disappear** from the query (no error), so call `GET /api/v1/queries/vocabulary` or the agent dialect reference to list
+is then validated and quoted as usual). An unregistered `@name` raises
+`ParserError("unknown variable '@name'")` (HTTP 400), so call `GET /api/v1/queries/vocabulary` or the agent dialect reference to list
 the names your deployment accepts.
 
 ### 13.4 Query filter functions
@@ -825,7 +834,7 @@ depend on the target:
 | Partial matching (`*like`, `*startswith`, ...) | yes | yes (`LOWER()`, `ESCAPE '!'`) | yes | yes | no |
 | Regex operators | yes | no (`ParserError`) | no | no | no |
 | JSONB operators (`@>`, `@>\|`, `->>`, ...) | yes | no | no | `JSON_VALUE` extraction | no |
-| Typed arrays / ranges (chapter 8) | not reachable (see 8) | no | no | no | no |
+| Typed arrays / ranges (chapter 8) | yes | no | no | no | no |
 | JSONB array aggregation, `having` | yes | no | no | no | no |
 | `distinct` option | template | template | template | template | RethinkDB |
 
@@ -846,8 +855,8 @@ QuerySource never concatenates user input into SQL without validation:
   partial-matching operators raise `ParserError`.
 - **Values** are quoted for the target dialect (`'` doubled; PostgreSQL uses
   escape-string literals when needed).
-- **`BETWEEN`** clauses with `;`, `--`, `/*`, `UNION` or `SELECT` are dropped
-  (but see the known issue in 5.4).
+- **`BETWEEN`** clauses with `;`, `--`, `/*`, `UNION` or `SELECT`
+  are rejected with a `ParserError` (5.4).
 - **Regex** patterns are length-limited and checked for catastrophic nested
   quantifiers.
 - **JSONB** operands are serialised with `orjson`; invalid JSON drops the
@@ -857,7 +866,7 @@ Errors surface as HTTP responses:
 
 | Status | Typical cause |
 |---|---|
-| 400 | `ParserError`: invalid partial match, invalid JSONB aggregation path/alias/`having`, slug not found |
+| 400 | `ParserError`: invalid partial match, invalid `BETWEEN` clause, conflicting filters (`col` and `col!`), unknown `@variable`, invalid JSONB aggregation path/alias/`having`, slug not found |
 | 403 | the caller lacks `slug:execute` permission |
 | 204 | the query returned no rows |
 
@@ -949,6 +958,8 @@ FILTER VALUES                               SQL
   col: '!v'        |  'col!': 'v'           col != 'v'
   col: [a, b]      |  'col!': [a, b]        col IN (...) / NOT IN (...)
   col: {'>': 10}                            col > '10'        (>= <= <> != < >)
+  col: {'>': 1, '<': 9}                     (col > '1' AND col < '9')
+  col: 'BETWEEN 1 AND 5' | 'col!': ...      (col BETWEEN 1 AND 5) / NOT BETWEEN
   col: ['>=', 10]                           col >= '10'       (+ IS, IS NOT)
   col: 'null' | '!null'                     IS NULL / IS NOT NULL
   col: true                                 col = true
@@ -958,7 +969,8 @@ PARTIAL MATCHING                            {op: 'text'}
   regex iregex (PostgreSQL)  — each with a not_ variant
 
 JSONB (PostgreSQL)
-  col: {'@>': x} | {'<@': x}                containment (always explicit)
+  col: {'@>': x} | {'<@': x}                containment (explicit, recommended)
+  col: {k: v, ...}                          implicit containment (all keys kept)
   col: {'@>|': [a, b]}                      any of
   col: {'@!': [a, b]}                       none of
   col: {'@$': [a, b]}                       not all
