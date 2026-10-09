@@ -97,7 +97,7 @@
       "feature_id": "FEAT-165",
       "feature": "json-dialect-filter-fixes",
       "spec": "sdd/specs/json-dialect-filter-fixes.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -107,8 +107,9 @@
       "parallelism_notes": "Imports base_key and is_comparison_dict from TASK-859 (filter_values.py) into pgsql/sql/sqlserver/bigquery .pyx. Exclusive: rebuilds four Cython parser extensions.",
       "assigned_to": null,
       "started_at": "2026-10-09T17:42:44+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-863-cython-builder-parity.md"
+      "completed_at": "2026-10-09T18:24:04+00:00",
+      "file": "sdd/tasks/completed/TASK-863-cython-builder-parity.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-864",
