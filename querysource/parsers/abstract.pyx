@@ -14,10 +14,11 @@ from asyncdb import AsyncDB
 from . import QS_FILTERS, QS_VARIABLES
 from ..types import to_flag
 from ..models import QueryObject, QueryModel
-from ..exceptions import EmptySentence
+from ..exceptions import EmptySentence, ParserError
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
 from .partial_matching import validate_partial_match_dict
+from .filter_values import base_key, is_comparison_dict, parse_between
 from ..utils.parseqs import is_parseable
 
 
@@ -441,6 +442,8 @@ cdef class AbstractParser:
 
     cdef object _get_function_replacement(self, object function, str key, object val):
         fn = QS_VARIABLES.get(function, None)
+        if fn is None:
+            raise ParserError(f"unknown variable '@{function}'")
         if callable(fn):
             return fn(key, val)
         return None
@@ -576,13 +579,20 @@ cdef class AbstractParser:
                 key, value, supports_regex=self.supports_regex_filter
             ) is not None:
                 return key, dict(value)
-            # Read the (last) operator without popitem(): the dict belongs to the caller, who may reuse it
-            # (e.g. a linked dashboard re-sending the same filter); mutating it empties the filter.
-            op, v = next(reversed(value.items()))
-            result = is_valid(key, v, noquote=self.string_literal)
-            return key, {op: result}
+            # Never mutate the caller's dict (a linked dashboard may re-send it).
+            if is_comparison_dict(value):
+                return key, {
+                    op: is_valid(key, v, noquote=self.string_literal)
+                    for op, v in value.items()
+                }
+            # JSONB payloads / operators, qsurl ILIKE and mixed dicts reach the
+            # builders unmodified: they own validation and quoting (FEAT-165).
+            return key, dict(value)
 
         if isinstance(value, str):
+            clause = parse_between(key, value)
+            if clause is not None:
+                return base_key(key), clause.render()
             parser = is_parseable(value)
             if parser:
                 try:
@@ -613,6 +623,10 @@ cdef class AbstractParser:
         tasks = [self._where_element(key, value, connection) for key, value in _filter.items()]
         results = await asyncio.gather(*tasks)
 
-        where_cond = {key: value for key, value in results}
+        where_cond = {}
+        for key, value in results:
+            if key in where_cond:
+                raise ParserError(f"conflicting filters for '{key}'")
+            where_cond[key] = value
         self.filter = where_cond
         return self
