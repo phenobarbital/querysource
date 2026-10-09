@@ -35,6 +35,7 @@ cdef class AbstractParser:
     cdef public int32_t _offset
     cdef public dict attributes
     cdef bint _distinct
+    cdef public set _typed_filter_keys
     # Parser Options:
     cdef public dict params
     cdef public dict _query_filters

@@ -18,7 +18,7 @@ from ..exceptions import EmptySentence, ParserError
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
 from .partial_matching import validate_partial_match_dict
-from .filter_values import base_key, is_comparison_dict, parse_between
+from .filter_values import TYPED_FILTER_FORMATS, base_key, is_comparison_dict, parse_between
 from ..utils.parseqs import is_parseable
 
 
@@ -97,6 +97,7 @@ cdef class AbstractParser:
         self.c_length = 0
         self.supports_regex_filter = False
         self.supports_partial_match = False
+        self._typed_filter_keys = set()
 
     cdef void define_conditions(self, object conditions):
         """Build the options needed by every query in QuerySource."""
@@ -524,7 +525,7 @@ cdef class AbstractParser:
             else:
                 try:
                     result = is_valid(key, value, _type)
-                except TypeError as exc:
+                except (TypeError, ValueError) as exc:
                     self.logger.warning(
                         f'Error on: {key} = {value} with type {_type}, {exc}'
                     )
@@ -550,7 +551,19 @@ cdef class AbstractParser:
         tasks = []
         _filter = {}
 
+        explicit = self.filter if isinstance(self.filter, dict) else {}
+        template = self.query_raw or ''
         for name, val in elements.items():
+            base = base_key(name)
+            if (
+                name in explicit
+                and base in self.cond_definition
+                and '{' + base + '}' not in template
+            ):
+                # FEAT-165: a typed column filtered explicitly stays a WHERE filter.
+                _filter[name] = val
+                self._typed_filter_keys.add(base)
+                continue
             tasks.append(self._process_element(name, val, connection))
         results = await asyncio.gather(*tasks)
 
@@ -569,6 +582,14 @@ cdef class AbstractParser:
 
     async def _where_element(self, key, value, connection):
         """Process a single element for the WHERE clause."""
+
+        base = base_key(key) if isinstance(key, str) else key
+        cond_type = self.cond_definition.get(base)
+        if base in self._typed_filter_keys and (
+            cond_type in TYPED_FILTER_FORMATS
+            or (cond_type in ('date', 'datetime') and isinstance(value, list) and len(value) == 2)
+        ):
+            return key, value
 
         if isinstance(value, dict):
             if not value:
