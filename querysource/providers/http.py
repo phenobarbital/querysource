@@ -92,7 +92,8 @@ class httpProvider(BaseProvider):
                             f'Error importing {module_name} module, error: {str(err)}'
                         ) from err
         try:
-            class_name = getattr(module, self.dialect, 'httpSource')
+            # the dialect class when the module defines one, else the base httpSource
+            class_name = getattr(module, self.dialect, None) or getattr(module, 'httpSource')
             self._source = class_name(
                 definition=self._definition,
                 conditions=self._conditions,
