@@ -681,9 +681,13 @@ fn process_str_value(
             // SECURITY: escape the value used in array containment check
             let safe_val = escape_string(value);
             if safe_val.parse::<i64>().is_ok() {
-                Some(format!("{} = ANY({})", safe_val, key))
+                Some(format!("{} = ANY({})", safe_val, base_key(key)))
             } else {
-                Some(format!("{}::character varying = ANY({})", pg_literal(value), key))
+                Some(format!(
+                    "{}::character varying = ANY({})",
+                    pg_literal(value),
+                    base_key(key)
+                ))
             }
         }
         Some("numrange") => {
@@ -1117,7 +1121,7 @@ mod tests {
         };
         assert_eq!(
             process_entry(&entry),
-            Some("(age > 18 AND age < 65)".to_string())
+            Some("(age > '18' AND age < '65')".to_string())
         );
     }
 
