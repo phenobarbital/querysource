@@ -10,7 +10,7 @@ tags: [pandas3, datetime, timezone, transforms]
 **Feature ID**: FEAT-171
 **Date**: 2026-10-13
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.x
 
 ---
