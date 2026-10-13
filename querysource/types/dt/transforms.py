@@ -611,9 +611,9 @@ def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):
     :param time: Name of the column in the df DataFrame containing time values.
     :return: Modified pandas DataFrame with the combined timestamp stored in a new column.
     """
-    df[field] = pd.to_datetime(
-        df[date].dt.date.astype(str) + " " + df[time].dt.time.astype(str)
-    )
+    date_part = _to_wall_clock(df[date], field=date)
+    time_part = _to_wall_clock(df[time], field=time)
+    df[field] = date_part.dt.normalize() + (time_part - time_part.dt.normalize())
     return df
 
 
@@ -2112,41 +2112,44 @@ def extract(df: pd.DataFrame, field: str, column="", to_date=None, value="day"):
 
     value = value.lower()
 
-    if not is_datetime_column(df[column]):
-        # convert to datetime, but only if not time:
-        if not is_time_column(df[column]):
-            try:
-                df[column] = pd.to_datetime(df[column])
-            except TypeError:
-                pass
+    if not is_datetime_column(df[column]) and not pd.api.types.is_timedelta64_dtype(df[column]):
+        try:
+            df[column] = _to_datetime_series(df[column], infer_tz=True, field=column)
+        except (TypeError, ValueError) as err:
+            logging.error(f"extract: cannot parse {column!r} as datetime: {err}")
+    source = df[column]
+    view = source if source.dtype != object else _to_wall_clock(source, field=column)
 
     if value == "day":
-        df[field] = df[column].dt.day
+        df[field] = view.dt.day
     elif value == "dow" or value.lower() == "dayofweek":
-        df[field] = df[column].dt.dayofweek
+        df[field] = view.dt.dayofweek
     elif value == "doy" or value.lower() == "dayofyear":
-        df[field] = df[column].dt.dayofyear
+        df[field] = view.dt.dayofyear
     elif value == "month":
-        df[field] = df[column].dt.month
+        df[field] = view.dt.month
         df[field] = df[field].astype("Int64")
     elif value == "year":
-        df[field] = df[column].dt.year
+        df[field] = view.dt.year
         df[field] = df[field].astype("Int64")
     elif value == "quarter":
-        df[field] = df[column].dt.quarter
+        df[field] = view.dt.quarter
     elif value == "hour":
         try:
-            df[field] = df[column].dt.hour
+            df[field] = view.dt.hour
         except AttributeError:
-            df[field] = df[column].dt.components.hours
+            df[field] = view.dt.components.hours
     elif value == "minute":
-        df[field] = df[column].dt.minute
+        df[field] = view.dt.minute
     elif value == "second":
-        df[field] = df[column].dt.second
+        df[field] = view.dt.second
     elif value == "ldom":
-        df[field] = df[column] + MonthEnd(0)
+        if source.dtype == object:
+            df[field] = source.map(lambda v: v if pd.isna(v) else v + MonthEnd(0))
+        else:
+            df[field] = source + MonthEnd(0)
     else:
-        df[field] = df[column].dt.to_period(value)
+        df[field] = view.dt.to_period(value)
     return df
 
 
