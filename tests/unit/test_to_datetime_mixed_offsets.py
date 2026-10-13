@@ -235,3 +235,126 @@ def test_add_timestamp_to_time_mixed():
         pd.Timestamp("2025-12-01T10:11:12.123456"),
         pd.NaT,
     ]
+
+
+MIXED_PRECISION = [
+    "2025-09-15T23:30:00-07:00",
+    "2025-12-01T08:00:00.123-08:00",
+    None,
+]
+
+
+def test_mixed_iso_precision_keeps_all_values():
+    """Seconds-only and fractional ISO strings keep every value and fraction."""
+    expected_utc = [
+        pd.Timestamp("2025-09-16T06:30:00Z"),
+        pd.Timestamp("2025-12-01T16:00:00.123Z"),
+        pd.NaT,
+    ]
+    expected_local = [
+        pd.Timestamp("2025-09-15T23:30:00-07:00"),
+        pd.Timestamp("2025-12-01T08:00:00.123-08:00"),
+        pd.NaT,
+    ]
+    expected_new_york = [
+        pd.Timestamp("2025-09-16T02:30:00-04:00"),
+        pd.Timestamp("2025-12-01T11:00:00.123-05:00"),
+        pd.NaT,
+    ]
+    time_values = [
+        "1900-01-01T01:02:03.456789-08:00",
+        "1900-01-01T10:11:12.123456-07:00",
+        None,
+    ]
+    expected_combined = [
+        pd.Timestamp("2025-09-15T01:02:03.456789"),
+        pd.Timestamp("2025-12-01T10:11:12.123456"),
+        pd.NaT,
+    ]
+
+    for values in (MIXED_PRECISION, list(reversed(MIXED_PRECISION))):
+        for dtype in ("object", "string"):
+            date_values = pd.Series(values, dtype=dtype)
+            frame = pd.DataFrame({"d": date_values})
+            for converter in (convert_to_datetime, to_timestamp):
+                utc = converter(frame.copy(), "d", infer_tz=False)["d"]
+                preserved = converter(frame.copy(), "d", infer_tz=True)["d"]
+                assert utc.notna().sum() == 2
+                assert preserved.notna().sum() == 2
+                assert utc.tolist() == (expected_utc if values[0] == MIXED_PRECISION[0] else expected_utc[::-1])
+                assert preserved.tolist() == (
+                    expected_local if values[0] == MIXED_PRECISION[0] else expected_local[::-1]
+                )
+                assert preserved.iloc[values.index(MIXED_PRECISION[1])].microsecond == 123000
+
+            excel = to_excel_date(frame.copy(), "d")["d"]
+            assert excel.tolist() == (expected_utc if values[0] == MIXED_PRECISION[0] else expected_utc[::-1])
+
+            converted = change_timezone(frame.copy(), "d", to_tz="America/New_York")["d"]
+            assert converted.tolist() == (
+                expected_new_york if values[0] == MIXED_PRECISION[0] else expected_new_york[::-1]
+            )
+
+            extracted = pd.DataFrame({"source": date_values})
+            extract(extracted, "day", column="source", value="day")
+            expected_days = [15.0, 1.0] if values[0] == MIXED_PRECISION[0] else [1.0, 15.0]
+            assert extracted["day"].iloc[:2].tolist() == expected_days
+            assert pd.isna(extracted["day"].iloc[2])
+            assert extracted["source"].notna().sum() == 2
+
+            combined = pd.DataFrame(
+                {
+                    "date": date_values,
+                    "time": pd.Series(
+                        time_values if values[0] == MIXED_PRECISION[0] else list(reversed(time_values)), dtype=dtype
+                    ),
+                }
+            )
+            add_timestamp_to_time(combined, "combined", "date", "time")
+            assert combined["combined"].notna().sum() == 2
+            assert combined["combined"].tolist() == (
+                expected_combined if values[0] == MIXED_PRECISION[0] else expected_combined[::-1]
+            )
+
+
+def test_naive_and_single_offset_regressions():
+    """Working naive and single-offset inputs retain their literal outputs."""
+    naive = ["2025-09-15T23:30:00", None]
+    single_offset = ["2025-09-15T23:30:00-07:00", None]
+
+    assert to_excel_date(pd.DataFrame({"d": naive}), "d")["d"].tolist() == [
+        pd.Timestamp("2025-09-15T23:30:00"),
+        pd.NaT,
+    ]
+    assert to_excel_date(pd.DataFrame({"d": single_offset}), "d")["d"].tolist() == [
+        pd.Timestamp("2025-09-16T06:30:00"),
+        pd.NaT,
+    ]
+
+    naive_tz = change_timezone(
+        pd.DataFrame({"d": naive}), "d", from_tz="UTC", to_tz="America/New_York"
+    )["d"]
+    assert naive_tz.tolist() == [pd.Timestamp("2025-09-15T19:30:00-04:00"), pd.NaT]
+    aware_tz = change_timezone(
+        pd.DataFrame({"d": single_offset}), "d", from_tz="UTC", to_tz="America/New_York"
+    )["d"]
+    assert aware_tz.tolist() == [pd.Timestamp("2025-09-16T02:30:00-04:00"), pd.NaT]
+
+    source = pd.DataFrame({"source": naive})
+    extract(source, "month_end", column="source", value="ldom")
+    assert source["month_end"].tolist() == [pd.Timestamp("2025-09-30T23:30:00"), pd.NaT]
+    assert source["source"].tolist() == [pd.Timestamp("2025-09-15T23:30:00"), pd.NaT]
+
+    aware_source = pd.DataFrame({"source": single_offset})
+    extract(aware_source, "month_end", column="source", value="ldom")
+    assert aware_source["month_end"].tolist() == [pd.Timestamp("2025-09-30T23:30:00-07:00"), pd.NaT]
+    assert aware_source["source"].iloc[0] == pd.Timestamp("2025-09-15T23:30:00-07:00")
+
+    combined = pd.DataFrame(
+        {
+            "date": naive,
+            "time": ["1900-01-01T01:02:03.456789", None],
+        }
+    )
+    add_timestamp_to_time(combined, "combined", "date", "time")
+    assert combined["combined"].tolist() == [pd.Timestamp("2025-09-15T01:02:03.456789"), pd.NaT]
