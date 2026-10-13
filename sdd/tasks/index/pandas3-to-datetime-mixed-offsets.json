@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-13T21:17:02+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-13T21:58:52+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Root task: no in-feature dependency. Requires PR #666 merged into dev (its _to_datetime_series in querysource/types/dt/transforms.py). Creates tests/unit/test_to_datetime_mixed_offsets.py, which TASK-889/890/891 extend.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-888-datetime-helper-hardening.md"
+      "started_at": "2026-10-13T21:26:57+00:00",
+      "completed_at": "2026-10-13T21:36:16+00:00",
+      "file": "sdd/tasks/completed/TASK-888-datetime-helper-hardening.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-889",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -43,9 +44,10 @@
       "parallel": true,
       "parallelism_notes": "Calls the hardened _to_datetime_series from TASK-888; also modifies querysource/types/dt/transforms.py and tests/unit/test_to_datetime_mixed_offsets.py, both touched by TASK-888.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-889-utc-semantics-sites.md"
+      "started_at": "2026-10-13T21:26:57+00:00",
+      "completed_at": "2026-10-13T21:42:48+00:00",
+      "file": "sdd/tasks/completed/TASK-889-utc-semantics-sites.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-890",
@@ -54,7 +56,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -63,9 +65,10 @@
       "parallel": true,
       "parallelism_notes": "Imports _to_wall_clock created by TASK-888 (transitive via TASK-889); serialized after TASK-889 because both modify querysource/types/dt/transforms.py and tests/unit/test_to_datetime_mixed_offsets.py.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-890-wall-clock-sites.md"
+      "started_at": "2026-10-13T21:26:57+00:00",
+      "completed_at": "2026-10-13T21:50:00+00:00",
+      "file": "sdd/tasks/completed/TASK-890-wall-clock-sites.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-891",
@@ -74,7 +77,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -83,9 +86,10 @@
       "parallel": true,
       "parallelism_notes": "Tests exercise extract/add_timestamp_to_time as changed by TASK-890 and the callers of TASK-888/889; appends to tests/unit/test_to_datetime_mixed_offsets.py, last modified by TASK-890.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-891-cross-cutting-regressions-changelog.md"
+      "started_at": "2026-10-13T21:26:57+00:00",
+      "completed_at": "2026-10-13T21:55:18+00:00",
+      "file": "sdd/tasks/completed/TASK-891-cross-cutting-regressions-changelog.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-892",
@@ -94,7 +98,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -103,9 +107,10 @@
       "parallel": true,
       "parallelism_notes": "Final gate by user requirement (spec §3 M5 'runs last'): validates the convert_to_datetime/to_timestamp behaviour delivered by TASK-888 (xs:date parsing, re-conversion) after TASK-891's full unit gate passes. Creates only tests/integration/test_offers_hires_datetime.py.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-892-offers-hires-real-data-validation.md"
+      "started_at": "2026-10-13T21:26:57+00:00",
+      "completed_at": "2026-10-13T21:58:52+00:00",
+      "file": "sdd/tasks/completed/TASK-892-offers-hires-real-data-validation.md",
+      "verification": "verified"
     }
   ]
 }
