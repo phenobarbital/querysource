@@ -27,14 +27,85 @@ from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
 
 
-def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):
+def _to_datetime_series(
+    series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
+) -> pd.Series:
+    """Parse a Series to datetime, handling mixed UTC offsets explicitly.
+
+    pandas>=3 raises ``ValueError`` when values carry different UTC offsets
+    (e.g. DST ``-07:00``/``-08:00``) unless ``utc=True``. Instead of leaving
+    the column unparsed, the caller decides how to resolve it:
+
+    * ``infer_tz=False`` (default): normalize every value to UTC. The instant
+      is preserved; the original per-value offsets are not.
+    * ``infer_tz=True``: parse each value on its own, keeping its original
+      offset (``object`` dtype of tz-aware ``Timestamp``).
+
+    Args:
+        series: Series with datetime-like values.
+        infer_tz: Keep each value's own UTC offset on mixed-offset input.
+        field: Column name, used only for logging.
+
+    Returns:
+        The parsed Series. Unparseable values become ``NaT``.
+    """
     try:
-        df[field] = pd.to_datetime(df[field], errors="coerce")
-        df[field] = df[field].where(df[field].notnull(), None)
-        df[field] = df[field].astype("datetime64[ns]")
+        return pd.to_datetime(series, errors="coerce")
+    except ValueError as err:
+        if not infer_tz:
+            logging.warning(
+                f"Datetime column {field!r} has mixed UTC offsets ({err}); "
+                "normalizing to UTC. Pass infer_tz=True to keep each "
+                "value's own offset."
+            )
+            return pd.to_datetime(series, errors="coerce", utc=True)
+
+        def _parse(value: Any) -> Union[pd.Timestamp, Any]:
+            if value is None or pd.isna(value):
+                return pd.NaT
+            try:
+                return pd.Timestamp(value)
+            except (ValueError, TypeError):
+                return pd.NaT
+
+        return series.map(_parse).astype(object)
+
+
+def _convert_datetime_column(
+    df: pd.DataFrame, field: str, infer_tz: bool = False
+) -> pd.DataFrame:
+    """Convert ``df[field]`` to datetime, keeping timezone information.
+
+    Naive results are cast to ``datetime64[ns]``. Tz-aware results keep their
+    timezone (cast to nanosecond resolution), and mixed-offset results from
+    ``infer_tz=True`` stay as ``object`` dtype: casting either of them to a
+    naive ``datetime64[ns]`` would drop the timezone.
+
+    Args:
+        df: DataFrame to modify in place.
+        field: Column to convert.
+        infer_tz: See :func:`_to_datetime_series`.
+
+    Returns:
+        The modified DataFrame.
+    """
+    try:
+        values = _to_datetime_series(df[field], infer_tz=infer_tz, field=field)
+        values = values.where(values.notnull(), None)
+        if isinstance(values.dtype, pd.DatetimeTZDtype):
+            values = values.dt.as_unit("ns")
+        elif values.dtype != object:
+            values = values.astype("datetime64[ns]")
+        df[field] = values
     except Exception as err:
-        print(err)
+        logging.error(f"Error converting {field!r} to datetime: {err}")
     return df
+
+
+def to_timestamp(
+    df: pd.DataFrame, field: str, remove_nat: bool = False, infer_tz: bool = False
+):
+    return _convert_datetime_column(df, field, infer_tz=infer_tz)
 
 
 def from_currency(df: pd.DataFrame, field: str, symbol="$", remove_nan: bool = True):
@@ -1413,22 +1484,20 @@ def convert_to_json(df: pd.DataFrame, field: str):
     return df
 
 
-def convert_to_datetime(df: pd.DataFrame, field: str, remove_nat=False):
+def convert_to_datetime(
+    df: pd.DataFrame, field: str, remove_nat=False, infer_tz: bool = False
+):
     """
     Converts the values in a specified column of a pandas DataFrame to datetime format.
 
     :param df: pandas DataFrame to be modified.
     :param field: Name of the column in the df DataFrame to be modified.
     :param remove_nat: Boolean indicating whether to remove NaT values. Defaults to False.
+    :param infer_tz: On mixed UTC offsets, keep each value's own offset
+        (object dtype) instead of normalizing to UTC. Defaults to False.
     :return: Modified pandas DataFrame with the values converted to datetime format.
     """
-    try:
-        df[field] = pd.to_datetime(df[field], errors="coerce")
-        df[field] = df[field].where(df[field].notnull(), None)
-        df[field] = df[field].astype("datetime64[ns]")
-    except Exception as err:
-        print(err)
-    return df
+    return _convert_datetime_column(df, field, infer_tz=infer_tz)
 
 
 def to_datetime(df: pd.DataFrame, field: str, format="%Y-%m-%d"):
@@ -2090,7 +2159,13 @@ def fill_nulls(df: pd.DataFrame, field: str, column: str):
 
         # Fill null values in the field with values from the specified column
         try:
-            df.loc[df[field].isnull(), field] = df[column]
+            mask = df[field].isnull()
+            try:
+                df.loc[mask, field] = df[column]
+            except TypeError:
+                # pandas>=3 string dtype rejects non-string fill values
+                df[field] = df[field].astype(object)
+                df.loc[mask, field] = df[column]
         except KeyError:
             logging.error(f"Fill Nulls: Column {column} doesn't exist")
         except ValueError as e:
