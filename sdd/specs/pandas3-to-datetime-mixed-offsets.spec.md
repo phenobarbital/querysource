@@ -10,7 +10,7 @@ tags: [pandas3, datetime, timezone, transforms]
 **Feature ID**: FEAT-171
 **Date**: 2026-10-13
 **Author**: Jesus Lara
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.x
 
 ---
@@ -290,6 +290,26 @@ decision.
   - `Candidate_Start_Date` values are midnight at their offset, never a naive
     `07:00`/`08:00` time;
   - applying the same function again to its own output changes nothing (M1 re-conversion hardening).
+- **`drop_timezone` check** (the production task `programs/workday/tasks/get_offers_and_hires.yaml`
+  runs `tMap` → `convert_to_datetime` on these five columns, then flowtask's
+  TransformRows `drop_timezone` on each of them). `drop_timezone` lives in
+  flowtask (`flowtask/components/TransformRows/functions.py:408`, flowtask
+  `c0406e71`), so it is **not imported**. The test carries a local mirror,
+  `_drop_timezone_like_flowtask`, with the same algorithm:
+  * `DatetimeTZDtype` → `series.dt.tz_localize(None)`;
+  * `object` → per value `x.replace(tzinfo=None)` for tz-aware `Timestamp`/`datetime`, then `.astype("datetime64[ns]")`;
+  * anything else → unchanged.
+
+  For each column × {`convert_to_datetime`, `to_timestamp`} × `infer_tz`, after
+  applying the mirror to the converted column:
+  - the result is naive `datetime64[ns]`, the non-null count is unchanged and no `str` remains;
+  - `infer_tz=True` → every value equals the source's **local wall-clock**
+    (`fromisoformat(src).replace(tzinfo=None)`), i.e. the pandas<3 result the
+    production task relies on. `Candidate_Start_Date` → local midnight;
+  - `infer_tz=False` → every value equals the source's **UTC wall-clock**
+    (`fromisoformat(src).astimezone(timezone.utc).replace(tzinfo=None)`).
+    This pins the documented 7–8 h shift, so a silent change of the default is
+    caught. A task that needs pandas<3 output must pass `infer_tz=True`.
 - **Interface Skeleton**:
   ```python
   # tests/integration/test_offers_hires_datetime.py  (new)
@@ -304,6 +324,15 @@ decision.
   @pytest.mark.parametrize("column", COLUMNS)
   def test_offers_hires_datetime_columns(offers_hires, func, infer_tz, column) -> None:
       """Per-column expectations above."""
+
+  def _drop_timezone_like_flowtask(series: pd.Series) -> pd.Series:
+      """Local mirror of flowtask TransformRows drop_timezone (functions.py:408 @ c0406e71)."""
+
+  @pytest.mark.parametrize("func", [convert_to_datetime, to_timestamp])
+  @pytest.mark.parametrize("infer_tz", [False, True])
+  @pytest.mark.parametrize("column", COLUMNS)
+  def test_offers_hires_drop_timezone_wall_clock(offers_hires, func, infer_tz, column) -> None:
+      """infer_tz=True -> local wall-clock (pandas<3 result); False -> UTC wall-clock."""
   ```
 
 ---
@@ -331,6 +360,7 @@ decision.
 | Test | Description |
 |---|---|
 | `test_offers_hires_datetime_columns` (M5) | 5 Workday columns × 2 functions × 2 `infer_tz` modes on `artifacts/get_offers_and_hires_1.6.csv`; skipped when the file is absent |
+| `test_offers_hires_drop_timezone_wall_clock` (M5) | same 20 combinations followed by the flowtask `drop_timezone` mirror: local wall-clock with `infer_tz=True`, UTC wall-clock with `False` |
 
 ### Test Data / Fixtures
 ```python
@@ -360,7 +390,7 @@ NAIVE_AWARE = [
 - [ ] `ruff check querysource/types/dt/transforms.py` reports no new errors (baseline: 20 pre-existing).
 - [ ] `CHANGES.rst` entry under *Unreleased*.
 - [ ] Date-only values with an offset (`YYYY-MM-DD±HH:MM`, `YYYY-MM-DDZ`) parse as midnight at that offset, never as a naive time of day.
-- [ ] Final task (M5): `QS_OFFERS_HIRES_CSV=<main checkout>/artifacts/get_offers_and_hires_1.6.csv pytest tests/integration/test_offers_hires_datetime.py` passes all 20 cases with **no skips**, and the CSV is not tracked by git (`git ls-files artifacts/` is empty).
+- [ ] Final task (M5): `QS_OFFERS_HIRES_CSV=<main checkout>/artifacts/get_offers_and_hires_1.6.csv pytest tests/integration/test_offers_hires_datetime.py` passes all 40 cases (20 conversion + 20 `drop_timezone`) with **no skips**, and the CSV is not tracked by git (`git ls-files artifacts/` is empty).
 
 ---
 
@@ -489,3 +519,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | 0.2 | 2026-10-13 | Jesus Lara | §8 Q1–Q4 resolved: M1 stays here; extract/add_timestamp_to_time preserve per-value offsets (no infer_tz); from_tz warning; format/unit audit filed |
 | 0.3 | 2026-10-13 | Jesus Lara | M5 final task: real-data validation on artifacts/get_offers_and_hires_1.6.csv; M1 adds `_parse_offset_dates` for xs:date values misread as naive times |
 | 0.3 | 2026-10-13 | Codex | Address review issues 3d6c989fd3b8, c5d2828575b5 and d4ebf933e643: independent parsing and naive/aware classification, differing ISO precision, timezone-preserving ldom, expanded regression criteria |
+| 0.4 | 2026-10-13 | Jesus Lara | M5: drop_timezone wall-clock check (flowtask mirror) — infer_tz=True must give pandas<3 local wall-clock; default pins the UTC shift |

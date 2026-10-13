@@ -65,7 +65,7 @@ EXPECTED: dict[tuple[str, str], str] = {
     ('array_cast_field', 'cython'): 'SELECT tags::text[], id FROM t ',
     ('array_cast_field', 'rust'): 'SELECT tags::text[], id FROM t ',
     ('comparison_dict', 'cython'): 'SELECT * FROM t  WHERE amount >= 10',
-    ('comparison_dict', 'rust'): "SELECT * FROM t  WHERE amount >= '10'",
+    ('comparison_dict', 'rust'): 'SELECT * FROM t  WHERE amount >= 10',
     ('group_and_count', 'cython'): 'SELECT store_id, count(*) FROM t  GROUP BY store_id ORDER BY store_id DESC',
     ('group_and_count', 'rust'): 'SELECT store_id, count(*) FROM t  GROUP BY store_id ORDER BY store_id DESC',
     ('jsonb_any_of', 'cython'): 'SELECT * FROM t  WHERE (graduation_details @> E\'[\\x7b"course":"Pilates Studio"\\x7d]\'::jsonb OR graduation_details @> E\'[\\x7b"course":"Pilates Mat"\\x7d]\'::jsonb)',

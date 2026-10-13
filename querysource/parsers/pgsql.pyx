@@ -14,7 +14,7 @@ from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from .jsonb_unnest import is_plan_candidate, unnest_plan, unnest_wrap
 from ..types.validators import Entity, field_components, is_integer, is_camel_case, is_valid
-from .filter_values import base_key, is_comparison_dict
+from .filter_values import base_key, has_between_prefix, is_canonical_between, is_comparison_dict
 from .partial_matching import (
     PARTIAL_MATCH_OPERATORS, build_like_pattern, like_escape, validate_partial_match_dict,
 )
@@ -495,11 +495,9 @@ cdef class pgSQLParser(SQLParser):
                         base = str_value[:-1].replace("'", "''")
                         val = f"'{base}%'"
                         where_cond.append(f"{name} NOT ILIKE {val}")
-                    elif str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
-                        # SECURITY: Reject BETWEEN clauses with injection markers
-                        upper_val = str_value.upper()
-                        if ('--' in str_value or '/*' in str_value or ';' in str_value
-                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                    elif has_between_prefix(str_value):
+                        # SECURITY (FEAT-168): splice only the canonical form parse_between emits.
+                        if not is_canonical_between(str_value):
                             continue
                         where_cond.append(f"({key} {str_value})")
                     elif value in ('null', 'NULL'):

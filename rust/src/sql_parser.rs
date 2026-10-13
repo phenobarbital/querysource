@@ -8,7 +8,7 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
-use crate::filter_common::{base_key, is_canonical_between};
+use crate::filter_common::{base_key, has_between_prefix, is_canonical_between};
 use crate::partial_match::{build_like_pattern, check_entries, like_escape_bang, sql_like_literal, MatchKind, PartialMatchOp};
 use crate::validators::{field_components, quote_string_bs as quote_string};
 
@@ -387,7 +387,12 @@ fn build_string_condition(
     end: &str,
     where_cond: &mut Vec<String>,
 ) -> PyResult<()> {
-    if is_canonical_between(value) {
+    if has_between_prefix(value) {
+        // SECURITY (FEAT-168): only the canonical form is spliced; the Cython
+        // fallback drops what this rejects.
+        if !is_canonical_between(value) {
+            return Err(pyo3::exceptions::PyValueError::new_err("Non-canonical BETWEEN clause"));
+        }
         // SECURITY: validate the BETWEEN clause for injection markers
         validate_between_clause(value)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
