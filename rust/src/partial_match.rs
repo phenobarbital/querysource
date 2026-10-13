@@ -2,6 +2,7 @@
 // Twin of querysource/parsers/partial_matching.py: same 20 rows, same order, same messages.
 #![allow(dead_code)]
 
+use crate::filter_common::base_key;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use regex::Regex;
@@ -126,6 +127,29 @@ pub fn validate(key: &str, op: &PartialMatchOp, value: &str, supports_regex: boo
 
 /// Twin of `validate_partial_match_dict`. `entries` = (key, Some(str) | None for non-string).
 /// Ok(None): no table operator present. Ok(Some((op, operand))): single valid pair.
+/// Apply a filter-key suffix to a partial-matching operator (FEAT-173).
+///
+/// No suffix keeps `op`; exactly `!` flips it to its `not_` counterpart (or
+/// back); any other suffix is rejected. Twin of
+/// `partial_matching.resolve_key_suffix`, with the same message.
+pub fn resolve_key_suffix(key: &str, op: &'static PartialMatchOp) -> PyResult<&'static PartialMatchOp> {
+    let suffix = &key[base_key(key).len()..];
+    match suffix {
+        "" => Ok(op),
+        "!" => {
+            let counterpart = match op.name.strip_prefix("not_") {
+                Some(positive) => positive.to_string(),
+                None => format!("not_{}", op.name),
+            };
+            Ok(lookup(&counterpart).expect("every operator has a not_ counterpart"))
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "{} on '{key}': key suffix '{suffix}' is not supported with partial-matching operators (only '!' to negate)",
+            op.name
+        ))),
+    }
+}
+
 pub fn check_entries<'a>(
     key: &str,
     entries: &[(&'a str, Option<&'a str>)],
@@ -140,13 +164,14 @@ pub fn check_entries<'a>(
         )));
     }
     let entry = lookup(op_name).expect("operator checked above");
+    let resolved = resolve_key_suffix(key, entry)?;
     let Some(value) = operand else {
         return Err(PyValueError::new_err(format!(
             "{op_name} on '{key}' requires a string operand"
         )));
     };
     validate(key, entry, value, supports_regex)?;
-    Ok(Some((entry, value)))
+    Ok(Some((resolved, value)))
 }
 
 #[cfg(test)]
@@ -163,6 +188,30 @@ mod tests {
 
     fn msg_of(r: PyResult<Option<(&'static PartialMatchOp, &str)>>) -> String {
         err_msg(r)
+    }
+
+    #[test]
+    fn key_suffix_resolution() {
+        let contains = lookup("contains").unwrap();
+        let not_contains = lookup("not_contains").unwrap();
+        assert_eq!(resolve_key_suffix("n", contains).unwrap().name, "contains");
+        assert_eq!(resolve_key_suffix("n!", contains).unwrap().name, "not_contains");
+        assert_eq!(resolve_key_suffix("n!", not_contains).unwrap().name, "contains");
+        for op in PARTIAL_MATCH_OPERATORS.iter() {
+            let flipped = resolve_key_suffix("n!", op).unwrap();
+            assert_eq!(resolve_key_suffix("n!", flipped).unwrap().name, op.name);
+            assert_eq!(flipped.negated, !op.negated);
+        }
+        for key in ["n~", "n|", "n!~", "n!!", "n#", "n@", "n:"] {
+            assert!(err_msg(resolve_key_suffix(key, contains)).contains("is not supported with partial-matching operators"));
+        }
+    }
+
+    #[test]
+    fn check_entries_applies_key_suffix() {
+        let (op, _) = check_entries("n!", &[("contains", Some("abc"))], false).unwrap().unwrap();
+        assert_eq!(op.name, "not_contains");
+        assert!(msg_of(check_entries("n~", &[("contains", Some("abc"))], false)).contains("key suffix '~'"));
     }
 
     #[test]

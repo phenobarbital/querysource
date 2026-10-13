@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-173 — Partial-match keys honour suffixes: base column, `!` negates, others rejected
 **Spec**: `sdd/specs/parsers-bigquery-fixes.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: M (2-4h)
 **Depends-on**: none
@@ -90,3 +90,9 @@ pub fn check_entries<'a>(key: &str, entries: &[(&'a str, Option<&'a str>)], supp
 - `pytest tests/test_rust_partial_match_units.py -q`
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 8ab3eb92)
+
+- `resolve_key_suffix()` is in `partial_match.rs`, and `check_entries` returns the resolved op.
+- The SQL, SQL Server and PostgreSQL builders render `base_key(key)`. In BigQuery, the `process_entry` Dict branch renders the base column with the flipped op.
+- New cargo tests: `key_suffix_resolution` and `check_entries_applies_key_suffix`. The full lib suite gives 366 passed and 4 failed; those 4 match the baseline.
