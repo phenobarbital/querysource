@@ -8,6 +8,7 @@ from querysource.types.dt.transforms import (
     _parse_offset_dates,
     _to_datetime_series,
     _to_wall_clock,
+    _vectorised_datetime_series,
     add_timestamp_to_time,
     change_timezone,
     convert_to_datetime,
@@ -399,3 +400,57 @@ def test_out_of_ns_range_dates_do_not_raise():
     utc = _to_datetime_series(frame["m"], infer_tz=False)
     assert utc.notna().all()
     assert utc.iloc[0].year == 9999
+
+
+def _per_value_parse(series, infer_tz, monkeypatch):
+    """Run ``_to_datetime_series`` with the vectorised fast path disabled."""
+    from querysource.types.dt import transforms
+
+    with monkeypatch.context() as patch:
+        patch.setattr(transforms, "_vectorised_datetime_series", lambda values: None)
+        return _to_datetime_series(series, infer_tz=infer_tz)
+
+
+def test_vectorised_fast_path_matches_per_value_parsing(monkeypatch):
+    """Uniform string columns take the fast path with identical results."""
+    cases = [
+        ["2025-09-15", "2025-12-01", None],
+        ["2025-09-15 10:11:12", "2025-12-01 08:00:00.123456", "2025-12-01"],
+        ["2025-09-15T10:00:00-07:00", "2025-09-16T10:00:00-07:00"],
+        ["2025-09-15-07:00", "2025-09-16-07:00"],
+        ["2025-09-15Z", "2025-09-16T10:00:00+00:00"],
+        ["9999-12-31", "2025-09-15"],
+        ["2025-09-15", ""],
+        ["09/15/2025", "12/01/2025"],
+    ]
+    for values in cases:
+        for dtype in (object, "string"):
+            series = pd.Series(values, dtype=dtype)
+            assert _vectorised_datetime_series(series) is not None, values
+            for infer_tz in (False, True):
+                got = _to_datetime_series(series, infer_tz=infer_tz)
+                expected = _per_value_parse(series, infer_tz, monkeypatch)
+                assert got.dtype == expected.dtype, values
+                assert got.equals(expected), values
+
+
+def test_vectorised_fast_path_declines_heterogeneous_input():
+    """Mixed offsets, unparseable or non-string values use the per-value path."""
+    cases = [
+        MIXED,
+        ["2025-09-15", "2025-09-15T10:00:00-07:00"],
+        ["2025-09-15", "not a date"],
+        [datetime.time(1, 2, 3), "2025-09-15"],
+        [1, 2],
+        [None, None],
+    ]
+    for values in cases:
+        assert _vectorised_datetime_series(pd.Series(values, dtype=object)) is None, values
+
+
+def test_vectorised_fast_path_still_warns_on_lost_values(caplog):
+    """Empty strings parsed to NaT on the fast path are still reported."""
+    with caplog.at_level("WARNING"):
+        result = _to_datetime_series(pd.Series(["2025-09-15", ""], dtype=object), field="d")
+    assert result.isna().tolist() == [False, True]
+    assert "1 non-null value(s) could not be parsed" in caplog.text

@@ -100,14 +100,66 @@ def _prefer_ns(series: pd.Series) -> pd.Series:
         return series
 
 
+def _vectorised_datetime_series(series: pd.Series) -> Optional[pd.Series]:
+    """Parse an all-string Series with vectorised ``pd.to_datetime`` calls.
+
+    Only the uniform case is handled: every non-null value is a string and
+    pandas parses them all with one inferred format (or as ISO 8601) and a
+    single timezone state. Anything else (non-string values, unparseable
+    values, mixed offsets or out-of-range dates) returns ``None`` so the
+    caller falls back to the per-value path, which keeps the authoritative
+    semantics.
+
+    Args:
+        series: Raw values.
+
+    Returns:
+        The parsed datetime64 Series, or ``None`` when the fast path does not apply.
+    """
+    if pd.api.types.infer_dtype(series, skipna=True) != "string":
+        return None
+    values = series.astype(object)
+    # only "YYYY-MM-DDZ" (11) and "YYYY-MM-DD±HH:MM" (16) can match _OFFSET_DATE_RE
+    candidates = values.str.len().isin((11, 16))
+    if candidates.any():
+        values = values.copy()
+        values[candidates] = values[candidates].str.replace(
+            _OFFSET_DATE_RE, r"\1T00:00:00\2", regex=True
+        )
+    for date_format in (None, "ISO8601"):
+        try:
+            return pd.to_datetime(values, errors="raise", format=date_format)
+        except (TypeError, ValueError, OverflowError, pd.errors.OutOfBoundsDatetime):
+            continue
+    return None
+
+
+def _warn_unparsed(parsed: pd.Series, series: pd.Series, field: Optional[str]) -> None:
+    """Log how many non-null input values became ``NaT`` during parsing.
+
+    Args:
+        parsed: The parsed Series.
+        series: The raw input Series.
+        field: Column name, used only for logging.
+    """
+    lost = int((parsed.isna() & series.notna()).sum())
+    if lost:
+        logging.warning(
+            f"Datetime column {field!r}: {lost} non-null value(s) could not be "
+            "parsed and became NaT."
+        )
+
+
 def _to_datetime_series(
     series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
 ) -> pd.Series:
     """Parse a Series while preserving every parseable timezone-bearing value.
 
-    Datetime-dtype inputs pass through unchanged. Heterogeneous values are
-    normalized to UTC with a warning when ``infer_tz`` is false; otherwise
-    their individual offsets and naive values are retained as an object Series.
+    Datetime-dtype inputs pass through unchanged. Uniform string input is
+    parsed with one vectorised call; everything else is parsed value by value.
+    Heterogeneous values are normalized to UTC with a warning when
+    ``infer_tz`` is false; otherwise their individual offsets and naive values
+    are retained as an object Series.
 
     Args:
         series: Series with datetime-like values.
@@ -119,13 +171,12 @@ def _to_datetime_series(
     """
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
+    fast = _vectorised_datetime_series(series)
+    if fast is not None:
+        _warn_unparsed(fast, series, field)
+        return fast
     parsed = _parse_offset_dates(series).map(_parse_datetime_value).astype(object)
-    lost = int((parsed.isna() & series.notna()).sum())
-    if lost:
-        logging.warning(
-            f"Datetime column {field!r}: {lost} non-null value(s) could not be "
-            "parsed and became NaT."
-        )
+    _warn_unparsed(parsed, series, field)
     if _has_mixed_timezones(parsed):
         if infer_tz:
             return parsed
