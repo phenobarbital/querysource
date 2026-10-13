@@ -1,6 +1,6 @@
 {
-  "next_task_id": 883,
-  "next_feature_id": 170,
-  "updated_at": "2026-10-13T20:01:14+00:00",
-  "updated_by": "src-bigquery-parser-tech-debt"
+  "next_task_id": 893,
+  "next_feature_id": 174,
+  "updated_at": "2026-10-13T21:12:28+00:00",
+  "updated_by": "pandas3-to-datetime-mixed-offsets"
 }

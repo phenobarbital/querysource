@@ -84,19 +84,47 @@ def build_like_pattern(op: PartialMatchOp, value: str, *, escaper: Callable[[str
     return f"{op.prefix}{escaper(value) if op.escape else value}{op.suffix}"
 
 
+BRACE_OPEN_SENTINEL: str = "\ue000"
+BRACE_CLOSE_SENTINEL: str = "\ue001"
+
+
+def protect_braces(text: str) -> str:
+    """Replace ``{``/``}`` with private-use sentinels that ``str.format_map`` ignores (FEAT-172).
+
+    The rendered filter goes through further ``format_map`` passes in
+    ``build_query`` (limit, conditions, final ``NullDefault``), which would strip
+    a raw ``{name}``. :func:`restore_braces` undoes this after the last pass.
+    """
+    return text.replace("{", BRACE_OPEN_SENTINEL).replace("}", BRACE_CLOSE_SENTINEL)
+
+
+def restore_braces(sql: str) -> str:
+    """Turn :func:`protect_braces` sentinels back into braces once no ``format_map`` pass remains."""
+    return sql.replace(BRACE_OPEN_SENTINEL, "{").replace(BRACE_CLOSE_SENTINEL, "}")
+
+
 def sql_like_literal(pattern: str) -> str:
-    """Quote a pattern for the generic SQL parser (MySQL-safe: doubles ``\\`` and ``'``)."""
-    return "'" + pattern.replace("\\", "\\\\").replace("'", "''") + "'"
+    """Quote a pattern for the generic SQL parser (MySQL-safe: doubles ``\\`` and ``'``).
+
+    Braces are emitted as :func:`protect_braces` sentinels.
+    """
+    return protect_braces("'" + pattern.replace("\\", "\\\\").replace("'", "''") + "'")
 
 
 def mssql_like_literal(pattern: str) -> str:
-    """Quote a pattern for SQL Server (T-SQL has no backslash escapes: doubles ``'`` only)."""
-    return "'" + pattern.replace("'", "''") + "'"
+    """Quote a pattern for SQL Server (T-SQL has no backslash escapes: doubles ``'`` only).
+
+    Braces are emitted as :func:`protect_braces` sentinels.
+    """
+    return protect_braces("'" + pattern.replace("'", "''") + "'")
 
 
 def bq_like_literal(pattern: str) -> str:
-    """Quote a pattern as a BigQuery double-quoted literal (escapes ``\\`` then ``\"``)."""
-    return '"' + pattern.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    """Quote a pattern as a BigQuery double-quoted literal (escapes ``\\`` then ``\"``).
+
+    Braces are emitted as :func:`protect_braces` sentinels.
+    """
+    return protect_braces('"' + pattern.replace("\\", "\\\\").replace('"', '\\"') + '"')
 
 
 def validate_partial_match(key: str, op: str, value: object, *, supports_regex: bool) -> PartialMatchOp:

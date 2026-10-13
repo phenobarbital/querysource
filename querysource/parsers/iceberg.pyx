@@ -10,6 +10,7 @@ Iceberg tables are queried via asyncdb's iceberg driver which uses DuckDB under 
 """
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence
+from .partial_matching import restore_braces
 from .sql cimport SQLParser
 
 
@@ -106,6 +107,8 @@ cdef class IcebergParser(SQLParser):
             except ValueError:
                 pass
 
+        # FEAT-172: every format_map pass is done; turn brace sentinels back into braces.
+        sql = restore_braces(sql)
         self.query_parsed = sql
         self.logger.debug(f": Iceberg SQL :: {sql}")
         if not self.query_parsed:
