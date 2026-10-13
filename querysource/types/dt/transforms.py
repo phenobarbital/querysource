@@ -8,6 +8,7 @@ import datetime
 import decimal
 import json
 import locale
+import re
 import traceback
 from datetime import timedelta
 from functools import reduce
@@ -26,49 +27,122 @@ from ...conf import DEFAULT_TIMEZONE
 from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
 
+_OFFSET_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(Z|[+-]\d{2}:\d{2})$")
+
+
+def _parse_offset_dates(series: pd.Series) -> pd.Series:
+    """Rewrite date-only strings carrying a UTC offset to midnight at that offset.
+
+    pandas reads xs:date values such as ``2025-09-15-07:00`` as the naive time
+    ``2025-09-15 07:00``. This rewrites them to ``2025-09-15T00:00:00-07:00``
+    (also ``+05:30`` and ``Z``). Every other value is returned unchanged.
+
+    Args:
+        series: Raw values.
+
+    Returns:
+        A Series with the same index and name.
+    """
+    return series.map(
+        lambda value: _OFFSET_DATE_RE.sub(r"\1T00:00:00\2", value) if isinstance(value, str) else value
+    )
+
+
+def _parse_datetime_value(value: Any) -> Any:
+    """Parse one value to ``pd.Timestamp``; nulls and unparseable values become ``NaT``."""
+    try:
+        if value is None or pd.isna(value):
+            return pd.NaT
+    except (TypeError, ValueError):
+        pass
+    try:
+        return pd.Timestamp(value)
+    except (TypeError, ValueError, OverflowError):
+        return pd.NaT
+
+
+def _has_mixed_timezones(series: pd.Series) -> bool:
+    """Return whether parsed values have more than one timezone state.
+
+    Naive values count as their own state, while aware values are keyed by
+    timezone identity. Nulls are ignored.
+
+    Args:
+        series: Independently parsed ``pd.Timestamp`` or ``NaT`` values.
+
+    Returns:
+        ``True`` when multiple timezone states are present.
+    """
+    states: set = set()
+    for value in series:
+        if value is pd.NaT or pd.isna(value):
+            continue
+        states.add(None if value.tzinfo is None else str(value.tz))
+        if len(states) > 1:
+            return True
+    return False
+
 
 def _to_datetime_series(
     series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
 ) -> pd.Series:
-    """Parse a Series to datetime, handling mixed UTC offsets explicitly.
+    """Parse a Series while preserving every parseable timezone-bearing value.
 
-    pandas>=3 raises ``ValueError`` when values carry different UTC offsets
-    (e.g. DST ``-07:00``/``-08:00``) unless ``utc=True``. Instead of leaving
-    the column unparsed, the caller decides how to resolve it:
-
-    * ``infer_tz=False`` (default): normalize every value to UTC. The instant
-      is preserved; the original per-value offsets are not.
-    * ``infer_tz=True``: parse each value on its own, keeping its original
-      offset (``object`` dtype of tz-aware ``Timestamp``).
+    Datetime-dtype inputs pass through unchanged. Heterogeneous values are
+    normalized to UTC with a warning when ``infer_tz`` is false; otherwise
+    their individual offsets and naive values are retained as an object Series.
 
     Args:
         series: Series with datetime-like values.
-        infer_tz: Keep each value's own UTC offset on mixed-offset input.
+        infer_tz: Keep individual timezone states for heterogeneous input.
         field: Column name, used only for logging.
 
     Returns:
         The parsed Series. Unparseable values become ``NaT``.
     """
-    try:
-        return pd.to_datetime(series, errors="coerce")
-    except ValueError as err:
-        if not infer_tz:
-            logging.warning(
-                f"Datetime column {field!r} has mixed UTC offsets ({err}); "
-                "normalizing to UTC. Pass infer_tz=True to keep each "
-                "value's own offset."
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series
+    parsed = _parse_offset_dates(series).map(_parse_datetime_value).astype(object)
+    if _has_mixed_timezones(parsed):
+        if infer_tz:
+            return parsed
+        logging.warning(
+            f"Datetime column {field!r} has mixed timezones/offsets; "
+            "normalizing to UTC (naive values read as UTC). Pass infer_tz=True "
+            "to keep each value's own offset."
+        )
+        return parsed.map(
+            lambda value: value
+            if value is pd.NaT
+            else value.tz_localize("UTC")
+            if value.tzinfo is None
+            else value.tz_convert("UTC")
+        ).astype("datetime64[ns, UTC]")
+    return pd.to_datetime(parsed)
+
+
+def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
+    """Return naive ``datetime64[ns]`` local wall-clock values.
+
+    Args:
+        series: Values to convert.
+        field: Column name, used only for logging.
+
+    Returns:
+        A naive ``datetime64[ns]`` Series with the same index and name.
+    """
+    parsed = _to_datetime_series(series, infer_tz=True, field=field)
+    if isinstance(parsed.dtype, pd.DatetimeTZDtype):
+        return parsed.dt.tz_localize(None).astype("datetime64[ns]")
+    if parsed.dtype == object:
+        parsed = pd.to_datetime(
+            parsed.map(
+                lambda value: value
+                if value is pd.NaT or value.tzinfo is None
+                else value.tz_localize(None)
             )
-            return pd.to_datetime(series, errors="coerce", utc=True)
-
-        def _parse(value: Any) -> Union[pd.Timestamp, Any]:
-            if value is None or pd.isna(value):
-                return pd.NaT
-            try:
-                return pd.Timestamp(value)
-            except (ValueError, TypeError):
-                return pd.NaT
-
-        return series.map(_parse).astype(object)
+        )
+    return parsed.astype("datetime64[ns]")
 
 
 def _convert_datetime_column(
