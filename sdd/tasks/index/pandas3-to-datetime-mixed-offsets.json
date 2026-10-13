@@ -77,7 +77,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -87,8 +87,9 @@
       "parallelism_notes": "Tests exercise extract/add_timestamp_to_time as changed by TASK-890 and the callers of TASK-888/889; appends to tests/unit/test_to_datetime_mixed_offsets.py, last modified by TASK-890.",
       "assigned_to": null,
       "started_at": "2026-10-13T21:26:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-891-cross-cutting-regressions-changelog.md"
+      "completed_at": "2026-10-13T21:55:18+00:00",
+      "file": "sdd/tasks/completed/TASK-891-cross-cutting-regressions-changelog.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-892",
