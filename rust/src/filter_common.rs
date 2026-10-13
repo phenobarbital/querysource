@@ -31,9 +31,23 @@ pub(crate) fn base_key(key: &str) -> &str {
     key.trim_end_matches(|c: char| matches!(c, '|' | '!' | '~' | '#' | '@' | ':'))
 }
 
-/// True for the canonical clause produced by the Python pre-processing.
-pub(crate) fn is_canonical_between(value: &str) -> bool {
+/// True for a value that starts like a builder BETWEEN clause (an attempt, not proof).
+pub(crate) fn has_between_prefix(value: &str) -> bool {
     value.starts_with("BETWEEN ") || value.starts_with("NOT BETWEEN ")
+}
+
+/// True only for the exact canonical clause `BetweenClause.render()` emits
+/// (`querysource/parsers/filter_values.py`); builders splice nothing else (FEAT-168).
+pub(crate) fn is_canonical_between(value: &str) -> bool {
+    static CANONICAL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    CANONICAL
+        .get_or_init(|| {
+            regex::Regex::new(
+                r"^(?:NOT )?BETWEEN (?:-?[0-9]+(?:\.[0-9]+)?|'(?:[^'\\]|'')*') AND (?:-?[0-9]+(?:\.[0-9]+)?|'(?:[^'\\]|'')*')$",
+            )
+            .expect("canonical BETWEEN regex")
+        })
+        .is_match(value)
 }
 
 impl FilterValue {
@@ -192,8 +206,11 @@ fn quote_negated(value: &str) -> String {
 
 /// Handle string-typed filter values with standard SQL syntax.
 pub fn process_str_value(key: &str, value: &str, name: &str, end: &str) -> Option<String> {
-    // BETWEEN in value string
-    if is_canonical_between(value) {
+    // BETWEEN in value string — SECURITY (FEAT-168): only the canonical form is spliced
+    if has_between_prefix(value) {
+        if !is_canonical_between(value) {
+            return None;
+        }
         return Some(format!("({} {})", key, value));
     }
     // NULL checks
@@ -271,6 +288,36 @@ mod tests {
         assert!(is_canonical_between("BETWEEN 1 AND 2"));
         assert!(is_canonical_between("NOT BETWEEN 1 AND 2"));
         assert!(!is_canonical_between("contains BETWEEN safely"));
+    }
+
+    #[test]
+    fn feat168_canonical_between_is_strict() {
+        for ok in ["BETWEEN 1 AND 2", "NOT BETWEEN -1.5 AND 3", "BETWEEN '2025-01-01' AND 'O''Brien'"] {
+            assert!(is_canonical_between(ok), "{ok}");
+        }
+        for bad in [
+            "BETWEEN 1 AND 2 OR 1=1",
+            "BETWEEN 1 AND 2;",
+            "between 1 and 2",
+            "BETWEEN  1 AND 2",
+            "BETWEEN 'a\\' AND 'b'",
+            "BETWEEN x AND y",
+            " BETWEEN 1 AND 2",
+            "BETWEEN \u{0661} AND 2",
+        ] {
+            assert!(!is_canonical_between(bad), "{bad}");
+        }
+        assert!(has_between_prefix("BETWEEN 1 AND 2 OR 1=1"));
+        assert!(!has_between_prefix("IN BETWEEN"));
+    }
+
+    #[test]
+    fn feat168_process_str_drops_non_canonical_between() {
+        assert_eq!(process_str_value("amount", "BETWEEN 1 AND 2 OR 1=1", "amount", ""), None);
+        assert_eq!(
+            process_str_value("amount", "NOT BETWEEN 1 AND 5", "amount", ""),
+            Some("(amount NOT BETWEEN 1 AND 5)".to_string())
+        );
     }
 
     #[test]
