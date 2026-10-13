@@ -66,9 +66,10 @@ the datetime itself" behaviour that #666 set out to eliminate.
 - Route `add_timestamp_to_time`, `to_excel_date`, `extract` and
   `change_timezone` through the shared helper. They must never silently drop a
   timezone or a value on mixed-offset input.
-- Expose `infer_tz: bool = False` on the transforms whose output depends on
-  which offset is used (`extract`, `add_timestamp_to_time`), with the same
-  meaning as in `convert_to_datetime`.
+- Make the transforms whose output depends on which offset is used (`extract`,
+  `add_timestamp_to_time`) **preserve each value's own offset**: they use each
+  value's local wall-clock and fall back to UTC only for values that carry no
+  offset (§8 Q2).
 - Keep the current output for naive input and for single-offset tz-aware input.
 
 ### Non-Goals (explicitly out of scope)
@@ -97,12 +98,13 @@ helpers in `transforms.py`:
    same way as the `ValueError` path: `infer_tz=False` → `utc=True` plus a
    warning; `infer_tz=True` → per-value Timestamps (`object`).
 2. **`_to_wall_clock`** (new): returns a **naive** `datetime64[ns]` Series for
-   transforms that need `.dt` accessors or naive output:
-   * naive input → parsed as is;
-   * single-offset or single-tz input → that zone's local wall-clock
-     (`tz_localize(None)`), which is unchanged from today;
-   * mixed offsets with `infer_tz=False` → UTC wall-clock;
-   * mixed offsets with `infer_tz=True` → each value's own local wall-clock.
+   transforms that need `.dt` accessors or naive output. It always preserves
+   offsets (it parses with `_to_datetime_series(..., infer_tz=True)`):
+   * a value that carries an offset → its own local wall-clock (single-offset
+     and single-tz input give exactly today's result);
+   * a value without an offset (naive) → used as is, i.e. read as UTC wall-clock
+     (no conversion, so both readings give the same components);
+   * unparseable → `NaT`.
 
 Per-site behaviour:
 
@@ -110,8 +112,8 @@ Per-site behaviour:
 |---|---|
 | `to_excel_date` | Parse with `_to_datetime_series`. Mixed offsets go to UTC, matching its documented "convert to UTC and remove the timezone" contract. No `infer_tz` parameter: its output is UTC-naive by definition. |
 | `change_timezone` | Parse with `_to_datetime_series` inside the existing `try`. If the parsed values are tz-aware, skip `tz_localize(from_tz)` and `tz_convert(to_tz)` directly, because the values carry their own offsets (§8 Q3). Naive input keeps the current `tz_localize(from_tz).tz_convert(to_tz)` path. Uses `logging` instead of `print`. |
-| `extract` | Gains `infer_tz: bool = False`. When `df[column]` is not already a datetime column, components are taken from `_to_wall_clock(df[column], infer_tz)`. Catches the mixed-offset path instead of letting the `ValueError` escape. |
-| `add_timestamp_to_time` | Gains `infer_tz: bool = False`. Takes the date and time parts from `_to_wall_clock` of each input column, so `object`/mixed columns no longer fail on `.dt`. |
+| `extract` | No new parameter. When `df[column]` is not already a datetime column, components are taken from `_to_wall_clock(df[column])`, i.e. each value's own offset is preserved. Catches the mixed-offset path instead of letting the `ValueError` escape. |
+| `add_timestamp_to_time` | No new parameter. Takes the date and time parts from `_to_wall_clock` of each input column (each value's own offset preserved), so `object`/mixed columns no longer fail on `.dt`. |
 
 ### Component Diagram
 ```
@@ -133,12 +135,10 @@ extract, add_timestamp_to_time  ──→ _to_wall_clock (new, M1) ────�
 None.
 
 ### New Public Interfaces
-```python
-def extract(df, field, column="", to_date=None, value="day", infer_tz: bool = False): ...
-def add_timestamp_to_time(df, field, date, time, infer_tz: bool = False): ...
-```
-Both new parameters are keyword-compatible additions with a `False` default,
-so existing task definitions keep working.
+None. All public signatures are unchanged. `extract` and
+`add_timestamp_to_time` get no `infer_tz` parameter: they always preserve each
+value's offset (§8 Q2), so a flag defaulting to UTC would contradict that
+decision.
 
 ---
 
@@ -149,8 +149,8 @@ so existing task definitions keep working.
 | Module | Eligible? | Decided patterns / exact contracts | Why not (if no) |
 |---|---|---|---|
 | M1: helper hardening + `_to_wall_clock` | yes | skeletons below; `infer_tz` semantics fixed by #666 | — |
-| M2: UTC-semantics sites (`to_excel_date`, `change_timezone`) | yes, once §8 Q3 is confirmed | per-site table in §2 | Q3 (`from_tz` on aware input) |
-| M3: wall-clock sites (`extract`, `add_timestamp_to_time`) | yes, once §8 Q2 is confirmed | per-site table in §2 | Q2 (UTC vs local wall-clock default) |
+| M2: UTC-semantics sites (`to_excel_date`, `change_timezone`) | yes | per-site table in §2; `from_tz` ignored with a warning on aware input (§8 Q3) | — |
+| M3: wall-clock sites (`extract`, `add_timestamp_to_time`) | yes | per-site table in §2; per-value offset preserved, no new parameter (§8 Q2) | — |
 | M4: tests | yes | §4 table | — |
 
 ### Module 1: Helper hardening
@@ -171,13 +171,10 @@ so existing task definitions keep working.
       """(unchanged contract) Also routes to the mixed-offset branch when
       _has_mixed_offsets(series) is True, before calling pd.to_datetime."""
 
-  def _to_wall_clock(
-      series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
-  ) -> pd.Series:
-      """Parse via _to_datetime_series and return naive datetime64[ns]:
-      tz-aware dtype -> tz_localize(None) (that zone's wall-clock; UTC when
-      mixed offsets were normalized); object (infer_tz=True mixed) -> each
-      value's own wall-clock. Unparseable values -> NaT."""
+  def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
+      """Parse via _to_datetime_series(series, infer_tz=True, field=field) and
+      return naive datetime64[ns]: each value with an offset -> its own local
+      wall-clock; naive values -> unchanged (UTC wall-clock); unparseable -> NaT."""
   ```
 
 ### Module 2: UTC-semantics sites
@@ -199,11 +196,9 @@ so existing task definitions keep working.
 - **Depends on**: Module 1
 - **Interface Skeleton**:
   ```python
-  def extract(df: pd.DataFrame, field: str, column="", to_date=None, value="day",
-              infer_tz: bool = False):  # verified: transforms.py:2023
-      """Non-datetime columns are parsed with _to_wall_clock(..., infer_tz)."""
-  def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str,
-                            infer_tz: bool = False):  # verified: transforms.py:529
+  def extract(df: pd.DataFrame, field: str, column="", to_date=None, value="day"):  # verified: transforms.py:2023
+      """Non-datetime columns are parsed with _to_wall_clock (offsets preserved)."""
+  def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):  # verified: transforms.py:529
       """Date/time parts are taken from _to_wall_clock of each column."""
   ```
 
@@ -222,10 +217,10 @@ so existing task definitions keep working.
 | `test_reconvert_infer_tz_output_keeps_all_values` | M1 | `convert_to_datetime` on its own `infer_tz=True` output: no `NaT` introduced; default → UTC, `infer_tz=True` → offsets kept |
 | `test_aware_python_datetimes_mixed_offsets` | M1 | `object` Series of aware `datetime.datetime` values with `-07:00`/`-08:00` behaves like the string case |
 | `test_has_mixed_offsets` | M1 | true for mixed aware; false for naive, single offset, all-null |
-| `test_to_wall_clock_modes` | M1 | naive passthrough; single offset → local wall-clock; mixed → UTC vs per-value wall-clock |
+| `test_to_wall_clock_modes` | M1 | naive passthrough; single offset → local wall-clock; mixed → each value's own wall-clock; naive + aware mix |
 | `test_to_excel_date_mixed_offsets` | M2 | mixed strings and `infer_tz` object → UTC-naive values, no `NaT` |
 | `test_change_timezone_mixed_and_aware` | M2 | mixed strings, single-offset aware and `infer_tz` object input all convert to `to_tz` with no `NaT`; naive + `from_tz` unchanged |
-| `test_extract_mixed_offsets` | M3 | `value="day"` on `2025-09-15T23:30-07:00`: 16 by default (UTC), 15 with `infer_tz=True` |
+| `test_extract_mixed_offsets` | M3 | `value="day"` on `2025-09-15T23:30-07:00` mixed with a `-08:00` value → 15 (own offset preserved, not 16 as UTC would give) |
 | `test_add_timestamp_to_time_mixed` | M3 | mixed/object inputs no longer raise `AttributeError` |
 | `test_naive_and_single_offset_regressions` | M2/M3 | all four functions match their current output for naive and single-offset input |
 
@@ -242,7 +237,9 @@ MIXED = ["2025-09-15T23:30:00-07:00", "2025-12-01T08:00:00-08:00", None]
 ## 5. Acceptance Criteria
 
 - [ ] No `NaT` is introduced for a parseable value in any of the four functions, or in `convert_to_datetime`/`to_timestamp`, for mixed-offset strings, `infer_tz=True` output, or aware Python datetimes.
-- [ ] `infer_tz` means the same everywhere: `False` → UTC normalization plus a logged warning naming the field; `True` → each value's own offset or wall-clock.
+- [ ] `infer_tz` keeps #666's meaning wherever it exists (`convert_to_datetime`/`to_timestamp`): `False` → UTC normalization plus a logged warning naming the field; `True` → each value's own offset.
+- [ ] `extract` and `add_timestamp_to_time` preserve each value's own offset (local wall-clock); only values without an offset are read as UTC.
+- [ ] `change_timezone` with tz-aware input and an explicit `from_tz` logs a warning and ignores `from_tz`.
 - [ ] `to_excel_date`, `extract`, `change_timezone` and `add_timestamp_to_time` no longer raise on mixed-offset input.
 - [ ] Output is unchanged for naive and single-offset input (regression test).
 - [ ] `to_time` is untouched.
@@ -285,7 +282,7 @@ def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: st
 ### Does NOT Exist (Anti-Hallucination)
 - ~~`_to_wall_clock`~~, ~~`_has_mixed_offsets`~~ — introduced by this spec.
 - ~~`_to_datetime_series` / `_convert_datetime_column` on `dev`~~ — they exist only on PR #666 (`fix/datetime-infer-tz`) until it merges.
-- ~~`infer_tz` parameter on `extract`, `add_timestamp_to_time`, `to_excel_date`, `change_timezone`~~ — does not exist yet (and is NOT added to the last two).
+- ~~`infer_tz` parameter on `extract`, `add_timestamp_to_time`, `to_excel_date`, `change_timezone`~~ — does not exist and is NOT added by this spec.
 - ~~`pd.to_datetime(..., errors="coerce")` raising on mixed aware `object` input~~ — it does not raise; it coerces to `NaT` (pandas 3.0.6, verified).
 
 ### Edit Sites (Blueprint Anchors)
@@ -313,10 +310,9 @@ Verified against: `be9a3cbc` (PR #666 head, branch `fix/datetime-infer-tz`). `de
 - Detect mixed offsets with `utcoffset()` on non-null tz-aware values. Do not rely on `pd.to_datetime` raising.
 
 ### Known Risks / Gotchas
-- **Behaviour change in `extract`**: on mixed input the default now extracts in
-  UTC. A `23:30-07:00` value yields day 16, not 15. This only affects inputs
-  that currently raise, so no working task changes output; `infer_tz=True`
-  gives local wall-clock components.
+- **`extract` on mixed input**: components come from each value's own offset,
+  so a `23:30-07:00` value yields day 15 (UTC would give 16). This only affects
+  inputs that currently raise, so no working task changes output.
 - **`change_timezone` with tz-aware input and `from_tz`**: today this fails in
   `tz_localize`, prints, and returns the column unconverted. After the change
   it converts. That is a fix, but it is visible in the output.
@@ -333,10 +329,10 @@ Verified against: `be9a3cbc` (PR #666 head, branch `fix/datetime-infer-tz`). `de
 
 ## 8. Open Questions
 
-- [ ] Q1: Should M1 (the `_to_datetime_series` hardening) be folded into PR #666 before it merges, since it is a data-loss bug in that PR's helper? This spec would then keep only M2–M4. — *Owner: Jesus Lara*
-- [ ] Q2: Default wall-clock for mixed offsets in `extract` / `add_timestamp_to_time`: UTC (proposed, consistent with `convert_to_datetime`) or each value's local time? — *Owner: Jesus Lara*
-- [ ] Q3: `change_timezone` with tz-aware input and an explicit `from_tz`: ignore `from_tz` with a warning (proposed), or raise? — *Owner: Jesus Lara*
-- [ ] Q4: Audit the `format=`/`unit=` call sites (#666 lines 1513–1666) for the same issue (e.g. `%z` with mixed offsets) in a follow-up ledger issue? — *Owner: Jesus Lara*
+- [x] Q1: Should M1 (the `_to_datetime_series` hardening) be folded into PR #666 before it merges? — *Owner: Jesus Lara*: on this spec. M1 stays in FEAT-171; #666 merges as is.
+- [x] Q2: Default wall-clock for mixed offsets in `extract` / `add_timestamp_to_time`? — *Owner: Jesus Lara*: "if we can preserve the offset, is preferable to preserve the offset before default to UTC, only UTC if date doesn't have offset". Each value's own offset is preserved; UTC applies only to values without an offset. No `infer_tz` parameter on these two functions.
+- [x] Q3: `change_timezone` with tz-aware input and an explicit `from_tz`? — *Owner: Jesus Lara*: warning (ignore `from_tz`, log a warning).
+- [x] Q4: Audit the `format=`/`unit=` call sites in a follow-up ledger issue? — *Owner: Jesus Lara*: yes, filed as a ledger issue.
 
 ---
 
@@ -366,3 +362,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-10-13 | Jesus Lara | Initial draft |
+| 0.2 | 2026-10-13 | Jesus Lara | §8 Q1–Q4 resolved: M1 stays here; extract/add_timestamp_to_time preserve per-value offsets (no infer_tz); from_tz warning; format/unit audit filed |
