@@ -8,7 +8,9 @@ from querysource.types.dt.transforms import (
     _parse_offset_dates,
     _to_datetime_series,
     _to_wall_clock,
+    change_timezone,
     convert_to_datetime,
+    to_excel_date,
     to_timestamp,
 )
 
@@ -126,3 +128,53 @@ def test_offset_date_parsed_as_midnight():
         assert result["d"].iloc[0] == pd.Timestamp("2025-09-15T00:00:00-07:00")
         assert result["d"].iloc[1] == pd.Timestamp("2025-09-15T00:00:00Z")
         assert result["d"].iloc[2] == pd.Timestamp("2025-09-15T00:00:00")
+
+
+def test_to_excel_date_mixed_offsets():
+    """Mixed strings and infer_tz object input become UTC-naive without NaT."""
+    expected = [
+        pd.Timestamp("2025-09-16T06:30:00"),
+        pd.Timestamp("2025-12-01T16:00:00"),
+        pd.NaT,
+    ]
+    inputs = [
+        pd.DataFrame({"d": MIXED}),
+        convert_to_datetime(pd.DataFrame({"d": MIXED}), "d", infer_tz=True),
+    ]
+
+    for frame in inputs:
+        result = to_excel_date(frame.copy(), "d")
+        assert str(result["d"].dtype) == "datetime64[ns]"
+        assert result["d"].tolist() == expected
+        assert result["d"].notna().sum() == 2
+
+
+def test_change_timezone_mixed_and_aware(caplog):
+    """Mixed and aware input converts directly; naive input retains localization."""
+    expected_mixed = [
+        pd.Timestamp("2025-09-16T02:30:00-04:00"),
+        pd.Timestamp("2025-12-01T11:00:00-05:00"),
+        pd.NaT,
+    ]
+    mixed = change_timezone(pd.DataFrame({"d": MIXED}), "d", to_tz="America/New_York")
+    assert mixed["d"].tolist() == expected_mixed
+    assert mixed["d"].notna().sum() == 2
+    assert "ignoring from_tz" not in caplog.text
+
+    caplog.clear()
+    aware = convert_to_datetime(pd.DataFrame({"d": MIXED}), "d", infer_tz=True)
+    aware = change_timezone(aware, "d", from_tz="UTC", to_tz="America/New_York")
+    assert aware["d"].tolist() == expected_mixed
+    assert aware["d"].notna().sum() == 2
+    assert "change_timezone: 'd' is already timezone-aware" in caplog.text
+    assert "ignoring from_tz='UTC'" in caplog.text
+
+    caplog.clear()
+    naive = change_timezone(
+        pd.DataFrame({"d": ["2025-09-15T23:30:00", None]}),
+        "d",
+        from_tz="UTC",
+        to_tz="America/New_York",
+    )
+    assert naive["d"].tolist() == [pd.Timestamp("2025-09-15T19:30:00-04:00"), pd.NaT]
+    assert "ignoring from_tz" not in caplog.text
