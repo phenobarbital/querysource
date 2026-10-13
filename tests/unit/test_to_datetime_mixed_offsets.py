@@ -8,8 +8,10 @@ from querysource.types.dt.transforms import (
     _parse_offset_dates,
     _to_datetime_series,
     _to_wall_clock,
+    add_timestamp_to_time,
     change_timezone,
     convert_to_datetime,
+    extract,
     to_excel_date,
     to_timestamp,
 )
@@ -178,3 +180,58 @@ def test_change_timezone_mixed_and_aware(caplog):
     )
     assert naive["d"].tolist() == [pd.Timestamp("2025-09-15T19:30:00-04:00"), pd.NaT]
     assert "ignoring from_tz" not in caplog.text
+
+
+def test_extract_mixed_offsets():
+    """Components use every mixed-offset value's local wall-clock time."""
+    frame = pd.DataFrame({"source": MIXED})
+
+    extract(frame, "day", column="source", value="day")
+    extract(frame, "month", column="source", value="month")
+    extract(frame, "hour", column="source", value="hour")
+
+    assert frame["day"].iloc[:2].tolist() == [15.0, 1.0]
+    assert frame["day"].isna().iloc[2]
+    assert frame["month"].tolist() == [9, 12, pd.NA]
+    assert frame["hour"].iloc[:2].tolist() == [23.0, 8.0]
+    assert frame["hour"].isna().iloc[2]
+    assert frame["source"].iloc[0].utcoffset() == pd.Timedelta(hours=-7)
+    assert frame["source"].iloc[1].utcoffset() == pd.Timedelta(hours=-8)
+
+
+def test_extract_ldom_preserves_timezone():
+    """Month-end output retains each input's timezone, local time, and nulls."""
+    cases = [
+        (MIXED, [pd.Timestamp("2025-09-30T23:30:00-07:00"), pd.Timestamp("2025-12-31T08:00:00-08:00"), pd.NaT]),
+        (
+            NAIVE_AWARE,
+            [pd.Timestamp("2025-09-30T23:30:00-07:00"), pd.Timestamp("2025-09-30T01:00:00"), pd.NaT],
+        ),
+    ]
+
+    for values, expected in cases:
+        frame = pd.DataFrame({"source": values})
+        extract(frame, "month_end", column="source", value="ldom")
+
+        assert frame["month_end"].tolist() == expected
+        assert frame["source"].iloc[0].utcoffset() == pd.Timedelta(hours=-7)
+        assert frame["month_end"].iloc[0].utcoffset() == pd.Timedelta(hours=-7)
+        assert frame["month_end"].isna().iloc[2]
+
+
+def test_add_timestamp_to_time_mixed():
+    """Mixed inputs combine local parts, keep fractional seconds, and propagate nulls."""
+    frame = pd.DataFrame(
+        {
+            "date": ["2025-09-15T23:30:00-07:00", "2025-12-01T08:00:00", None],
+            "time": ["1900-01-01T01:02:03.456789-08:00", "1900-01-01T10:11:12.123456-07:00", "00:00:00"],
+        }
+    )
+
+    add_timestamp_to_time(frame, "combined", "date", "time")
+
+    assert frame["combined"].tolist() == [
+        pd.Timestamp("2025-09-15T01:02:03.456789"),
+        pd.Timestamp("2025-12-01T10:11:12.123456"),
+        pd.NaT,
+    ]
