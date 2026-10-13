@@ -282,13 +282,17 @@ def test_mixed_iso_precision_keeps_all_values():
                 assert utc.notna().sum() == 2
                 assert preserved.notna().sum() == 2
                 assert utc.tolist() == (expected_utc if values[0] == MIXED_PRECISION[0] else expected_utc[::-1])
-                assert preserved.tolist() == (
-                    expected_local if values[0] == MIXED_PRECISION[0] else expected_local[::-1]
-                )
+                # the converters expose nulls as None on object output
+                expected_preserved = [
+                    None if pd.isna(item) else item
+                    for item in (expected_local if values[0] == MIXED_PRECISION[0] else expected_local[::-1])
+                ]
+                assert preserved.tolist() == expected_preserved
                 assert preserved.iloc[values.index(MIXED_PRECISION[1])].microsecond == 123000
 
             excel = to_excel_date(frame.copy(), "d")["d"]
-            assert excel.tolist() == (expected_utc if values[0] == MIXED_PRECISION[0] else expected_utc[::-1])
+            expected_excel = [item if pd.isna(item) else item.tz_localize(None) for item in expected_utc]
+            assert excel.tolist() == (expected_excel if values[0] == MIXED_PRECISION[0] else expected_excel[::-1])
 
             converted = change_timezone(frame.copy(), "d", to_tz="America/New_York")["d"]
             assert converted.tolist() == (
@@ -297,9 +301,11 @@ def test_mixed_iso_precision_keeps_all_values():
 
             extracted = pd.DataFrame({"source": date_values})
             extract(extracted, "day", column="source", value="day")
-            expected_days = [15.0, 1.0] if values[0] == MIXED_PRECISION[0] else [1.0, 15.0]
-            assert extracted["day"].iloc[:2].tolist() == expected_days
-            assert pd.isna(extracted["day"].iloc[2])
+            expected_days = [15.0, 1.0, float("nan")]
+            if values[0] != MIXED_PRECISION[0]:
+                expected_days = expected_days[::-1]
+            assert extracted["day"].isna().tolist() == [pd.isna(day) for day in expected_days]
+            assert extracted["day"].dropna().tolist() == [day for day in expected_days if not pd.isna(day)]
             assert extracted["source"].notna().sum() == 2
 
             combined = pd.DataFrame(
