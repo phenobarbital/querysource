@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-170 — filter_values / abstract edge cases — BETWEEN key negation and template placeholder detection
 **Spec**: `sdd/specs/parsers-abstract-tech-debt.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: low
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -141,3 +141,12 @@ def template_fields(template: str) -> frozenset[str]:
 ---
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 44053fee)
+
+- `parse_between`: `key_negated = "!" in key[len(base_key(key)):]`.
+- New `filter_values.template_fields()` uses `string.Formatter().parse`, with a regex fallback on `ValueError`. It is exported in `__all__`.
+- `AbstractParser.set_conditions` computes the fields once per call and tests `base not in fields`.
+- Tests: 5 unit tests in `tests/test_filter_values.py` and 2 parser-level tests in `tests/test_dialect_typed_filters.py`.
+- Validation, after `build_ext --inplace`: the two validation modules give 43 passed. Related parser suites give 191 passed. `ruff` is clean.
+- Ledger: resolves `issue:1149c6ed91ea`.
