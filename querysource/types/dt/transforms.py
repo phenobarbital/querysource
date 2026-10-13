@@ -27,7 +27,6 @@ from ...conf import DEFAULT_TIMEZONE
 from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
 
-
 _OFFSET_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(Z|[+-]\d{2}:\d{2})$")
 
 
