@@ -1,0 +1,32 @@
+{
+  "feature": "e2e-test-qsurl-dry-run-tech-debt",
+  "feature_id": "FEAT-169",
+  "spec": "sdd/specs/e2e-test-qsurl-dry-run-tech-debt.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-13T19:59:51+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-879",
+      "slug": "refresh-qsurl-test-docstrings",
+      "title": "Refresh stale environment-limitation docstrings in qsurl tests",
+      "feature_id": "FEAT-169",
+      "feature": "e2e-test-qsurl-dry-run-tech-debt",
+      "spec": "sdd/specs/e2e-test-qsurl-dry-run-tech-debt.spec.md",
+      "status": "pending",
+      "priority": "low",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "single task; edits only two test module docstrings",
+      "discovered_from": "issue:4bd3bb62d420",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-879-refresh-qsurl-test-docstrings.md"
+    }
+  ]
+}
