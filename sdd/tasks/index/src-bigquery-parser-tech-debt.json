@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-13T20:03:46+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-13T20:15:18+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "discovered_from": [
@@ -20,7 +20,7 @@
       "feature_id": "FEAT-168",
       "feature": "src-bigquery-parser-tech-debt",
       "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -28,8 +28,9 @@
       "parallelism_notes": "exclusive: rebuilds the Cython extensions in place (setup.py build_ext --inplace), which TASK-881's Python-level checks also load",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-880-python-cython-strict-between.md"
+      "completed_at": "2026-10-13T20:08:39+00:00",
+      "file": "sdd/tasks/completed/TASK-880-python-cython-strict-between.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-881",
@@ -38,7 +39,7 @@
       "feature_id": "FEAT-168",
       "feature": "src-bigquery-parser-tech-debt",
       "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -46,8 +47,9 @@
       "parallelism_notes": "exclusive: rebuilds and stages the shared _qs_parsers maturin extension (make build-rust + stage-rust)",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-881-rust-strict-between-numeric-operands.md"
+      "completed_at": "2026-10-13T20:09:00+00:00",
+      "file": "sdd/tasks/completed/TASK-881-rust-strict-between-numeric-operands.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-882",
@@ -56,7 +58,7 @@
       "feature_id": "FEAT-168",
       "feature": "src-bigquery-parser-tech-debt",
       "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -64,11 +66,12 @@
         "TASK-881"
       ],
       "parallel": true,
-      "parallelism_notes": "needs is_canonical_between/has_between_prefix + bare BigQuery operands from TASK-880 (filter_values.py, bigquery.pyx) and the strict Rust builders from TASK-881 (filter_common.rs, pgsql_parser.rs) \u2014 its exact assertions fail without both",
+      "parallelism_notes": "needs is_canonical_between/has_between_prefix + bare BigQuery operands from TASK-880 (filter_values.py, bigquery.pyx) and the strict Rust builders from TASK-881 (filter_common.rs, pgsql_parser.rs) — its exact assertions fail without both",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-882-parity-and-builder-between-tests.md"
+      "completed_at": "2026-10-13T20:13:22+00:00",
+      "file": "sdd/tasks/completed/TASK-882-parity-and-builder-between-tests.md",
+      "verification": "verified"
     }
   ]
 }

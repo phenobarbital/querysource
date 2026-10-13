@@ -24,7 +24,10 @@ _BETWEEN_CLAUSE = re.compile(
     rf"^\s*(?P<not>NOT\s+)?BETWEEN\s+(?P<lo>{_BOUND})\s+AND\s+(?P<hi>{_BOUND})\s*$",
     re.IGNORECASE,
 )
-_NUMBER = re.compile(r"^-?\d+(?:\.\d+)?$")
+_NUMBER = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")
+# Exactly what BetweenClause.render() can emit; builders splice nothing else (FEAT-168).
+_CANONICAL_BOUND = r"(?:-?[0-9]+(?:\.[0-9]+)?|'(?:[^'\\]|'')*')"
+_CANONICAL_BETWEEN = re.compile(rf"(?:NOT )?BETWEEN {_CANONICAL_BOUND} AND {_CANONICAL_BOUND}")
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,16 @@ def base_key(key: str) -> str:
     return key.rstrip(KEY_SUFFIX_CHARS)
 
 
+def has_between_prefix(value: object) -> bool:
+    """Return whether ``value`` is a str that starts like a builder BETWEEN clause."""
+    return isinstance(value, str) and value.startswith(("BETWEEN ", "NOT BETWEEN "))
+
+
+def is_canonical_between(value: object) -> bool:
+    """Return whether ``value`` exactly matches ``BetweenClause.render()`` output."""
+    return isinstance(value, str) and _CANONICAL_BETWEEN.fullmatch(value) is not None
+
+
 def is_comparison_dict(value: dict) -> bool:
     """Return whether ``value`` is non-empty and uses only comparison operators."""
     return bool(value) and all(key in COMPARISON_OPERATORS for key in value)
@@ -62,6 +75,8 @@ __all__ = [
     "KEY_SUFFIX_CHARS",
     "TYPED_FILTER_FORMATS",
     "base_key",
+    "has_between_prefix",
+    "is_canonical_between",
     "is_comparison_dict",
     "parse_between",
     "unquote_literal",
@@ -79,7 +94,7 @@ def _normalise_bound(key: str, bound: str) -> str:
     Raises:
         ParserError: the bound is outside the grammar.
     """
-    if any(marker in bound for marker in (";", "--", "/*")):
+    if "\\" in bound or any(marker in bound for marker in (";", "--", "/*")):
         raise _invalid_between(key)
     if _NUMBER.fullmatch(bound):
         return bound

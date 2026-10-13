@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-172 — Protect braces in partial-match LIKE literals from later format_map passes
 **Spec**: `sdd/specs/parsers-deltatbl-tech-debt.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-884
@@ -123,3 +123,12 @@ def restore_braces(sql: str) -> str:
 - `pytest tests/test_sql_partial_matching.py tests/test_mssql_partial_matching.py tests/test_bigquery_partial_matching.py tests/test_partial_matching_conformance.py -q`
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 9c20938a)
+
+- Added `BRACE_OPEN_SENTINEL`, `BRACE_CLOSE_SENTINEL`, `protect_braces` and `restore_braces` to `partial_matching.py`. The three literal helpers now protect braces.
+- `restore_braces(sql)` runs before `self.query_parsed = sql` in `sql.pyx` (inherited by `msSQLParser` and `BigQueryParser`), `deltatbl.pyx` and `iceberg.pyx`.
+- New `tests/test_partial_match_braces.py` covers 3 dialects × 2 paths × 3 operands, plus DeltaTable and Iceberg. There are also 2 new helper tests in `test_partial_matching_operators.py`.
+- Validation, after `build_ext --inplace` and staging the TASK-884 wheel: 1752 passed with no skips. Wider parser suites: 243 + 110 passed.
+- Repro: `contains '{limit}'` now renders `LIKE '%{limit}%'`; before the fix it rendered `'%%'`.
+- Ledger: resolves `issue:64c82d35d831`.

@@ -12,9 +12,10 @@ from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
 from ..types.validators import Entity, field_components, quote_sql_literal
-from .filter_values import base_key, is_comparison_dict
+from .filter_values import base_key, has_between_prefix, is_canonical_between, is_comparison_dict
 from .partial_matching import (
-    build_like_pattern, like_escape_bang, sql_like_literal, validate_partial_match_dict,
+    build_like_pattern, like_escape_bang, restore_braces, sql_like_literal,
+    validate_partial_match_dict,
 )
 from .abstract cimport AbstractParser
 
@@ -232,12 +233,9 @@ cdef class SQLParser(AbstractParser):
                             where_cond.append(f"{key} IN ({val})")
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
-                    if str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
-                        # SECURITY: Validate BETWEEN clause for injection markers
-                        upper_val = str_value.upper()
-                        if ('--' in str_value or '/*' in str_value or ';' in str_value
-                                or 'UNION' in upper_val or 'SELECT' in upper_val):
-                            # Reject unsafe BETWEEN clause
+                    if has_between_prefix(str_value):
+                        # SECURITY (FEAT-168): splice only the canonical form parse_between emits.
+                        if not is_canonical_between(str_value):
                             continue
                         where_cond.append(f"({key} {str_value})")
                     elif value in ('null', 'NULL'):
@@ -474,6 +472,8 @@ cdef class SQLParser(AbstractParser):
             except ValueError:
                 pass
         # default null setters
+        # FEAT-172: every format_map pass is done; turn brace sentinels back into braces.
+        sql = restore_braces(sql)
         self.query_parsed = sql
         self.logger.debug(
             f": SQL :: {sql}"

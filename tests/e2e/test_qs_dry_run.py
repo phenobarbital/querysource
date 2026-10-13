@@ -55,7 +55,7 @@ class TestInlineQuery:
         pytest.param(
             "SELECT * FROM t {where_cond}",
             {"where_cond": {"amount": {">=": 100}, "name": "!null", "d": ["2024-01-01", "2024-01-31"]}},
-            "SELECT * FROM t  WHERE amount >= '100' AND name IS NOT NULL"
+            "SELECT * FROM t  WHERE amount >= 100 AND name IS NOT NULL"
             " AND d IN ('2024-01-01','2024-01-31')",
             id="operators-null-and-in",
         ),
