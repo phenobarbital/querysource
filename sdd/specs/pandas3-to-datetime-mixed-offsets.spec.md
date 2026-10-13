@@ -79,7 +79,7 @@ the datetime itself" behaviour that #666 set out to eliminate.
 - Calls with an explicit `format=`/`unit=` (`to_datetime`, `convert_to_date`,
   `datetime_format`, `from_unix` …, #666 lines 1513–1666) and the Excel serial
   conversion (line 1983). If these show the same issue, it is tracked
-  separately (§8 Q4).
+  separately in `issue:581d7f51d6f3` (§8 Q4).
 - Rewriting the other `print`/`except Exception` patterns in `transforms.py`
   beyond the four functions touched here.
 
@@ -332,7 +332,7 @@ Verified against: `be9a3cbc` (PR #666 head, branch `fix/datetime-infer-tz`). `de
 - [x] Q1: Should M1 (the `_to_datetime_series` hardening) be folded into PR #666 before it merges? — *Owner: Jesus Lara*: on this spec. M1 stays in FEAT-171; #666 merges as is.
 - [x] Q2: Default wall-clock for mixed offsets in `extract` / `add_timestamp_to_time`? — *Owner: Jesus Lara*: "if we can preserve the offset, is preferable to preserve the offset before default to UTC, only UTC if date doesn't have offset". Each value's own offset is preserved; UTC applies only to values without an offset. No `infer_tz` parameter on these two functions.
 - [x] Q3: `change_timezone` with tz-aware input and an explicit `from_tz`? — *Owner: Jesus Lara*: warning (ignore `from_tz`, log a warning).
-- [x] Q4: Audit the `format=`/`unit=` call sites in a follow-up ledger issue? — *Owner: Jesus Lara*: yes, filed as a ledger issue.
+- [x] Q4: Audit the `format=`/`unit=` call sites in a follow-up ledger issue? — *Owner: Jesus Lara*: yes, filed as `issue:581d7f51d6f3` (confirmed: `format=` with `%z` raises on mixed offsets).
 
 ---
 
