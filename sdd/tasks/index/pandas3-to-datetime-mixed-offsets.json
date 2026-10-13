@@ -56,7 +56,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -66,8 +66,9 @@
       "parallelism_notes": "Imports _to_wall_clock created by TASK-888 (transitive via TASK-889); serialized after TASK-889 because both modify querysource/types/dt/transforms.py and tests/unit/test_to_datetime_mixed_offsets.py.",
       "assigned_to": null,
       "started_at": "2026-10-13T21:26:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-890-wall-clock-sites.md"
+      "completed_at": "2026-10-13T21:50:00+00:00",
+      "file": "sdd/tasks/completed/TASK-890-wall-clock-sites.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-891",
