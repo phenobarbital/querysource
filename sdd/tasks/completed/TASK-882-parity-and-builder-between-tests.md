@@ -179,4 +179,14 @@ async def build(path: str, parser_cls: type, module: Any, filter_: dict, monkeyp
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Code (/sdd-fix session)
+**Date**: 2026-10-13
+**Notes**: Removed `_numeric_literals`, so parity assertions are exact (74 pass, Rust path not skipped).
+Added `test_bigquery_comparison_operands_keep_their_type` and `tests/unit/test_builder_between_strict.py`
+(56 cases: 4 dialects × rust/cython × hostile/canonical). Full suite: 5248 passed; the 8 failures
+are tests/test_source_parquet_{s3,gcs}.py (`No module named 's3fs'`, environment only).
+
+**Deviations from spec**: the behaviour change (numbers bare on the Rust PG path) also required updating
+expectations in tests/e2e/test_multiqs_dry_run.py, tests/e2e/test_qs_dry_run.py and
+tests/test_pgsql_jsonb_unnest_regression.py, plus docs/QUERYSOURCE_DIALECT.md §5.3/§5.4/§9/cheat sheet
+(the doc test checks doc SQL against the parity corpus).

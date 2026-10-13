@@ -105,7 +105,7 @@ class TestInlinePipeline:
 
         assert rendered == {
             "stores": "SELECT store_id, region FROM public.stores  WHERE region IN ('EMEA','APAC')",
-            "sales": "SELECT store_id, amount FROM public.sales  WHERE amount > '1'",
+            "sales": "SELECT store_id, amount FROM public.sales  WHERE amount > 1",
         }
         assert_valid_sql(rendered)
         totals = dict(zip(result["region"], result["amount_sum"], strict=True))

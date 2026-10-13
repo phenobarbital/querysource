@@ -251,4 +251,13 @@ fn dict_operand(v: &FilterValue) -> String {
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Code (/sdd-fix session)
+**Date**: 2026-10-13
+**Notes**: Strict `is_canonical_between` + `has_between_prefix` in filter_common; all four call
+sites now refuse non-canonical BETWEEN. pgsql/bigquery `dict_operand` renders Int/finite Float bare.
+11 new `feat168_*` tests pass; `cargo test --lib --no-default-features`: 375 passed, 4 failed. The 4
+failures are the pre-existing baseline (bigquery test_process_str_negation, pgsql
+test_process_comparison_token, sql test_build_string_condition_end_bang, validators
+test_field_components_no_prefix). The wheel was built with maturin and its .so staged into the worktree.
+
+**Deviations from spec**: the grammar uses `[0-9]` (ASCII) instead of `\d`; non-finite floats are quoted.
