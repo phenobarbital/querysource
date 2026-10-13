@@ -2003,7 +2003,7 @@ def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
 
     try:
         # Ensure the column is converted to datetime
-        df[column] = pd.to_datetime(df[column], errors='coerce')
+        df[column] = _to_datetime_series(df[column], infer_tz=False, field=column)
 
         # Handle timezone-aware datetimes
         if df[column].dt.tz is not None:
@@ -2014,7 +2014,7 @@ def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
             df[field] = df[column].dt.tz_localize(None)
 
     except Exception as e:
-        print('Error on to_excel_date: ', e)
+        logging.error(f"Error on to_excel_date for {column!r}: {e}")
         raise e  # Re-raise the exception after logging it
 
     return df
@@ -2333,22 +2333,31 @@ def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: st
     """
     Changes the timezone of a datetime field in a DataFrame.
 
+    Timezone-aware input is converted directly; ``from_tz`` is ignored.
+
     :param df: The DataFrame containing the datetime field.
     :param field: The name of the field to change the timezone for.
     :param from_tz: The original timezone of the field.
     :param to_tz: The target timezone for the field.
     :return: The DataFrame with the timezone changed field.
     """
-    df[field] = pd.to_datetime(df[field], errors="coerce")
     try:
-        infer_dst = np.array([False] * df.shape[0])
-        df[field] = (
-            df[field].dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
-        )
+        values = _to_datetime_series(df[field], infer_tz=False, field=field)
+        if isinstance(values.dtype, pd.DatetimeTZDtype):
+            if from_tz:
+                logging.warning(
+                    f"change_timezone: {field!r} is already timezone-aware; "
+                    f"ignoring from_tz={from_tz!r}"
+                )
+            df[field] = values.dt.tz_convert(to_tz)
+        else:
+            infer_dst = np.array([False] * df.shape[0])
+            df[field] = (
+                values.dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
+            )
     except Exception as err:
-        print("Error Changing timezone: ", err)
-    finally:
-        return df
+        logging.error(f"Error changing timezone of {field!r}: {err}")
+    return df
 
 
 def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):
