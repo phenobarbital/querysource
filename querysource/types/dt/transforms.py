@@ -55,6 +55,9 @@ def _parse_datetime_value(value: Any) -> Any:
             return pd.NaT
     except (TypeError, ValueError):
         pass
+    if isinstance(value, datetime.time):
+        # time-of-day values anchor on 1900-01-01, matching ``to_time``
+        return pd.Timestamp.combine(datetime.date(1900, 1, 1), value)
     try:
         return pd.Timestamp(value)
     except (TypeError, ValueError, OverflowError):
@@ -83,6 +86,20 @@ def _has_mixed_timezones(series: pd.Series) -> bool:
     return False
 
 
+def _prefer_ns(series: pd.Series) -> pd.Series:
+    """Cast a datetime Series to nanosecond resolution when its values fit.
+
+    Out-of-range values (e.g. ``9999-12-31``) keep their coarser resolution
+    instead of raising ``OutOfBoundsDatetime``.
+    """
+    try:
+        return series.astype(
+            f"datetime64[ns, {series.dt.tz}]" if series.dt.tz is not None else "datetime64[ns]"
+        )
+    except (OverflowError, ValueError, pd.errors.OutOfBoundsDatetime):
+        return series
+
+
 def _to_datetime_series(
     series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
 ) -> pd.Series:
@@ -103,6 +120,12 @@ def _to_datetime_series(
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     parsed = _parse_offset_dates(series).map(_parse_datetime_value).astype(object)
+    lost = int((parsed.isna() & series.notna()).sum())
+    if lost:
+        logging.warning(
+            f"Datetime column {field!r}: {lost} non-null value(s) could not be "
+            "parsed and became NaT."
+        )
     if _has_mixed_timezones(parsed):
         if infer_tz:
             return parsed
@@ -111,29 +134,37 @@ def _to_datetime_series(
             "normalizing to UTC (naive values read as UTC). Pass infer_tz=True "
             "to keep each value's own offset."
         )
-        return parsed.map(
-            lambda value: value
-            if value is pd.NaT
-            else value.tz_localize("UTC")
-            if value.tzinfo is None
-            else value.tz_convert("UTC")
-        ).astype("datetime64[ns, UTC]")
+        return _prefer_ns(
+            pd.to_datetime(
+                parsed.map(
+                    lambda value: value
+                    if value is pd.NaT
+                    else value.tz_localize("UTC")
+                    if value.tzinfo is None
+                    else value.tz_convert("UTC")
+                ),
+                utc=True,
+            )
+        )
     return pd.to_datetime(parsed)
 
 
 def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
-    """Return naive ``datetime64[ns]`` local wall-clock values.
+    """Return naive datetime64 local wall-clock values.
+
+    The resolution is left to pandas, so out-of-ns-range dates such as
+    ``9999-12-31`` are preserved instead of raising.
 
     Args:
         series: Values to convert.
         field: Column name, used only for logging.
 
     Returns:
-        A naive ``datetime64[ns]`` Series with the same index and name.
+        A naive datetime64 Series with the same index and name.
     """
     parsed = _to_datetime_series(series, infer_tz=True, field=field)
     if isinstance(parsed.dtype, pd.DatetimeTZDtype):
-        return parsed.dt.tz_localize(None).astype("datetime64[ns]")
+        return _prefer_ns(parsed.dt.tz_localize(None))
     if parsed.dtype == object:
         parsed = pd.to_datetime(
             parsed.map(
@@ -142,7 +173,7 @@ def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
                 else value.tz_localize(None)
             )
         )
-    return parsed.astype("datetime64[ns]")
+    return _prefer_ns(parsed)
 
 
 def _convert_datetime_column(
@@ -612,8 +643,12 @@ def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):
     :return: Modified pandas DataFrame with the combined timestamp stored in a new column.
     """
     date_part = _to_wall_clock(df[date], field=date)
-    time_part = _to_wall_clock(df[time], field=time)
-    df[field] = date_part.dt.normalize() + (time_part - time_part.dt.normalize())
+    if pd.api.types.is_timedelta64_dtype(df[time]):
+        offset = df[time]
+    else:
+        time_part = _to_wall_clock(df[time], field=time)
+        offset = time_part - time_part.dt.normalize()
+    df[field] = date_part.dt.normalize() + offset
     return df
 
 

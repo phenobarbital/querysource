@@ -364,3 +364,38 @@ def test_naive_and_single_offset_regressions():
     )
     add_timestamp_to_time(combined, "combined", "date", "time")
     assert combined["combined"].tolist() == [pd.Timestamp("2025-09-15T01:02:03.456789"), pd.NaT]
+
+
+def test_time_of_day_and_timedelta_inputs_are_not_lost():
+    """datetime.time and timedelta columns never silently become NaT."""
+    import datetime as dt
+
+    frame = pd.DataFrame(
+        {
+            "t": pd.Series([dt.time(1, 2, 3), dt.time(10, 11, 12)], dtype=object),
+            "d": pd.to_datetime(["2025-09-15", "2025-12-01"]),
+            "td": pd.to_timedelta(["01:02:03", "10:11:12"]),
+        }
+    )
+    extract(frame, "hour", column="t", value="hour")
+    assert frame["hour"].tolist() == [1, 10]
+    add_timestamp_to_time(frame, "c1", "d", "t")
+    add_timestamp_to_time(frame, "c2", "d", "td")
+    expected = [pd.Timestamp("2025-09-15 01:02:03"), pd.Timestamp("2025-12-01 10:11:12")]
+    assert frame["c1"].tolist() == expected
+    assert frame["c2"].tolist() == expected
+
+
+def test_out_of_ns_range_dates_do_not_raise():
+    """Sentinel dates such as 9999-12-31 survive the wall-clock and UTC paths."""
+    frame = pd.DataFrame(
+        {
+            "d": pd.Series(["9999-12-31", "2025-09-15"], dtype=object),
+            "m": pd.Series(["9999-12-31T00:00:00-07:00", "2025-12-01T08:00:00-08:00"], dtype=object),
+        }
+    )
+    wall = _to_wall_clock(frame["d"])
+    assert wall.iloc[0].year == 9999
+    utc = _to_datetime_series(frame["m"], infer_tz=False)
+    assert utc.notna().all()
+    assert utc.iloc[0].year == 9999
