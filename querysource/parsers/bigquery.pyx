@@ -5,12 +5,13 @@
 """
 BigQuery SQL Parser.
 """
+import math
 import re
 from typing import Union, Dict, Any, List, Tuple
 from datamodel.typedefs import NullDefault, SafeDict
 from .sql cimport SQLParser
 from ..types.validators import Entity, field_components
-from .filter_values import base_key, is_comparison_dict
+from .filter_values import base_key, has_between_prefix, is_canonical_between, is_comparison_dict
 from ..exceptions import ParserError
 from .partial_matching import (
     bq_like_literal, build_like_pattern, like_escape, validate_partial_match_dict,
@@ -58,6 +59,18 @@ cdef str bq_quote_string(object value):
     # Escape backslashes first (BigQuery reads `\` as an escape), then double quotes
     v = v.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{v}"'
+
+
+cdef str bq_comparison_operand(object value):
+    """Render a comparison-dict operand: numbers bare, everything else bq-quoted.
+
+    BigQuery is strictly typed: ``INT64 > STRING`` is an error (FEAT-168).
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float) and math.isfinite(value):
+        return str(value)
+    return bq_quote_string(str(value))
 
 
 cdef str bq_partial_match_condition(str field_expr, object entry, str operand):
@@ -244,13 +257,13 @@ cdef class BigQueryParser(SQLParser):
                         )
                         continue
                     if is_comparison_dict(value):
-                        parts = [f"{field_expr} {op} {bq_quote_string(str(v))}" for op, v in value.items()]
+                        parts = [f"{field_expr} {op} {bq_comparison_operand(v)}" for op, v in value.items()]
                         where_cond.append(parts[0] if len(parts) == 1 else '(' + ' AND '.join(parts) + ')')
                         continue
                     op, v = next(reversed(value.items()))  # never popitem(): the filter dict is the caller's
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
-                        where_cond.append(f"{field_expr} {op} {bq_quote_string(str(v))}")
+                        where_cond.append(f"{field_expr} {op} {bq_comparison_operand(v)}")
                     else:
                         # BigQuery: JSON extraction via dict key
                         # SECURITY (FEAT-162 / TASK-857): the member key lands inside a string
@@ -287,11 +300,9 @@ cdef class BigQueryParser(SQLParser):
 
                 elif isinstance(value, (str, int)):
                     str_value = str(value)
-                    if str_value.startswith(("BETWEEN ", "NOT BETWEEN ")):
-                        # SECURITY: Reject BETWEEN clauses with injection markers
-                        upper_val = str_value.upper()
-                        if ('--' in str_value or '/*' in str_value or ';' in str_value
-                                or 'UNION' in upper_val or 'SELECT' in upper_val):
+                    if has_between_prefix(str_value):
+                        # SECURITY (FEAT-168): splice only the canonical form parse_between emits.
+                        if not is_canonical_between(str_value):
                             continue
                         where_cond.append(f"({field_expr} {str_value})")
                     elif value in ('null', 'NULL'):

@@ -255,4 +255,13 @@ def test_is_canonical_between_rejects(value: object) -> None:
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: Claude Code (/sdd-fix session)
+**Date**: 2026-10-13
+**Notes**: Added `has_between_prefix` / `is_canonical_between` to filter_values; the four Cython builders
+(sql, sqlserver, bigquery, pgsql) now drop any BETWEEN-prefixed value that is not canonical.
+`bq_comparison_operand` renders int and finite float operands bare in BigQuery. 32 grammar tests.
+
+**Deviations from spec**: (1) the canonical grammar and `_NUMBER` use `[0-9]` instead of `\d`
+(Python/Rust `\d` match non-ASCII digits); (2) non-finite floats (NaN/inf) stay quoted, since a bare
+`nan` would be read as an identifier. CQL/SOQL builders have the same blacklist pattern but are
+outside this fix group (follow-up).

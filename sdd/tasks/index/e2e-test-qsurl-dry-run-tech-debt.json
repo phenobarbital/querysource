@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-13T19:59:51+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-13T20:03:27+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,7 +16,7 @@
       "feature_id": "FEAT-169",
       "feature": "e2e-test-qsurl-dry-run-tech-debt",
       "spec": "sdd/specs/e2e-test-qsurl-dry-run-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "low",
       "effort": "S",
       "depends_on": [],
@@ -25,8 +25,9 @@
       "discovered_from": "issue:4bd3bb62d420",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-879-refresh-qsurl-test-docstrings.md"
+      "completed_at": "2026-10-13T20:03:27+00:00",
+      "file": "sdd/tasks/completed/TASK-879-refresh-qsurl-test-docstrings.md",
+      "verification": "verified"
     }
   ]
 }

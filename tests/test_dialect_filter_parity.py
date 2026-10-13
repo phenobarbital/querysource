@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging as stdlib_logging
-import re
 import sys
 import types
 from typing import Any
@@ -76,13 +75,6 @@ def _where_body(rendered: str) -> str | None:
     return rendered.split(" WHERE ", 1)[1].strip()
 
 
-def _numeric_literals(predicate: str | None) -> str | None:
-    """Unquote plain numeric literals: ``'1'`` and ``1`` are equivalent SQL operands."""
-    if predicate is None:
-        return None
-    return re.sub(r"(?<![\w'])(['\"])(-?\d+(?:\.\d+)?)\1", r"\2", predicate)
-
-
 async def render(
     path: str,
     conditions: dict[str, Any],
@@ -127,8 +119,10 @@ PG_CORPUS = [
     ),
     ({"filter": {"attributes": {"->>": {"status": "active"}}}}, "attributes ->> 'status' = 'active'"),
     ({"filter": {"attributes": {"->": {"status": "active"}}}}, "attributes -> 'status' = '\"active\"'::jsonb"),
-    ({"filter": {"x": {">": 1, "<": 9}}}, "(x > '1' AND x < '9')"),
-    ({"filter": {"qty": {">": 0}}}, "qty > '0'"),
+    ({"filter": {"x": {">": 1, "<": 9}}}, "(x > 1 AND x < 9)"),
+    ({"filter": {"qty": {">": 0}}}, "qty > 0"),
+    ({"filter": {"x": {">=": 2.5}}}, "x >= 2.5"),
+    ({"filter": {"x": {">": "b"}}}, "x > 'b'"),
     ({"filter": {"name": {"startswith": "andre"}}}, "name LIKE 'andre%'"),
 ]
 
@@ -139,7 +133,7 @@ async def test_pg_full_pipeline(
     path: str, conditions: dict[str, Any], expected: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """PostgreSQL integration cases render the documented predicate on both paths."""
-    assert _numeric_literals(_where_body(await render(path, conditions, monkeypatch))) == _numeric_literals(expected)
+    assert _where_body(await render(path, conditions, monkeypatch)) == expected
 
 
 @pytest.mark.parametrize("path", PATHS)
@@ -163,8 +157,8 @@ async def test_other_dialects_render_between(
 @pytest.mark.parametrize(
     ("parser_cls", "module", "expected"),
     [
-        (SQLParser, sql, "(x > '1' AND x < '9')"),
-        (BigQueryParser, bigquery, '(x > "1" AND x < "9")'),
+        (SQLParser, sql, "(x > 1 AND x < 9)"),
+        (BigQueryParser, bigquery, "(x > 1 AND x < 9)"),
     ],
 )
 async def test_other_dialects_render_all_comparison_operators(
@@ -172,7 +166,24 @@ async def test_other_dialects_render_all_comparison_operators(
 ) -> None:
     """Generic SQL and BigQuery retain each comparison-dict member in order."""
     rendered = await render(path, {"filter": {"x": {">": 1, "<": 9}}}, monkeypatch, parser_cls, module)
-    assert _numeric_literals(_where_body(rendered)) == _numeric_literals(expected)
+    assert _where_body(rendered) == expected
+
+
+@pytest.mark.parametrize("path", PATHS)
+@pytest.mark.parametrize(
+    ("conditions", "expected"),
+    [
+        ({"filter": {"x": {">=": 2.5}}}, "x >= 2.5"),
+        ({"filter": {"x": {">": "b"}}}, 'x > "b"'),
+        ({"filter": {"x": {">": 1, "<": "9"}}}, '(x > 1 AND x < "9")'),
+    ],
+)
+async def test_bigquery_comparison_operands_keep_their_type(
+    path: str, conditions: dict[str, Any], expected: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BigQuery renders numeric operands bare and string operands quoted (INT64 > STRING is an error)."""
+    rendered = await render(path, conditions, monkeypatch, BigQueryParser, bigquery)
+    assert _where_body(rendered) == expected
 
 
 @pytest.mark.parametrize("path", PATHS)
