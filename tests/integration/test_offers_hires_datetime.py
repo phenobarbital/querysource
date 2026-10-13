@@ -84,13 +84,13 @@ def test_offers_hires_datetime_columns(offers_hires, func, infer_tz, column) -> 
 
     refs = [_reference(v) for v in src]
     got = list(out)
-    bad_instant = sum(1 for g, r in zip(got, refs) if g.to_pydatetime() != r)
+    bad_instant = sum(1 for g, r in zip(got, refs, strict=True) if g.to_pydatetime() != r)
     assert bad_instant == 0, f"{column}: {bad_instant} values with a different instant"
 
     if not infer_tz:
         assert str(result.dtype) == "datetime64[ns, UTC]", f"{column}: dtype {result.dtype}"
     else:
-        bad_off = sum(1 for g, r in zip(got, refs) if g.utcoffset() != r.utcoffset())
+        bad_off = sum(1 for g, r in zip(got, refs, strict=True) if g.utcoffset() != r.utcoffset())
         assert bad_off == 0, f"{column}: {bad_off} values with a different offset"
         if column == "Candidate_Start_Date":
             bad_mid = sum(
@@ -102,7 +102,7 @@ def test_offers_hires_datetime_columns(offers_hires, func, infer_tz, column) -> 
     again = func(pd.DataFrame({column: result}), column, infer_tz=infer_tz)[column]
     assert again.notna().sum() == result.notna().sum(), f"{column}: second pass lost values"
     same = sum(
-        1 for a, b in zip(again.loc[src.index], out) if a != b or a.utcoffset() != b.utcoffset()
+        1 for a, b in zip(again.loc[src.index], out, strict=True) if a != b or a.utcoffset() != b.utcoffset()
     ) if infer_tz else int((again.loc[src.index] != out).sum())
     assert same == 0, f"{column}: second pass changed {same} values"
 
@@ -124,5 +124,5 @@ def test_offers_hires_drop_timezone_wall_clock(offers_hires, func, infer_tz, col
     else:
         expected = [r.astimezone(timezone.utc).replace(tzinfo=None) for r in refs]
     got = [v.to_pydatetime() for v in result.loc[src.index]]
-    bad = sum(1 for g, e in zip(got, expected) if g != e)
+    bad = sum(1 for g, e in zip(got, expected, strict=True) if g != e)
     assert bad == 0, f"{column}: {bad} wall-clock mismatches"

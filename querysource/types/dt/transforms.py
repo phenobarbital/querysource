@@ -429,8 +429,7 @@ def extract_from_array(
         df[field] = df[column].apply(safe_extract)
     except Exception as err:
         logging.error(f"extract_from_array Error: {err}")
-    finally:
-        return df
+    return df
 
 
 def explode(
@@ -468,13 +467,12 @@ def explode(
                 df[col] = df[col].str.strip("()").str.split(delimiter)
     try:
         df = df.explode(splitcols, ignore_index=True)
-    except ValueError as err:
+    except Exception as err:  # the former finally-return swallowed every error
         logging.error(f"Explode Error: {err}")
-    finally:
-        return df  # pylint: disable=W0150
+    return df
 
 
-def sum(df: pd.DataFrame, field: str = "", columns: list = []):
+def sum(df: pd.DataFrame, field: str = "", columns: Optional[list] = None):
     """
     Takes a pandas DataFrame and sums the values across specified columns,
     storing the result in a new column.
@@ -484,6 +482,8 @@ def sum(df: pd.DataFrame, field: str = "", columns: list = []):
     :param columns: List of columns in the df DataFrame to be summed. Defaults to an empty list ([]).
     :return: Modified pandas DataFrame with the sum of the specified columns stored in a new column.
     """
+    if columns is None:
+        columns = []
     try:
         if columns and isinstance(columns, list):
             df[field] = df[columns].sum(axis=1)
@@ -548,10 +548,11 @@ def to_time(
             # If value is already a datetime or Timestamp, return its time component
             return value.time() if hasattr(value, 'time') else value
         try:
-            return datetime.datetime.strptime(value.strip(), format).time()
+            # Time-of-day parse: a timezone has no meaning here.
+            return datetime.datetime.strptime(value.strip(), format).time()  # noqa: DTZ007
         except ValueError:
             try:
-                return datetime.datetime.strptime(value.strip(), fallback_format).time()
+                return datetime.datetime.strptime(value.strip(), fallback_format).time()  # noqa: DTZ007
             except ValueError:
                 return None  # Return None if both formats fail
 
@@ -748,7 +749,7 @@ def pad(df: pd.DataFrame, field: str, num_chars=4, side="left", char="0"):
     return df
 
 
-def concat(df: pd.DataFrame, field: str, columns=[], separator=" "):
+def concat(df: pd.DataFrame, field: str, columns: Optional[list] = None, separator=" "):
     """
     Takes a pandas DataFrame and concatenates the values from specified columns into a single column,
     using a specified separator.
@@ -759,6 +760,8 @@ def concat(df: pd.DataFrame, field: str, columns=[], separator=" "):
     :param separator: The character or string used to separate the concatenated values. Defaults to a space (" ").
     :return: Modified pandas DataFrame with the concatenated values stored in a new column.
     """
+    if columns is None:
+        columns = []
     try:
         if columns and isinstance(columns, list):
             df[field] = (
@@ -981,8 +984,7 @@ def split_to_columns(df: pd.DataFrame, field: str, columns: list, regex: str = "
         df[columns] = df[field].str.extract(regex, expand=expand)
     except Exception as err:
         print("Split to Columns Error: ", err)
-    finally:
-        return df
+    return df
 
 
 def slice(
@@ -1116,7 +1118,7 @@ def multiply(
     return df
 
 
-def nullif(df: pd.DataFrame, field: str, chars=[]):
+def nullif(df: pd.DataFrame, field: str, chars: Optional[list] = None):
     """
     Takes a pandas DataFrame and sets the values in a specified column to None
     if they match any value in a given list of characters.
@@ -1126,6 +1128,8 @@ def nullif(df: pd.DataFrame, field: str, chars=[]):
     :param chars: List of characters to be checked against. If a value in the column matches any character in this list, it will be set to None. Defaults to an empty list ([]).
     :return: Modified pandas DataFrame with the specified values set to None.
     """  # noqa
+    if chars is None:
+        chars = []
     df.loc[(df[field].isin(chars)), field] = None
     return df
 
@@ -1367,7 +1371,7 @@ def replace_regex(df: pd.DataFrame, field: str, to_replace="", value=""):
     return df
 
 
-def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
+def ereplace(df: pd.DataFrame, field: str, columns: Optional[list] = None, newvalue=""):
     """
     Replaces occurrences of a value from one column with another value in a specified column of a pandas DataFrame.
 
@@ -1377,6 +1381,8 @@ def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
     :param newvalue: The string to replace with.
     :return: Modified pandas DataFrame with the replaced values.
     """
+    if columns is None:
+        columns = []
     col1 = columns[0]
     col2 = columns[1]
     
@@ -1398,7 +1404,9 @@ def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
     df[field] = df.apply(safe_replace, axis=1)
     return df
 
-def replace_to_nan(df: pd.DataFrame, field: str, to_replace=[]):
+def replace_to_nan(df: pd.DataFrame, field: str, to_replace: Optional[list] = None):
+    if to_replace is None:
+        to_replace = []
     df[field] = df[field].replace(to_replace, np.nan)
     return df
 
@@ -1440,10 +1448,9 @@ def convert_to_string(
             df[field] = df[field].str.replace(np.nan, "", regex=True)
         if avoid_empty is True:
             df[field] = df[field].astype(str).replace(r"^\s*$", None, regex=True)
-    except TypeError:
-        raise
-    finally:
-        return df
+    except Exception as err:  # the former finally-return swallowed every error, re-raised TypeError included
+        logging.error(f"to_string Error: {err}")
+    return df
 
 
 def to_string(
@@ -1466,7 +1473,7 @@ def to_list(
     df: pd.DataFrame,
     field: str,
     column: str = None,
-    columns: list = [],
+    columns: Optional[list] = None,
 ) -> pd.DataFrame:
     """to_list.
 
@@ -1476,6 +1483,8 @@ def to_list(
     :param field: Name of the column in the df DataFrame to be modified.
     :param columns: List of columns to convert to a list.
     """
+    if columns is None:
+        columns = []
     try:
         if column is not None:
             field = column
@@ -1512,7 +1521,7 @@ def convert_to_array(
     if no_duplicates is True:
         # Trim whitespace from each word, handle "nan" strings, and remove duplicates
         df[field] = df[field].apply(
-            lambda x: list(set([word.strip() for word in x if word.strip() != "nan"]))
+            lambda x: list({word.strip() for word in x if word.strip() != "nan"})
         )
     else:
         # Trim whitespace from each word and handle "nan" strings
@@ -1837,7 +1846,7 @@ def to_integer(df: pd.DataFrame, field: str):
 def convert_to_boolean(
     df: pd.DataFrame,
     field: str,
-    boolDict={"True": True, "False": False},
+    boolDict: Optional[dict] = None,
     true_values: Optional[dict] = None,
     nan: bool = False,
     preserve_nulls: bool = False,
@@ -1853,6 +1862,8 @@ def convert_to_boolean(
     :param preserve_nulls: Whether to preserve null values.
     :return: The DataFrame with the converted field.
     """
+    if boolDict is None:
+        boolDict = {"True": True, "False": False}
     if field not in df.columns:
         # column doesn't exist
         df = df.assign(field=nan)
@@ -1961,7 +1972,7 @@ def to_percentile(df: pd.DataFrame, field: str, symbol="%", divisor=None, remove
     return df
 
 
-def split_cols(df: pd.DataFrame, field: str, separator=",", columns=[], numcols=2):
+def split_cols(df: pd.DataFrame, field: str, separator=",", columns: Optional[list] = None, numcols=2):
     """
     Splits a specified field in a DataFrame into multiple columns based on a separator.
 
@@ -1972,6 +1983,8 @@ def split_cols(df: pd.DataFrame, field: str, separator=",", columns=[], numcols=
     :param numcols: The number of columns to split into.
     :return: The DataFrame with the split columns.
     """
+    if columns is None:
+        columns = []
     if not columns:
         columns = [f"{field}_part{i + 1}" for i in range(numcols)]
 
@@ -2321,7 +2334,7 @@ def fn_get_timezone(latitudes, longitudes):
     latitudes = latitudes[mask]
     longitudes = longitudes[mask]
     if len(latitudes) > 0:
-        zones[mask] = [tz.timezone_at(lng=long, lat=lat) for lat, long in zip(latitudes, longitudes)]
+        zones[mask] = [tz.timezone_at(lng=long, lat=lat) for lat, long in zip(latitudes, longitudes, strict=True)]
         zones[zones == "uninhabited"] = DEFAULT_TIMEZONE
         zones[zones is None] = DEFAULT_TIMEZONE
     return zones
@@ -2337,7 +2350,7 @@ def get_timezone(df: pd.DataFrame, field: str, lat: str, long: str) -> pd.DataFr
     :param long: The name of the longitude column.
     :return: The DataFrame with the timezone field.
     """
-    if not set([lat, long]).issubset(df.columns):
+    if not {lat, long}.issubset(df.columns):
         df[field] = None
     try:
         df[lat] = pd.to_numeric(df[lat], errors='coerce')
@@ -2363,8 +2376,7 @@ def split_into_series(df: pd.DataFrame, field: str):
         df = df[field].apply(pd.Series)
     except Exception as err:
         print("Split Series Error: ", err)
-    finally:
-        return df
+    return df
 
 
 def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: str = "UTC"):
@@ -3302,7 +3314,7 @@ def filter_list_elements(df: pd.DataFrame, field: str, column: str, filter_value
                     if isinstance(parsed_list, list):
                         filtered = [item for item in parsed_list if filter_value in str(item)]
                         return filtered if filtered else None
-                except:
+                except Exception:
                     pass
             return None
         except Exception:
