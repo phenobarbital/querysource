@@ -16,7 +16,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Root task: no in-feature dependency. Requires PR #666 merged into dev (its _to_datetime_series in querysource/types/dt/transforms.py). Creates tests/unit/test_to_datetime_mixed_offsets.py, which TASK-889/890/891 extend.",
       "assigned_to": null,
       "started_at": "2026-10-13T21:26:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-888-datetime-helper-hardening.md"
+      "completed_at": "2026-10-13T21:36:16+00:00",
+      "file": "sdd/tasks/completed/TASK-888-datetime-helper-hardening.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-889",
