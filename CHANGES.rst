@@ -5,8 +5,13 @@ pandas 3 compatibility for datetime and fill transforms
 -------------------------------------------------------
 
 - ``convert_to_datetime`` / ``to_timestamp``: values with mixed UTC offsets
-  (e.g. DST ``-07:00``/``-08:00``) no longer stay as strings under pandas>=3;
-  each value is parsed keeping its own offset, matching the pandas<3 result.
+  (e.g. DST ``-07:00``/``-08:00``) no longer stay as strings under pandas>=3.
+  By default they are normalized to UTC (same instant, ``datetime64[ns, UTC]``)
+  and a warning is logged. Pass the new ``infer_tz=True`` parameter to keep
+  each value's own offset instead (``object`` dtype, the pandas<3 result).
+- ``convert_to_datetime`` / ``to_timestamp``: tz-aware results keep their
+  timezone explicitly instead of relying on a swallowed ``astype`` error, and
+  conversion errors are logged instead of printed.
 - ``fill_nulls``: filling a string-dtype column with a non-string value
   (e.g. ``False``) no longer raises ``TypeError`` under pandas>=3.
 
