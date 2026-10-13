@@ -18,7 +18,13 @@ from ..exceptions import EmptySentence, ParserError
 from ..conf import REDIS_URL
 from ..types.validators import Entity, is_valid, field_components
 from .partial_matching import validate_partial_match_dict
-from .filter_values import TYPED_FILTER_FORMATS, base_key, is_comparison_dict, parse_between
+from .filter_values import (
+    TYPED_FILTER_FORMATS,
+    base_key,
+    is_comparison_dict,
+    parse_between,
+    template_fields,
+)
 from ..utils.parseqs import is_parseable
 
 
@@ -553,12 +559,13 @@ cdef class AbstractParser:
 
         explicit = self.filter if isinstance(self.filter, dict) else {}
         template = self.query_raw or ''
+        fields = template_fields(template)
         for name, val in elements.items():
             base = base_key(name)
             if (
                 name in explicit
                 and base in self.cond_definition
-                and '{' + base + '}' not in template
+                and base not in fields
             ):
                 # FEAT-165: a typed column filtered explicitly stays a WHERE filter.
                 _filter[name] = val
