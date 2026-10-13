@@ -14,6 +14,15 @@ pandas 3 compatibility for datetime and fill transforms
   conversion errors are logged instead of printed.
 - ``fill_nulls``: filling a string-dtype column with a non-string value
   (e.g. ``False``) no longer raises ``TypeError`` under pandas>=3.
+- Datetime parsing (FEAT-171) no longer loses values silently under pandas>=3:
+  already-parsed tz-aware values with mixed offsets, naive/aware mixtures and
+  mixed fractional precision are all kept, and date-only values with an offset
+  (``2025-09-15-07:00``) parse as midnight at that offset instead of 07:00.
+- ``to_excel_date`` and ``change_timezone`` accept mixed-offset input;
+  ``change_timezone`` converts tz-aware input directly and ignores ``from_tz``
+  with a warning.
+- ``extract`` and ``add_timestamp_to_time`` accept mixed-offset input and use
+  each value's own local time (``23:30-07:00`` is day 15, not 16 as in UTC).
 
 Describe API for query slugs (FEAT-148)
 ---------------------------------------
