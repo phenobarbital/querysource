@@ -192,7 +192,7 @@ cdef class SQLParser(AbstractParser):
                     )
                     if entry is not None:
                         where_cond.append(
-                            sql_partial_match_condition(key, entry, next(iter(value.values())))
+                            sql_partial_match_condition(base_key(key), entry, next(iter(value.values())))
                         )
                         continue
                     if is_comparison_dict(value):

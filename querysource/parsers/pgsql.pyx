@@ -393,7 +393,7 @@ cdef class pgSQLParser(SQLParser):
                     )
                     if entry is not None:
                         where_cond.append(
-                            partial_match_condition(key, entry, next(iter(value.values())))
+                            partial_match_condition(base_key(key), entry, next(iter(value.values())))
                         )
                         continue
                     handled, cond = jsonb_condition(key, value)

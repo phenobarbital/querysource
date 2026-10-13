@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..exceptions import ParserError
+from .filter_values import base_key
 
 CONTAINS_MIN_LENGTH: int = 3
 MAX_REGEX_PATTERN_LENGTH: int = 200
@@ -136,7 +137,8 @@ def validate_partial_match_dict(key: str, value: dict, *, supports_regex: bool) 
     """Validate a dict operand that may contain one partial-matching operator.
 
     Returns None when no key of ``value`` is a table operator. Raises ParserError when
-    a table operator is combined with another key; otherwise validates its single pair.
+    a table operator is combined with another key; otherwise validates its single pair and
+    returns the operator with the key suffix applied (:func:`resolve_key_suffix`).
     """
     table_keys = [op for op in value if op in PARTIAL_MATCH_OPERATORS]
     if not table_keys:
@@ -146,4 +148,28 @@ def validate_partial_match_dict(key: str, value: dict, *, supports_regex: bool) 
             f"one operator per field: '{key}' combines a partial-matching operator with other keys"
         )
     op = table_keys[0]
-    return validate_partial_match(key, op, value[op], supports_regex=supports_regex)
+    resolved = resolve_key_suffix(key, PARTIAL_MATCH_OPERATORS[op])
+    validate_partial_match(key, op, value[op], supports_regex=supports_regex)
+    return resolved
+
+
+def resolve_key_suffix(key: str, op: PartialMatchOp) -> PartialMatchOp:
+    """Apply a filter-key suffix to a partial-matching operator (FEAT-173).
+
+    No suffix keeps ``op``; exactly ``!`` flips it to its ``not_`` counterpart (or
+    back); any other suffix is rejected. Callers render ``base_key(key)``.
+    Twin of ``partial_match::resolve_key_suffix`` (same message).
+
+    Raises:
+        ParserError: for a suffix other than ``!``.
+    """
+    suffix = key[len(base_key(key)):]
+    if not suffix:
+        return op
+    if suffix == "!":
+        counterpart = op.name[4:] if op.name.startswith("not_") else f"not_{op.name}"
+        return PARTIAL_MATCH_OPERATORS[counterpart]
+    raise ParserError(
+        f"{op.name} on '{key}': key suffix '{suffix}' is not supported with "
+        "partial-matching operators (only '!' to negate)"
+    )

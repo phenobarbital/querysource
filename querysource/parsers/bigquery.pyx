@@ -239,8 +239,19 @@ cdef class BigQueryParser(SQLParser):
                         key, value, supports_regex=self.supports_regex_filter
                     )
                     if entry is not None:
+                        # FEAT-173: render the base column; entry already carries the key suffix.
+                        column = base_key(key)
+                        pm_expr = field_expr
+                        if column != key:
+                            pm_field, pm_path, pm_has_path = await self.get_json_path(column)
+                            if pm_has_path:
+                                pm_expr = f"JSON_VALUE({pm_field}, '{pm_path}')"
+                            elif (self.cond_definition or {}).get(column) == "json":
+                                pm_expr = f"JSON_VALUE({column}, '$')"
+                            else:
+                                pm_expr = column
                         where_cond.append(
-                            bq_partial_match_condition(field_expr, entry, next(iter(value.values())))
+                            bq_partial_match_condition(pm_expr, entry, next(iter(value.values())))
                         )
                         continue
                     if is_comparison_dict(value):

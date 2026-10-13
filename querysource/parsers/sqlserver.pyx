@@ -142,7 +142,7 @@ cdef class msSQLParser(SQLParser):
                     )
                     if entry is not None:
                         where_cond.append(
-                            mssql_partial_match_condition(key, entry, next(iter(value.values())))
+                            mssql_partial_match_condition(base_key(key), entry, next(iter(value.values())))
                         )
                         continue
                     # other dicts keep today's fallthrough (final else branch)
