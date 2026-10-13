@@ -35,7 +35,7 @@
       "feature_id": "FEAT-171",
       "feature": "pandas3-to-datetime-mixed-offsets",
       "spec": "sdd/specs/pandas3-to-datetime-mixed-offsets.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -45,8 +45,9 @@
       "parallelism_notes": "Calls the hardened _to_datetime_series from TASK-888; also modifies querysource/types/dt/transforms.py and tests/unit/test_to_datetime_mixed_offsets.py, both touched by TASK-888.",
       "assigned_to": null,
       "started_at": "2026-10-13T21:26:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-889-utc-semantics-sites.md"
+      "completed_at": "2026-10-13T21:42:48+00:00",
+      "file": "sdd/tasks/completed/TASK-889-utc-semantics-sites.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-890",
