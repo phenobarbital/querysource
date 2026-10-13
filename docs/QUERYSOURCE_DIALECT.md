@@ -308,11 +308,13 @@ There are two equivalent forms.
 ```
 
 ```sql
-qty > '0' AND price <= '99.9'
+qty > 0 AND price <= 99.9
 ```
 
-Allowed operators: `>=`, `<=`, `<>`, `!=`, `<`, `>`. Values are quoted
-literals; the database coerces them to the column type.
+Allowed operators: `>=`, `<=`, `<>`, `!=`, `<`, `>`. JSON numbers render as
+bare numeric literals and strings as quoted literals, on every dialect and on
+both the Rust and Cython paths (BigQuery is strictly typed, so `INT64 > "1"`
+would be an error). `{"qty": {">": "0"}}` renders `qty > '0'`.
 
 **List form** — the first item is the operator:
 
@@ -332,8 +334,8 @@ kept and they are joined with `AND` (PostgreSQL, generic SQL and BigQuery):
 
 | Request | SQL |
 |---|---|
-| `{"x": {">": 1, "<": 9}}` | `(x > '1' AND x < '9')` |
-| `{"qty": {">": 0}}` | `qty > '0'` |
+| `{"x": {">": 1, "<": 9}}` | `(x > 1 AND x < 9)` |
+| `{"qty": {">": 0}}` | `qty > 0` |
 
 > On PostgreSQL, a dict whose key is not a recognised operator is treated as
 > implicit JSONB containment (chapter 7), not as an error.
@@ -357,9 +359,14 @@ Bound grammar (each bound is validated, never passed through verbatim):
 - bare tokens (letters, digits, `_ : . / + -`) are resolved through the date
   keywords (`FDOM`, `TODAY`, ...) and otherwise quoted.
 
-Anything else (`;`, `--`, `/*`, extra keywords, a missing `AND`) raises
-`ParserError("invalid BETWEEN clause for '<column>'")`, an HTTP 400. A value that
-merely *contains* the word (`IN BETWEEN`) is an ordinary equality.
+Anything else (`;`, `--`, `/*`, a backslash, extra keywords, a missing `AND`)
+raises `ParserError("invalid BETWEEN clause for '<column>'")`, an HTTP 400. A
+value that merely *contains* the word (`IN BETWEEN`) is an ordinary equality.
+
+Every dialect builder (Rust and Cython) then re-checks the normalised clause
+against the exact form shown above — `[NOT ]BETWEEN <bound> AND <bound>` with
+numeric or `'`-quoted bounds — and drops the filter if it does not match, so a
+`BETWEEN` value can never be spliced into SQL unvalidated.
 
 ### 5.5 Key suffixes
 
@@ -871,8 +878,9 @@ QuerySource never concatenates user input into SQL without validation:
   partial-matching operators raise `ParserError`.
 - **Values** are quoted for the target dialect (`'` doubled; PostgreSQL uses
   escape-string literals when needed).
-- **`BETWEEN`** clauses with `;`, `--`, `/*`, `UNION` or `SELECT`
-  are rejected with a `ParserError` (5.4).
+- **`BETWEEN`** clauses outside the bound grammar (`;`, `--`, `/*`, a
+  backslash, extra keywords) are rejected with a `ParserError`; the builders
+  additionally accept only the exact normalised form (5.4).
 - **Regex** patterns are length-limited and checked for catastrophic nested
   quantifiers.
 - **JSONB** operands are serialised with `orjson`; invalid JSON drops the
@@ -973,8 +981,8 @@ FILTER VALUES                               SQL
   col: 'v'                                  col = 'v'
   col: '!v'        |  'col!': 'v'           col != 'v'
   col: [a, b]      |  'col!': [a, b]        col IN (...) / NOT IN (...)
-  col: {'>': 10}                            col > '10'        (>= <= <> != < >)
-  col: {'>': 1, '<': 9}                     (col > '1' AND col < '9')
+  col: {'>': 10}                            col > 10          (>= <= <> != < >)
+  col: {'>': 1, '<': 9}                     (col > 1 AND col < 9)
   col: 'BETWEEN 1 AND 5' | 'col!': ...      (col BETWEEN 1 AND 5) / NOT BETWEEN
   col: ['>=', 10]                           col >= '10'       (+ IS, IS NOT)
   col: 'null' | '!null'                     IS NULL / IS NOT NULL

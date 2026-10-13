@@ -140,3 +140,26 @@ async def test_between_bounds_reject_sql_markers(value: str, monkeypatch: pytest
     """Bounds with statement/comment markers raise instead of silently dropping the filter."""
     with pytest.raises(ParserError):
         await render({"filter": {"d": value}}, monkeypatch)
+
+
+async def test_escaped_brace_is_not_a_placeholder(monkeypatch):
+    """FEAT-170: {{since}} is literal text, so the typed filter stays a WHERE filter."""
+    sql = await render(
+        {"filter": {"since": "2025-01-01"}, "cond_definition": {"since": "date"}},
+        monkeypatch,
+        "SELECT '{{since}}' AS tag FROM public.t {where_cond}",
+    )
+    assert "since" in sql.split("FROM public.t", 1)[1]
+    assert "'2025-01-01'" in sql
+
+
+async def test_placeholder_with_conversion_keeps_substitution(monkeypatch):
+    """FEAT-170: {since!s} is a placeholder, so no duplicate WHERE filter is added."""
+    sql = await render(
+        {"filter": {"since": "2025-01-01"}, "cond_definition": {"since": "date"}},
+        monkeypatch,
+        "SELECT * FROM public.t WHERE created_at >= {since!s} {and_cond}",
+    )
+    assert "2025-01-01" in sql
+    assert "{since" not in sql
+    assert sql.count("2025-01-01") == 1

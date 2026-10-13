@@ -12,9 +12,12 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use crate::filter_common::apply_where_clause;
-use crate::filter_common::is_canonical_between;
-use crate::partial_match::{bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, MatchKind, PartialMatchOp};
+use crate::filter_common::{apply_where_clause, base_key};
+use crate::filter_common::{has_between_prefix, is_canonical_between};
+use crate::partial_match::{
+    bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, resolve_key_suffix, MatchKind,
+    PartialMatchOp,
+};
 use crate::safe_dict::safe_format_map_rust;
 use crate::validators::{bq_quote_string, field_components, is_integer};
 
@@ -192,6 +195,16 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
 
     match value {
         FilterValue::Dict(entries) => {
+            // FEAT-173: a single partial-matching operator renders the base column with the
+            // key suffix applied (validated up front by check_entries in bq_filter_conditions).
+            if let [(op, FilterValue::Str(s))] = entries.as_slice() {
+                if let Some(pm) = lookup(op) {
+                    let resolved = resolve_key_suffix(key, pm).ok()?;
+                    let base_quoted = bq_safe_identifier_key(base_key(key))?;
+                    let (base_expr, _) = resolve_json_field(&base_quoted, format_hint);
+                    return Some(bq_partial_match_condition(&base_expr, resolved, s));
+                }
+            }
             process_dict_value(&field_expr, entries)
         }
         FilterValue::List(items) => {
@@ -219,6 +232,16 @@ fn bq_partial_match_condition(field_expr: &str, op: &PartialMatchOp, operand: &s
     }
 }
 
+/// Comparison-dict operand: numbers bare, everything else a BigQuery string
+/// literal. BigQuery is strictly typed — `INT64 > STRING` is an error (FEAT-168).
+fn dict_operand(v: &FilterValue) -> String {
+    match v {
+        FilterValue::Int(i) => i.to_string(),
+        FilterValue::Float(f) if f.is_finite() => f.to_string(),
+        other => bq_quote_string(&other.as_str()),
+    }
+}
+
 /// Handle dict-typed filter values: comparison tokens and JSON extraction.
 fn process_dict_value(
     field_expr: &str,
@@ -234,7 +257,7 @@ fn process_dict_value(
     if all_comparisons {
         let rendered: Vec<String> = entries
             .iter()
-            .map(|(op, v)| format!("{} {} {}", field_expr, op, bq_quote_string(&v.as_str())))
+            .map(|(op, v)| format!("{} {} {}", field_expr, op, dict_operand(v)))
             .collect();
         return Some(if rendered.len() == 1 {
             rendered[0].clone()
@@ -254,7 +277,7 @@ fn process_dict_value(
 
     // Standard comparison tokens
     if COMPARISON_TOKENS.contains(&op.as_str()) {
-        return Some(format!("{} {} {}", field_expr, op, v.as_str()));
+        return Some(format!("{} {} {}", field_expr, op, dict_operand(v)));
     }
 
     // For BigQuery, dict values with non-comparison keys are JSON extraction
@@ -327,8 +350,11 @@ fn process_str_value(
     name: &str,
     end: &str,
 ) -> Option<String> {
-    // BETWEEN in value string
-    if is_canonical_between(value) {
+    // BETWEEN in value string — SECURITY (FEAT-168): only the canonical form is spliced
+    if has_between_prefix(value) {
+        if !is_canonical_between(value) {
+            return None;
+        }
         return Some(format!("({} {})", field_expr, value));
     }
     // NULL checks
@@ -891,6 +917,57 @@ mod tests {
         assert_eq!(
             process_entry(&entry),
             Some("(date BETWEEN '2024-01-01' AND '2024-12-31')".to_string())
+        );
+    }
+
+    #[test]
+    fn feat168_numeric_comparison_operands_are_bare() {
+        let entry = FilterEntry {
+            key: "x".to_string(),
+            value: FilterValue::Dict(vec![
+                (">".to_string(), FilterValue::Int(1)),
+                ("<".to_string(), FilterValue::Float(9.5)),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), Some("(x > 1 AND x < 9.5)".to_string()));
+    }
+
+    #[test]
+    fn feat168_string_comparison_operand_stays_quoted() {
+        let entry = FilterEntry {
+            key: "x".to_string(),
+            value: FilterValue::Dict(vec![(">".to_string(), FilterValue::Str("b".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), Some("x > \"b\"".to_string()));
+    }
+
+    #[test]
+    fn feat168_non_finite_float_operand_is_quoted() {
+        assert_eq!(dict_operand(&FilterValue::Float(f64::NAN)), "\"NaN\"");
+    }
+
+    #[test]
+    fn feat168_mixed_dict_comparison_operand_is_never_raw() {
+        let entries = vec![
+            (">".to_string(), FilterValue::Str("1 OR 1=1".to_string())),
+            ("name".to_string(), FilterValue::Str("a".to_string())),
+        ];
+        assert_eq!(
+            process_dict_value("x", &entries),
+            Some("x > \"1 OR 1=1\"".to_string())
+        );
+    }
+
+    #[test]
+    fn feat168_non_canonical_between_is_dropped() {
+        for value in ["BETWEEN 1 AND 2 OR 1=1", "BETWEEN 1 AND 2;", "BETWEEN x AND y"] {
+            assert_eq!(process_str_value("amount", value, "amount", ""), None, "{value}");
+        }
+        assert_eq!(
+            process_str_value("amount", "BETWEEN 100 AND 500", "amount", ""),
+            Some("(amount BETWEEN 100 AND 500)".to_string())
         );
     }
 

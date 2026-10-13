@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
-use crate::filter_common::{base_key, is_canonical_between};
+use crate::filter_common::{base_key, has_between_prefix, is_canonical_between};
 use crate::validators::{escape_string, field_components, is_camel_case, is_integer, quote_string};
 use crate::partial_match::{build_like_pattern, check_entries, like_escape, MatchKind, PartialMatchOp};
 
@@ -472,6 +472,16 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
     }
 }
 
+/// Comparison-dict operand: numbers bare (as the Cython builder renders them),
+/// everything else through the idempotent `quote_string` (FEAT-168).
+fn dict_operand(v: &FilterValue) -> String {
+    match v {
+        FilterValue::Int(i) => i.to_string(),
+        FilterValue::Float(f) if f.is_finite() => f.to_string(),
+        other => quote_string(&other.as_str(), true),
+    }
+}
+
 /// Handle dict-typed filter values with a comparison token (`{">=": 5}`).
 ///
 /// JSONB dicts never reach this function: they are rendered by
@@ -492,12 +502,7 @@ fn process_dict_value(
         let rendered: Vec<String> = entries
             .iter()
             .map(|(op, v)| {
-                format!(
-                    "{} {} {}",
-                    key,
-                    op,
-                    quote_string(&v.as_str(), true)
-                )
+                format!("{} {} {}", key, op, dict_operand(v))
             })
             .collect();
         return Some(if rendered.len() == 1 {
@@ -516,8 +521,8 @@ fn process_dict_value(
 
     // Standard comparison tokens
     if COMPARISON_TOKENS.contains(&op.as_str()) {
-        // SECURITY: escape the comparison value
-        let safe_v = quote_string(&v.as_str(), true);
+        // SECURITY: escape the comparison value (numbers stay bare)
+        let safe_v = dict_operand(v);
         return Some(format!("{} {} {}", key, op, safe_v));
     }
 
@@ -648,9 +653,9 @@ fn process_str_value(
         let val = format!("'{base_escaped}%'");
         return Some(format!("{} NOT ILIKE {}", name, val));
     }
-    // BETWEEN in value string — validate for injection
-    if is_canonical_between(value) {
-        if !pg_validate_between(value) {
+    // BETWEEN in value string — SECURITY (FEAT-168): only the canonical form is spliced
+    if has_between_prefix(value) {
+        if !is_canonical_between(value) || !pg_validate_between(value) {
             return None; // reject unsafe BETWEEN
         }
         return Some(format!("({} {})", key, value));
@@ -752,7 +757,8 @@ fn pg_partial_match_from_dict(key: &str, dict: &Bound<'_, PyDict>) -> PyResult<O
     let Some((op, operand)) = check_entries(key, &borrowed, true)? else {
         return Ok(None);
     };
-    let Some(safe_key) = pg_safe_identifier_key(key) else {
+    // FEAT-173: base column; check_entries already applied the key suffix.
+    let Some(safe_key) = pg_safe_identifier_key(base_key(key)) else {
         return Ok(Some(FilterValue::Null));
     };
     Ok(Some(FilterValue::Condition(pg_partial_match_condition(&safe_key, op, operand))))
@@ -1205,6 +1211,45 @@ mod tests {
         assert_eq!(
             process_entry(&entry),
             Some("(date BETWEEN '2024-01-01' AND '2024-12-31')".to_string())
+        );
+    }
+
+    #[test]
+    fn feat168_numeric_comparison_operands_are_bare() {
+        let entry = FilterEntry {
+            key: "x".to_string(),
+            value: FilterValue::Dict(vec![
+                (">".to_string(), FilterValue::Int(1)),
+                ("<".to_string(), FilterValue::Float(9.5)),
+            ]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), Some("(x > 1 AND x < 9.5)".to_string()));
+    }
+
+    #[test]
+    fn feat168_string_comparison_operand_stays_quoted() {
+        let entry = FilterEntry {
+            key: "x".to_string(),
+            value: FilterValue::Dict(vec![(">".to_string(), FilterValue::Str("b".to_string()))]),
+            format_hint: None,
+        };
+        assert_eq!(process_entry(&entry), Some("x > 'b'".to_string()));
+    }
+
+    #[test]
+    fn feat168_non_finite_float_operand_is_quoted() {
+        assert_eq!(dict_operand(&FilterValue::Float(f64::INFINITY)), "'inf'");
+    }
+
+    #[test]
+    fn feat168_non_canonical_between_is_dropped() {
+        for value in ["BETWEEN 1 AND 2 OR 1=1", "BETWEEN 1 AND 2;", "BETWEEN x AND y"] {
+            assert_eq!(process_str_value("amount", value, "amount", "", None), None, "{value}");
+        }
+        assert_eq!(
+            process_str_value("amount", "BETWEEN 100 AND 500", "amount", "", None),
+            Some("(amount BETWEEN 100 AND 500)".to_string())
         );
     }
 

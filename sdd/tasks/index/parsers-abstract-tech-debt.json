@@ -1,0 +1,33 @@
+{
+  "feature": "parsers-abstract-tech-debt",
+  "feature_id": "FEAT-170",
+  "spec": "sdd/specs/parsers-abstract-tech-debt.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-13T20:05:47+00:00",
+  "completed_at": "2026-10-13T20:07:44+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "TASK-883",
+      "slug": "between-negation-and-template-fields",
+      "title": "BETWEEN suffix negation and format-aware template placeholder detection",
+      "feature_id": "FEAT-170",
+      "feature": "parsers-abstract-tech-debt",
+      "spec": "sdd/specs/parsers-abstract-tech-debt.spec.md",
+      "status": "done",
+      "priority": "low",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "exclusive: modifies abstract.pyx, which needs a Cython build_ext --inplace rebuild",
+      "discovered_from": "issue:1149c6ed91ea",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T20:07:44+00:00",
+      "file": "sdd/tasks/completed/TASK-883-between-negation-and-template-fields.md",
+      "verification": "verified"
+    }
+  ]
+}

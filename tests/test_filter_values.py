@@ -9,6 +9,7 @@ from querysource.parsers.filter_values import (
     base_key,
     is_comparison_dict,
     parse_between,
+    template_fields,
 )
 from querysource.utils.functions import to_udf
 
@@ -85,3 +86,33 @@ def test_parse_between_embedded_quote():
 def test_between_clause_render():
     """BetweenClause renders both regular and negated forms."""
     assert BetweenClause(False, "1", "2").render() == "BETWEEN 1 AND 2"
+
+
+@pytest.mark.parametrize("key", ["amount!", "amount!~", "amount~!", "amount|!#"])
+def test_parse_between_bang_anywhere_in_suffix_negates(key):
+    """FEAT-170: a ! anywhere in the stripped suffix negates, whatever the order."""
+    assert parse_between(key, "BETWEEN 1 AND 2").negated is True
+
+
+@pytest.mark.parametrize("key", ["amount", "amount~", "amount|#"])
+def test_parse_between_suffix_without_bang_not_negated(key):
+    """FEAT-170: suffixes without ! never negate."""
+    assert parse_between(key, "BETWEEN 1 AND 2").negated is False
+
+
+def test_template_fields_strips_conversion_spec_and_escapes():
+    """FEAT-170: format_map field semantics: escaped braces are literal text."""
+    template = "a {x} {y!s} {z:>3} {{w}} {o.attr} {i[0]} {and_cond}"
+    assert template_fields(template) == frozenset({"x", "y", "z", "o", "i", "and_cond"})
+
+
+@pytest.mark.parametrize("template", ["", "SELECT 1", "WHERE a = '{'", "x {a} }"])
+def test_template_fields_malformed_never_raises(template):
+    """FEAT-170: a non-format-string template falls back instead of raising."""
+    fields = template_fields(template)
+    assert isinstance(fields, frozenset)
+
+
+def test_template_fields_fallback_keeps_brace_names():
+    """FEAT-170: the fallback still finds plain placeholders in a malformed template."""
+    assert template_fields("WHERE a >= {since!s} AND b = '{'") == frozenset({"since"})

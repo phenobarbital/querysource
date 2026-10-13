@@ -8,6 +8,7 @@ import datetime
 import decimal
 import json
 import locale
+import re
 import traceback
 from datetime import timedelta
 from functools import reduce
@@ -26,15 +27,190 @@ from ...conf import DEFAULT_TIMEZONE
 from ...types.validators import strtobool
 from ...utils.getfunc import getFunction
 
+_OFFSET_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(Z|[+-]\d{2}:\d{2})$")
 
-def to_timestamp(df: pd.DataFrame, field: str, remove_nat: bool = False):
+
+def _parse_offset_dates(series: pd.Series) -> pd.Series:
+    """Rewrite date-only strings carrying a UTC offset to midnight at that offset.
+
+    pandas reads xs:date values such as ``2025-09-15-07:00`` as the naive time
+    ``2025-09-15 07:00``. This rewrites them to ``2025-09-15T00:00:00-07:00``
+    (also ``+05:30`` and ``Z``). Every other value is returned unchanged.
+
+    Args:
+        series: Raw values.
+
+    Returns:
+        A Series with the same index and name.
+    """
+    return series.map(
+        lambda value: _OFFSET_DATE_RE.sub(r"\1T00:00:00\2", value) if isinstance(value, str) else value
+    )
+
+
+def _parse_datetime_value(value: Any) -> Any:
+    """Parse one value to ``pd.Timestamp``; nulls and unparseable values become ``NaT``."""
     try:
-        df[field] = pd.to_datetime(df[field], errors="coerce")
-        df[field] = df[field].where(df[field].notnull(), None)
-        df[field] = df[field].astype("datetime64[ns]")
+        if value is None or pd.isna(value):
+            return pd.NaT
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, datetime.time):
+        # time-of-day values anchor on 1900-01-01, matching ``to_time``
+        return pd.Timestamp.combine(datetime.date(1900, 1, 1), value)
+    try:
+        return pd.Timestamp(value)
+    except (TypeError, ValueError, OverflowError):
+        return pd.NaT
+
+
+def _has_mixed_timezones(series: pd.Series) -> bool:
+    """Return whether parsed values have more than one timezone state.
+
+    Naive values count as their own state, while aware values are keyed by
+    timezone identity. Nulls are ignored.
+
+    Args:
+        series: Independently parsed ``pd.Timestamp`` or ``NaT`` values.
+
+    Returns:
+        ``True`` when multiple timezone states are present.
+    """
+    states: set = set()
+    for value in series:
+        if value is pd.NaT or pd.isna(value):
+            continue
+        states.add(None if value.tzinfo is None else str(value.tz))
+        if len(states) > 1:
+            return True
+    return False
+
+
+def _prefer_ns(series: pd.Series) -> pd.Series:
+    """Cast a datetime Series to nanosecond resolution when its values fit.
+
+    Out-of-range values (e.g. ``9999-12-31``) keep their coarser resolution
+    instead of raising ``OutOfBoundsDatetime``.
+    """
+    try:
+        return series.astype(
+            f"datetime64[ns, {series.dt.tz}]" if series.dt.tz is not None else "datetime64[ns]"
+        )
+    except (OverflowError, ValueError, pd.errors.OutOfBoundsDatetime):
+        return series
+
+
+def _to_datetime_series(
+    series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
+) -> pd.Series:
+    """Parse a Series while preserving every parseable timezone-bearing value.
+
+    Datetime-dtype inputs pass through unchanged. Heterogeneous values are
+    normalized to UTC with a warning when ``infer_tz`` is false; otherwise
+    their individual offsets and naive values are retained as an object Series.
+
+    Args:
+        series: Series with datetime-like values.
+        infer_tz: Keep individual timezone states for heterogeneous input.
+        field: Column name, used only for logging.
+
+    Returns:
+        The parsed Series. Unparseable values become ``NaT``.
+    """
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series
+    parsed = _parse_offset_dates(series).map(_parse_datetime_value).astype(object)
+    lost = int((parsed.isna() & series.notna()).sum())
+    if lost:
+        logging.warning(
+            f"Datetime column {field!r}: {lost} non-null value(s) could not be "
+            "parsed and became NaT."
+        )
+    if _has_mixed_timezones(parsed):
+        if infer_tz:
+            return parsed
+        logging.warning(
+            f"Datetime column {field!r} has mixed timezones/offsets; "
+            "normalizing to UTC (naive values read as UTC). Pass infer_tz=True "
+            "to keep each value's own offset."
+        )
+        return _prefer_ns(
+            pd.to_datetime(
+                parsed.map(
+                    lambda value: value
+                    if value is pd.NaT
+                    else value.tz_localize("UTC")
+                    if value.tzinfo is None
+                    else value.tz_convert("UTC")
+                ),
+                utc=True,
+            )
+        )
+    return pd.to_datetime(parsed)
+
+
+def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
+    """Return naive datetime64 local wall-clock values.
+
+    The resolution is left to pandas, so out-of-ns-range dates such as
+    ``9999-12-31`` are preserved instead of raising.
+
+    Args:
+        series: Values to convert.
+        field: Column name, used only for logging.
+
+    Returns:
+        A naive datetime64 Series with the same index and name.
+    """
+    parsed = _to_datetime_series(series, infer_tz=True, field=field)
+    if isinstance(parsed.dtype, pd.DatetimeTZDtype):
+        return _prefer_ns(parsed.dt.tz_localize(None))
+    if parsed.dtype == object:
+        parsed = pd.to_datetime(
+            parsed.map(
+                lambda value: value
+                if value is pd.NaT or value.tzinfo is None
+                else value.tz_localize(None)
+            )
+        )
+    return _prefer_ns(parsed)
+
+
+def _convert_datetime_column(
+    df: pd.DataFrame, field: str, infer_tz: bool = False
+) -> pd.DataFrame:
+    """Convert ``df[field]`` to datetime, keeping timezone information.
+
+    Naive results are cast to ``datetime64[ns]``. Tz-aware results keep their
+    timezone (cast to nanosecond resolution), and mixed-offset results from
+    ``infer_tz=True`` stay as ``object`` dtype: casting either of them to a
+    naive ``datetime64[ns]`` would drop the timezone.
+
+    Args:
+        df: DataFrame to modify in place.
+        field: Column to convert.
+        infer_tz: See :func:`_to_datetime_series`.
+
+    Returns:
+        The modified DataFrame.
+    """
+    try:
+        values = _to_datetime_series(df[field], infer_tz=infer_tz, field=field)
+        values = values.where(values.notnull(), None)
+        if isinstance(values.dtype, pd.DatetimeTZDtype):
+            values = values.dt.as_unit("ns")
+        elif values.dtype != object:
+            values = values.astype("datetime64[ns]")
+        df[field] = values
     except Exception as err:
-        print(err)
+        logging.error(f"Error converting {field!r} to datetime: {err}")
     return df
+
+
+def to_timestamp(
+    df: pd.DataFrame, field: str, remove_nat: bool = False, infer_tz: bool = False
+):
+    return _convert_datetime_column(df, field, infer_tz=infer_tz)
 
 
 def from_currency(df: pd.DataFrame, field: str, symbol="$", remove_nan: bool = True):
@@ -253,8 +429,7 @@ def extract_from_array(
         df[field] = df[column].apply(safe_extract)
     except Exception as err:
         logging.error(f"extract_from_array Error: {err}")
-    finally:
-        return df
+    return df
 
 
 def explode(
@@ -292,13 +467,12 @@ def explode(
                 df[col] = df[col].str.strip("()").str.split(delimiter)
     try:
         df = df.explode(splitcols, ignore_index=True)
-    except ValueError as err:
+    except Exception as err:  # the former finally-return swallowed every error
         logging.error(f"Explode Error: {err}")
-    finally:
-        return df  # pylint: disable=W0150
+    return df
 
 
-def sum(df: pd.DataFrame, field: str = "", columns: list = []):
+def sum(df: pd.DataFrame, field: str = "", columns: Optional[list] = None):
     """
     Takes a pandas DataFrame and sums the values across specified columns,
     storing the result in a new column.
@@ -308,6 +482,8 @@ def sum(df: pd.DataFrame, field: str = "", columns: list = []):
     :param columns: List of columns in the df DataFrame to be summed. Defaults to an empty list ([]).
     :return: Modified pandas DataFrame with the sum of the specified columns stored in a new column.
     """
+    if columns is None:
+        columns = []
     try:
         if columns and isinstance(columns, list):
             df[field] = df[columns].sum(axis=1)
@@ -372,10 +548,11 @@ def to_time(
             # If value is already a datetime or Timestamp, return its time component
             return value.time() if hasattr(value, 'time') else value
         try:
-            return datetime.datetime.strptime(value.strip(), format).time()
+            # Time-of-day parse: a timezone has no meaning here.
+            return datetime.datetime.strptime(value.strip(), format).time()  # noqa: DTZ007
         except ValueError:
             try:
-                return datetime.datetime.strptime(value.strip(), fallback_format).time()
+                return datetime.datetime.strptime(value.strip(), fallback_format).time()  # noqa: DTZ007
             except ValueError:
                 return None  # Return None if both formats fail
 
@@ -466,9 +643,13 @@ def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):
     :param time: Name of the column in the df DataFrame containing time values.
     :return: Modified pandas DataFrame with the combined timestamp stored in a new column.
     """
-    df[field] = pd.to_datetime(
-        df[date].dt.date.astype(str) + " " + df[time].dt.time.astype(str)
-    )
+    date_part = _to_wall_clock(df[date], field=date)
+    if pd.api.types.is_timedelta64_dtype(df[time]):
+        offset = df[time]
+    else:
+        time_part = _to_wall_clock(df[time], field=time)
+        offset = time_part - time_part.dt.normalize()
+    df[field] = date_part.dt.normalize() + offset
     return df
 
 
@@ -568,7 +749,7 @@ def pad(df: pd.DataFrame, field: str, num_chars=4, side="left", char="0"):
     return df
 
 
-def concat(df: pd.DataFrame, field: str, columns=[], separator=" "):
+def concat(df: pd.DataFrame, field: str, columns: Optional[list] = None, separator=" "):
     """
     Takes a pandas DataFrame and concatenates the values from specified columns into a single column,
     using a specified separator.
@@ -579,6 +760,8 @@ def concat(df: pd.DataFrame, field: str, columns=[], separator=" "):
     :param separator: The character or string used to separate the concatenated values. Defaults to a space (" ").
     :return: Modified pandas DataFrame with the concatenated values stored in a new column.
     """
+    if columns is None:
+        columns = []
     try:
         if columns and isinstance(columns, list):
             df[field] = (
@@ -801,8 +984,7 @@ def split_to_columns(df: pd.DataFrame, field: str, columns: list, regex: str = "
         df[columns] = df[field].str.extract(regex, expand=expand)
     except Exception as err:
         print("Split to Columns Error: ", err)
-    finally:
-        return df
+    return df
 
 
 def slice(
@@ -936,7 +1118,7 @@ def multiply(
     return df
 
 
-def nullif(df: pd.DataFrame, field: str, chars=[]):
+def nullif(df: pd.DataFrame, field: str, chars: Optional[list] = None):
     """
     Takes a pandas DataFrame and sets the values in a specified column to None
     if they match any value in a given list of characters.
@@ -946,6 +1128,8 @@ def nullif(df: pd.DataFrame, field: str, chars=[]):
     :param chars: List of characters to be checked against. If a value in the column matches any character in this list, it will be set to None. Defaults to an empty list ([]).
     :return: Modified pandas DataFrame with the specified values set to None.
     """  # noqa
+    if chars is None:
+        chars = []
     df.loc[(df[field].isin(chars)), field] = None
     return df
 
@@ -1187,7 +1371,7 @@ def replace_regex(df: pd.DataFrame, field: str, to_replace="", value=""):
     return df
 
 
-def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
+def ereplace(df: pd.DataFrame, field: str, columns: Optional[list] = None, newvalue=""):
     """
     Replaces occurrences of a value from one column with another value in a specified column of a pandas DataFrame.
 
@@ -1197,6 +1381,8 @@ def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
     :param newvalue: The string to replace with.
     :return: Modified pandas DataFrame with the replaced values.
     """
+    if columns is None:
+        columns = []
     col1 = columns[0]
     col2 = columns[1]
     
@@ -1218,7 +1404,9 @@ def ereplace(df: pd.DataFrame, field: str, columns=[], newvalue=""):
     df[field] = df.apply(safe_replace, axis=1)
     return df
 
-def replace_to_nan(df: pd.DataFrame, field: str, to_replace=[]):
+def replace_to_nan(df: pd.DataFrame, field: str, to_replace: Optional[list] = None):
+    if to_replace is None:
+        to_replace = []
     df[field] = df[field].replace(to_replace, np.nan)
     return df
 
@@ -1260,10 +1448,9 @@ def convert_to_string(
             df[field] = df[field].str.replace(np.nan, "", regex=True)
         if avoid_empty is True:
             df[field] = df[field].astype(str).replace(r"^\s*$", None, regex=True)
-    except TypeError:
-        raise
-    finally:
-        return df
+    except Exception as err:  # the former finally-return swallowed every error, re-raised TypeError included
+        logging.error(f"to_string Error: {err}")
+    return df
 
 
 def to_string(
@@ -1286,7 +1473,7 @@ def to_list(
     df: pd.DataFrame,
     field: str,
     column: str = None,
-    columns: list = [],
+    columns: Optional[list] = None,
 ) -> pd.DataFrame:
     """to_list.
 
@@ -1296,6 +1483,8 @@ def to_list(
     :param field: Name of the column in the df DataFrame to be modified.
     :param columns: List of columns to convert to a list.
     """
+    if columns is None:
+        columns = []
     try:
         if column is not None:
             field = column
@@ -1332,7 +1521,7 @@ def convert_to_array(
     if no_duplicates is True:
         # Trim whitespace from each word, handle "nan" strings, and remove duplicates
         df[field] = df[field].apply(
-            lambda x: list(set([word.strip() for word in x if word.strip() != "nan"]))
+            lambda x: list({word.strip() for word in x if word.strip() != "nan"})
         )
     else:
         # Trim whitespace from each word and handle "nan" strings
@@ -1413,22 +1602,20 @@ def convert_to_json(df: pd.DataFrame, field: str):
     return df
 
 
-def convert_to_datetime(df: pd.DataFrame, field: str, remove_nat=False):
+def convert_to_datetime(
+    df: pd.DataFrame, field: str, remove_nat=False, infer_tz: bool = False
+):
     """
     Converts the values in a specified column of a pandas DataFrame to datetime format.
 
     :param df: pandas DataFrame to be modified.
     :param field: Name of the column in the df DataFrame to be modified.
     :param remove_nat: Boolean indicating whether to remove NaT values. Defaults to False.
+    :param infer_tz: On mixed UTC offsets, keep each value's own offset
+        (object dtype) instead of normalizing to UTC. Defaults to False.
     :return: Modified pandas DataFrame with the values converted to datetime format.
     """
-    try:
-        df[field] = pd.to_datetime(df[field], errors="coerce")
-        df[field] = df[field].where(df[field].notnull(), None)
-        df[field] = df[field].astype("datetime64[ns]")
-    except Exception as err:
-        print(err)
-    return df
+    return _convert_datetime_column(df, field, infer_tz=infer_tz)
 
 
 def to_datetime(df: pd.DataFrame, field: str, format="%Y-%m-%d"):
@@ -1659,7 +1846,7 @@ def to_integer(df: pd.DataFrame, field: str):
 def convert_to_boolean(
     df: pd.DataFrame,
     field: str,
-    boolDict={"True": True, "False": False},
+    boolDict: Optional[dict] = None,
     true_values: Optional[dict] = None,
     nan: bool = False,
     preserve_nulls: bool = False,
@@ -1675,6 +1862,8 @@ def convert_to_boolean(
     :param preserve_nulls: Whether to preserve null values.
     :return: The DataFrame with the converted field.
     """
+    if boolDict is None:
+        boolDict = {"True": True, "False": False}
     if field not in df.columns:
         # column doesn't exist
         df = df.assign(field=nan)
@@ -1783,7 +1972,7 @@ def to_percentile(df: pd.DataFrame, field: str, symbol="%", divisor=None, remove
     return df
 
 
-def split_cols(df: pd.DataFrame, field: str, separator=",", columns=[], numcols=2):
+def split_cols(df: pd.DataFrame, field: str, separator=",", columns: Optional[list] = None, numcols=2):
     """
     Splits a specified field in a DataFrame into multiple columns based on a separator.
 
@@ -1794,6 +1983,8 @@ def split_cols(df: pd.DataFrame, field: str, separator=",", columns=[], numcols=
     :param numcols: The number of columns to split into.
     :return: The DataFrame with the split columns.
     """
+    if columns is None:
+        columns = []
     if not columns:
         columns = [f"{field}_part{i + 1}" for i in range(numcols)]
 
@@ -1860,7 +2051,7 @@ def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
 
     try:
         # Ensure the column is converted to datetime
-        df[column] = pd.to_datetime(df[column], errors='coerce')
+        df[column] = _to_datetime_series(df[column], infer_tz=False, field=column)
 
         # Handle timezone-aware datetimes
         if df[column].dt.tz is not None:
@@ -1871,7 +2062,7 @@ def to_excel_date(df: pd.DataFrame, field: str, column: str = None):
             df[field] = df[column].dt.tz_localize(None)
 
     except Exception as e:
-        print('Error on to_excel_date: ', e)
+        logging.error(f"Error on to_excel_date for {column!r}: {e}")
         raise e  # Re-raise the exception after logging it
 
     return df
@@ -1969,41 +2160,44 @@ def extract(df: pd.DataFrame, field: str, column="", to_date=None, value="day"):
 
     value = value.lower()
 
-    if not is_datetime_column(df[column]):
-        # convert to datetime, but only if not time:
-        if not is_time_column(df[column]):
-            try:
-                df[column] = pd.to_datetime(df[column])
-            except TypeError:
-                pass
+    if not is_datetime_column(df[column]) and not pd.api.types.is_timedelta64_dtype(df[column]):
+        try:
+            df[column] = _to_datetime_series(df[column], infer_tz=True, field=column)
+        except (TypeError, ValueError) as err:
+            logging.error(f"extract: cannot parse {column!r} as datetime: {err}")
+    source = df[column]
+    view = source if source.dtype != object else _to_wall_clock(source, field=column)
 
     if value == "day":
-        df[field] = df[column].dt.day
+        df[field] = view.dt.day
     elif value == "dow" or value.lower() == "dayofweek":
-        df[field] = df[column].dt.dayofweek
+        df[field] = view.dt.dayofweek
     elif value == "doy" or value.lower() == "dayofyear":
-        df[field] = df[column].dt.dayofyear
+        df[field] = view.dt.dayofyear
     elif value == "month":
-        df[field] = df[column].dt.month
+        df[field] = view.dt.month
         df[field] = df[field].astype("Int64")
     elif value == "year":
-        df[field] = df[column].dt.year
+        df[field] = view.dt.year
         df[field] = df[field].astype("Int64")
     elif value == "quarter":
-        df[field] = df[column].dt.quarter
+        df[field] = view.dt.quarter
     elif value == "hour":
         try:
-            df[field] = df[column].dt.hour
+            df[field] = view.dt.hour
         except AttributeError:
-            df[field] = df[column].dt.components.hours
+            df[field] = view.dt.components.hours
     elif value == "minute":
-        df[field] = df[column].dt.minute
+        df[field] = view.dt.minute
     elif value == "second":
-        df[field] = df[column].dt.second
+        df[field] = view.dt.second
     elif value == "ldom":
-        df[field] = df[column] + MonthEnd(0)
+        if source.dtype == object:
+            df[field] = source.map(lambda v: v if pd.isna(v) else v + MonthEnd(0))
+        else:
+            df[field] = source + MonthEnd(0)
     else:
-        df[field] = df[column].dt.to_period(value)
+        df[field] = view.dt.to_period(value)
     return df
 
 
@@ -2090,7 +2284,13 @@ def fill_nulls(df: pd.DataFrame, field: str, column: str):
 
         # Fill null values in the field with values from the specified column
         try:
-            df.loc[df[field].isnull(), field] = df[column]
+            mask = df[field].isnull()
+            try:
+                df.loc[mask, field] = df[column]
+            except TypeError:
+                # pandas>=3 string dtype rejects non-string fill values
+                df[field] = df[field].astype(object)
+                df.loc[mask, field] = df[column]
         except KeyError:
             logging.error(f"Fill Nulls: Column {column} doesn't exist")
         except ValueError as e:
@@ -2134,7 +2334,7 @@ def fn_get_timezone(latitudes, longitudes):
     latitudes = latitudes[mask]
     longitudes = longitudes[mask]
     if len(latitudes) > 0:
-        zones[mask] = [tz.timezone_at(lng=long, lat=lat) for lat, long in zip(latitudes, longitudes)]
+        zones[mask] = [tz.timezone_at(lng=long, lat=lat) for lat, long in zip(latitudes, longitudes, strict=True)]
         zones[zones == "uninhabited"] = DEFAULT_TIMEZONE
         zones[zones is None] = DEFAULT_TIMEZONE
     return zones
@@ -2150,7 +2350,7 @@ def get_timezone(df: pd.DataFrame, field: str, lat: str, long: str) -> pd.DataFr
     :param long: The name of the longitude column.
     :return: The DataFrame with the timezone field.
     """
-    if not set([lat, long]).issubset(df.columns):
+    if not {lat, long}.issubset(df.columns):
         df[field] = None
     try:
         df[lat] = pd.to_numeric(df[lat], errors='coerce')
@@ -2176,13 +2376,14 @@ def split_into_series(df: pd.DataFrame, field: str):
         df = df[field].apply(pd.Series)
     except Exception as err:
         print("Split Series Error: ", err)
-    finally:
-        return df
+    return df
 
 
 def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: str = "UTC"):
     """
     Changes the timezone of a datetime field in a DataFrame.
+
+    Timezone-aware input is converted directly; ``from_tz`` is ignored.
 
     :param df: The DataFrame containing the datetime field.
     :param field: The name of the field to change the timezone for.
@@ -2190,16 +2391,23 @@ def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: st
     :param to_tz: The target timezone for the field.
     :return: The DataFrame with the timezone changed field.
     """
-    df[field] = pd.to_datetime(df[field], errors="coerce")
     try:
-        infer_dst = np.array([False] * df.shape[0])
-        df[field] = (
-            df[field].dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
-        )
+        values = _to_datetime_series(df[field], infer_tz=False, field=field)
+        if isinstance(values.dtype, pd.DatetimeTZDtype):
+            if from_tz:
+                logging.warning(
+                    f"change_timezone: {field!r} is already timezone-aware; "
+                    f"ignoring from_tz={from_tz!r}"
+                )
+            df[field] = values.dt.tz_convert(to_tz)
+        else:
+            infer_dst = np.array([False] * df.shape[0])
+            df[field] = (
+                values.dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
+            )
     except Exception as err:
-        print("Error Changing timezone: ", err)
-    finally:
-        return df
+        logging.error(f"Error changing timezone of {field!r}: {err}")
+    return df
 
 
 def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):
@@ -3106,7 +3314,7 @@ def filter_list_elements(df: pd.DataFrame, field: str, column: str, filter_value
                     if isinstance(parsed_list, list):
                         filtered = [item for item in parsed_list if filter_value in str(item)]
                         return filtered if filtered else None
-                except:
+                except Exception:
                     pass
             return None
         except Exception:

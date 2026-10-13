@@ -1,0 +1,77 @@
+{
+  "feature": "src-bigquery-parser-tech-debt",
+  "feature_id": "FEAT-168",
+  "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-13T20:03:46+00:00",
+  "completed_at": "2026-10-13T20:15:18+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "discovered_from": [
+    "issue:7a248a32aa07",
+    "issue:fc81723e95ac"
+  ],
+  "tasks": [
+    {
+      "id": "TASK-880",
+      "slug": "python-cython-strict-between",
+      "title": "Strict canonical BETWEEN + numeric BigQuery operands (Python/Cython)",
+      "feature_id": "FEAT-168",
+      "feature": "src-bigquery-parser-tech-debt",
+      "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "exclusive: rebuilds the Cython extensions in place (setup.py build_ext --inplace), which TASK-881's Python-level checks also load",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T20:08:39+00:00",
+      "file": "sdd/tasks/completed/TASK-880-python-cython-strict-between.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-881",
+      "slug": "rust-strict-between-numeric-operands",
+      "title": "Strict canonical BETWEEN + numeric comparison operands (Rust)",
+      "feature_id": "FEAT-168",
+      "feature": "src-bigquery-parser-tech-debt",
+      "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": false,
+      "parallelism_notes": "exclusive: rebuilds and stages the shared _qs_parsers maturin extension (make build-rust + stage-rust)",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T20:09:00+00:00",
+      "file": "sdd/tasks/completed/TASK-881-rust-strict-between-numeric-operands.md",
+      "verification": "verified"
+    },
+    {
+      "id": "TASK-882",
+      "slug": "parity-and-builder-between-tests",
+      "title": "Exact parity assertions + builder-level BETWEEN defence-in-depth tests",
+      "feature_id": "FEAT-168",
+      "feature": "src-bigquery-parser-tech-debt",
+      "spec": "sdd/specs/src-bigquery-parser-tech-debt.spec.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-880",
+        "TASK-881"
+      ],
+      "parallel": true,
+      "parallelism_notes": "needs is_canonical_between/has_between_prefix + bare BigQuery operands from TASK-880 (filter_values.py, bigquery.pyx) and the strict Rust builders from TASK-881 (filter_common.rs, pgsql_parser.rs) — its exact assertions fail without both",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T20:13:22+00:00",
+      "file": "sdd/tasks/completed/TASK-882-parity-and-builder-between-tests.md",
+      "verification": "verified"
+    }
+  ]
+}

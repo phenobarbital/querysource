@@ -1,0 +1,55 @@
+{
+  "feature": "parsers-bigquery-fixes",
+  "feature_id": "FEAT-173",
+  "spec": "sdd/specs/parsers-bigquery-fixes.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-10-13T21:04:27+00:00",
+  "completed_at": "2026-10-13T21:08:30+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "feature_id": "FEAT-173",
+      "feature": "parsers-bigquery-fixes",
+      "spec": "sdd/specs/parsers-bigquery-fixes.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T21:08:28+00:00",
+      "discovered_from": "issue:36f51186eac1",
+      "parallel": false,
+      "effort": "M",
+      "id": "TASK-886",
+      "slug": "rust-partial-match-key-suffix",
+      "title": "Rust partial-match keys: base column, ! flips operator, other suffixes rejected",
+      "depends_on": [],
+      "parallelism_notes": "exclusive: changes rust/src (maturin rebuild of the shared _qs_parsers extension)",
+      "file": "sdd/tasks/completed/TASK-886-rust-partial-match-key-suffix.md",
+      "verification": "verified"
+    },
+    {
+      "feature_id": "FEAT-173",
+      "feature": "parsers-bigquery-fixes",
+      "spec": "sdd/specs/parsers-bigquery-fixes.spec.md",
+      "status": "done",
+      "priority": "medium",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-10-13T21:08:30+00:00",
+      "discovered_from": "issue:36f51186eac1",
+      "parallel": false,
+      "effort": "M",
+      "id": "TASK-887",
+      "slug": "python-partial-match-key-suffix",
+      "title": "Python/Cython partial-match keys: base column, ! flips operator, other suffixes rejected",
+      "depends_on": [
+        "TASK-886"
+      ],
+      "parallelism_notes": "needs resolve_key_suffix behaviour from TASK-886 (rust/src/partial_match.rs) for rust-path e2e tests; exclusive: Cython build_ext --inplace",
+      "file": "sdd/tasks/completed/TASK-887-python-partial-match-key-suffix.md",
+      "verification": "verified"
+    }
+  ]
+}
