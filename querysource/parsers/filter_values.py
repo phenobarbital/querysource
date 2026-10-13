@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 
 from ..exceptions import ParserError
-from ..types.validators import is_udf
+from ..types.validators import is_udf, unquote_literal
 from ..utils.functions import to_udf
 
 KEY_SUFFIX_CHARS: str = "|!~#@:"
@@ -54,6 +54,18 @@ def is_comparison_dict(value: dict) -> bool:
 def _quote(text: str) -> str:
     """Quote ``text`` as a SQL string literal (single quotes doubled)."""
     return "'" + text.replace("'", "''") + "'"
+
+
+__all__ = [
+    "BetweenClause",
+    "COMPARISON_OPERATORS",
+    "KEY_SUFFIX_CHARS",
+    "TYPED_FILTER_FORMATS",
+    "base_key",
+    "is_comparison_dict",
+    "parse_between",
+    "unquote_literal",
+]
 
 
 def _invalid_between(key: str) -> ParserError:

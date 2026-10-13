@@ -1,15 +1,15 @@
 import uuid
-from typing import Callable
-from datetime import datetime
+from datetime import datetime, timezone
+
 import dateutil
-import builtins
+
 
 ### validations
 def isdate(value):
     returned = False
     # can be a unix epoch?
     try:
-        b = datetime.fromtimestamp(int(value))
+        b = datetime.fromtimestamp(int(value), tz=timezone.utc)
         returned = bool(b)
     except Exception:
         pass
@@ -18,8 +18,7 @@ def isdate(value):
         returned = True
     except Exception:
         pass
-    finally:
-        return returned
+    return returned
 
 is_date = isdate
 
@@ -69,30 +68,3 @@ PG_CONSTANTS = ["CURRENT_DATE", "CURRENT_TIMESTAMP"]
 
 def is_pgconstant(value):
     return value in PG_CONSTANTS
-
-
-# TODO: get the current list of supported UDF dynamically.
-UDF = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "FDOM", "LDOM"]
-def is_an_udf(value):
-    return value in UDF
-
-def is_udf(value: str, *args, **kwargs) -> Callable:
-    fn = None
-    try:
-        f = value.lower()
-        if value in UDF:
-            fn = globals()[f](*args, **kwargs)
-        else:
-            func = globals()[f]
-            if not func:
-                try:
-                    func = getattr(builtins, f)
-                except AttributeError:
-                    return None
-            if func and callable(func):
-                try:
-                    fn = func(*args, **kwargs)
-                except Exception as err:
-                    raise Exception(err)
-    finally:
-        return fn

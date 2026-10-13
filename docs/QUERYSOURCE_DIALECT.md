@@ -695,10 +695,10 @@ and named functions), **as an `@variable`** registered by the deployment, and
 
 ### 13.1 Value functions (date keywords)
 
-A string value that names a built-in function from
-`querysource/utils/functions.pyx` is **replaced by the result of calling that
-function with no arguments**. The lookup is case-insensitive. The
-officially-supported relative-date keywords are:
+A string value equal (case-insensitively) to one of the keywords below is
+**replaced by the keyword's value**. Only these keywords are resolved: any
+other text — including the name of some other helper function — is sent to
+the database as a quoted literal. The supported relative-date keywords are:
 
 | Keyword | Result |
 |---|---|
@@ -709,11 +709,14 @@ officially-supported relative-date keywords are:
 | `LAST_YEAR` | the same date one year ago |
 | `FDOM` | first day of the current month (`YYYY-MM-DD`) |
 | `LDOM` | last day of the current month (`YYYY-MM-DD`) |
+| `FDOW` | first day (Monday) of the current week (`YYYY-MM-DD`) |
+| `LDOW` | last day (Sunday) of the current week (`YYYY-MM-DD`) |
+| `LDOPM` | last day of the previous month (`YYYY-MM-DD`) |
 
-The list can be changed per deployment with the `UDF_LIST` environment variable
-(comma separated). Other zero-argument helpers of the same module can be named
-the same way, for example `fdow` / `ldow` (Monday / Sunday of the current
-week, `YYYY-MM-DD`) or `ldopm` (last day of the previous month).
+The list can be changed per deployment with the `UDF_LIST` environment
+variable (comma separated). That variable is the only way to make an
+additional zero-argument helper of `querysource/utils/functions.pyx`
+resolvable; nothing else is executed by name.
 
 ```json
 {"filter": {"sale_date": {">=": "FDOM"}}, "firstdate": "FDOM", "lastdate": "LDOM"}
@@ -743,6 +746,19 @@ rendered as quoted literals (`d='CURRENT_DATE'`, `d='now()'`), so the
 database receives the text, not a function call — use a date keyword (13.1)
 instead. JSONB
 element filters (chapter 12) never evaluate SQL functions.
+
+Any other value is a **literal**: a value that merely contains parentheses
+(`Acme (US)`, `pg_sleep(5)`) is quoted like any text, never treated as a
+function call, and a value equal to a configuration variable name is sent as
+that text, never substituted. Quoting is idempotent — a value already wrapped
+in single quotes with its inner quotes doubled (`'O''Brien'`) is unwrapped once
+and re-quoted, so `O'Brien` always reaches the database as `'O''Brien'`.
+
+**Negation and backslashes.** A leading `!` negates the rest of the text, whatever
+it contains: `!O'Brien` renders `name != 'O''Brien'`. Backslashes are dialect
+policy: the PostgreSQL parser keeps them literal (`standard_conforming_strings`),
+while the generic `sql` parser doubles them (`\'` → `'\\''`) so a backslash can
+never close the literal on MySQL; BigQuery escapes `\` before `"`.
 
 ### 13.3 `@variables`
 

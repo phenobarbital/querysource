@@ -2,6 +2,7 @@
 # Copyright (C) 2018-present Jesus Lara
 #
 import os
+import logging
 import asyncio
 import builtins
 import re
@@ -15,16 +16,15 @@ from libcpp cimport bool as bool_t
 from cpython cimport datetime
 from cpython.datetime cimport datetime as dt
 from dataclasses import _MISSING_TYPE
-from navconfig import config
 from decimal import Decimal
 from dateutil import parser
 from uuid import UUID
 from ..utils.functions import *
+from ..utils.udf_list import udf_list
 import orjson
 from numpy import int64, ndarray
 
-
-cdef list udf = ["CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "LAST_YEAR", "FDOM", "LDOM"]
+logger = logging.getLogger(__name__)
 
 
 cdef list _env_list(str name, list default, bint upper = True):
@@ -37,7 +37,7 @@ cdef list _env_list(str name, list default, bint upper = True):
         for s in str(raw).split(',') if s.strip()
     ]
 
-cdef list UDF_LIST = _env_list('UDF_LIST', udf)
+cdef list UDF_LIST = udf_list()
 cdef list PG_CONSTANTS = _env_list('PG_CONSTANTS', ["CURRENT_DATE", "CURRENT_TIMESTAMP"])
 cdef list PG_UDF = _env_list('PG_UDF', ["now()"], False)
 
@@ -153,39 +153,58 @@ cdef str parseString(str value):
         return value
 
 cdef str quoteString(object value):
+    """Module-level literal quoting used by ``is_valid``.
+
+    Same contract as ``Entity.quoteString`` (FEAT-167 G4): a well-formed
+    pre-quoted literal is unwrapped once, anything else is re-escaped from
+    scratch; a double-quoted value is converted first. Never returns text that
+    can carry an unescaped single quote.
+    """
     v = value if value != 'None' else ""
     if value == 'null' or value == 'NULL':
-            return v
+        return v
     if isinstance(v, int):
         # quoting to string:
         return "'{}'".format(v)
     elif isinstance(v, str):
-        start_quote = v.startswith("'")
-        end_quote = v.endswith("'")
-
-        # Slice the string if it starts/ends with a quote
-        inner = v[1:-1] if start_quote and end_quote else (v[1:] if start_quote else (v[:-1] if end_quote else v))
-        # Escape single quotes
-        inner = inner.replace("'", "''")
-
-        if start_quote: # was already quoted
-            return "'{}'".format(inner)
-        elif v.startswith('"'): # is double quoted
-            return v.replace('"', "'")
-        else:
-            # Ledger issue:48c9b3050a0c (code review, FEAT-152): this used to
-            # return `v` (the raw, unescaped value) instead of `inner` (the
-            # same value with every embedded single quote doubled, already
-            # computed above) — a plain string containing a `'` was wrapped
-            # without escaping it, producing an unterminated/broken SQL
-            # string literal. Callers that pre-quote a value before their own
-            # dedicated escaper runs (e.g. querysource/parsers/pgsql.pyx's
-            # PG_TEXT_OPERATORS branch, rust/src/pgsql_parser.rs) strip this
-            # wrapper and then undo `''`-doubling before re-escaping, so they
-            # tolerate this fix; see the "PINNED INVARIANT" comments there.
-            return "'{}'".format(inner)
+        if v.startswith('"'):
+            v = v.replace('"', "'")
+        inner = unquote_literal(v)
+        if inner is None:
+            inner = v
+        return "'{}'".format(inner.replace("'", "''"))
     else:
         return v
+
+cpdef object quote_sql_literal(object value):
+    """``Entity.quoteString`` for dialects where a backslash is an escape character.
+
+    Generic ``sql`` builder / MySQL (without ``NO_BACKSLASH_ESCAPES``): every
+    backslash in a quoted result is doubled so ``\\'`` cannot close the literal.
+    Postgres keeps ``Entity.quoteString`` (standard_conforming_strings).
+    """
+    quoted = Entity.quoteString(value)
+    if isinstance(quoted, str) and len(quoted) >= 2 and quoted[0] == "'" and quoted[-1] == "'":
+        return quoted.replace("\\", "\\\\")
+    return quoted
+
+cpdef object unquote_literal(object value):
+    """Inner text of a well-formed pre-quoted SQL literal, or None.
+
+    Well-formed: ``len >= 2``, starts and ends with ``'``, and every interior
+    ``'`` belongs to a ``''`` pair. The doubling is undone in the result
+    (``"'O''Brien'"`` -> ``"O'Brien"``). Anything else (raw text, a lone
+    quote, ``"'a'b'"``) returns None so the caller escapes it from scratch.
+    """
+    cdef str inner
+    if not isinstance(value, str) or len(value) < 2:
+        return None
+    if value[0] != "'" or value[-1] != "'":
+        return None
+    inner = value[1:-1]
+    if "'" in inner.replace("''", ""):
+        return None
+    return inner.replace("''", "'")
 
 cpdef bool_t is_callable(object value):
     """Return if value is a callable (function object).
@@ -207,10 +226,8 @@ cpdef bool_t is_udf(object value):
     return value in UDF_LIST
 
 cdef bool_t is_pg_function(object value):
-    if '(' in value:
-        return True
-    else:
-        return value in PG_UDF
+    """True only for an exact member of PG_UDF (default ['now()']) — never for a value that merely contains '('."""
+    return isinstance(value, str) and value in PG_UDF
 
 cpdef bool_t is_pgconstant(object value):
     return value in PG_CONSTANTS
@@ -424,11 +441,9 @@ cpdef bool_t is_string(object value):
             UUID
         ))
 
-cdef object get_config_var(object value):
-    return config.get(value)
-
 cdef str to_string(object value):
-    return quoteString(escape_string(value))
+    # Typed string/varchar/field hints: idempotent quoting without quote-stripping.
+    return Entity.quoteString(value)
 
 cpdef object escape_string(object value):
     try:
@@ -588,32 +603,19 @@ cdef class Entity:
 
     @classmethod
     def quoteString(cls, value, bool_t no_dblquoting=True):
+        """Idempotent SQL literal quoting (FEAT-167 G4)."""
         v = value if value != 'None' else ""
         if value == 'null' or value == 'NULL':
             return v
         if isinstance(v, bool):
             return str(v)
         if isinstance(v, str):
-            # Handle double quotes
             if v.startswith('"') and no_dblquoting:
                 v = v.replace('"', "'")
-
-            # Check if the string starts or ends with a single quote
-            start_quote = v.startswith("'")
-            end_quote = v.endswith("'")
-
-            # Slice the string if it starts/ends with a quote
-            v = v[1:-1] if start_quote and end_quote else (v[1:] if start_quote else (v[:-1] if end_quote else v))
-
-            # Escape single quotes
-            v = v.replace("'", "''")
-
-            # # Add back the starting and/or ending quote if they were present
-            # if start_quote:
-            #     v = "'" + v
-            # if end_quote:
-            #     v += "'"
-
+            inner = unquote_literal(v)
+            if inner is None:
+                inner = v
+            v = inner.replace("'", "''")
         v = "'{}'".format(v) if type(v) == str else v
         return v
 
@@ -645,39 +647,26 @@ cpdef object is_valid(object key, object value, str T = None, bint noquote = Fal
                     return conv(value)
         except KeyError:
             pass
-    if value == 'null' or value == 'NULL' or value == None or value == 'None':
+    if value == 'null' or value == 'NULL' or value is None or value == 'None':
         return 'null'
     elif is_boolean(value):
         return value
     elif is_integer(value):
         return value
     elif is_udf(str(value).upper()):
-        return quoteString(to_udf(value))
+        # Relative-date keyword (UDF_LIST only — to_udf is allowlist-only since TASK-872).
+        try:
+            return quoteString(to_udf(value))
+        except Exception as ex:  # noqa: BLE001 — a keyword whose impl fails degrades to a literal
+            logger.warning("is_valid: keyword %r for %r could not be resolved: %s", value, key, ex)
     elif is_pgconstant(str(value).upper()):
         return value.upper()
     elif is_pg_function(value):
         return value # return exactly the value
     elif isinstance(value, list) or isinstance(value, dict):
         return value
-    else:
-        try:
-            val = get_config_var(value)
-            if val:
-                if isinstance(val, str) or T == 'date':
-                    return quoteString(val)
-                else:
-                    return escape_string(val)
-        except Exception:
-            pass
-        try:
-            val = to_udf(value)
-            if noquote:
-                return val
-            return quoteString(val)
-        except KeyError:
-            pass
-        except Exception as ex:
-            print(f'Valid Error on {key}:{value}, error: {ex}')
-        if noquote:
-            return value
-        return quoteString(value)
+    # Everything else is a literal: never a configuration value, never a function name,
+    # never raw because it contains '(' (FEAT-167 G1/G2, §8 Q2/Q3).
+    if noquote:
+        return value
+    return quoteString(value)

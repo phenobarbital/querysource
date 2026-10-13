@@ -338,4 +338,10 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by native seat sonnet, 1 attempt, merged.
+- Created `tests/unit/test_where_value_hardening.py` (22 tests: pgsql Rust, pgsql Cython, SQLParser, CQLParser, BigQueryParser).
+- Modified `tests/unit/test_cython_filter_fallback.py` (idempotent `_qs_quote_string` stub) and `docs/QUERYSOURCE_DIALECT.md` §13.1/§13.2.
+- Deviation: `"!O'Brien"` is not negation syntax; roundtrip test asserts single doubling only.
+- Orchestrator follow-up commit (outside task scope, caused by this feature): `tests/test_getfunc_allowlist.py` dropped `is_udf` from the re-exported-names list; `tests/e2e/test_qs_dry_run.py` injection test now expects `'x''; DROP TABLE t; --'`.
+- Full `pytest tests/` by coder: 10 failed — 2 fixed above; 8 are missing optional deps (parquet gcs/s3), unrelated to FEAT-167.
+- Closed via close_task.sh (no durable review EvidenceRef for finalize_task).

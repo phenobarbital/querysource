@@ -83,6 +83,24 @@ KEYWORD_REGISTRY: dict[str, KeywordEntry] = {
         returns="integer",
         description="Current month number (1-12).",
     ),
+    "FDOW": KeywordEntry(
+        name="FDOW",
+        category="date",
+        returns="date-string",
+        description="First day (Monday) of the current week, YYYY-MM-DD.",
+    ),
+    "LDOW": KeywordEntry(
+        name="LDOW",
+        category="date",
+        returns="date-string",
+        description="Last day (Sunday) of the current week, YYYY-MM-DD.",
+    ),
+    "LDOPM": KeywordEntry(
+        name="LDOPM",
+        category="date",
+        returns="date-string",
+        description="Last day of the previous month, YYYY-MM-DD.",
+    ),
 }
 
 FUNCTION_REGISTRY: tuple[FunctionEntry, ...] = (
@@ -126,26 +144,6 @@ FUNCTION_REGISTRY: tuple[FunctionEntry, ...] = (
             FunctionArg(name="months", default=1),
         ],
         description="Return the first day of the previous month.",
-        invocable=False,
-    ),
-    FunctionEntry(
-        name="fdow",
-        args=[
-            FunctionArg(name="value", default=None),
-            FunctionArg(name="mask", default="%Y-%m-%d"),
-            FunctionArg(name="zone", default=None),
-        ],
-        description="First day of the current week (Monday).",
-        invocable=False,
-    ),
-    FunctionEntry(
-        name="ldow",
-        args=[
-            FunctionArg(name="value", default=None),
-            FunctionArg(name="mask", default="%Y-%m-%d"),
-            FunctionArg(name="zone", default=None),
-        ],
-        description="Last day of the current week (Sunday).",
         invocable=False,
     ),
 )

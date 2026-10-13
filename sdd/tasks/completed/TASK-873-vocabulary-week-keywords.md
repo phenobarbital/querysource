@@ -251,4 +251,9 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-luna (codex), 1 attempt, 41s, merged.
+- `utils/vocabulary.py`: FDOW/LDOW/LDOPM keyword rows added; fdow/ldow function rows removed.
+- `tests/unit/test_vocabulary.py`: registry pins updated + `test_vocabulary_week_keywords`.
+- Validation: merge tier 5 passed.
+- Review: orchestrator scope review, no fixes.
+- Closed via close_task.sh (no durable review EvidenceRef for finalize_task).

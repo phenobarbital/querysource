@@ -9,7 +9,7 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 
 use crate::safe_dict::safe_format_map_rust;
-use crate::validators::{escape_string, field_components, quote_string};
+use crate::validators::{field_components, is_integer, quote_string};
 
 // ---------------------------------------------------------------------------
 // Rust-native types for parallel processing (Send + Sync)
@@ -165,17 +165,28 @@ pub fn process_list_value(
     } else if _format == Some("date") {
         // Date BETWEEN
         if items.len() >= 2 {
+            // Quote through the idempotent quoter: bounds are never interpolated raw.
             Some(format!(
-                "{} BETWEEN '{}' AND '{}'",
+                "{} BETWEEN {} AND {}",
                 key,
-                items[0].as_str(),
-                items[1].as_str()
+                quote_string(&items[0].as_str(), true),
+                quote_string(&items[1].as_str(), true)
             ))
         } else {
             Some(format!("{} IN ({})", key, val_str))
         }
     } else {
         Some(format!("{} IN ({})", key, val_str))
+    }
+}
+
+/// Quote the operand of a negation: integers stay bare, everything else is a
+/// single-quoted literal produced by the idempotent `quote_string`.
+fn quote_negated(value: &str) -> String {
+    if is_integer(value) {
+        value.to_string()
+    } else {
+        quote_string(value, true)
     }
 }
 
@@ -192,14 +203,13 @@ pub fn process_str_value(key: &str, value: &str, name: &str, end: &str) -> Optio
     if value == "!null" || value == "!NULL" {
         return Some(format!("{} IS NOT NULL", key));
     }
-    // Negation with end marker
+    // Negation with end marker — the operand is quoted, never emitted raw.
     if end == "!" {
-        return Some(format!("{} != {}", name, value));
+        return Some(format!("{} != {}", name, quote_negated(value)));
     }
-    // Negation with ! prefix
-    if value.starts_with('!') {
-        let escaped = escape_string(&value[1..]);
-        return Some(format!("{} != {}", key, escaped));
+    // Negation with ! prefix — strip, then quote (a lone "!" stays a literal).
+    if value.starts_with('!') && value.len() > 1 {
+        return Some(format!("{} != {}", key, quote_negated(&value[1..])));
     }
     // Default: quoted equality
     Some(format!("{} = {}", key, quote_string(value, true)))

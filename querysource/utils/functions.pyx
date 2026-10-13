@@ -6,7 +6,6 @@ Main Functions for QuerySource.
 """
 import os
 import re
-import builtins
 import hashlib
 import calendar
 import binascii
@@ -23,7 +22,13 @@ from cpython.datetime cimport time as dtime
 from zoneinfo import ZoneInfo
 from uuid import UUID
 
-from .validators import is_udf
+from .udf_list import udf_list
+
+
+# Keyword allowlist, read once at import (same moment validators.pyx reads it).
+# Leading underscore: validators.pyx star-imports this module and declares its
+# own `cdef list UDF_LIST` — a public name here would collide.
+_UDF_LIST = udf_list()
 
 
 cpdef dict empty_dict(object obj):
@@ -819,29 +824,19 @@ cpdef str file_extension(object path):
 
 
 def to_udf(str value, *args, **kwargs):
-    """Executes an UDF function and returns result.
+    """Execute the relative-date keyword ``value`` and return its result.
+
+    Only names in the effective ``UDF_LIST`` (``querysource.utils.udf_list``)
+    resolve; the lookup is case-insensitive and ignores surrounding spaces.
+    Raises ``KeyError(value)`` for any other name: ``to_udf`` is NOT a
+    general function dispatcher (FEAT-167, G3) and has no name-resolution
+    fallback. ``*args``/``**kwargs`` are passed to the keyword's function.
     """
-    fn = None
-    f = value.lower()
-    if is_udf(value) is True:
-        fn = globals()[f](*args, **kwargs)
-    else:
-        func = globals()[f]
-        if not func:
-            try:
-                func = getattr(builtins, f)
-            except AttributeError:
-                return None
-        if callable(func):
-            try:
-                fn = func(*args, **kwargs)
-            except Exception:
-                raise
-        else:
-            raise RuntimeError(
-                f"to_udf Error: There is no Function called {fn!r}"
-            )
-    return fn
+    cdef str name = value.strip()
+    if name.upper() not in _UDF_LIST:
+        raise KeyError(value)
+    func = globals()[name.lower()]
+    return func(*args, **kwargs)
 
 
 cpdef bool_t check_empty(object obj):

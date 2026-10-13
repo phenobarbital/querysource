@@ -335,4 +335,10 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-terra (codex), 1 attempt, 498s, merged.
+- `rust/src/validators.rs`: env-aware `UDF_LIST`/`PG_CONSTANTS`/`PG_UDF` (same semantics as Cython `_env_list`); 10-name default; `is_pg_function` exact-match only; new Rust unit tests.
+- Added `tests/unit/test_rust_allowlists.py`.
+- Validation: merge tier 7 passed after building the wheel and staging `_qs_parsers` into the worktree (first run failed only on the stale staged .so).
+- Note: Rust test `test_default_udf_list_has_week_helpers` asserts `UDF_LIST.len()==10`, which would fail if the `UDF_LIST` env is set in the test environment (minor).
+- Review: orchestrator diff review, no fixes; coder-review recorded.
+- Closed via close_task.sh (no durable review EvidenceRef for finalize_task).

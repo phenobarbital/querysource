@@ -335,4 +335,10 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-luna (codex), 1 attempt, 239s, merged.
+- `types/validators.pyx`: new `unquote_literal`; `Entity.quoteString` idempotent (well-formed pre-quoted literals unwrapped once, anything else escaped from scratch); `to_string` delegates to it.
+- `parsers/filter_values.py`: re-exports `unquote_literal` (`__all__`).
+- Added `tests/unit/test_literal_quoting.py`.
+- Validation: merge tier 23 passed (extensions rebuilt in-place first).
+- Review: orchestrator diff review, no fixes.
+- Closed via close_task.sh (no durable review EvidenceRef for finalize_task).

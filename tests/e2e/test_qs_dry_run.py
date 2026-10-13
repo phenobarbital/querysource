@@ -103,7 +103,7 @@ class TestSanitization:
             driver="db",
             conditions={"where_cond": {"name": "x'; DROP TABLE t; --"}},
         )
-        assert sql == "SELECT * FROM t  WHERE name='x; DROP TABLE t; --'"
+        assert sql == "SELECT * FROM t  WHERE name='x''; DROP TABLE t; --'"
         assert "DROP" not in [token.text.upper() for token in sqlglot.tokenize(sql)
                               if token.token_type.name != "STRING"]
 

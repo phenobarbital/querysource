@@ -336,4 +336,10 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-terra (codex), 1 attempt, 471s, merged.
+- `rust/src/validators.rs`: `unquote_literal`, idempotent `quote_string`, `to_string`; Rust unit tests.
+- `rust/src/pgsql_parser.rs` / `sql_parser.rs`: quoting sites routed through the idempotent helper.
+- Added `tests/unit/test_rust_literal_quoting.py`.
+- Validation: merge tier 9 passed after rebuilding and staging `_qs_parsers` in the worktree.
+- Review: orchestrator scope/diff-stat review, no fixes.
+- Closed via close_task.sh (no durable review EvidenceRef for finalize_task).

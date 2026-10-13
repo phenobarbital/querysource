@@ -6,6 +6,7 @@
 use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 use regex::Regex;
+use std::env;
 
 // Regex for field_components: ^(?:(@|!|#|~|:|))(\w*)(?:(\||\&|\!|\~|\#)|)+$
 static EVAL_FIELD: Lazy<Regex> = Lazy::new(|| {
@@ -17,22 +18,36 @@ static CAMEL_CASE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(?:[A-Z][a-z]+)+$").unwrap()
 });
 
-/// UDF names recognized by the query system.
-static UDF_LIST: Lazy<Vec<&str>> = Lazy::new(|| {
-    vec![
-        "CURRENT_YEAR",
-        "CURRENT_MONTH",
-        "TODAY",
-        "YESTERDAY",
-        "LAST_YEAR",
-        "FDOM",
-        "LDOM",
-    ]
-});
+/// Comma-separated env override with the Cython `_env_list` semantics
+/// (validators.pyx:30): unset/blank → `default`; else split on ',', trim,
+/// drop blanks, upper-case when `upper`.
+fn env_list(name: &str, default: &[&str], upper: bool) -> Vec<String> {
+    match env::var(name) {
+        Ok(raw) if !raw.trim().is_empty() => raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| if upper { s.to_uppercase() } else { s.to_string() })
+            .collect(),
+        _ => default.iter().map(|s| s.to_string()).collect(),
+    }
+}
 
-/// PostgreSQL constant names.
-static PG_CONSTANTS: Lazy<Vec<&str>> =
-    Lazy::new(|| vec!["CURRENT_DATE", "CURRENT_TIMESTAMP"]);
+/// Default relative-date keywords — MUST equal `DEFAULT_UDF_LIST` in `querysource/utils/udf_list.py`.
+const DEFAULT_UDF_LIST: &[&str] = &[
+    "CURRENT_YEAR", "CURRENT_MONTH", "TODAY", "YESTERDAY", "LAST_YEAR", "FDOM", "LDOM", "FDOW", "LDOW",
+    "LDOPM",
+];
+
+/// UDF names recognized by the query system (env `UDF_LIST`).
+static UDF_LIST: Lazy<Vec<String>> = Lazy::new(|| env_list("UDF_LIST", DEFAULT_UDF_LIST, true));
+
+/// PostgreSQL constant names (env `PG_CONSTANTS`).
+static PG_CONSTANTS: Lazy<Vec<String>> =
+    Lazy::new(|| env_list("PG_CONSTANTS", &["CURRENT_DATE", "CURRENT_TIMESTAMP"], true));
+
+/// PostgreSQL function allowlist (env `PG_UDF`, case preserved) — the ONLY raw pass-through.
+static PG_UDF: Lazy<Vec<String>> = Lazy::new(|| env_list("PG_UDF", &["now()"], false));
 
 // ---------------------------------------------------------------------------
 // Type checkers
@@ -76,21 +91,24 @@ pub fn is_boolean(value: &str) -> bool {
 #[pyfunction]
 #[pyo3(signature = (value,))]
 pub fn is_udf(value: &str) -> bool {
-    UDF_LIST.contains(&value.to_uppercase().as_str())
+    let upper = value.to_uppercase();
+    UDF_LIST.iter().any(|k| *k == upper)
 }
 
 /// Check if a value string is a known PG constant.
 #[pyfunction]
 #[pyo3(signature = (value,))]
 pub fn is_pgconstant(value: &str) -> bool {
-    PG_CONSTANTS.contains(&value.to_uppercase().as_str())
+    let upper = value.to_uppercase();
+    PG_CONSTANTS.iter().any(|k| *k == upper)
 }
 
-/// Check if value looks like a PG function call (contains parentheses or is `now()`).
+/// True only for an exact member of PG_UDF (default `now()`).
+/// A value that merely contains '(' is NOT a function (FEAT-167 G2).
 #[pyfunction]
 #[pyo3(signature = (value,))]
 pub fn is_pg_function(value: &str) -> bool {
-    value.contains('(') || value == "now()"
+    PG_UDF.iter().any(|k| k == value)
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +172,22 @@ pub fn escape_string(value: &str) -> String {
     result
 }
 
+/// Inner text of a well-formed pre-quoted SQL literal, or None.
+///
+/// Well-formed literals start and end with `'`, and every interior quote is
+/// part of a doubled `''` pair.
+pub fn unquote_literal(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    if bytes.len() < 2 || bytes[0] != b'\'' || bytes[bytes.len() - 1] != b'\'' {
+        return None;
+    }
+    let inner = &value[1..value.len() - 1];
+    if inner.replace("''", "").contains('\'') {
+        return None;
+    }
+    Some(inner.replace("''", "'"))
+}
+
 /// Quote a string value for SQL queries.
 ///
 /// Mirrors `Entity.quoteString()` from validators.pyx.
@@ -180,24 +214,26 @@ pub fn quote_string(value: &str, no_dblquoting: bool) -> String {
         v = v.replace('"', "'");
     }
 
-    let start_quote = v.starts_with('\'');
-    let end_quote = v.ends_with('\'');
-
-    // Strip existing quotes
-    let inner = if start_quote && end_quote && v.len() >= 2 {
-        &v[1..v.len() - 1]
-    } else if start_quote {
-        &v[1..]
-    } else if end_quote {
-        &v[..v.len() - 1]
-    } else {
-        &v
-    };
-
-    // Escape internal single quotes
+    // Idempotently unwrap a well-formed literal, then escape from scratch.
+    let inner = unquote_literal(&v).unwrap_or(v);
     let escaped = inner.replace('\'', "''");
 
     format!("'{escaped}'")
+}
+
+/// Quote a string value for dialects that treat `\\` as an escape character
+/// (MySQL without `NO_BACKSLASH_ESCAPES`, and the generic `sql` builder).
+///
+/// Same as [`quote_string`], but every backslash in the literal text is doubled
+/// after the idempotent unwrap, so `\\'` can never close the literal early.
+/// Postgres (standard_conforming_strings) must keep using [`quote_string`].
+pub fn quote_string_bs(value: &str, no_dblquoting: bool) -> String {
+    let quoted = quote_string(value, no_dblquoting);
+    if quoted.contains('\\') && quoted.starts_with('\'') && quoted.ends_with('\'') {
+        quoted.replace('\\', "\\\\")
+    } else {
+        quoted
+    }
 }
 
 /// Quote a string value for BigQuery using double-quote delimiters.
@@ -220,7 +256,8 @@ pub fn bq_quote_string(value: &str) -> String {
     } else {
         value.to_string()
     };
-    let v = inner.replace('"', "\\\"");
+    // Backslash first: BigQuery treats `\\` as an escape inside both quote styles.
+    let v = inner.replace('\\', "\\\\").replace('"', "\\\"");
     format!("\"{}\"", v)
 }
 
@@ -230,7 +267,7 @@ pub fn bq_quote_string(value: &str) -> String {
 #[pyfunction]
 #[pyo3(signature = (value,))]
 pub fn to_string(value: &str) -> String {
-    quote_string(&escape_string(value), true)
+    quote_string(value, true)
 }
 
 /// Convert value to unquoted integer string (or return as-is if already numeric).
@@ -254,7 +291,7 @@ pub fn to_unquoted(value: &str) -> String {
 /// persist `cond_definition` hints in upper case, e.g. `"STRING"`):
 /// - `literal` → escape_string
 /// - `integer`/`int`/`float`/`numeric`/`decimal` → unquoted
-/// - `string`/`varchar`/`field` → quote_string(escape_string(v))
+/// - `string`/`varchar`/`field` → quote_string(v)
 /// - `boolean` → TRUE/FALSE
 /// - `date`/`datetime`/`timestamp` → quote_string
 /// - `uuid` → quote_string
@@ -391,6 +428,26 @@ mod tests {
     }
 
     #[test]
+    fn test_unquote_literal_grammar() {
+        assert_eq!(unquote_literal("'O''Brien'"), Some("O'Brien".to_string()));
+        assert_eq!(unquote_literal("''"), Some(String::new()));
+        assert_eq!(unquote_literal("O'Brien"), None);
+        assert_eq!(unquote_literal("'a'b'"), None);
+        assert_eq!(unquote_literal("'"), None);
+        assert_eq!(unquote_literal("'abc"), None);
+    }
+
+    #[test]
+    fn test_quote_string_idempotent() {
+        for raw in ["O'Brien", "plain", "it''s", "50%", "a\\b", "x) OR (1=1"] {
+            let once = quote_string(raw, true);
+            assert_eq!(once, format!("'{}'", raw.replace('\'', "''")));
+            assert_eq!(quote_string(&once, true), once);
+        }
+        assert_eq!(to_string("O'Brien"), "'O''Brien'");
+    }
+
+    #[test]
     fn test_quote_string_null() {
         assert_eq!(quote_string("null", true), "null");
         assert_eq!(quote_string("NULL", true), "NULL");
@@ -462,6 +519,27 @@ mod tests {
     }
 
     #[test]
+    fn test_is_pg_function_exact() {
+        assert!(is_pg_function("now()"));
+        assert!(!is_pg_function("pg_sleep(5)"));
+        assert!(!is_pg_function("(select 1)"));
+        assert!(!is_pg_function("lower('x')"));
+    }
+
+    #[test]
+    fn test_is_valid_parenthesis_is_quoted() {
+        assert_eq!(is_valid("x", "pg_sleep(5)", None, false), "'pg_sleep(5)'");
+        assert_eq!(is_valid("x", "x) OR (1=1", None, false), "'x) OR (1=1'");
+        assert_eq!(is_valid("x", "pg_sleep(5)", None, true), "pg_sleep(5)");
+    }
+
+    #[test]
+    fn test_default_udf_list_has_week_helpers() {
+        assert!(is_udf("fdow") && is_udf("LDOW") && is_udf("Ldopm"));
+        assert_eq!(UDF_LIST.len(), 10);
+    }
+
+    #[test]
     fn test_is_valid_noquote() {
         assert_eq!(is_valid("x", "some_value", None, true), "some_value");
     }
@@ -488,6 +566,21 @@ mod tests {
         assert_eq!(bq_quote_string("'BBY102'"), "\"BBY102\"");
         // PG-style '' escaping is undone when unwrapping.
         assert_eq!(bq_quote_string("'Sam''s Club'"), "\"Sam's Club\"");
+    }
+
+    #[test]
+    fn test_quote_string_bs_doubles_backslash() {
+        assert_eq!(quote_string_bs("\\' OR 1=1 -- ", true), "'\\\\'' OR 1=1 -- '");
+        assert_eq!(quote_string_bs("a\\b", true), "'a\\\\b'");
+        assert_eq!(quote_string_bs("plain", true), "'plain'");
+        assert_eq!(quote_string_bs("null", true), "null");
+        // the postgres quoter is untouched
+        assert_eq!(quote_string("a\\b", true), "'a\\b'");
+    }
+
+    #[test]
+    fn test_bq_quote_string_backslash_cannot_close_literal() {
+        assert_eq!(bq_quote_string("\\\" OR 1=1 --"), "\"\\\\\\\" OR 1=1 --\"");
     }
 
     #[test]

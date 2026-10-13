@@ -11,7 +11,7 @@ from typing import Union
 from functools import partial
 from datamodel.typedefs import NullDefault, SafeDict
 from ..exceptions import EmptySentence, ParserError
-from ..types.validators import Entity, field_components
+from ..types.validators import Entity, field_components, quote_sql_literal
 from .filter_values import base_key, is_comparison_dict
 from .partial_matching import (
     build_like_pattern, like_escape_bang, sql_like_literal, validate_partial_match_dict,
@@ -197,7 +197,7 @@ cdef class SQLParser(AbstractParser):
                         continue
                     if is_comparison_dict(value):
                         parts = [
-                            f"{key} {op} {Entity.quoteString(v) if isinstance(v, str) else str(v)}"
+                            f"{key} {op} {quote_sql_literal(v) if isinstance(v, str) else str(v)}"
                             for op, v in value.items()
                         ]
                         where_cond.append(parts[0] if len(parts) == 1 else '(' + ' AND '.join(parts) + ')')
@@ -206,7 +206,7 @@ cdef class SQLParser(AbstractParser):
                     # SECURITY: Operator must be in allowlist
                     if op in COMPARISON_TOKENS:
                         # SECURITY: Escape the comparison value
-                        safe_v = Entity.quoteString(v) if isinstance(v, str) else str(v)
+                        safe_v = quote_sql_literal(v) if isinstance(v, str) else str(v)
                         where_cond.append(f"{key} {op} {safe_v}")
                     else:
                         # currently, discard any non-supported comparison token
@@ -216,13 +216,13 @@ cdef class SQLParser(AbstractParser):
                     # SECURITY: Operator must be in allowlist
                     if fval in self.valid_operators:
                         # SECURITY: Escape the second value
-                        safe_v = Entity.quoteString(str(value[1])) if value[1] not in ('null', 'NULL') else str(value[1])
+                        safe_v = quote_sql_literal(str(value[1])) if value[1] not in ('null', 'NULL') else str(value[1])
                         where_cond.append(f"{key} {fval} {safe_v}")
                     else:
                         # is a list of values → IN clause; each item escaped
                         val = ','.join(
                             [
-                                "{}".format(Entity.quoteString(v)) for v in value
+                                "{}".format(quote_sql_literal(v)) for v in value
                             ]
                         )  # pylint: disable=C0209
                         # check for operator
@@ -251,15 +251,15 @@ cdef class SQLParser(AbstractParser):
                     elif end == '!':
                         # SECURITY: Escape the negated value
                         where_cond.append(
-                            f"{name} != {Entity.quoteString(str_value)}"
+                            f"{name} != {quote_sql_literal(str_value)}"
                         )
                     elif str_value.startswith('!'):
                         where_cond.append(
-                            f"{key} != {Entity.quoteString(str_value[1:])}"
+                            f"{key} != {quote_sql_literal(str_value[1:])}"
                         )
                     else:
                         where_cond.append(
-                            f"{key}={Entity.quoteString(value)}"
+                            f"{key}={quote_sql_literal(value)}"
                         )
                 elif isinstance(value, bool):
                     # Boolean literals are safe SQL values (True/False)
@@ -268,7 +268,7 @@ cdef class SQLParser(AbstractParser):
                     )
                 else:
                     where_cond.append(
-                        f"{key}={Entity.quoteString(value)}"
+                        f"{key}={quote_sql_literal(value)}"
                     )
             # build WHERE
             if _sql.count('and_cond') > 0:

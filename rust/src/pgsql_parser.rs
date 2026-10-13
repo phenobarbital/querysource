@@ -496,7 +496,7 @@ fn process_dict_value(
                     "{} {} {}",
                     key,
                     op,
-                    quote_string(&escape_string(&v.as_str()), true)
+                    quote_string(&v.as_str(), true)
                 )
             })
             .collect();
@@ -517,7 +517,7 @@ fn process_dict_value(
     // Standard comparison tokens
     if COMPARISON_TOKENS.contains(&op.as_str()) {
         // SECURITY: escape the comparison value
-        let safe_v = quote_string(&escape_string(&v.as_str()), true);
+        let safe_v = quote_string(&v.as_str(), true);
         return Some(format!("{} {} {}", key, op, safe_v));
     }
 
@@ -578,7 +578,7 @@ fn process_list_value(
     // Check if first item is a valid operator (allowlist enforced)
     if VALID_OPERATORS.contains(&first_str.as_str()) && items.len() > 1 {
         // SECURITY: escape the second value
-        let safe_v = quote_string(&escape_string(&items[1].as_str()), true);
+        let safe_v = quote_string(&items[1].as_str(), true);
         return Some(format!("{} {} {}", key, first_str, safe_v));
     }
 
@@ -586,12 +586,12 @@ fn process_list_value(
     if _format == Some("date") || _format == Some("datetime") {
         if items.len() >= 2 {
             // SECURITY: escape BETWEEN boundary values
-            let v0 = escape_string(&items[0].as_str());
-            let v1 = escape_string(&items[1].as_str());
+            let v0 = quote_string(&items[0].as_str(), true);
+            let v1 = quote_string(&items[1].as_str(), true);
             if end == "!" {
-                return Some(format!("{} NOT BETWEEN '{}' AND '{}'", name, v0, v1));
+                return Some(format!("{} NOT BETWEEN {} AND {}", name, v0, v1));
             } else {
-                return Some(format!("{} BETWEEN '{}' AND '{}'", name, v0, v1));
+                return Some(format!("{} BETWEEN {} AND {}", name, v0, v1));
             }
         }
     }
@@ -599,7 +599,7 @@ fn process_list_value(
     // Build IN clause from list values — each item escaped
     let val_str: String = items
         .iter()
-        .map(|v| quote_string(&escape_string(&v.as_str()), true))
+        .map(|v| quote_string(&v.as_str(), true))
         .collect::<Vec<_>>()
         .join(",");
 
@@ -664,14 +664,14 @@ fn process_str_value(
     }
     // Negation with end marker — SECURITY: escape value
     if end == "!" {
-        return Some(format!("{} != {}", name, quote_string(&escape_string(value), true)));
+        return Some(format!("{} != {}", name, quote_string(value, true)));
     }
     // Negation with ! prefix — SECURITY: escape after stripping prefix
     if value.starts_with('!') {
         return Some(format!(
             "{} != {}",
             key,
-            quote_string(&escape_string(&value[1..]), true)
+            quote_string(&value[1..], true)
         ));
     }
 
@@ -719,7 +719,7 @@ fn process_str_value(
             } else {
                 key.to_string()
             };
-            Some(format!("{}={}", final_key, quote_string(&escape_string(value), true)))
+            Some(format!("{}={}", final_key, quote_string(value, true)))
         }
     }
 }

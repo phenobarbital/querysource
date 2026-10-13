@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use crate::safe_dict::safe_format_map_rust;
 use crate::filter_common::{base_key, is_canonical_between};
 use crate::partial_match::{build_like_pattern, check_entries, like_escape_bang, sql_like_literal, MatchKind, PartialMatchOp};
-use crate::validators::{escape_string, field_components, quote_string};
+use crate::validators::{field_components, quote_string_bs as quote_string};
 
 /// Comparison tokens recognized in filter conditions.
 const COMPARISON_TOKENS: &[&str] = &[">=", "<=", "<>", "!=", "<", ">"];
@@ -61,7 +61,7 @@ fn safe_scalar_value(value: &str) -> String {
     match value {
         "null" | "NULL" | "!null" | "!NULL" => value.to_string(),
         v if v.parse::<i64>().is_ok() || v.parse::<f64>().is_ok() => v.to_string(),
-        _ => quote_string(&escape_string(value), true),
+        _ => quote_string(value, true),
     }
 }
 
@@ -329,7 +329,7 @@ pub fn filter_conditions(
                     // IN clause — escape each item
                     let val_str: String = list_val
                         .iter()
-                        .map(|v| quote_string(&escape_string(v), true))
+                        .map(|v| quote_string(v, true))
                         .collect::<Vec<_>>()
                         .join(",");
                     if end == "!" {
@@ -365,7 +365,7 @@ pub fn filter_conditions(
                 let s_str = s.to_string();
                 where_cond.push(format!(
                     "{formatted_key}={}",
-                    quote_string(&escape_string(&s_str), true)
+                    quote_string(&s_str, true)
                 ));
             }
         }
@@ -395,14 +395,14 @@ fn build_string_condition(
         where_cond.push(format!("{key} IS NOT NULL"));
     } else if end == "!" {
         // SECURITY: escape the negated value
-        where_cond.push(format!("{name} != {}", quote_string(&escape_string(value), true)));
+        where_cond.push(format!("{name} != {}", quote_string(value, true)));
     } else if value.starts_with('!') {
         where_cond.push(format!(
             "{key} != {}",
-            quote_string(&escape_string(&value[1..]), true)
+            quote_string(&value[1..], true)
         ));
     } else {
-        where_cond.push(format!("{key}={}", quote_string(&escape_string(value), true)));
+        where_cond.push(format!("{key}={}", quote_string(value, true)));
     }
     Ok(())
 }

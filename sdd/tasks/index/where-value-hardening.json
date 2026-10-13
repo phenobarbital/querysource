@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-12T22:11:37Z",
-  "completed_at": null,
+  "completed_at": "2026-10-13T01:33:35+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "exclusive: edits querysource/utils/functions.pyx and types/validators.pyx and must rebuild the Cython extensions in place (python setup.py build_ext --inplace) before its tests run",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-872-udf-list-to-udf-allowlist.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T00:54:01+00:00",
+      "file": "sdd/tasks/completed/TASK-872-udf-list-to-udf-allowlist.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-873",
@@ -34,16 +35,19 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
-      "depends_on": ["TASK-872"],
+      "depends_on": [
+        "TASK-872"
+      ],
       "parallel": true,
       "parallelism_notes": "needs the 10-name default from udf_keywords() produced by TASK-872 (querysource/utils/udf_list.py via types/validators.pyx) for test_vocabulary_week_keywords; pure Python, no rebuild",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-873-vocabulary-week-keywords.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:27:15+00:00",
+      "file": "sdd/tasks/completed/TASK-873-vocabulary-week-keywords.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-874",
@@ -52,16 +56,19 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-872"],
+      "depends_on": [
+        "TASK-872"
+      ],
       "parallel": false,
       "parallelism_notes": "modifies querysource/types/validators.pyx which TASK-872 also modifies (lines 27/40) and relies on to_udf being allowlist-only from TASK-872 (functions.pyx); exclusive: rebuilds the Cython extensions in place",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-874-is-valid-closure-cython.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:01:05+00:00",
+      "file": "sdd/tasks/completed/TASK-874-is-valid-closure-cython.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-875",
@@ -70,16 +77,17 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "no file shared with the Cython tasks; exclusive: rebuilds and stages the Rust extension (make build-rust && make stage-rust) into the source tree before its tests run",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-875-rust-allowlists-env-aware.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:11:21+00:00",
+      "file": "sdd/tasks/completed/TASK-875-rust-allowlists-env-aware.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-876",
@@ -88,16 +96,19 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-874"],
+      "depends_on": [
+        "TASK-874"
+      ],
       "parallel": false,
       "parallelism_notes": "modifies querysource/types/validators.pyx (Entity.quoteString, to_string) which TASK-874 also modifies (is_valid); exclusive: rebuilds the Cython extensions in place",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-876-idempotent-quoting-cython.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:16:32+00:00",
+      "file": "sdd/tasks/completed/TASK-876-idempotent-quoting-cython.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-877",
@@ -106,16 +117,19 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-875"],
+      "depends_on": [
+        "TASK-875"
+      ],
       "parallel": false,
       "parallelism_notes": "modifies rust/src/validators.rs (quote_string, to_string) which TASK-875 also modifies (statics, predicates); exclusive: rebuilds and stages the Rust extension",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-877-idempotent-quoting-rust.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:25:47+00:00",
+      "file": "sdd/tasks/completed/TASK-877-idempotent-quoting-rust.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-878",
@@ -124,16 +138,21 @@
       "feature_id": "FEAT-167",
       "feature": "where-value-hardening",
       "spec": "sdd/specs/where-value-hardening.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
-      "depends_on": ["TASK-873", "TASK-876", "TASK-877"],
+      "depends_on": [
+        "TASK-873",
+        "TASK-876",
+        "TASK-877"
+      ],
       "parallel": false,
       "parallelism_notes": "asserts the composed behaviour of TASK-873 (vocabulary keywords), TASK-876 (Entity.quoteString, is_valid via TASK-874/872) and TASK-877 (rs.quote_string, Rust builders); exclusive: rebuilds both the Cython and Rust extensions in its worktree before running the e2e renders",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-878-e2e-tests-docs.md"
+      "started_at": "2026-10-13T00:41:15+00:00",
+      "completed_at": "2026-10-13T01:33:35+00:00",
+      "file": "sdd/tasks/completed/TASK-878-e2e-tests-docs.md",
+      "verification": "verified"
     }
   ]
 }

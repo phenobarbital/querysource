@@ -55,8 +55,8 @@ cdef str bq_quote_string(object value):
     # (is_valid/quoteString) and undo PG-style '' escaping before re-wrapping.
     if v.startswith("'") and v.endswith("'") and len(v) >= 2:
         v = v[1:-1].replace("''", "'")
-    # Escape any literal double quotes inside the string
-    v = v.replace('"', '\\"')
+    # Escape backslashes first (BigQuery reads `\` as an escape), then double quotes
+    v = v.replace('\\', '\\\\').replace('"', '\\"')
     return f'"{v}"'
 
 

@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
 
-use crate::validators::{escape_string, is_valid};
+use crate::validators::is_valid;
 
 // ---------------------------------------------------------------------------
 // Injection detection helpers
@@ -138,8 +138,9 @@ pub fn safe_format_map_validated_rust(
                         let escaped = match ctx {
                             PlaceholderContext::Literal => {
                                 // Template already has surrounding `'...'`
-                                // Emit the escaped inner value (no extra quotes)
-                                escape_string(value)
+                                // Emit the inner value with `'` doubled (no extra quotes);
+                                // apostrophes and `%` are preserved, never stripped.
+                                value.replace('\'', "''")
                             }
                             PlaceholderContext::Identifier => {
                                 // Template already has surrounding `"..."`

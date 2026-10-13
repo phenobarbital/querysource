@@ -626,6 +626,14 @@ cdef class AbstractParser:
                 except (TypeError, ValueError):
                     pass
 
+        # FEAT-167: a leading '!' negates the *rest* of the text, whatever it
+        # contains (apostrophes, spaces...). field_components() only recognises
+        # \w+ operands, so "!O'Brien" used to be pre-quoted as one literal and
+        # lost its negation. Hand it raw to the builder, which strips the '!'
+        # and quotes the operand exactly once.
+        if isinstance(value, str) and len(value) > 1 and value[0] == '!':
+            return key, value
+
         comps = field_components(str(value))
         if comps:
             prefix, fn, _ = comps[0]

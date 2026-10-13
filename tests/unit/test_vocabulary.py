@@ -1,7 +1,6 @@
 """FEAT-148 TASK-739 — date keyword vocabulary."""
 from querysource.types.validators import pg_constants, pg_udfs, udf_keywords
 from querysource.utils.functions import fdom
-
 from querysource.utils.vocabulary import (
     FUNCTION_REGISTRY,
     build_vocabulary,
@@ -44,12 +43,12 @@ def test_unknown_keyword_has_null_description():
 
 
 def test_functions_informational_only():
-    """Functions should be exactly 6 helpers, all invocable=False, previous_year absent."""
+    """Functions should be exactly 4 helpers, all invocable=False, previous_year absent."""
     function_names = [f.name for f in FUNCTION_REGISTRY]
 
-    # Exactly 6 functions in specific order
-    assert len(FUNCTION_REGISTRY) == 6
-    assert function_names == ["date_diff", "date_sum", "days_ago", "previous_month", "fdow", "ldow"]
+    # Exactly 4 functions in specific order
+    assert len(FUNCTION_REGISTRY) == 4
+    assert function_names == ["date_diff", "date_sum", "days_ago", "previous_month"]
 
     # All are not invocable
     for func in FUNCTION_REGISTRY:
@@ -68,3 +67,17 @@ def test_keyword_example_resolves():
     # Unknown keyword should return None
     assert keyword_example("NOPE") is None
     assert keyword_example("") is None
+
+
+def test_vocabulary_week_keywords():
+    """FEAT-167: FDOW/LDOW/LDOPM are keywords with descriptions and examples (AC2)."""
+    from querysource.utils.functions import fdow, ldopm, ldow
+
+    result = build_vocabulary(udf_keywords(), pg_constants(), pg_udfs())
+    by_name = {k["name"]: k for k in result["keywords"]}
+    assert [k["name"] for k in result["keywords"]] == udf_keywords()
+    assert len(result["functions"]) == 4
+    for name, fn in (("FDOW", fdow), ("LDOW", ldow), ("LDOPM", ldopm)):
+        assert by_name[name]["returns"] == "date-string"
+        assert by_name[name]["description"]
+        assert by_name[name]["example"] == fn()

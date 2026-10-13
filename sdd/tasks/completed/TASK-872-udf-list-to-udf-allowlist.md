@@ -382,4 +382,9 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-terra (codex), 1 attempt, 473s, merged at f3199e63.
+- Created `querysource/utils/udf_list.py` (10-name default, env-aware `udf_list()`, `is_udf_keyword()`).
+- `functions.pyx::to_udf` is allowlist-only (KeyError otherwise); `types/validators.pyx` uses `udf_list()`; dead `is_udf` dispatcher removed from `utils/validators.py`.
+- Validation: merge tier `tests/unit/test_udf_list.py` 16 passed (after in-place `build_ext` in the worktree; first run failed only on missing compiled extension).
+- Review: orchestrator diff review, no fixes; recorded as coder-review:7879fe7b078adc4f3cd3bbeb.
+- Closed via close_task.sh, not finalize_task: engine produces no durable EvidenceRef for review, so finalize_task could not be satisfied honestly.

@@ -289,4 +289,9 @@ When you pick up this task:
 
 ## Completion Note
 
-> Filled in by the implementing agent at close time.
+Implemented by seat gpt-5.6-terra (codex), 1 attempt, 331s, merged.
+- `types/validators.pyx`: module logger; `is_pg_function` exact-match only; `get_config_var` and the `to_udf` fallback removed from `is_valid`; generic values are always literals.
+- Added `tests/unit/test_is_valid_closure.py`.
+- Validation: merge tier 19 passed (extensions rebuilt in-place first).
+- Review: orchestrator diff review, no fixes; coder-review:fd6146a6f6689d8b2958a378.
+- Closed via close_task.sh (no durable review EvidenceRef available for finalize_task).

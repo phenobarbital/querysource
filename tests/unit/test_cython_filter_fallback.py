@@ -33,8 +33,8 @@ import pytest
 
 # Try to get Entity from the compiled extension; fall back to pure-Python stubs.
 try:
-    import sys
     import os
+    import sys
     # Temporarily remove the worktree root so the installed package takes priority
     _wt_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     _removed = _wt_root in sys.path
@@ -52,13 +52,15 @@ except (ImportError, Exception):
 
 
 def _qs_quote_string(value) -> str:
-    """Pure-Python equivalent of Entity.quoteString."""
+    """Pure-Python equivalent of Entity.quoteString (idempotent, FEAT-167)."""
     if value is None or value == 'None':
         return "''"
     if value in ('null', 'NULL'):
         return str(value)
-    v = str(value).replace("'", "''")
-    return f"'{v}'"
+    v = str(value)
+    if len(v) >= 2 and v[0] == v[-1] == "'" and "'" not in v[1:-1].replace("''", ""):
+        v = v[1:-1].replace("''", "'")
+    return "'" + v.replace("'", "''") + "'"
 
 
 def _qs_escape_string(value) -> str:

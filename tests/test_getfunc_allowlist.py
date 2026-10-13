@@ -37,7 +37,7 @@ def test_getfunc_module_has_no_dynamic_import_machinery():
         assert not hasattr(mod, forbidden), forbidden
 
 
-@pytest.mark.parametrize("name", ["Path", "PurePath", "UUID", "ZoneInfo", "relativedelta", "urlparse", "Number", "is_udf"])
+@pytest.mark.parametrize("name", ["Path", "PurePath", "UUID", "ZoneInfo", "relativedelta", "urlparse", "Number"])
 def test_reexported_names_are_not_resolvable(name):
     assert callable(getattr(qsfunctions, name))  # they exist on the module...
     assert getFunction(name) is None             # ...but are not QuerySource helpers
