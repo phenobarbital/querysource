@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-173 — Partial-match keys honour suffixes: base column, `!` negates, others rejected
 **Spec**: `sdd/specs/parsers-bigquery-fixes.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-886
@@ -88,3 +88,11 @@ PARTIAL_MATCH_OPERATORS: dict[str, PartialMatchOp]  # keyed by name, each with a
 - `pytest tests/test_partial_matching_operators.py tests/test_sql_partial_matching.py tests/test_mssql_partial_matching.py tests/test_bigquery_partial_matching.py tests/test_pgsql_partial_matching.py tests/test_partial_matching_conformance.py -q`
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 0f669b51)
+
+- `resolve_key_suffix()` is in `partial_matching.py`, and `validate_partial_match_dict` returns the resolved op, so `abstract.pyx` pre-validation rejects bad suffixes early.
+- `sql.pyx`, `sqlserver.pyx` and `pgsql.pyx` render `base_key(key)`. `bigquery.pyx` builds `field_expr` from the base column (JSON path and json-typed handling included).
+- New `tests/test_partial_match_key_suffix.py`: 58 passed, covering 4 dialects × rust/cython with no skips.
+- Regression suites (partial matching, dialect filters, Rust-backed tests): 2109 passed.
+- Repro: `{"n!": {"contains": "abc"}}` now renders `n NOT LIKE '%abc%'` on every dialect and path. `n~` raises `ParserError`.
