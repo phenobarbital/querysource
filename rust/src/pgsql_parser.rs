@@ -752,7 +752,8 @@ fn pg_partial_match_from_dict(key: &str, dict: &Bound<'_, PyDict>) -> PyResult<O
     let Some((op, operand)) = check_entries(key, &borrowed, true)? else {
         return Ok(None);
     };
-    let Some(safe_key) = pg_safe_identifier_key(key) else {
+    // FEAT-173: base column; check_entries already applied the key suffix.
+    let Some(safe_key) = pg_safe_identifier_key(base_key(key)) else {
         return Ok(Some(FilterValue::Null));
     };
     Ok(Some(FilterValue::Condition(pg_partial_match_condition(&safe_key, op, operand))))

@@ -77,7 +77,8 @@ pub fn mssql_filter_conditions(
                 .collect();
             if let Some((op, operand)) = check_entries(&key, &refs, false)? {
                 if is_safe_key(&key) {
-                    items.push(MssqlItem::Done(mssql_partial_match_condition(&key, op, operand)?));
+                    // FEAT-173: base column; check_entries already applied the key suffix.
+                    items.push(MssqlItem::Done(mssql_partial_match_condition(base_key(&key), op, operand)?));
                 }
                 continue;
             }

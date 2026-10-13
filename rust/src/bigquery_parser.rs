@@ -12,9 +12,12 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use crate::filter_common::apply_where_clause;
+use crate::filter_common::{apply_where_clause, base_key};
 use crate::filter_common::is_canonical_between;
-use crate::partial_match::{bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, MatchKind, PartialMatchOp};
+use crate::partial_match::{
+    bq_like_literal, build_like_pattern, check_entries, like_escape, lookup, resolve_key_suffix, MatchKind,
+    PartialMatchOp,
+};
 use crate::safe_dict::safe_format_map_rust;
 use crate::validators::{bq_quote_string, field_components, is_integer};
 
@@ -192,6 +195,16 @@ fn process_entry(entry: &FilterEntry) -> Option<String> {
 
     match value {
         FilterValue::Dict(entries) => {
+            // FEAT-173: a single partial-matching operator renders the base column with the
+            // key suffix applied (validated up front by check_entries in bq_filter_conditions).
+            if let [(op, FilterValue::Str(s))] = entries.as_slice() {
+                if let Some(pm) = lookup(op) {
+                    let resolved = resolve_key_suffix(key, pm).ok()?;
+                    let base_quoted = bq_safe_identifier_key(base_key(key))?;
+                    let (base_expr, _) = resolve_json_field(&base_quoted, format_hint);
+                    return Some(bq_partial_match_condition(&base_expr, resolved, s));
+                }
+            }
             process_dict_value(&field_expr, entries)
         }
         FilterValue::List(items) => {

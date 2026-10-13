@@ -275,7 +275,10 @@ pub fn filter_conditions(
                 .map(|(op_name, operand)| (op_name.as_str(), operand.as_deref()))
                 .collect();
             if let Some((op, operand)) = check_entries(&key, &entry_refs, false)? {
-                where_cond.push(sql_partial_match_condition(&formatted_key, op, operand)?);
+                // FEAT-173: render the base column; check_entries already applied the key suffix.
+                let column = safe_identifier_key(base_key(&key))
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                where_cond.push(sql_partial_match_condition(&column, op, operand)?);
                 continue;
             }
             // Dict value → comparison operator + value
