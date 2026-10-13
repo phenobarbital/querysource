@@ -1,28 +1,16 @@
 """qsurl end-to-end on the dry-run harness: split -> QS (real dialect parsers, FEAT-152).
 
-NOTE (TASK-776, environment limitation): the qsurl parser back-ends (Rust
-extension, TASK-764/777; Lark fallback, TASK-766) are blocked in this
-sandbox — porting the user-provided reference tarball requires explicit
-operator permission the sandbox denied (see TASK-764's Completion Note).
-``querysource.qsurl.parse()`` is therefore not functional here. Every test
-below constructs the IR dict directly (the documented, stable contract
-``parse()`` itself would produce — spec §2 Data Models) instead of calling
-``parse()``, so the real composition this task exists to prove — the real
-``translate.split`` (TASK-771) against the real PostgreSQL/Cassandra dialect
-parsers via a real ``QS.dry_run()`` and a real ``residual.apply`` — is fully
-exercised independent of the blocked grammar parser.
+Every test builds the IR dict directly -- the stable contract ``parse()``
+produces (spec §2 Data Models) -- instead of calling ``parse()``, so the
+composition this module exists to prove (the real ``translate.split``,
+TASK-771, against the real PostgreSQL/Cassandra dialect parsers via a real
+``QS.dry_run()`` and a real ``residual.apply``) is exercised independently of
+the grammar, which has its own tests.
 
-Second environment limitation (also discovered via this task, documented and
-fixed in ``querysource/parsers/pgsql.pyx`` and ``rust/src/pgsql_parser.rs``,
-TASK-769's files): the installed ``querysource.qs_parsers._qs_parsers``
-extension in the shared ``.venv`` predates the TASK-769 ILIKE fix (rebuilding
-it would mutate the shared, read-only environment — the exact same
-constraint documented in TASK-769's own Completion Note). Since
-``pgSQLParser.filter_conditions`` tries the Rust extension first and it does
-not raise for an ``ILIKE`` dict key (it silently mis-renders it as a JSONB
-containment filter), ``test_text_match_pushdown_pg`` forces the Cython path
-via ``monkeypatch.setattr(pgsql, "HAS_RUST", False)`` to exercise the fixed,
-current source instead of the stale installed binary.
+The ILIKE pushdown tests force ``monkeypatch.setattr(pgsql, "HAS_RUST", False)``
+to pin the Cython ``pgSQLParser.filter_conditions`` path (TASK-769), so that
+builder stays covered even when the Rust extension is installed and would
+otherwise be tried first.
 """
 from __future__ import annotations
 
