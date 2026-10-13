@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import inspect
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,22 @@ from querysource.exceptions import QueryAccessDenied
 
 _log = logging.getLogger(__name__)
 _WARNED_ABSENT_RUNTIME = False
+_WARN_LOCK = threading.Lock()
+
+
+def _claim_absent_runtime_warning() -> bool:
+    """Atomically test-and-set the warn-once flag for a missing PBAC runtime.
+
+    Returns:
+        True for exactly one caller per process (the one that must emit the
+        warning), False for every later caller, including concurrent threads.
+    """
+    global _WARNED_ABSENT_RUNTIME
+    with _WARN_LOCK:
+        if _WARNED_ABSENT_RUNTIME:
+            return False
+        _WARNED_ABSENT_RUNTIME = True
+        return True
 
 
 @dataclass(frozen=True)
@@ -142,17 +159,15 @@ async def enforce_principal(principal: QSPrincipal, resource_type: Any, resource
     user=None. Deny → QueryAccessDenied. Logs principal.log_fields(), tenant selector,
     resource, action, decision, matched policy and reason.
     """
-    global _WARNED_ABSENT_RUNTIME
     log = logger or _log
     pbac_enabled, evaluator = resolve_evaluator(None, detached=True)
 
     if not pbac_enabled:
-        if QS_PBAC_ENABLED and not _WARNED_ABSENT_RUNTIME:
+        if QS_PBAC_ENABLED and _claim_absent_runtime_warning():
             log.warning(
                 "QS_PBAC_ENABLED is True but no PBAC runtime is registered in this "
                 "process; principal-path checks are no-ops until setup_pbac() runs."
             )
-            _WARNED_ABSENT_RUNTIME = True
         log.debug(
             "PBAC no-op (not configured): %s/%s action=%s tenant=%s %s",
             resource_type, resource_name, action, tenant, principal.log_fields(),
