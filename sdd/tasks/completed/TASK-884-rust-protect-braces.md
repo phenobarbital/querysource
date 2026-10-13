@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-172 — Protect braces in partial-match LIKE literals from later format_map passes
 **Spec**: `sdd/specs/parsers-deltatbl-tech-debt.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -92,3 +92,10 @@ pub fn protect_braces(text: &str) -> String {
 - `pytest tests/test_rust_partial_match_units.py -q`
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 5c807c4d)
+
+- Added `protect_braces()`. `sql_like_literal`, `mssql_like_literal` and `bq_like_literal` now emit U+E000/U+E001 instead of `{`/`}`.
+- New cargo test `literals_protect_braces`. The existing `literals` test is unchanged.
+- `cargo test --no-default-features partial_match`: 10 passed. The full lib suite gives 365 passed and 4 failed; those are the same 4 failures as the 2026-10-07 baseline.
+- `pytest tests/test_rust_partial_match_units.py`: passed, with the maturin wheel staged.

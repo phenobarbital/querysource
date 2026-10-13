@@ -74,16 +74,23 @@ pub fn build_like_pattern(op: &PartialMatchOp, value: &str, escaper: fn(&str) ->
     format!("{}{}{}", op.prefix, body, op.suffix)
 }
 
+/// Replace `{`/`}` with the private-use sentinels U+E000/U+E001 so the later
+/// `str.format_map` passes in `build_query` leave them alone (FEAT-172). The
+/// Python `partial_matching.restore_braces` turns them back into braces.
+pub fn protect_braces(text: &str) -> String {
+    text.replace('{', "\u{e000}").replace('}', "\u{e001}")
+}
+
 pub fn sql_like_literal(pattern: &str) -> String {
-    format!("'{}'", pattern.replace('\\', "\\\\").replace('\'', "''"))
+    protect_braces(&format!("'{}'", pattern.replace('\\', "\\\\").replace('\'', "''")))
 }
 
 pub fn mssql_like_literal(pattern: &str) -> String {
-    format!("'{}'", pattern.replace('\'', "''"))
+    protect_braces(&format!("'{}'", pattern.replace('\'', "''")))
 }
 
 pub fn bq_like_literal(pattern: &str) -> String {
-    format!("\"{}\"", pattern.replace('\\', "\\\\").replace('"', "\\\""))
+    protect_braces(&format!("\"{}\"", pattern.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
 /// Twin of `validate_partial_match` for a string operand (non-string handled by `check_entries`).
@@ -239,6 +246,15 @@ mod tests {
         assert_eq!(sql_like_literal("a\\b'c"), "'a\\\\b''c'");
         assert_eq!(mssql_like_literal("a\\b'c"), "'a\\b''c'");
         assert_eq!(bq_like_literal("a\\b\"c"), "\"a\\\\b\\\"c\"");
+    }
+
+    #[test]
+    fn literals_protect_braces() {
+        assert_eq!(protect_braces("{a}{{b}}"), "\u{e000}a\u{e001}\u{e000}\u{e000}b\u{e001}\u{e001}");
+        assert_eq!(sql_like_literal("%a{b}%"), "'%a\u{e000}b\u{e001}%'");
+        assert_eq!(mssql_like_literal("{limit}"), "'\u{e000}limit\u{e001}'");
+        assert_eq!(bq_like_literal("x{y}"), "\"x\u{e000}y\u{e001}\"");
+        assert!(!sql_like_literal("{").contains('{'));
     }
 
     #[test]

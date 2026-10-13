@@ -14,7 +14,8 @@ from ..exceptions import EmptySentence, ParserError
 from ..types.validators import Entity, field_components, quote_sql_literal
 from .filter_values import base_key, is_comparison_dict
 from .partial_matching import (
-    build_like_pattern, like_escape_bang, sql_like_literal, validate_partial_match_dict,
+    build_like_pattern, like_escape_bang, restore_braces, sql_like_literal,
+    validate_partial_match_dict,
 )
 from .abstract cimport AbstractParser
 
@@ -474,6 +475,8 @@ cdef class SQLParser(AbstractParser):
             except ValueError:
                 pass
         # default null setters
+        # FEAT-172: every format_map pass is done; turn brace sentinels back into braces.
+        sql = restore_braces(sql)
         self.query_parsed = sql
         self.logger.debug(
             f": SQL :: {sql}"

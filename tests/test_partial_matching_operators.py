@@ -3,12 +3,16 @@ import pytest
 
 from querysource.exceptions import ParserError
 from querysource.parsers.partial_matching import (
+    BRACE_CLOSE_SENTINEL,
+    BRACE_OPEN_SENTINEL,
     PARTIAL_MATCH_OPERATORS,
     bq_like_literal,
     build_like_pattern,
     like_escape,
     like_escape_bang,
     mssql_like_literal,
+    protect_braces,
+    restore_braces,
     sql_like_literal,
     validate_partial_match,
     validate_partial_match_dict,
@@ -46,6 +50,23 @@ def test_literal_helpers_quote_patterns_without_entity_side_effects():
     assert sql_like_literal("o'b\\") == "'o''b\\\\'"
     assert mssql_like_literal("o'b\\") == "'o''b\\'"
     assert bq_like_literal('a"\\%') == '"a\\"\\\\%"'
+
+
+@pytest.mark.parametrize("helper", [sql_like_literal, mssql_like_literal, bq_like_literal])
+def test_literal_helpers_emit_brace_sentinels(helper):
+    """FEAT-172: literals never carry raw braces into later format_map passes."""
+    rendered = helper("%a{b}{{c}}%")
+    assert "{" not in rendered and "}" not in rendered
+    assert BRACE_OPEN_SENTINEL in rendered and BRACE_CLOSE_SENTINEL in rendered
+    assert "a{b}{{c}}" in restore_braces(rendered)
+
+
+def test_protect_and_restore_braces_round_trip():
+    """FEAT-172: restore_braces inverts protect_braces and survives format_map."""
+    text = "x {limit} {{y}} }{"
+    protected = protect_braces(text)
+    assert protected.format_map({}) == protected
+    assert restore_braces(protected) == text
 
 
 @pytest.mark.parametrize(

@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-13T20:20:09+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-13T20:24:37+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -13,11 +13,11 @@
       "feature_id": "FEAT-172",
       "feature": "parsers-deltatbl-tech-debt",
       "spec": "sdd/specs/parsers-deltatbl-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": "2026-10-13T20:24:36+00:00",
       "discovered_from": "issue:64c82d35d831",
       "parallel": false,
       "id": "TASK-884",
@@ -26,17 +26,18 @@
       "effort": "S",
       "depends_on": [],
       "parallelism_notes": "exclusive: changes rust/src (maturin rebuild of the shared _qs_parsers extension)",
-      "file": "sdd/tasks/active/TASK-884-rust-protect-braces.md"
+      "file": "sdd/tasks/completed/TASK-884-rust-protect-braces.md",
+      "verification": "verified"
     },
     {
       "feature_id": "FEAT-172",
       "feature": "parsers-deltatbl-tech-debt",
       "spec": "sdd/specs/parsers-deltatbl-tech-debt.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": "2026-10-13T20:24:37+00:00",
       "discovered_from": "issue:64c82d35d831",
       "parallel": false,
       "id": "TASK-885",
@@ -47,7 +48,8 @@
         "TASK-884"
       ],
       "parallelism_notes": "needs protect_braces sentinel output from TASK-884 (rust/src/partial_match.rs) for its rust-path build_query tests; exclusive: Cython build_ext --inplace rebuild",
-      "file": "sdd/tasks/active/TASK-885-python-protect-restore-braces.md"
+      "file": "sdd/tasks/completed/TASK-885-python-protect-restore-braces.md",
+      "verification": "verified"
     }
   ]
 }

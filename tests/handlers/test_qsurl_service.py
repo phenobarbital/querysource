@@ -1,16 +1,10 @@
 """QSUrlService: 400 detail, PBAC ordering, ?q= form, decode-once (spec AC5-AC8).
 
-NOTE (TASK-775, environment limitation): the qsurl parser back-ends (Rust
-extension, TASK-764/777; Lark fallback, TASK-766) are blocked in this sandbox
-— porting the user-provided reference tarball requires explicit operator
-permission the sandbox denied (see TASK-764's Completion Note). ``parse()``
-is therefore not functional here (``querysource.qsurl._fallback`` does not
-exist yet). Every test below patches ``querysource.handlers.qsurl.parse``
-directly instead of exercising the real grammar, so the handler's own logic
-(source assembly, PBAC ordering, capability probe wiring, translate.split
-integration, error envelope) is fully covered independent of the blocked
-parser back-ends. ``translate.split`` itself (TASK-771) is real and
-unmocked wherever a full IR is supplied.
+Every test patches ``querysource.handlers.qsurl.parse`` on purpose: the qsurl
+grammar has its own tests, so these isolate the handler's own logic (source
+assembly, PBAC ordering, capability probe wiring, translate.split integration,
+error envelope). ``translate.split`` itself (TASK-771) is real and unmocked
+wherever a full IR is supplied.
 """
 from __future__ import annotations
 

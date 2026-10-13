@@ -111,6 +111,17 @@ async def test_enforce_principal_pbac_off_and_warn_once(monkeypatch, caplog):
     assert len(warnings) == 1
 
 
+def test_absent_runtime_warning_claimed_once_across_threads():
+    """The warn-once flag is an atomic test-and-set: one winner across threads."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(lambda _: enforcement._claim_absent_runtime_warning(), range(64)))
+
+    assert results.count(True) == 1
+    assert enforcement._WARNED_ABSENT_RUNTIME is True
+
+
 @pytest.mark.asyncio
 async def test_enforce_principal_missing_evaluator():
     """AC-4: a runtime whose evaluator is None (guardian set) -> QueryAccessDenied."""

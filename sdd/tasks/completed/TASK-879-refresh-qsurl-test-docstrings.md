@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-169 — Refresh stale "environment limitation" docstrings in qsurl tests
 **Spec**: `sdd/specs/e2e-test-qsurl-dry-run-tech-debt.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: low
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -131,3 +131,11 @@ wherever a full IR is supplied.
 ---
 
 ## Completion Note
+
+**Completed**: 2026-10-13 by agent:sdd-fix (commit 2a2acde8)
+
+- Rewrote both module docstrings; the first summary lines are unchanged. No test body changes.
+- AC1: the forbidden-phrase grep on both files returns nothing.
+- AC3: `pytest tests/handlers/test_qsurl_service.py tests/e2e/test_qsurl_dry_run.py`: 13 passed, the same count as before (the e2e tests need the local Postgres container running).
+- AC4: the diff touches only the two docstrings.
+- Ledger: resolves `issue:4bd3bb62d420`.
