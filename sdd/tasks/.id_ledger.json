@@ -1,6 +1,6 @@
 {
   "next_task_id": 879,
-  "next_feature_id": 169,
-  "updated_at": "2026-10-13T19:58:21+00:00",
-  "updated_by": "src-bigquery-parser-tech-debt"
+  "next_feature_id": 170,
+  "updated_at": "2026-10-13T19:58:40+00:00",
+  "updated_by": "e2e-test-qsurl-dry-run-tech-debt"
 }
