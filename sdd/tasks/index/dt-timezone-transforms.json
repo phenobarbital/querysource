@@ -35,7 +35,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -45,8 +45,9 @@
       "parallelism_notes": "Calls to_wall_clock created by TASK-893 (querysource/types/dt/transforms.py) and appends to tests/unit/test_dt_timezone_transforms.py created by TASK-893.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-894-drop-timezone.md"
+      "completed_at": "2026-10-14T03:50:03+00:00",
+      "file": "sdd/tasks/completed/TASK-894-drop-timezone.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-895",
