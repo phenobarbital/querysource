@@ -1,4 +1,5 @@
 """QuerySource semantic layer (FEAT-175). Importing this package never imports sidemantic."""
+from .api import compile, execute  # noqa: A004
 from .exceptions import (
     SemanticCompilerUnavailable,
     SemanticError,
@@ -40,3 +41,5 @@ __all__ = (
     "SemanticResource",
     "SemanticResourceError",
 )
+
+__all__ = (*__all__, "compile", "execute")
