@@ -10,7 +10,7 @@ tags: [semantic-layer, sidemantic, ossie, pbac, metrics, sql-compiler]
 **Feature ID**: FEAT-175
 **Date**: 2026-10-14
 **Author**: Jesus Lara / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.3.0
 **Exploration**: `sdd/proposals/semantic-layer.brainstorm.md` (Option A, status accepted)
 
@@ -1089,7 +1089,7 @@ Verified against: `6e6bd94`
 - [x] PBAC-provided row filters — *Resolved in brainstorm*: Yes, declared in the resource YAML as role-keyed `governance.row_filters` (+ `default`), validated like caller filters, AND-ed across matching roles, on top of Sidemantic `security.row_filters`.
 - [x] Target version — *Resolved at spec time*: 5.3.0.
 - [ ] Q12 Should `execute(compiled)` in the Python API accept a `CompiledQuery` produced by another process (serialized), or only one produced in-process? v1 embeds the original request in `CompiledQuery.parameters['request']` and re-runs through `QS`, so both work; confirm this is acceptable for ai-parrot's cache. — *Owner: Jesus Lara* (decidable during implementation; does not block tasks)
-- [ ] Q13 (escalated from §9 S2) MultiQS child semantic slugs: `MultiQS` builds child `QueryObject`s without a principal (`querysource/queries/obj.py`, `querysource/queries/multi/sources/executors.py`), so secured semantic children are denied fail-closed in v1. Should FEAT-175 propagate the parent principal to children (touching MultiQS), or is that a follow-up feature? — *Owner: Jesus Lara* (v1 ships fail-closed; does not block tasks)
+- [ ] Q13 (escalated from §9 S2) MultiQS child semantic slugs: `MultiQS` builds child `QueryObject`s without a principal (`querysource/queries/obj.py`, `querysource/queries/multi/sources/executors.py`), so secured semantic children are denied fail-closed in v1. Should FEAT-175 propagate the parent principal to children (touching MultiQS), or is that a follow-up feature? — *Owner: Jesus Lara* (v1 ships fail-closed; does not block tasks), yes, propagate principal to children
 
 ---
 
