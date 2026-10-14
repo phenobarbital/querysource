@@ -16,7 +16,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "root task: creates querysource/semantic/ package + tests/semantic/conftest.py; no dependencies",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-897-semantic-models-protocol.md"
+      "completed_at": "2026-10-14T22:27:12+00:00",
+      "file": "sdd/tasks/completed/TASK-897-semantic-models-protocol.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-898",
@@ -226,7 +227,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [],
@@ -234,8 +235,9 @@
       "parallelism_notes": "independent: touches only multi/__init__.py, multi/sources/query.py, executors.py, obj.py — no FEAT-175 symbol needed (spec Q13 answer)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-907-multiqs-principal-propagation.md"
+      "completed_at": "2026-10-14T22:27:13+00:00",
+      "file": "sdd/tasks/completed/TASK-907-multiqs-principal-propagation.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-908",
