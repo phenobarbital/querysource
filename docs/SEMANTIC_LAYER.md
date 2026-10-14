@@ -63,7 +63,7 @@ Requests are carried in the slug's conditions (JSON body or query parameters):
 | `dimensions` | list[str] | Dimension names; a `__grain` suffix (`order_date__month`) picks a grain |
 | `filters` | list | Structured `{field, op, value}` or SQL-like strings |
 | `time_grain` | str | `day`, `week`, `month`, `quarter` or `year`; rewrites time dimensions |
-| `order_by` | list[str] | `field [asc|desc]` entries |
+| `order_by` | list[str] | `<field>[__grain] [asc|desc]` entries; anything else (expressions, subqueries, functions) is **400** |
 | `limit` | int | Positive; defaults to `QS_SEMANTIC_DEFAULT_LIMIT`, capped at `QS_SEMANTIC_MAX_LIMIT` (warning) |
 | `offset` | int | Non-negative |
 
@@ -98,6 +98,14 @@ Four independent layers, all conjunctive:
    ignored. An invalid governance filter is **500** (logged with slug and role).
 
 With a principal absent and PBAC enabled the request is denied (fail-closed).
+
+Per-field checks use the canonical bare name (no model prefix, no `__grain` suffix) and cover every
+place a field can appear: `metrics`, `dimensions`, filter fields (structured and string) and `order_by`.
+
+**Anonymous callers.** With PBAC disabled and no principal, only the `default` row-filter block applies:
+role-keyed blocks need a principal whose `roles` contain that role, so an anonymous caller is never
+*more* restricted than the `default` block. Enable PBAC (or require a session) if anonymous access to a
+semantic slug is not acceptable.
 
 ## Dialects
 
@@ -167,15 +175,16 @@ through `QS`, so PBAC and governance apply again.
 
 `GET /api/v1/semantic/{slug}/catalog` and `GET /api/v1/{tenant}/semantic/{slug}/catalog` return a
 `CatalogPayload`: `slug`, `model_version`, `dialect`, `models`, `metrics`, `dimensions` and
-`row_filters_applied`. Fields denied by PBAC are listed with `granted: false` and no detail. Responses:
+`row_filters_applied`. Fields denied by PBAC are listed with `granted: false` and no detail. The catalog resolves the same datasource and dialect as execution and enforces `datasource:use` / `driver:use` (denied = 404). Responses:
 200, 401 without a principal, 404 for a missing, non-semantic or denied slug. `describe_slug()` also adds
-`derived.semantic` for semantic slugs.
+`derived.semantic` for semantic slugs; the datasource name, role names and parser error text are only
+included for callers with the raw grant.
 
 ## MultiQS
 
 `MultiQS` forwards its principal to every child `QueryObject`, so a semantic child enforces the same PBAC,
 governance and `security:` rules as a direct call. A semantic child run without a principal against a
-`security:` model is denied. Remote (qworker) executors do not propagate the principal and log that fact.
+`security:` model is denied. Remote (qworker) executors do not propagate the principal; this is logged as a warning, and only `security:` models fail closed there.
 
 ## License note
 

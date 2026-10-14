@@ -1,6 +1,7 @@
 """Semantic provider (FEAT-175): compile a SemanticQuery and run it on the model's datasource."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any, Union
 
@@ -81,8 +82,8 @@ class semanticProvider(BaseProvider):
             return self._datasource_name, source.driver
 
         self._datasource_name = "default"
-        driver = manager._default_driver
-        self._connection = manager.default_connection(driver=driver, dsn=manager._dsn)
+        driver = manager.default_driver_name
+        self._connection = manager.default_connection(driver=driver, dsn=manager.default_dsn)
         self._driver = driver
         return self._datasource_name, driver
 
@@ -99,7 +100,7 @@ class semanticProvider(BaseProvider):
         )
         self._resource_revision = revision
         try:
-            model = get_loader().resolve(self._slug, revision, self.resource)
+            model = await asyncio.to_thread(get_loader().resolve, self._slug, revision, self.resource)
             await governance.enforce_query(self._request, principal, self._slug, self.request_model, logger=self._logger)
             filters, roles = governance.governance_filters(self.resource, principal)
             target = CompilationTarget(
@@ -123,7 +124,8 @@ class semanticProvider(BaseProvider):
         except (SemanticError, QueryException):
             raise
         except Exception as exc:  # configuration boundaries are normalized for QS callers
-            raise SemanticResourceError(f"Unable to prepare semantic resource '{self._slug}': {exc}") from exc
+            self._logger.exception("Unable to prepare semantic resource %s: %s", self._slug, exc)
+            raise SemanticResourceError(f"Unable to prepare semantic resource '{self._slug}'") from exc
 
         if warning:
             self.compiled.warnings.append(warning)
@@ -187,7 +189,7 @@ class semanticProvider(BaseProvider):
             default_limit=QS_SEMANTIC_DEFAULT_LIMIT,
             max_limit=QS_SEMANTIC_MAX_LIMIT,
         )
-        model = get_loader().resolve(self._slug, self._resource_revision, self.resource)
+        model = await asyncio.to_thread(get_loader().resolve, self._slug, self._resource_revision, self.resource)
         catalog = {field.name: field.type for field in get_compiler(self.resource.semantic.compiler).catalog(model, target)}
         return [
             {"name": self._output_name(name), "type": catalog.get(name.split("__", maxsplit=1)[0])}

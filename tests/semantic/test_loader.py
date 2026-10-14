@@ -64,3 +64,18 @@ def test_loader_cache_lru(tmp_path) -> None:
     assert loader.cached(first) is None
     assert loader.cached(second) is not None
     assert loader.cached(third) is not None
+
+
+def test_loader_model_version_follows_file_edit_with_same_revision(tmp_path) -> None:
+    """A path-backed file edit changes model_version (and so the cache key) without a new revision."""
+    path = tmp_path / "m.yml"
+    path.write_text("models: []\n")
+    loader = ModelLoader(tmp_path, cache_size=2)
+    first = loader.resolve("s", "r1", _res("m.yml"))
+    path.write_text("models: [] # edited\n")
+    second = loader.resolve("s", "r1", _res("m.yml"))
+    assert first.model_version != second.model_version
+    assert first.source_path != second.source_path
+    # The compiled copy is immutable: editing the source never changes what was hashed.
+    assert first.source_path.read_text() == "models: []\n"
+    loader.close()

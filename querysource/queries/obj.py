@@ -234,7 +234,7 @@ class QueryObject(BaseQuery):
                         "QS unhandled Exception",
                         exception=ex,
                         code=500
-                    )
+                    ) from ex
                 finally:
                     await self._qs.close()
         elif self._type == 'query':
@@ -258,7 +258,7 @@ class QueryObject(BaseQuery):
                 except (RuntimeError, QueryException) as ex:
                     raise QueryException(
                         f"Error on Query: {ex}"
-                    )
+                    ) from ex
         else:
             result = {
                 "result": self._query

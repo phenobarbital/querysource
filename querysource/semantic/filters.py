@@ -117,6 +117,8 @@ class FilterValidator:
         except (sqlglot.errors.ParseError, SyntaxError, ValueError) as exc:
             raise SemanticRequestError(f"Invalid filter expression: {text!r}") from exc
 
+        if not isinstance(expression, exp.Condition):
+            raise SemanticRequestError("Filter must be a boolean predicate")
         if any(isinstance(node, (exp.Subquery, exp.Select, exp.Command)) for node in expression.walk()):
             raise SemanticRequestError("Subqueries and SQL commands are not allowed in filters")
         for function in expression.find_all(exp.Func):

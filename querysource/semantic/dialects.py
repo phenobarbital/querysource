@@ -44,3 +44,24 @@ def dialect_for_driver(driver: str) -> tuple[str, str | None]:
     if dialect is not None:
         return dialect, None
     return "ansi", f"dialect not mapped for driver {driver}; ANSI SQL generated"
+
+
+def datasource_driver(connection: str | None) -> tuple[str, str]:
+    """Return ``(datasource_name, driver)`` for a resource ``connection`` without connecting.
+
+    ``None`` selects the default QuerySource database. Used by the provider and the catalog
+    endpoint so both resolve the same datasource and dialect.
+
+    Raises:
+        SemanticResourceError: If the named datasource is not registered.
+    """
+    from ..interfaces.connections import DATASOURCES  # noqa: PLC0415
+
+    if connection is None:
+        from ..connections import QueryConnection  # noqa: PLC0415
+
+        return "default", QueryConnection().default_driver_name
+    source = DATASOURCES.get(connection)
+    if source is None:
+        raise SemanticResourceError(f"Datasource '{connection}' not found")
+    return connection, source.driver

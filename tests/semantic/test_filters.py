@@ -56,3 +56,19 @@ def test_filter_renders_qualified_column_not_dotted_identifier(validator):
     for rendered in (structured, string):
         assert '"orders.region"' not in rendered
         assert "orders.region" in rendered
+
+
+def test_filter_rejects_unknown_column_command_and_too_many(validator):
+    with pytest.raises(SemanticRequestError):
+        validator.render(["nope = 1"])
+    with pytest.raises(SemanticRequestError):
+        validator.render(["DROP TABLE orders"])
+    many = [SemanticFilter(field="region", op="=", value="x")] * 3
+    small = FilterValidator(DIMS, dialect="postgres", max_filters=2)
+    with pytest.raises(SemanticRequestError, match="Too many"):
+        small.render(many)
+
+
+def test_filter_string_quote_escape_stays_inside_literal(validator):
+    out = validator.render([SemanticFilter(field="region", op="=", value="x' OR '1'='1")])[0]
+    assert "''" in out

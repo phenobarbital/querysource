@@ -4,6 +4,7 @@ from __future__ import annotations
 import atexit
 import hashlib
 import logging
+import os
 import shutil
 import tempfile
 import threading
@@ -43,7 +44,8 @@ class ModelLoader:
                 self.logger.warning("Semantic inline definition takes precedence over path for slug %s", slug)
             document = yaml.safe_dump(definition, sort_keys=True).encode()
             digest = hashlib.sha256(document).hexdigest()
-            source_path, resolved_bytes = self._write_inline(definition, resource.semantic.format, digest)
+            resolved_bytes = yaml.safe_dump(definition, sort_keys=True).encode()
+            source_path = self._materialize(resolved_bytes, resource.semantic.format, digest)
         else:
             source_path = self._guard_path(slug, definition)
             try:
@@ -55,6 +57,9 @@ class ModelLoader:
                 self.logger.warning("Semantic model file exceeds size cap for slug %s", slug)
                 raise SemanticResourceError(f"Semantic model for '{slug}' exceeds the size limit")
             digest = hashlib.sha256(resolved_bytes).hexdigest()
+            # Compile from an immutable copy of the exact bytes that were hashed, so a
+            # concurrent edit of the source file cannot desynchronise model_version.
+            source_path = self._materialize(resolved_bytes, resource.semantic.format, digest)
 
         return SemanticModelRef(
             slug=slug,
@@ -80,15 +85,18 @@ class ModelLoader:
             raise SemanticResourceError(f"Semantic model file is missing for '{slug}'")
         return candidate
 
-    def _write_inline(self, document: dict[str, Any], fmt: str, digest: str) -> tuple[Path, bytes]:
-        """Serialize an inline document once into the loader's private temporary directory."""
-        document_bytes = yaml.safe_dump(document, sort_keys=True).encode()
-        if self._tmpdir is None:
-            self._tmpdir = Path(tempfile.mkdtemp(prefix="qs-semantic-"))
-        source_path = self._tmpdir / f"{digest}{_SUFFIX[fmt]}"
-        if not source_path.exists():
-            source_path.write_bytes(document_bytes)
-        return source_path, document_bytes
+    def _materialize(self, document: bytes, fmt: str, digest: str) -> Path:
+        """Write ``document`` once, atomically, into the loader's private temp directory."""
+        with self._lock:
+            if self._tmpdir is None:
+                self._tmpdir = Path(tempfile.mkdtemp(prefix="qs-semantic-"))
+            tmpdir = self._tmpdir
+        target = tmpdir / f"{digest}{_SUFFIX[fmt]}"
+        if not target.exists():
+            partial = tmpdir / f".{digest}.{threading.get_ident()}.tmp"
+            partial.write_bytes(document)
+            os.replace(partial, target)
+        return target
 
     def cached(self, key: CacheKey) -> Any | None:
         """Return a cached layer and mark it as most recently used."""

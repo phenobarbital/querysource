@@ -225,7 +225,7 @@ class RemoteExecutor(QueryExecutor):
             )
         is_tenant = store is not None and store.contract == "tenant"
         if principal is not None:
-            logger.debug("Remote query %r runs without principal propagation", name)
+            logger.warning("Remote query %r runs without principal propagation", name)
 
         owner: TenantOwnerEnvelope | None = None
         if is_tenant:

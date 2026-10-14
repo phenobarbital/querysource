@@ -118,7 +118,7 @@ class SidemanticCompiler:
             load_from_file(layer, model.source_path, **options)
         except Exception as exc:  # noqa: BLE001 - any loader failure is a resource problem
             self.logger.warning("Semantic model %s failed to load: %s", model.slug, exc)
-            raise SemanticResourceError(f"Unable to load semantic model '{model.slug}': {exc}") from exc
+            raise SemanticResourceError(f"Unable to load semantic model '{model.slug}'") from exc
         self._loader.store(key, layer)
         return layer
 
