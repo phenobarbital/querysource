@@ -2415,34 +2415,68 @@ def split_into_series(df: pd.DataFrame, field: str):
     return df
 
 
-def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: str = "UTC"):
-    """
-    Changes the timezone of a datetime field in a DataFrame.
+def change_timezone(
+    df: pd.DataFrame,
+    field: str,
+    from_tz: Optional[str] = None,
+    to_tz: Optional[str] = "UTC",
+    *,
+    column: Optional[str] = None,
+    tz_column: Optional[str] = None,
+    default_timezone: str = "UTC",
+) -> pd.DataFrame:
+    """Convert a datetime column to a target timezone.
 
-    Timezone-aware input is converted directly; ``from_tz`` is ignored.
+    Timezone-aware values are converted directly (``from_tz`` is ignored, with a
+    warning when given). Naive values are localized to ``from_tz`` (UTC when not
+    given): ambiguous wall-clock times are read as standard time and nonexistent
+    times are shifted forward.
 
-    :param df: The DataFrame containing the datetime field.
-    :param field: The name of the field to change the timezone for.
-    :param from_tz: The original timezone of the field.
-    :param to_tz: The target timezone for the field.
-    :return: The DataFrame with the timezone changed field.
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        from_tz: Timezone of naive values (defaults to UTC).
+        to_tz: Target timezone (``default_timezone`` when ``None``).
+        column: Source column (defaults to ``field``).
+        tz_column: Column holding a target timezone per row; overrides ``to_tz``.
+        default_timezone: Fallback for null/invalid ``tz_column`` values and for ``to_tz=None``.
+
+    Returns:
+        The DataFrame with ``field`` set.
     """
+    if column is None:
+        column = field
     try:
-        values = _to_datetime_series(df[field], infer_tz=False, field=field)
+        values = parse_datetime_series(df[column], infer_tz=False, field=column)
         if isinstance(values.dtype, pd.DatetimeTZDtype):
             if from_tz:
                 logging.warning(
-                    f"change_timezone: {field!r} is already timezone-aware; "
+                    f"change_timezone: {column!r} is already timezone-aware; "
                     f"ignoring from_tz={from_tz!r}"
                 )
-            df[field] = values.dt.tz_convert(to_tz)
         else:
             infer_dst = np.array([False] * df.shape[0])
-            df[field] = (
-                values.dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
+            values = values.dt.tz_localize(
+                from_tz or "UTC", ambiguous=infer_dst, nonexistent="shift_forward"
             )
+        if tz_column is None:
+            df[field] = values.dt.tz_convert(to_tz or default_timezone)
+        else:
+            timezones = df[tz_column].fillna(default_timezone).astype("string")
+            utc_times = values.dt.tz_convert("UTC")
+            converted_times = []
+            for idx in df.index:
+                moment = utc_times.loc[idx]
+                if pd.isna(moment):
+                    converted_times.append(pd.NaT)
+                    continue
+                try:
+                    converted_times.append(moment.tz_convert(ZoneInfo(timezones.loc[idx])))
+                except Exception:
+                    converted_times.append(moment.tz_convert(ZoneInfo(default_timezone)))
+            df[field] = pd.Series(converted_times, index=df.index)
     except Exception as err:
-        logging.error(f"Error changing timezone of {field!r}: {err}")
+        logging.error(f"Error changing timezone of {column!r}: {err}")
     return df
 
 
@@ -2475,6 +2509,41 @@ def drop_timezone(df: pd.DataFrame, field: str, column: Optional[str] = None) ->
     except Exception as err:
         logging.error(f"Error on drop_timezone {field!r}: {err}")
     return df
+
+
+def convert_timezone(
+    df: pd.DataFrame,
+    field: str,
+    *,
+    column: Optional[str] = None,
+    from_tz: Optional[str] = None,
+    to_tz: Optional[str] = None,
+    tz_column: Optional[str] = None,
+    default_timezone: str = "UTC",
+) -> pd.DataFrame:
+    """Flowtask-compatible alias of :func:`change_timezone`.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        column: Source column (defaults to ``field``).
+        from_tz: Timezone of naive values (defaults to UTC).
+        to_tz: Target timezone (defaults to ``default_timezone``).
+        tz_column: Column holding a target timezone per row.
+        default_timezone: Fallback timezone.
+
+    Returns:
+        The DataFrame with ``field`` set.
+    """
+    return change_timezone(
+        df,
+        field,
+        from_tz=from_tz,
+        to_tz=to_tz or default_timezone,
+        column=column,
+        tz_column=tz_column,
+        default_timezone=default_timezone,
+    )
 
 
 def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):
