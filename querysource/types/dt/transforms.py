@@ -2465,13 +2465,12 @@ def change_timezone(
             timezones = df[tz_column].fillna(default_timezone).astype("string")
             utc_times = values.dt.tz_convert("UTC")
             converted_times = []
-            for idx in df.index:
-                moment = utc_times.loc[idx]
+            for moment, tz_name in zip(utc_times, timezones):
                 if pd.isna(moment):
                     converted_times.append(pd.NaT)
                     continue
                 try:
-                    converted_times.append(moment.tz_convert(ZoneInfo(timezones.loc[idx])))
+                    converted_times.append(moment.tz_convert(ZoneInfo(tz_name)))
                 except Exception:
                     converted_times.append(moment.tz_convert(ZoneInfo(default_timezone)))
             df[field] = pd.Series(converted_times, index=df.index)

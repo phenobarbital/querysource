@@ -239,3 +239,16 @@ def test_transforms_never_raise(caplog):
         res = func(df, "missing")
         assert res is df
         assert "missing" in caplog.text
+
+
+def test_change_timezone_tz_column_duplicate_index():
+    """tz_column conversion must work positionally with a non-unique index."""
+    import pandas as pd
+    from querysource.types.dt.transforms import change_timezone
+
+    df = pd.DataFrame(
+        {"ts": ["2024-01-01 12:00:00", "2024-01-01 12:00:00"], "tz": ["UTC", "Asia/Tokyo"]},
+        index=[0, 0],
+    )
+    out = change_timezone(df, "out", column="ts", tz_column="tz")
+    assert [t.hour for t in out["out"]] == [12, 21]
