@@ -66,7 +66,7 @@ def definitions(monkeypatch: pytest.MonkeyPatch):
 
     repository = _Definitions()
 
-    async def get_definition_repository() -> _Definitions:
+    async def get_definition_repository(self: QS) -> _Definitions:
         return repository
 
     monkeypatch.setattr(QS, "get_definition_repository", get_definition_repository)
@@ -87,7 +87,7 @@ async def test_get_provider_semantic_branch(monkeypatch: pytest.MonkeyPatch) -> 
 @pytest.mark.asyncio
 async def test_provider_receives_principal(definitions, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pass a slug query's principal to its semantic provider."""
-    definitions.add(query_slug="s", provider="semantic", query_raw="x", conditions={}, is_cached=False)
+    definitions.add(query_slug="s", provider="semantic", query_raw="x", conditions={}, is_cached=False, cache_timeout=3600)
     principal = QSPrincipal(user_id="1", username="semantic", groups=(), tenant_id="public")
     query = QS(slug="s", principal=principal)
 
@@ -104,7 +104,7 @@ async def test_provider_receives_principal(definitions, monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 async def test_provider_semantic_error_surfaces_with_code(definitions, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep semantic request errors intact instead of wrapping them as 500s."""
-    definitions.add(query_slug="s", provider="semantic", query_raw="x", conditions={}, is_cached=False)
+    definitions.add(query_slug="s", provider="semantic", query_raw="x", conditions={}, is_cached=False, cache_timeout=3600)
     query = QS(slug="s")
 
     async def get_provider(entry, session=None, app=None):
