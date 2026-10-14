@@ -1,4 +1,5 @@
 """FEAT-174 — timezone transforms hosted in QuerySource."""
+from collections.abc import Callable
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -212,6 +213,37 @@ def test_convert_timezone_tz_column():
     assert out.iloc[0] == expected
 
 
+@pytest.mark.parametrize("func", [change_timezone, convert_timezone])
+@pytest.mark.parametrize(
+    "zones, expected_zones",
+    [
+        (
+            pd.Series(pd.Categorical(["America/Chicago", None])),
+            ["America/Chicago", "Asia/Tokyo"],
+        ),
+        (pd.Series([1, None], dtype="Int64"), ["Asia/Tokyo", "Asia/Tokyo"]),
+    ],
+)
+def test_timezone_nullable_zone_fallback(
+    func: Callable[..., pd.DataFrame], zones: pd.Series, expected_zones: list[str]
+) -> None:
+    """Null and invalid zones fall back even with restrictive source dtypes."""
+    df = pd.DataFrame(
+        {"src": pd.to_datetime(["2025-01-01 12:00", "2025-01-01 12:00"]), "tz": zones}
+    )
+    original = df.copy(deep=True)
+    result = func(
+        df, "dst", column="src", tz_column="tz", default_timezone="Asia/Tokyo"
+    )
+    assert result is df
+    pd.testing.assert_frame_equal(result[["src", "tz"]], original)
+    instant = pd.Timestamp("2025-01-01 12:00", tz="UTC")
+    for actual, zone in zip(result["dst"], expected_zones, strict=True):
+        expected = instant.tz_convert(zone)
+        assert actual == expected
+        assert actual.utcoffset() == expected.utcoffset()
+
+
 def test_convert_timezone_is_alias():
     """convert_timezone(...) == change_timezone(..., to_tz=to_tz or default_timezone, ...)."""
     for to_tz, default in (("America/New_York", "UTC"), (None, "America/Chicago"), (None, "UTC")):
@@ -243,9 +275,6 @@ def test_transforms_never_raise(caplog):
 
 def test_change_timezone_tz_column_duplicate_index():
     """tz_column conversion must work positionally with a non-unique index."""
-    import pandas as pd
-    from querysource.types.dt.transforms import change_timezone
-
     df = pd.DataFrame(
         {"ts": ["2024-01-01 12:00:00", "2024-01-01 12:00:00"], "tz": ["UTC", "Asia/Tokyo"]},
         index=[0, 0],
