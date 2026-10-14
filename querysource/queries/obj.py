@@ -150,7 +150,8 @@ class QueryObject(BaseQuery):
                     "definition": objquery,
                     "conditions": conditions,
                     "request": self._request,
-                    "loop": self._loop
+                    "loop": self._loop,
+                    "principal": self._principal,
                 }
                 self._qs = provider(**args)
                 await self._qs.prepare_connection()
