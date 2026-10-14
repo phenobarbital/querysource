@@ -476,6 +476,14 @@ QS_PBAC_ALLOW_SESSIONLESS_AUTHZ = config.getboolean(
     'QS_PBAC_ALLOW_SESSIONLESS_AUTHZ', fallback=False
 )
 
+# ── Semantic layer (FEAT-175) ─────────────────────────────────────────────────
+QS_SEMANTIC_MODELS_DIR = config.get('QS_SEMANTIC_MODELS_DIR', fallback=str(BASE_DIR / 'semantic'))
+QS_SEMANTIC_DEFAULT_LIMIT = config.getint('QS_SEMANTIC_DEFAULT_LIMIT', fallback=500)
+QS_SEMANTIC_MAX_LIMIT = config.getint('QS_SEMANTIC_MAX_LIMIT', fallback=5000)
+QS_SEMANTIC_MAX_FILTERS = config.getint('QS_SEMANTIC_MAX_FILTERS', fallback=32)
+QS_SEMANTIC_CACHE_SIZE = config.getint('QS_SEMANTIC_CACHE_SIZE', fallback=64)
+QS_SEMANTIC_MAX_MODEL_BYTES = config.getint('QS_SEMANTIC_MAX_MODEL_BYTES', fallback=2 * 1024 * 1024)
+
 # ── Airtable Integration (FEAT-096) ───────────────────────────────────────────
 # OAuth2 client credentials (server-side; never sent to the browser).
 AIRTABLE_CLIENT_ID = config.get('AIRTABLE_CLIENT_ID')

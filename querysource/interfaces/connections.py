@@ -282,6 +282,10 @@ class Connection:
             )
             # conn = await self._postgres.acquire()
             return [conn, _provider]
+        elif provider == 'semantic':
+            # FEAT-175: the semantic provider resolves its own datasource.
+            _provider = self.load_provider('semantic')
+            return [None, _provider]
         elif provider in EXTERNAL_PROVIDERS:
             _provider = self.load_provider(provider)
             ## TODO: return a QS Provider for REST/External operations
