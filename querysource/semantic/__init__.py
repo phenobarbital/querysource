@@ -20,6 +20,7 @@ from .models import (
     SemanticResource,
 )
 from .protocol import SemanticCompiler
+from .api import compile, execute  # noqa: A004
 
 __all__ = (
     "FILTER_OPS",
@@ -40,3 +41,5 @@ __all__ = (
     "SemanticResource",
     "SemanticResourceError",
 )
+
+__all__ = (*__all__, "compile", "execute")
