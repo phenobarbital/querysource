@@ -200,8 +200,8 @@ Spec §4 Integration Tests.
 
 ## Completion Note
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-10-13
+**Notes**: Mirror replaced by real drop_timezone; raw-string case added. With QS_OFFERS_HIRES_CSV: 45 passed, 0 skipped (no row values printed, CSV not copied). Without the CSV the module skips. CHANGES.rst entry added. Code commit 1eaa99d.
 
 **Deviations from spec**: none
