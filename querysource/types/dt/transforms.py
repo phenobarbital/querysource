@@ -668,22 +668,46 @@ def add_days(df: pd.DataFrame, field: str, column="", days=1):
     return df
 
 
-def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):
-    """
-    Takes a pandas DataFrame and combines the values from a date column and a time column
-    to create a new timestamp column.
+def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str) -> pd.DataFrame:
+    """Combine local dates and times, preserving timezone information from the time.
 
-    :param df: pandas DataFrame to be modified.
-    :param field: Name of the new column to store the combined timestamp.
-    :param date: Name of the column in the df DataFrame containing date values.
-    :param time: Name of the column in the df DataFrame containing time values.
-    :return: Modified pandas DataFrame with the combined timestamp stored in a new column.
+    Mixed timezones remain an object column so each row retains its own offset.
+    Date-column offsets determine the local date only, as for naive time inputs.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output timestamp column.
+        date: Source date column.
+        time: Source time or timedelta column.
+
+    Returns:
+        The DataFrame with the combined timestamp column.
     """
     date_part = _to_wall_clock(df[date], field=date)
     if pd.api.types.is_timedelta64_dtype(df[time]):
         offset = df[time]
     else:
-        time_part = _to_wall_clock(df[time], field=time)
+        # Anchor time-only strings so pandas uses its datetime parser, preserving
+        # nanoseconds instead of truncating them through the time-only fallback.
+        time_values = df[time].map(
+            lambda value: (
+                f"1900-01-01 {value}" if isinstance(value, str) and re.match(r"^\d{1,2}:\d{2}", value) else value
+            )
+        )
+        time_part = parse_datetime_series(time_values, infer_tz=True, field=time)
+        if isinstance(time_part.dtype, pd.DatetimeTZDtype) or time_part.dtype == object:
+            combined: list[pd.Timestamp] = []
+            for day, moment in zip(date_part, time_part):
+                if pd.isna(day) or pd.isna(moment):
+                    combined.append(pd.NaT)
+                    continue
+                local_time = moment.tz_localize(None)
+                timestamp = day.normalize() + (local_time - local_time.normalize())
+                combined.append(timestamp.tz_localize(moment.tzinfo))
+            df[field] = parse_datetime_series(
+                pd.Series(combined, index=df.index, dtype=object), infer_tz=True, field=field
+            )
+            return df
         offset = time_part - time_part.dt.normalize()
     df[field] = date_part.dt.normalize() + offset
     return df
