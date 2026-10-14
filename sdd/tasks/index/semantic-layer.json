@@ -96,7 +96,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -107,8 +107,9 @@
       "parallelism_notes": "imports SemanticResource/SemanticModelRef from TASK-897 (models.py); reads QS_SEMANTIC_MODELS_DIR/CACHE_SIZE/MAX_MODEL_BYTES added to conf.py by TASK-899",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-901-semantic-model-loader.md"
+      "completed_at": "2026-10-14T22:35:21+00:00",
+      "file": "sdd/tasks/completed/TASK-901-semantic-model-loader.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-902",
@@ -117,7 +118,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -128,8 +129,9 @@
       "parallelism_notes": "uses ResourceType.SEMANTIC added by TASK-899 (_resource_types.py); imports SemanticFieldDenied/SemanticQuery from TASK-897; tests use fake_evaluator from TASK-897 conftest",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-902-semantic-governance.md"
+      "completed_at": "2026-10-14T22:35:21+00:00",
+      "file": "sdd/tasks/completed/TASK-902-semantic-governance.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-903",
