@@ -56,7 +56,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -66,8 +66,9 @@
       "parallelism_notes": "Calls parse_datetime_series (TASK-893) and inserts convert_timezone right after drop_timezone created by TASK-894; same files querysource/types/dt/transforms.py and tests/unit/test_dt_timezone_transforms.py as TASK-894.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-895-change-timezone-unified.md"
+      "completed_at": "2026-10-14T03:50:46+00:00",
+      "file": "sdd/tasks/completed/TASK-895-change-timezone-unified.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-896",
