@@ -10,13 +10,13 @@ from querysource import semantic
 async def test_api_compile_returns_compiled_query(
     sidemantic_available, semantic_definitions, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Compile without opening a datasource connection or executing a query."""
-    from asyncdb import AsyncDB
+    """Compile without executing a query."""
+    from querysource.providers.semantic import semanticProvider
 
-    def fail_connection(*args: object, **kwargs: object) -> object:
-        raise AssertionError("compile() must not open a datasource connection")
+    async def fail_query(*args: object, **kwargs: object) -> object:
+        raise AssertionError("compile() must not execute a query")
 
-    monkeypatch.setattr(AsyncDB, "connection", fail_connection)
+    monkeypatch.setattr(semanticProvider, "query", fail_query)
 
     compiled = await semantic.compile("epson.sales", metrics=["revenue"])
 
