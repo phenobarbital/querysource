@@ -1,6 +1,20 @@
 Unreleased
 ==========
 
+Timezone transforms hosted in QuerySource (FEAT-174)
+----------------------------------------------------
+
+- New ``drop_timezone`` transform: drops timezone information keeping each
+  value's own local wall-clock; mixed UTC offsets and date-only values with an
+  offset (``2025-09-15-07:00`` → local midnight) are handled.
+- ``change_timezone``: new keyword-only ``column``, ``tz_column`` (per-row
+  target timezone) and ``default_timezone``; naive input without ``from_tz`` is
+  now localized as UTC instead of being left unconverted; nonexistent DST times
+  are shifted forward instead of failing the whole column.
+- New ``convert_timezone`` transform: Flowtask-compatible alias of
+  ``change_timezone``.
+- New public helpers ``parse_datetime_series`` and ``to_wall_clock``.
+
 pandas 3 compatibility for datetime and fill transforms
 -------------------------------------------------------
 

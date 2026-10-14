@@ -231,8 +231,8 @@ def test_add_timestamp_to_time_mixed():
     add_timestamp_to_time(frame, "combined", "date", "time")
 
     assert frame["combined"].tolist() == [
-        pd.Timestamp("2025-09-15T01:02:03.456789"),
-        pd.Timestamp("2025-12-01T10:11:12.123456"),
+        pd.Timestamp("2025-09-15T01:02:03.456789-08:00"),
+        pd.Timestamp("2025-12-01T10:11:12.123456-07:00"),
         pd.NaT,
     ]
 
@@ -267,8 +267,8 @@ def test_mixed_iso_precision_keeps_all_values():
         None,
     ]
     expected_combined = [
-        pd.Timestamp("2025-09-15T01:02:03.456789"),
-        pd.Timestamp("2025-12-01T10:11:12.123456"),
+        pd.Timestamp("2025-09-15T01:02:03.456789-08:00"),
+        pd.Timestamp("2025-12-01T10:11:12.123456-07:00"),
         pd.NaT,
     ]
 
