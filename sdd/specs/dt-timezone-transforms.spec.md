@@ -66,8 +66,8 @@ and components can delegate to it without importing `_`-prefixed names.
 - Changing `change_timezone`, `add_timestamp_to_time`, `convert_to_datetime`,
   `to_timestamp` or any FEAT-171 helper behaviour.
 - Flowtask-side changes (deleting the three functions, pinning QS, migrating
-  `extract_from_*` and the components audited in the brainstorm). Tracked in a separate
-  Flowtask spec that depends on this feature's release.
+  `extract_from_*` and the components audited in the brainstorm). Tracked in Flowtask
+  FEAT-567 (`pandas3-datetime-mixed-offsets`), which depends on this release.
 - Duplicating the parser in Flowtask (brainstorm Option A — rejected: two code bases).
 - Aliasing `convert_timezone` to an extended `change_timezone`: kept as a separate
   function so `change_timezone` callers are untouched (see §8 Q1).
@@ -416,7 +416,7 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 - **Module graph**: M2 → M1 (`to_wall_clock`), M3 → M1 (`parse_datetime_series`), M4 → M1–M3.
 - **Shared files**: `querysource/types/dt/transforms.py` (M1, M2, M3) — their tasks are serialized.
 - **Exclusive resources**: none (pure Python; the worktree needs `python setup.py build_ext --inplace` only to import the package).
-- **Cross-feature dependencies**: FEAT-171 (merged). Downstream: the Flowtask spec that deletes Flowtask's `drop_timezone` / `convert_timezone` / `add_timestamp_to_time` and pins the QS release.
+- **Cross-feature dependencies**: FEAT-171 (merged). Downstream: Flowtask **FEAT-567** (`sdd/specs/pandas3-datetime-mixed-offsets.spec.md` in the Flowtask repo) deletes Flowtask's `drop_timezone` / `convert_timezone` / `add_timestamp_to_time`, moves `extract_from_*` to `parse_datetime_series` and pins this release.
 
 ---
 
