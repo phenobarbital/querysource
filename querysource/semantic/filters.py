@@ -52,7 +52,7 @@ class FilterValidator:
     def _render_structured(self, flt: SemanticFilter) -> str:
         sqlglot = _sqlglot()
         exp = sqlglot.exp
-        field = exp.column(self.resolve_field(flt.field))
+        field = self._column(self.resolve_field(flt.field), exp)
         op = flt.op.strip().lower()
         if op not in FILTER_OPS:
             raise SemanticRequestError(f"Unsupported semantic filter operator: {flt.op!r}")
@@ -97,6 +97,12 @@ class FilterValidator:
         return expression.sql(dialect=self._dialect)
 
     @staticmethod
+    def _column(qualified: str, exp: Any) -> Any:
+        """Build ``model.field`` as table + column, never a single dotted identifier."""
+        table, _, name = qualified.rpartition(".")
+        return exp.column(name, table=table or None)
+
+    @staticmethod
     def _literal(value: Any, exp: Any) -> Any:
         """Convert a structured value to a sqlglot literal expression."""
         if isinstance(value, str):
@@ -123,5 +129,5 @@ class FilterValidator:
             column_name = column.name
             if column.table:
                 column_name = f"{column.table}.{column_name}"
-            column.replace(exp.column(self.resolve_field(column_name)))
+            column.replace(self._column(self.resolve_field(column_name), exp))
         return expression.sql(dialect=self._dialect)

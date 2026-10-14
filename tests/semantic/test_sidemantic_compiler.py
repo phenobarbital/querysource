@@ -181,3 +181,16 @@ def test_compiler_catalog(compiler, tmp_path):
     assert fields["orders.revenue"].kind == "metric"
     assert fields["orders.order_date"].granularities
     assert fields["orders.region"].granularities == []
+
+
+def test_compiler_filters_reach_sql_as_real_columns(compiler, tmp_path):
+    from querysource.semantic.models import SemanticFilter
+
+    request = SemanticQuery(
+        metrics=["revenue"],
+        dimensions=["region"],
+        filters=[SemanticFilter(field="region", op="in", value=["ES", "PT"])],
+    )
+    result = compiler.compile(_ref(tmp_path, MODEL_YAML), request, _target())
+    assert '"orders.region"' not in result.sql
+    assert "'ES'" in result.sql and "'PT'" in result.sql

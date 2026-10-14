@@ -47,3 +47,12 @@ def test_filter_string_rejects_subquery_and_function(validator):
 def test_filter_string_literal_quoting(validator):
     out = validator.render([SemanticFilter(field="region", op="=", value="1 OR 1=1")])
     assert "'1 OR 1=1'" in out[0]
+
+
+def test_filter_renders_qualified_column_not_dotted_identifier(validator):
+    """``orders.region`` must render as table.column, never as the quoted ``"orders.region"``."""
+    structured = validator.render([SemanticFilter(field="region", op="=", value="ES")])[0]
+    string = validator.render(["region = 'ES'"])[0]
+    for rendered in (structured, string):
+        assert '"orders.region"' not in rendered
+        assert "orders.region" in rendered
