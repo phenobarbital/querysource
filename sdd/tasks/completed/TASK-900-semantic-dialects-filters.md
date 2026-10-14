@@ -257,3 +257,5 @@ from querysource.datasources.drivers import SUPPORTED
 **Notes**: Merge-tier tests green, no fixes. Review recorded as coder-review:9f732a6efeafdbfb7b47b2ce. Closed via close_task.sh (finalize_task needs a durable review EvidenceRef no available tool produces).
 
 **Deviations from spec**: none
+
+**Late review fix**: 792a281 corrected filter column rendering (`"orders.region"` → `orders.region` as table+column); feedback coder-feedback:8993785c3d2180558c3236fe.
