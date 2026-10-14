@@ -189,7 +189,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -199,8 +199,9 @@
       "parallelism_notes": "reads semanticProvider.compiled from TASK-904 (providers/semantic.py); modifies querysource/semantic/__init__.py created by TASK-897 (reached transitively)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-905-semantic-python-api.md"
+      "completed_at": "2026-10-14T22:53:27+00:00",
+      "file": "sdd/tasks/completed/TASK-905-semantic-python-api.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-906",
