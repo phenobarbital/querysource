@@ -10,6 +10,7 @@ ThreadQuery when remote execution is requested.
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 from navconfig.logging import logging
@@ -20,6 +21,9 @@ from querysource.tenants import LoadedDefinition, QueryStore, TenantOwnerEnvelop
 from ....conf import QWORKER_QUERY_TIMEOUT, QWORKER_TIMEOUT
 from ....exceptions import QueryException
 from ...obj import QueryObject
+
+if TYPE_CHECKING:
+    from ....auth.principal import QSPrincipal
 
 logger = logging.getLogger("QS.RemoteExecutor")
 
@@ -64,6 +68,7 @@ class QueryExecutor(ABC):
         *,
         store: QueryStore | None = None,
         definition: LoadedDefinition | None = None,
+        principal: "QSPrincipal | None" = None,
     ) -> None:
         """Put {alias: DataFrame}; route metadata never becomes SQL conditions."""
 
@@ -86,6 +91,7 @@ class LocalExecutor(QueryExecutor):
         *,
         store: QueryStore | None = None,
         definition: LoadedDefinition | None = None,
+        principal: "QSPrincipal | None" = None,
     ) -> None:
         """Execute the query locally using QueryObject.
 
@@ -112,6 +118,7 @@ class LocalExecutor(QueryExecutor):
             loop=loop,
             tenant=tenant_selector,
             definition=definition,
+            principal=principal,
         )
         await query_obj.build_provider()
         await query_obj.query()
@@ -165,6 +172,7 @@ class RemoteExecutor(QueryExecutor):
         *,
         store: QueryStore | None = None,
         definition: LoadedDefinition | None = None,
+        principal: "QSPrincipal | None" = None,
     ) -> None:
         """Dispatch the query to a remote qworker and place the result in the queue.
 
@@ -216,6 +224,8 @@ class RemoteExecutor(QueryExecutor):
                 f"{store.contract!r}."
             )
         is_tenant = store is not None and store.contract == "tenant"
+        if principal is not None:
+            logger.debug("Remote query %r runs without principal propagation", name)
 
         owner: TenantOwnerEnvelope | None = None
         if is_tenant:

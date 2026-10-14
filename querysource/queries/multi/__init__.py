@@ -743,6 +743,7 @@ class MultiQS(BaseQuery):
                         store=resolved_stores.get(name),
                         definition=child_definitions.get(name),
                         hooks=hooks,
+                        principal=self._principal,
                     )
                 except Exception as ex:
                     raise self.Error(
