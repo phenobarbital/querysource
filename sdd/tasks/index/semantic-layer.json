@@ -164,7 +164,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -178,8 +178,9 @@
       "parallelism_notes": "composes dialect_for_driver/FilterValidator (TASK-900), get_loader (TASK-901), governance (TASK-902), get_compiler (TASK-903); reachable via get_provider branch + principal kwarg from TASK-899 (connections.py, qs.py)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-904-semantic-provider.md"
+      "completed_at": "2026-10-14T22:50:58+00:00",
+      "file": "sdd/tasks/completed/TASK-904-semantic-provider.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-905",
@@ -208,7 +209,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -222,8 +223,9 @@
       "parallelism_notes": "uses get_loader (TASK-901), get_compiler().catalog (TASK-903), governance.check (TASK-902), dialect_for_driver (TASK-900), ResourceType.SEMANTIC (TASK-899)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-906-semantic-catalog-endpoint.md"
+      "completed_at": "2026-10-14T22:51:00+00:00",
+      "file": "sdd/tasks/completed/TASK-906-semantic-catalog-endpoint.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-907",
