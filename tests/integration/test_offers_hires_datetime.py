@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from querysource.types.dt.transforms import convert_to_datetime, to_timestamp
+from querysource.types.dt.transforms import convert_to_datetime, drop_timezone, to_timestamp
 
 COLUMNS = [
     "Candidate_Start_Date",
@@ -46,17 +46,10 @@ def _reference(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-def _drop_timezone_like_flowtask(series: pd.Series) -> pd.Series:
-    """Local mirror of flowtask TransformRows drop_timezone (functions.py:408 @ c0406e71)."""
-    if isinstance(series.dtype, pd.DatetimeTZDtype):
-        return series.dt.tz_localize(None)
-    if series.dtype == "object":
-        return series.apply(
-            lambda x: x.replace(tzinfo=None)
-            if isinstance(x, (pd.Timestamp, datetime)) and x.tzinfo is not None
-            else x
-        ).astype("datetime64[ns]")
-    return series
+def _drop_timezone(series: pd.Series) -> pd.Series:
+    """Apply the real QuerySource drop_timezone to a one-column frame."""
+    frame = series.to_frame(name="value")
+    return drop_timezone(frame, "value")["value"]
 
 
 def _source(offers_hires: pd.DataFrame, column: str) -> pd.Series:
@@ -113,7 +106,7 @@ def test_offers_hires_datetime_columns(offers_hires, func, infer_tz, column) -> 
 def test_offers_hires_drop_timezone_wall_clock(offers_hires, func, infer_tz, column) -> None:
     """infer_tz=True -> local wall-clock (pandas<3 result); False -> UTC wall-clock."""
     src = _source(offers_hires, column)
-    result = _drop_timezone_like_flowtask(_run(offers_hires, func, column, infer_tz))
+    result = _drop_timezone(_run(offers_hires, func, column, infer_tz))
     assert str(result.dtype) == "datetime64[ns]", f"{column}: dtype {result.dtype}"
     assert int(result.notna().sum()) == len(src), f"{column}: non-null count changed"
     assert not any(isinstance(v, str) for v in result), f"{column}: str values left"
@@ -126,3 +119,16 @@ def test_offers_hires_drop_timezone_wall_clock(offers_hires, func, infer_tz, col
     got = [v.to_pydatetime() for v in result.loc[src.index]]
     bad = sum(1 for g, e in zip(got, expected, strict=True) if g != e)
     assert bad == 0, f"{column}: {bad} wall-clock mismatches"
+
+
+@pytest.mark.parametrize("column", COLUMNS)
+def test_offers_hires_drop_timezone_raw_strings(offers_hires, column) -> None:
+    """Raw source strings -> drop_timezone -> local wall-clock for every non-null value."""
+    src = _source(offers_hires, column)
+    result = _drop_timezone(offers_hires[column])
+    assert int(result.notna().sum()) == len(src), f"{column}: non-null count changed"
+    out = result.loc[src.index]
+    assert not any(isinstance(v, str) for v in out), f"{column}: str values left"
+    refs = [_reference(v).replace(tzinfo=None) for v in src]
+    bad = sum(1 for g, r in zip(out, refs, strict=True) if g.to_pydatetime() != r)
+    assert bad == 0, f"{column}: {bad} values with a wrong wall-clock"
