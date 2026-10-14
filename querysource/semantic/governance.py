@@ -11,7 +11,7 @@ from ..auth.enforcement import AccessDecision, build_eval_context, evaluate, res
 from ..auth.principal import QSPrincipal
 from ..exceptions import QueryAccessDenied
 from .exceptions import SemanticFieldDenied
-from .models import SemanticFilter, SemanticQuery, SemanticResource
+from .models import TIME_GRAINS, SemanticFilter, SemanticQuery, SemanticResource
 
 
 def principal_from_session(session: Any | None) -> QSPrincipal | None:
@@ -99,14 +99,50 @@ async def enforce_query(
     if not decision.allowed:
         raise QueryAccessDenied()
 
-    for metric in query.metrics:
+    metrics, dimensions = referenced_fields(query)
+    for metric in metrics:
         decision = await check(request, principal, f"{slug}:metric:{metric}", "semantic:use", logger=logger)
         if not decision.allowed:
             raise SemanticFieldDenied(metric)
-    for dimension in query.dimensions:
+    for dimension in dimensions:
         decision = await check(request, principal, f"{slug}:dimension:{dimension}", "semantic:use", logger=logger)
         if not decision.allowed:
             raise SemanticFieldDenied(dimension)
+
+
+def _bare_name(name: str) -> str:
+    """Return the canonical PBAC field name: no model prefix and no ``__grain`` suffix."""
+    bare = name.strip().rsplit(".", 1)[-1]
+    base, sep, grain = bare.rpartition("__")
+    return base if sep and grain in TIME_GRAINS else bare
+
+
+def referenced_fields(query: SemanticQuery) -> tuple[list[str], list[str]]:
+    """Return canonical ``(metrics, dimensions)`` referenced anywhere in the request.
+
+    Covers requested metrics and dimensions, filter fields (structured and string) and
+    ``order_by`` entries, so a denied field cannot be used to filter or sort. An
+    ``order_by`` entry may name either kind, so it is checked as both.
+    """
+    metrics = [_bare_name(name) for name in query.metrics]
+    dimensions = [_bare_name(name) for name in query.dimensions]
+    for flt in query.filters:
+        if isinstance(flt, SemanticFilter):
+            dimensions.append(_bare_name(flt.field))
+            continue
+        try:
+            import sqlglot  # noqa: PLC0415
+            from sqlglot import exp  # noqa: PLC0415
+
+            for column in sqlglot.parse_one(flt).find_all(exp.Column):
+                dimensions.append(_bare_name(column.sql()))
+        except Exception:  # noqa: BLE001 - the compiler rejects unparsable filters with a 400
+            continue
+    for entry in query.order_by:
+        head = _bare_name(entry.strip().split(" ", 1)[0])
+        metrics.append(head)
+        dimensions.append(head)
+    return list(dict.fromkeys(metrics)), list(dict.fromkeys(dimensions))
 
 
 async def enforce_datasource(

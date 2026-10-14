@@ -60,3 +60,30 @@ def test_principal_from_session_shape() -> None:
     assert principal.channel == "http"
     assert set(principal.to_userinfo()) >= {"username", "user_id", "groups", "roles"}
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        SemanticQuery(metrics=["orders.margin"]),
+        SemanticQuery(dimensions=["orders.region"]),
+        SemanticQuery(dimensions=["order_date__month"]),
+        SemanticQuery(metrics=["revenue"], filters=[{"field": "region", "op": "=", "value": "ES"}]),
+        SemanticQuery(metrics=["revenue"], filters=["orders.region = 'ES'"]),
+        SemanticQuery(metrics=["revenue"], order_by=["region desc"]),
+    ],
+)
+async def test_governance_denies_qualified_grained_filter_and_order_by_fields(fake_evaluator, query) -> None:
+    """Denials apply to canonical names however a field is spelled or used."""
+    fake_evaluator.deny.update(
+        {
+            "s:metric:margin",
+            "s:dimension:region",
+            "s:dimension:order_date",
+        }
+    )
+    with pytest.raises(SemanticFieldDenied):
+        await governance.enforce_query(
+            None, QSPrincipal(user_id="7", username="a"), "s", query, logger=logging.getLogger("t")
+        )

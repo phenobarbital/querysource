@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import re
 from typing import Any
 
 from ..exceptions import (
@@ -23,6 +24,7 @@ from ..models import (
 )
 
 _GRAIN_SEP = "__"
+_ORDER_BY = re.compile(r"(?P<field>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(?P<dir>asc|desc))?", re.IGNORECASE)
 
 
 def _sidemantic() -> Any:
@@ -191,19 +193,32 @@ class SidemanticCompiler:
         return rewritten
 
     def _qualify_order_by(self, layer: Any, order_by: list[str]) -> list[str]:
-        """Qualify the field part of each ``"field [asc|desc]"`` entry when resolvable."""
+        """Validate and qualify ``"field[__grain] [asc|desc]"`` entries; reject anything else.
+
+        Raises:
+            SemanticRequestError: If an entry is not a known metric/dimension with an
+                optional direction (400). Free-form SQL never reaches the compiler.
+        """
         metrics, dimensions = self._fields(layer)
         known = {**metrics, **dimensions}
         result: list[str] = []
         for entry in order_by:
-            head, _, tail = entry.strip().partition(" ")
+            match = _ORDER_BY.fullmatch(entry.strip())
+            if match is None:
+                raise SemanticRequestError(
+                    f"Invalid order_by entry {entry!r}; use '<field> [asc|desc]'"
+                )
+            head, direction = match.group("field"), (match.group("dir") or "").lower()
             base, grain = self._split_grain(head)
             if base not in known:
-                matches = [item for item in known if item.endswith(f".{base}")]
-                if len(matches) == 1:
-                    base = matches[0]
-            head = f"{base}{_GRAIN_SEP}{grain}" if grain else base
-            result.append(f"{head} {tail}".strip())
+                matches = sorted(item for item in known if item.endswith(f".{base}"))
+                if len(matches) != 1:
+                    raise SemanticRequestError(
+                        f"Unknown or ambiguous order_by field {head!r}; available: {', '.join(sorted(known))}"
+                    )
+                base = matches[0]
+            qualified = f"{base}{_GRAIN_SEP}{grain}" if grain else base
+            result.append(f"{qualified} {direction}".strip())
         return result
 
     def compile(
@@ -250,6 +265,10 @@ class SidemanticCompiler:
             raise SemanticFieldDenied("security") from exc
         except (ValueError, KeyError) as exc:
             raise SemanticRequestError(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            if type(exc).__module__.startswith("sqlglot"):
+                raise SemanticRequestError(f"Unable to compile the request: {exc}") from exc
+            raise
 
         return CompiledQuery(
             sql=sql,

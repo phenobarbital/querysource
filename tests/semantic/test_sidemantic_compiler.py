@@ -194,3 +194,19 @@ def test_compiler_filters_reach_sql_as_real_columns(compiler, tmp_path):
     result = compiler.compile(_ref(tmp_path, MODEL_YAML), request, _target())
     assert '"orders.region"' not in result.sql
     assert "'ES'" in result.sql and "'PT'" in result.sql
+
+
+@pytest.mark.parametrize(
+    "entry",
+    ["revenue, (select 1)", "revenue; drop table orders", "pg_sleep(5)", "revenue desc, region", "(select 1)"],
+)
+def test_compiler_rejects_free_form_order_by(compiler, tmp_path, entry):
+    request = SemanticQuery(metrics=["revenue"], dimensions=["region"], order_by=[entry])
+    with pytest.raises(SemanticRequestError):
+        compiler.compile(_ref(tmp_path, MODEL_YAML), request, _target())
+
+
+def test_compiler_accepts_catalog_order_by(compiler, tmp_path):
+    request = SemanticQuery(metrics=["revenue"], dimensions=["region"], order_by=["revenue desc", "region"])
+    result = compiler.compile(_ref(tmp_path, MODEL_YAML), request, _target())
+    assert "ORDER BY" in result.sql.upper()
