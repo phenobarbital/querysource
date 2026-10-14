@@ -1,9 +1,9 @@
 """Shared fixtures for FEAT-175 semantic-layer tests."""
 from __future__ import annotations
 
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-import sys
 from types import SimpleNamespace
 from typing import Any
 

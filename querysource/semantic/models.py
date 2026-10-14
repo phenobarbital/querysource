@@ -92,7 +92,7 @@ class SemanticQuery(BaseModel):
         return value
 
     @classmethod
-    def from_conditions(cls, conditions: dict[str, Any] | None) -> "SemanticQuery":
+    def from_conditions(cls, conditions: dict[str, Any] | None) -> SemanticQuery:
         """Drop transport keys and translate validation errors to a request error."""
         values = dict(conditions or {})
         for key in RESERVED_CONDITION_KEYS:
@@ -130,7 +130,7 @@ class SemanticResource(BaseModel):
     governance: GovernanceBlock = Field(default_factory=GovernanceBlock)
 
     @classmethod
-    def from_yaml(cls, text: str) -> "SemanticResource":
+    def from_yaml(cls, text: str) -> SemanticResource:
         """Safely parse a resource document and translate every failure to 400."""
         try:
             document = yaml.safe_load(text)
