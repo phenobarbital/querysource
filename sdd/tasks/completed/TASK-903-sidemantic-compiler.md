@@ -308,10 +308,12 @@ def test_compiler_security_error_maps_to_403(sidemantic_available, tmp_path):
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Completed by**: sdd-worker directly (Sonnet 5.5; Nova seats failed on expired credentials, user directed codex/sonnet)
+**Date**: 2026-10-15
+**Notes**: Verified against sidemantic 0.12.0 wheel (installed to a scratch --target dir; the shared venv lacks the `semantic` extra, so the 6 sidemantic-dependent tests skip under the sandboxed merge-tier run and were run green separately: tests/semantic 28 passed).
+- `SecurityError` path: `sidemantic.core.semantic_layer.SecurityError`.
+- `describe_models()` returns `{'models': [{name, table, dimensions:[{name,type,granularity?}], metrics:[{name,agg,sql}]}], ...}`; catalog is built from `list_models()` + `get_model()` instead (typed objects).
+- Native metric keys are `agg`/`sql` (not `type`/`expression`): the TASK-897 conftest fixture was invalid and was fixed (commit a5a6511, feedback coder-feedback:c398de538cb2fd32c3c52daa, review fix on TASK-897).
+- Security `access` expressions must be Jinja (`{{ ... }}`) or bool; a plain SQL expression raises SecurityError at compile time.
+- Compiled SQL for an unqualified filter field is rewritten into the model CTE by Sidemantic; filters are passed as strings from FilterValidator.
+**Deviations from spec**: none (tests/semantic/conftest.py touched as a TASK-897 review fix, separate commit).

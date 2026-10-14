@@ -140,7 +140,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -153,8 +153,9 @@
       "parallelism_notes": "imports ModelLoader/get_loader from TASK-901 (loader.py), FilterValidator from TASK-900 (filters.py), models from TASK-897; needs sidemantic installed by the semantic extra declared in TASK-898 (pyproject.toml)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-903-sidemantic-compiler.md"
+      "completed_at": "2026-10-14T22:44:51+00:00",
+      "file": "sdd/tasks/completed/TASK-903-sidemantic-compiler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-904",
