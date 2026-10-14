@@ -16,7 +16,7 @@ tags: [semantic-layer, sidemantic, ossie, pbac, metrics, sql-compiler]
 
 **Date**: 2026-10-14
 **Author**: Jesus Lara
-**Status**: exploration
+**Status**: accepted
 **Recommended Option**: A
 
 ---
