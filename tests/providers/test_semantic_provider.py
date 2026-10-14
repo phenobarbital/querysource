@@ -7,7 +7,7 @@ from querysource.exceptions import QueryAccessDenied
 from querysource.queries.qs import QS
 from querysource.semantic.exceptions import SemanticFieldDenied, SemanticRequestError
 from querysource.semantic.models import CompiledQuery
-from tests.semantic.conftest import *  # noqa: F403
+from semantic.conftest import *  # noqa: F403  (tests/ is on sys.path; `tests` itself is not a package)
 
 pytestmark = pytest.mark.usefixtures("sidemantic_available")
 
