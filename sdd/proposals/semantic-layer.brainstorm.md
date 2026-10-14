@@ -83,6 +83,17 @@ Decisions taken during discovery (Rounds 0–2) are binding for the spec:
   validated predicate strings (parsed with sqlglot, columns checked against the
   model's dimensions, operator allow-list). Nothing reaches the compiler
   unvalidated.
+- **Resolved on 2026-10-14 (see Open Questions)**: explicit `semantic` branch
+  in `Connection.get_provider()`; `pydantic.BaseModel` for the semantic models
+  and `pydantic>=2` declared as a core dependency; AGPL extra approved as an
+  unmodified dependency; `user_attributes` always in the
+  `QSPrincipal.to_userinfo()` shape; `ResourceType.SEMANTIC` via the shim now
+  and upstream later; field permissions named `<slug>:metric:<name>` /
+  `<slug>:dimension:<name>` with action `semantic:use`; inline Ossie through a
+  temp file and the public adapter API; request-level `time_grain` rewrites
+  unsuffixed time dimensions; a catalog endpoint
+  `GET /api/v1/semantic/{slug}/catalog` ships in v1; role-based
+  `governance.row_filters` live in the resource YAML.
 - **Targets**: any dialect Sidemantic supports; dialect is derived from the
   datasource driver (`pg`/`pg_admin`/`postgres` → `postgres`, `bigquery`,
   `mysql`, `mariadb` → `mysql`, `sqlserver` → `tsql`, `clickhouse`, `oracle`,
@@ -147,7 +158,7 @@ result like `defaultProvider.query`. `dry_run()` returns the compiled SQL.
 | `sidemantic>=0.12.0,<0.13` | Semantic model + SQL compiler, RLS | AGPL-3.0, Python ≥3.11, released 2026-09-13; hard deps: duckdb≥1.0, sqlglot≥30.1, pydantic≥2, pyyaml≥6, jinja2, antlr4, click, typer. **No** `sidemantic-rs` in `requires_dist`. |
 | `sidemantic[ossie]` | Offline JSON-Schema validation of Ossie docs | adds `jsonschema<5,>=4.23`; schemas vendored and checksum-pinned (0.1.1 / 0.2.0.dev0 profiles). |
 | `sqlglot>=30.1` | Parse/validate predicate strings, render literals, dialect names | Already installed transitively (30.20.0 in venv) but **not declared** in `pyproject.toml`; declare it in the extra. |
-| `pydantic>=2` | `SemanticQuery` request model (user asked for pydantic; `BaseModel` from `datamodel` is the house default) | 2.12.5 installed; not a direct dependency today — decide in spec (see Open Questions). |
+| `pydantic>=2` | `SemanticQuery`, `CompiledQuery`, `SemanticResource` models | Decided: pydantic v2 for the whole `querysource/semantic/` package; 2.12.5 installed, to be declared as a core dependency. |
 | `pyyaml>=6` | Parse the resource YAML in `query_raw` | 6.0.3 installed, transitive. |
 
 🔗 **Existing Code to Reuse:**
@@ -276,7 +287,20 @@ the returned SQL locally.
      definition: models/epson_sales.ossie.yaml   # relative to QS_SEMANTIC_MODELS_DIR
      # or an inline document under `definition:` (inline wins when both exist)
      scope: commerce                  # optional Ossie scope when the document has several
+   governance:                        # optional, QuerySource-owned (not Ossie syntax)
+     row_filters:
+       default: []                    # applied to every principal
+       analyst:                       # role name as carried by the principal's `roles`
+         - {field: region, op: in, value: ["ES", "PT"]}
+       country_manager:
+         - "region = 'ES'"            # validated string form is accepted too
    ```
+
+   `governance.row_filters` are QuerySource-side row-level filters keyed by
+   role; the principal's roles decide which blocks apply, every applicable
+   block is AND-ed (most restrictive), and each filter passes the same
+   validator as caller-supplied filters. They complement, and never replace,
+   the Sidemantic `security:` block inside the model.
 
    Management endpoints and the tenant repository store it like any other
    slug; the definition revision is the model version.
@@ -301,10 +325,13 @@ the returned SQL locally.
    Output formats (`:csv`, `queryformat=…`, `_download`) work as for any slug.
    `GET` with the same keys as query parameters is accepted for simple cases.
 
-3. **Inspecting the catalog.** `HEAD`/`PATCH` columns and the describe
-   endpoint return the model's metrics and dimensions with descriptions, types,
-   aggregation and whether the principal may use each one. `test_slug` /
-   `dry_run` returns the compiled SQL and warnings without executing.
+3. **Inspecting the catalog.** `GET /api/v1/semantic/{slug}/catalog` (and
+   the tenant-prefixed form) returns the model's metrics and dimensions with
+   descriptions, types, aggregation, time grains and whether the principal may
+   use each one; it is the contract AI agents read before building a request.
+   `HEAD`/`PATCH` columns and the describe endpoint expose the same catalog for
+   existing tooling. `test_slug` / `dry_run` returns the compiled SQL and
+   warnings without executing.
 
 4. **Python API.** `QS(slug='epson.sales', conditions={...}, principal=...)`
    works unchanged. A convenience module exposes the two-step form:
@@ -325,31 +352,43 @@ the returned SQL locally.
 ### Internal Behavior
 
 1. `QS.build_provider()` reads the definition through the repository
-   (unchanged). `Connection.get_provider()` sees `provider == 'semantic'`,
-   loads `querysource.providers.semantic.semanticProvider`; the connection
-   is **not** taken from the default driver but resolved by the provider from
-   the resource YAML's `connection` (datasource registry) or the default
-   PostgreSQL connection when omitted.
+   (unchanged). `Connection.get_provider()` gets an explicit
+   `provider == 'semantic'` branch, placed next to the `EXTERNAL_PROVIDERS`
+   check, that returns `[None, semanticProvider]` without touching the default
+   driver. The provider resolves its own connection in `prepare_connection()`
+   from the resource YAML's `connection` through `Connection.datasource(name)`,
+   or the default PostgreSQL connection when omitted.
 2. `semanticProvider.__init__` parses `query_raw` into a `SemanticResource`
-   (kind, connection, semantic block), and builds a `SemanticQuery` from
-   `conditions` (`metrics`, `dimensions`, `filters`, `time_grain`, `order_by`,
-   `limit`, `offset`); reserved QuerySource keys (`refresh`, `_output_options`,
-   …) are stripped first. Unknown keys are rejected.
+   (kind, connection, semantic block, governance block) and builds a
+   `SemanticQuery` from `conditions` (`metrics`, `dimensions`, `filters`,
+   `time_grain`, `order_by`, `limit`, `offset`); reserved QuerySource keys
+   (`refresh`, `_output_options`, …) are stripped first. Unknown keys are
+   rejected. All models in `querysource/semantic/` are `pydantic.BaseModel`
+   (v2) classes. `time_grain` rewrites every requested time dimension that has
+   no explicit suffix to `<dim>__<grain>`; explicit suffixes win.
 3. `prepare_connection()`:
    - resolves the datasource and derives the dialect from its driver;
    - loads the model via the `ModelLoader` (inline document or
      `QS_SEMANTIC_MODELS_DIR`-relative path; format `ossie` →
-     `OssieAdapter(target_dialect=<dialect>)`, format `sidemantic` →
-     `load_from_file`), cached in-process by `(definition revision, dialect)`;
-   - **PBAC layer**: `semantic:execute` on the slug, then one evaluation per
-     requested metric/dimension (`semantic:<slug>:metric:<name>`,
-     `semantic:<slug>:dimension:<name>`, action `semantic:use`); PBAC off →
-     allowed; any deny → `QueryAccessDenied`-style error with the field name;
+     `OssieAdapter(target_dialect=<dialect>).parse_document(path)`, where an
+     inline document is first written to a private temp file so only the
+     public adapter API is used; format `sidemantic` → `load_from_file`),
+     cached in-process by `(definition revision, dialect)`;
+   - **PBAC layer**: resource type `SEMANTIC`, action `semantic:execute` on
+     resource name `<slug>`, then one evaluation per requested field on
+     `<slug>:metric:<name>` / `<slug>:dimension:<name>` with action
+     `semantic:use`; PBAC off → allowed; any deny → `QueryAccessDenied`-style
+     error with the field name;
+   - builds the principal: the library path already has a `QSPrincipal`; the
+     request path builds one from the session so `user_attributes` always have
+     the `QSPrincipal.to_userinfo()` shape (`user_id`, `username`, `groups`,
+     `roles`, `programs`, `superuser`, `tenant_id`);
+   - **governance filters**: selects `governance.row_filters.default` plus the
+     blocks whose key matches one of the principal's `roles`, validates them
+     like caller filters and appends them to the request (AND semantics);
    - validates filters: structured objects against the dimension list and the
      operator allow-list; strings parsed with sqlglot, every column reference
      must be a model dimension, no subqueries/functions outside the allow-list;
-   - builds `user_attributes` from the session (`user_id`, `groups`, `roles`,
-     `programs`, `superuser`, `tenant_id`) or from `QSPrincipal.to_userinfo()`;
    - calls `SemanticCompiler.compile(model_ref, query, target)` →
      `CompiledQuery`; the Sidemantic implementation calls
      `SemanticLayer.compile(metrics=..., dimensions=..., filters=...,
@@ -367,6 +406,12 @@ the returned SQL locally.
 6. `querysource.semantic.compile()/execute()` wrap the same provider: compile
    builds the provider up to `prepare_connection()` and returns the
    `CompiledQuery`; execute re-attaches a connection and runs it.
+7. The catalog endpoint (`querysource/handlers/semantic.py`,
+   `GET /api/v1/semantic/{slug}/catalog`) enforces `semantic:execute`, loads
+   the model through the same `ModelLoader`, and returns metrics/dimensions
+   from `SemanticLayer.describe_models()` annotated with the principal's
+   per-field grants (one `semantic:use` evaluation per field, PBAC off →
+   all granted) and the governance row-filter summary for the principal.
 
 ### Edge Cases & Error Handling
 
@@ -392,8 +437,15 @@ the returned SQL locally.
   and add a warning; the SQL may still fail at execution and surfaces as the
   normal provider error.
 - **Empty result** → `NotFound` ("Empty Result") like other providers.
-- **time_grain** with a non-time dimension → 400; valid grains follow
-  Sidemantic (`day|week|month|quarter|year`).
+- **time_grain** on a request with no time dimension → 400; valid grains
+  follow Sidemantic (`day|week|month|quarter|year`); an explicit per-dimension
+  suffix always wins over the request-level grain.
+- **governance.row_filters**: an unknown role key never matches (no filter
+  applied, no error); a filter that fails validation is a configuration error
+  → 500 logged with the slug and role, never silently skipped; a principal
+  without roles gets only `default`.
+- **Session without identity on a model that has `security:` or
+  `governance.row_filters`** → 403 before compilation.
 - **Definition revision changes** → loader cache miss, model recompiled; stale
   cached results are keyed out by `model_version`.
 - **Compile latency**: first compile per revision parses YAML + schema; keep
@@ -405,9 +457,10 @@ the returned SQL locally.
 
 ### New Capabilities
 - `semantic-layer`: semantic resource kind, `querysource/semantic/` package
-  (models, Protocol, loader, filter validation, dialect map, Sidemantic
-  compiler), `semanticProvider`, `compile()/execute()` helpers, settings,
-  `[semantic]` extra, docs and tests.
+  (pydantic models, Protocol, loader, filter validation, governance row
+  filters, dialect map, Sidemantic compiler), `semanticProvider`, the
+  `get_provider` branch, `compile()/execute()` helpers, the catalog endpoint,
+  settings, `[semantic]` extra, docs and tests.
 
 ### Modified Capabilities
 - `pbac-support`: add `ResourceType.SEMANTIC` to the shim and the
@@ -424,12 +477,13 @@ the returned SQL locally.
 |---|---|---|
 | `querysource/providers/semantic.py` | new | `semanticProvider(BaseProvider)`, `__parser__ = None`, loaded by `Connection.load_provider('semantic')` |
 | `querysource/semantic/` (new package) | new | `models.py`, `protocol.py`, `loader.py`, `filters.py`, `dialects.py`, `compilers/sidemantic.py`, `api.py` (`compile`/`execute`) |
-| `querysource/interfaces/connections.py` | extends | `get_provider()` branch for `provider == 'semantic'` (no default-driver lookup; provider resolves its datasource) — see Open Questions |
-| `querysource/auth/_resource_types.py` | extends | `SEMANTIC = "semantic"` in the shim |
+| `querysource/interfaces/connections.py` | extends | explicit `provider == 'semantic'` branch in `get_provider()` returning `[None, semanticProvider]` (decided) |
+| `querysource/auth/_resource_types.py` | extends | `SEMANTIC = "semantic"` in the shim; upstream navigator-auth enum + `SEMANTIC_EXECUTE`/`SEMANTIC_USE` as a TASK-640-style follow-up |
+| `querysource/handlers/semantic.py` | new | `GET /api/v1/semantic/{slug}/catalog` (+ tenant-prefixed route) with per-field grants |
 | `querysource/auth/enforcement.py` | depends on | `enforce_principal` reused per metric/dimension; request path reuses `AbstractHandler._enforce_pbac` |
 | `querysource/queries/describe.py` | extends | catalog section for semantic slugs |
 | `querysource/conf.py` | extends | `QS_SEMANTIC_MODELS_DIR`, `QS_SEMANTIC_DEFAULT_LIMIT`, `QS_SEMANTIC_MAX_LIMIT`, `QS_SEMANTIC_MAX_FILTERS` |
-| `pyproject.toml` | extends | `semantic = ["sidemantic>=0.12.0,<0.13", "sidemantic[ossie]", "sqlglot>=30.1"]` |
+| `pyproject.toml` | extends | `semantic = ["sidemantic>=0.12.0,<0.13", "sidemantic[ossie]", "sqlglot>=30.1"]`; `pydantic>=2` added to core dependencies (semantic models are pydantic) |
 | `querysource/handlers/service.py` | no change expected | JSON body + params already reach the provider as `conditions` |
 | `querysource/cache/*` | depends on | cache key must include `model_version` |
 | `docs/` | new | `SEMANTIC_LAYER.md` (resource YAML, request contract, governance, dialect table) |
@@ -750,7 +804,8 @@ from sidemantic.adapters.ossie import OssieAdapter, OssieImportError  # adapters
   and `querysource/interfaces/connections.py`, both shared with PBAC and tenant
   work; no active worktree currently modifies them (verify with
   `/sdd-status` at spec time). `querysource/queries/describe.py` overlaps with
-  `describe-queryslug`.
+  `describe-queryslug`. The catalog handler is a new file and route
+  registration only.
 - **Recommended isolation**: `mixed`.
 - **Rationale**: the compiler/provider chain is a strict dependency line and
   should stay in one worktree; the auth shim, filter validator, dialect map and
@@ -760,13 +815,16 @@ from sidemantic.adapters.ossie import OssieAdapter, OssieImportError  # adapters
 
 ## Open Questions
 
-- [ ] Connection resolution: add a `provider == 'semantic'` branch in `Connection.get_provider()` (returns `[None, semanticProvider]` and lets the provider call `datasource(name)`), or let the generic fallback stand and have the provider ignore the (possibly `None`) connection it receives? Recommended: explicit branch, mirrors `EXTERNAL_PROVIDERS`. — *Owner: Jesus Lara*
-- [ ] Request model base class: `pydantic.BaseModel` (user's sketch; pulled in by sidemantic anyway) or house `datamodel.BaseModel` for `SemanticQuery`/`CompiledQuery`? Conventions say follow the surrounding module; `querysource/semantic/` is new. — *Owner: Jesus Lara*
-- [ ] Legal/ops sign-off on the AGPL-3.0 optional extra (`sidemantic`, unmodified, in-process) and on DuckDB being installed on workers that serve semantic slugs. — *Owner: Jesus Lara*
-- [ ] `user_attributes` mapping: which session/principal keys feed Sidemantic row filters (`user_id`, `groups`, `roles`, `programs`, `superuser`, `tenant_id`), and should the request-path session be normalised through `QSPrincipal.to_userinfo()` for parity? — *Owner: Jesus Lara*
-- [ ] navigator-auth upstream: add `ResourceType.SEMANTIC` + `SEMANTIC_EXECUTE`/`SEMANTIC_USE` actions (TASK-640 style) or keep the string shim indefinitely? — *Owner: Jesus Lara*
-- [ ] Per-field PBAC resource naming: `semantic:<slug>:metric:<name>` with action `semantic:use`, or reuse `slug:<slug>` with per-field attributes in the policy? Depends on how navigator-auth policies express wildcards for nested names. — *Owner: Jesus Lara*
-- [ ] Inline Ossie documents: use Sidemantic's lower-level `parse_ossie_document`/`lower_ossie_document` (internal, may change) or write to a temp file and call `OssieAdapter.parse_document()`? — *Owner: Jesus Lara*
-- [ ] `time_grain` semantics: a request-level grain applied to every time dimension, or only via per-dimension suffixes (`order_date__month`) as Sidemantic expects? — *Owner: Jesus Lara*
-- [ ] Should the HTTP surface stay only on `/api/v1/queries/{slug}` (+ tenant route), or also expose a catalog endpoint (`GET …/semantic/{slug}/catalog`) for agents in this feature? — *Owner: Jesus Lara*
-- [ ] PBAC-provided row filters (policy attributes injected as extra filters, as in the user's sketch) in v1, or only Sidemantic `security.row_filters` with user attributes? — *Owner: Jesus Lara*
+All questions were resolved with the author on 2026-10-14; the answers are
+folded into the sections above and are binding for `/sdd-spec`.
+
+- [x] Connection resolution: add a `provider == 'semantic'` branch in `Connection.get_provider()` (returns `[None, semanticProvider]` and lets the provider call `datasource(name)`), or let the generic fallback stand and have the provider ignore the (possibly `None`) connection it receives? — *Owner: Jesus Lara*: Explicit branch in `get_provider()` returning `[None, semanticProvider]`, mirroring `EXTERNAL_PROVIDERS`; the provider resolves `connection:` from the resource YAML through `Connection.datasource(name)`, or the default PostgreSQL connection when omitted.
+- [x] Request model base class: `pydantic.BaseModel` or house `datamodel.BaseModel` for `SemanticQuery`/`CompiledQuery`? — *Owner: Jesus Lara*: `pydantic.BaseModel` (v2) for every model in `querysource/semantic/`; `pydantic>=2` is declared as a core dependency in `pyproject.toml` (it is already installed transitively).
+- [x] Legal/ops sign-off on the AGPL-3.0 optional extra (`sidemantic`, unmodified, in-process) and on DuckDB being installed on workers that serve semantic slugs. — *Owner: Jesus Lara*: Approved as an unmodified optional dependency (`querysource[semantic]`); the core package never imports it, no sidemantic source is copied into the repo, and DuckDB is installed only on workers that serve semantic slugs.
+- [x] `user_attributes` mapping: which session/principal keys feed Sidemantic row filters, and should the request-path session be normalised through `QSPrincipal.to_userinfo()`? — *Owner: Jesus Lara*: One shape for both paths — the `QSPrincipal.to_userinfo()` dict (`user_id`, `username`, `groups`, `roles`, `programs`, `superuser`, `tenant_id`). The request path builds a `QSPrincipal` from the session before compiling; the library path uses the principal directly.
+- [x] navigator-auth upstream: add `ResourceType.SEMANTIC` + actions (TASK-640 style) or keep the string shim? — *Owner: Jesus Lara*: Shim now (`SEMANTIC = "semantic"` in `querysource/auth/_resource_types.py`) so the feature ships independently; a TASK-640-style follow-up adds `SEMANTIC`, `SEMANTIC_EXECUTE` and `SEMANTIC_USE` upstream.
+- [x] Per-field PBAC resource naming. — *Owner: Jesus Lara*: Resource type `SEMANTIC`; `semantic:execute` on resource name `<slug>`; field checks on `<slug>:metric:<name>` / `<slug>:dimension:<name>` with action `semantic:use`, so policies can use wildcards such as `epson.sales:metric:*`.
+- [x] Inline Ossie documents: lower-level `parse_ossie_document` or temp file + `OssieAdapter.parse_document()`? — *Owner: Jesus Lara*: Temp file + the public `OssieAdapter.parse_document()`; done once per definition revision thanks to the loader cache. No internal Sidemantic APIs.
+- [x] `time_grain` semantics. — *Owner: Jesus Lara*: A request-level `time_grain` rewrites every requested time dimension without an explicit suffix to `<dim>__<grain>`; an explicit suffix (`order_date__day`) wins; non-time dimensions are unaffected; a grain on a request with no time dimension is a 400.
+- [x] HTTP surface: query routes only, or also a catalog endpoint? — *Owner: Jesus Lara*: Both. Execution on `POST/GET /api/v1/queries/{slug}` (and the tenant route) plus `GET /api/v1/semantic/{slug}/catalog` returning metrics/dimensions with descriptions, types and the principal's grants; describe/HEAD/PATCH columns are updated too.
+- [x] PBAC-provided row filters in v1? — *Owner: Jesus Lara*: Yes, declared in the resource YAML: a `governance.row_filters` block keyed by role (plus `default`) in the QuerySource resource document; PBAC/session only supplies the roles. Filters pass the same validator as caller filters, are injected before compile, and are combined with AND (most restrictive) when a principal matches several roles. Sidemantic `security.row_filters` keep working on top.
