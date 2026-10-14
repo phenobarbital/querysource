@@ -54,7 +54,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -64,8 +64,9 @@
       "parallelism_notes": "imports SemanticError from TASK-897 (querysource/semantic/exceptions.py) into qs.py; tests use tests/semantic/conftest.py from TASK-897",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-899-semantic-wiring.md"
+      "completed_at": "2026-10-14T22:32:50+00:00",
+      "file": "sdd/tasks/completed/TASK-899-semantic-wiring.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-900",
@@ -74,7 +75,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -84,8 +85,9 @@
       "parallelism_notes": "imports SemanticFilter, CatalogField, FILTER_OPS, SemanticRequestError from TASK-897 (querysource/semantic/models.py, exceptions.py)",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-900-semantic-dialects-filters.md"
+      "completed_at": "2026-10-14T22:32:50+00:00",
+      "file": "sdd/tasks/completed/TASK-900-semantic-dialects-filters.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-901",
