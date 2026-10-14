@@ -201,6 +201,26 @@ def redact_payload(payload: dict, grants: DescribeGrants) -> tuple[dict, list[st
     return new_payload, sorted(redacted_names)
 
 
+def _semantic_summary(base: dict[str, Any]) -> dict[str, Any]:
+    """Summarize a semantic resource without importing a compiler (FEAT-175)."""
+    from ..semantic.exceptions import SemanticError
+    from ..semantic.models import SemanticResource
+
+    try:
+        resource = SemanticResource.from_yaml(base.get("query_raw"))
+    except SemanticError as err:
+        return {"error": str(err)}
+
+    definition = resource.semantic.definition
+    return {
+        "format": resource.semantic.format,
+        "connection": resource.connection,
+        "definition_kind": "inline" if isinstance(definition, dict) else "path",
+        "governance_roles": [role for role in resource.governance.row_filters if role != "default"],
+        "catalog": f"/api/v1/semantic/{base.get('query_slug')}/catalog",
+    }
+
+
 def describe_slug(
     definition: QueryModel | dict,
     grants: DescribeGrants,
@@ -254,6 +274,8 @@ def describe_slug(
     }
     if "variables_error" in variables_result:
         derived["variables_error"] = variables_result["variables_error"]
+    if base.get("provider") == "semantic":
+        derived["semantic"] = _semantic_summary(base)
 
     payload, redacted = redact_payload(base, grants)
 
