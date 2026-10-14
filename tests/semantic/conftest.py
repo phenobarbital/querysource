@@ -22,10 +22,10 @@ semantic:
         table: orders
         metrics:
           - name: revenue
-            type: sum
-            expression: amount
+            agg: sum
+            sql: amount
           - name: order_count
-            type: count
+            agg: count
         dimensions:
           - name: region
             type: categorical
