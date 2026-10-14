@@ -176,6 +176,42 @@ def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
     return _prefer_ns(parsed)
 
 
+def parse_datetime_series(
+    series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
+) -> pd.Series:
+    """Parse a Series to datetimes, preserving every parseable timezone-bearing value.
+
+    Public entry point for the FEAT-171 parser (same contract as ``_to_datetime_series``).
+
+    Args:
+        series: Raw or datetime-like values.
+        infer_tz: When false, heterogeneous offsets are normalized to UTC (a warning is
+            logged); when true, an ``object`` Series keeps each value's own offset.
+        field: Column name, used only for logging.
+
+    Returns:
+        The parsed Series with the same index and name; unparseable values become ``NaT``.
+    """
+    return _to_datetime_series(series, infer_tz=infer_tz, field=field)
+
+
+def to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
+    """Return naive datetime64 values holding each value's own local wall-clock.
+
+    Public entry point for ``_to_wall_clock``: values with an offset keep their local
+    time, values without an offset are unchanged, date-only values with an offset
+    become local midnight, unparseable values become ``NaT``.
+
+    Args:
+        series: Values to convert.
+        field: Column name, used only for logging.
+
+    Returns:
+        A naive datetime64 Series with the same index and name.
+    """
+    return _to_wall_clock(series, field=field)
+
+
 def _convert_datetime_column(
     df: pd.DataFrame, field: str, infer_tz: bool = False
 ) -> pd.DataFrame:
