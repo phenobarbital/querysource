@@ -10,7 +10,7 @@ tags: [pandas3, datetime, timezone, transforms, flowtask]
 **Feature ID**: FEAT-174
 **Date**: 2026-10-13
 **Author**: Juan Francisco Ruffato
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.5
 
 ---
@@ -454,7 +454,7 @@ Verified against: `67419a9`
 - [x] Q2: DST policy? — *Resolved 2026-10-13 (Juan Francisco Ruffato)*: QS's existing ambiguous policy (all `False` → standard time) + `nonexistent="shift_forward"`; evidence table in §2 (`infer` fails the whole column on a single ambiguous value in unsorted data).
 - [x] Q3: Public helper location/names? — *Resolved 2026-10-13 (Juan Francisco Ruffato)*: `parse_datetime_series` / `to_wall_clock` in `transforms.py` (precedent: `is_datetime_column`), wrapping the private helpers, which stay.
 - [x] Q4: Release version? — *Resolved 2026-10-13 (Juan Francisco Ruffato)*: **5.2.5**, together with FEAT-171 and PR #673 (FEAT-171 is unreleased: latest tag `5.2.4` does not contain merge `37830150`). Flowtask FEAT-567 pins `querysource>=5.2.5`.
-- [ ] Confirm Q1–Q4 decisions (taken by the Flowtask side to unblock FEAT-567) — *Owner: Jesus Lara*
+- [x] Confirm Q1–Q4 decisions — *Resolved 2026-10-13 (Juan Francisco Ruffato)*: approved without a separate sign-off; Jesus Lara reviews the implementation PR.
 
 ---
 
@@ -484,4 +484,5 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-10-13 | Juan Francisco Ruffato | Initial draft from the Flowtask brainstorm `pandas3-datetime-mixed-offsets` (Option C hybrid) |
+| 0.3 | 2026-10-13 | Juan Francisco Ruffato | Approved; review happens on the implementation PR |
 | 0.2 | 2026-10-13 | Juan Francisco Ruffato | §8 Q1–Q4 resolved after reviewing FEAT-171 (code, ledger, PR #673, release tags): unify on `change_timezone` + alias; QS DST policy + `shift_forward`; helpers in `transforms.py`; release 5.2.5 with FEAT-171. Fixed wrong `field`/`column` claim; noted #673 not yet on `dev` |
