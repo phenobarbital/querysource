@@ -34,7 +34,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -42,8 +42,9 @@
       "parallelism_notes": "exclusive: edits pyproject.toml (+ uv.lock) and installs the semantic extra into the shared venv",
       "assigned_to": null,
       "started_at": "2026-10-14T22:16:02+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-898-semantic-dependencies.md"
+      "completed_at": "2026-10-14T22:19:08+00:00",
+      "file": "sdd/tasks/completed/TASK-898-semantic-dependencies.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-899",
