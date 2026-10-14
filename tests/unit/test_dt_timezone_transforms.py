@@ -1,9 +1,12 @@
 """FEAT-174 — timezone transforms hosted in QuerySource."""
+from datetime import datetime
+
 import pandas as pd
 
 from querysource.types.dt.transforms import (
     _to_datetime_series,
     _to_wall_clock,
+    drop_timezone,
     parse_datetime_series,
     to_wall_clock,
 )
@@ -29,3 +32,86 @@ def test_public_helpers_delegate():
                 parse_datetime_series(s, infer_tz=infer_tz), _to_datetime_series(s, infer_tz=infer_tz)
             )
         pd.testing.assert_series_equal(to_wall_clock(s), _to_wall_clock(s))
+
+
+def _drop_timezone_like_flowtask(series: pd.Series) -> pd.Series:
+    """Mirror of Flowtask TransformRows drop_timezone (functions.py:408) — the behaviour being replaced."""
+    if isinstance(series.dtype, pd.DatetimeTZDtype):
+        return series.dt.tz_localize(None)
+    if series.dtype == "object":
+        return series.apply(
+            lambda x: x.replace(tzinfo=None) if isinstance(x, (pd.Timestamp, datetime)) and x.tzinfo else x
+        ).astype("datetime64[ns]")
+    return series
+
+
+def test_drop_timezone_mixed_strings():
+    """MIXED strings -> naive [2025-09-15 23:30, 2025-12-01 08:00, NaT]; no str left."""
+    df = pd.DataFrame({"d": MIXED})
+    out = drop_timezone(df, "d")["d"]
+    assert pd.api.types.is_datetime64_any_dtype(out)
+    assert out.dt.tz is None
+    assert out.iloc[0] == pd.Timestamp("2025-09-15 23:30:00")
+    assert out.iloc[1] == pd.Timestamp("2025-12-01 08:00:00")
+    assert pd.isna(out.iloc[2])
+    assert not any(isinstance(v, str) for v in out)
+
+
+def test_drop_timezone_offset_date():
+    """'2025-09-15-07:00' -> 2025-09-15 00:00; '2025-09-15Z' -> midnight; plain date stays midnight."""
+    out = drop_timezone(pd.DataFrame({"d": OFFSET_DATES}), "d")["d"]
+    assert out.iloc[0] == pd.Timestamp("2025-09-15")
+    assert out.iloc[1] == pd.Timestamp("2025-12-01")
+    assert out.iloc[2] == pd.Timestamp("2025-09-15")
+    assert out.iloc[3] == pd.Timestamp("2025-09-15")
+    assert pd.isna(out.iloc[4])
+
+
+def test_drop_timezone_dtypes():
+    """tz dtype (incl. UTC) -> tz_localize(None); naive unchanged; aware object mixed -> local wall-clock;
+    numeric column copied unchanged; column != field leaves the source untouched."""
+    base = pd.to_datetime(["2025-09-15 10:00", "2025-12-01 08:00"])
+    # tz dtype
+    df = pd.DataFrame({"d": base.tz_localize("America/Chicago")})
+    out = drop_timezone(df, "d")["d"]
+    assert out.dt.tz is None
+    assert list(out) == list(base)
+    # UTC dtype keeps UTC wall-clock
+    df = pd.DataFrame({"d": base.tz_localize("UTC")})
+    assert list(drop_timezone(df, "d")["d"]) == list(base)
+    # naive unchanged
+    df = pd.DataFrame({"d": base})
+    pd.testing.assert_series_equal(drop_timezone(df, "d")["d"], pd.Series(base, name="d"))
+    # aware object with mixed offsets
+    aware = pd.Series(
+        [pd.Timestamp("2025-09-15T23:30:00-07:00"), pd.Timestamp("2025-12-01T08:00:00-08:00")],
+        dtype=object,
+    )
+    out = drop_timezone(pd.DataFrame({"d": aware}), "d")["d"]
+    assert list(out) == [pd.Timestamp("2025-09-15 23:30:00"), pd.Timestamp("2025-12-01 08:00:00")]
+    # numeric unchanged
+    df = pd.DataFrame({"n": [1, 2, 3]})
+    pd.testing.assert_series_equal(drop_timezone(df, "n")["n"], pd.Series([1, 2, 3], name="n"))
+    # column != field
+    df = pd.DataFrame({"src": MIXED})
+    res = drop_timezone(df, "dst", column="src")
+    assert list(res["src"].iloc[:2]) == MIXED[:2]
+    assert res["dst"].iloc[0] == pd.Timestamp("2025-09-15 23:30:00")
+
+
+def test_drop_timezone_flowtask_parity():
+    """On Flowtask's working inputs (tz dtype, aware object, naive) output equals the mirror."""
+    base = pd.to_datetime(["2025-09-15 10:00", "2025-12-01 08:00"])
+    aware_obj = pd.Series(
+        [pd.Timestamp("2025-09-15T23:30:00-07:00"), pd.Timestamp("2025-09-16T01:00:00-07:00")],
+        dtype=object,
+    )
+    for series in (
+        pd.Series(base.tz_localize("America/Chicago"), name="d"),
+        pd.Series(base.tz_localize("UTC"), name="d"),
+        aware_obj.rename("d"),
+        pd.Series(base, name="d"),
+    ):
+        expected = _drop_timezone_like_flowtask(series)
+        got = drop_timezone(series.to_frame(), "d")["d"]
+        pd.testing.assert_series_equal(got, expected, check_dtype=False)

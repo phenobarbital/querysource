@@ -2446,6 +2446,37 @@ def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: st
     return df
 
 
+def drop_timezone(df: pd.DataFrame, field: str, column: Optional[str] = None) -> pd.DataFrame:
+    """Drop timezone information, keeping each value's local wall-clock.
+
+    Datetime-aware columns lose their timezone (``tz_localize(None)``); object or
+    string columns are parsed and each value keeps its own local wall-clock
+    (date-only values with an offset become local midnight, unparseable values
+    become ``NaT``); naive datetimes and non-datetime columns are copied unchanged.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        column: Source column (defaults to ``field``).
+
+    Returns:
+        The DataFrame with ``field`` set.
+    """
+    if column is None:
+        column = field
+    try:
+        series = df[column]
+        if isinstance(series.dtype, pd.DatetimeTZDtype):
+            df[field] = series.dt.tz_localize(None)
+        elif pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            df[field] = to_wall_clock(series, field=field)
+        else:
+            df[field] = series
+    except Exception as err:
+        logging.error(f"Error on drop_timezone {field!r}: {err}")
+    return df
+
+
 def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):
     """
     Converts a column of a pandas DataFrame to numeric values, optionally removing
