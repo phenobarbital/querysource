@@ -49,7 +49,7 @@ except (ImportError, AttributeError):
 if not hasattr(ResourceType, "SEMANTIC"):
     # navigator-auth's upstream enum predates the semantic resource type.
     # A string is accepted by its access checker, matching the local shim.
-    setattr(ResourceType, "SEMANTIC", "semantic")
+    ResourceType.SEMANTIC = "semantic"
 
 
 __all__ = ("ResourceType",)

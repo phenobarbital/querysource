@@ -30,9 +30,9 @@ from ..exceptions import (
     QueryException,
     RawQueryPlaceholderError,
 )
-from ..semantic.exceptions import SemanticError
 from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
+from ..semantic.exceptions import SemanticError
 from ..tenant_errors import TenantError
 from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
