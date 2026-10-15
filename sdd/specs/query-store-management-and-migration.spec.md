@@ -12,7 +12,7 @@ tags: [query-stores, legacy-compatibility, explicit-migration, frontend-contract
 **Author**: Codex, from decisions agreed with Juanfran
 **Status**: draft
 **Target version**: Next compatible release; no package version bump prescribed
-**Companion**: `navigator-frontend-next/sdd/specs/querysource-store-selection-and-migration.spec.md`
+**Companion**: `navigator-frontend-next/sdd/specs/querysource-store-selection-and-migration.spec.md` (frontend **FEAT-252**, independently allocated).
 
 ## 1. Motivation & Business Requirements
 
