@@ -149,10 +149,7 @@ See blueprint.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: none | describe if any
+**Completed by**: sdd-worker directly (Sonnet 5.5; codex-spark rejected on this ChatGPT account, Nova credentials expired)
+**Date**: 2026-10-15
+**Notes**: docs/SEMANTIC_LAYER.md covers AC-20 (resource YAML, request contract incl. param-over-body precedence, governance layers, dialects, settings, errors, Python API, catalog, MultiQS, AGPL note). The Postgres integration test skips cleanly without QS_SEMANTIC_IT=1 and the catalog test passes with the scratch sidemantic install; the Postgres-backed test was NOT executed (no reachable disposable database in this sandbox) — only its dry-run SQL path was exercised (probe). While probing generated SQL, found the TASK-900 defect (dotted quoted identifier in filter SQL), fixed in 792a281 (feedback coder-feedback:8993785c3d2180558c3236fe).
+**Deviations from spec**: Integration test drives QS directly (library path) instead of POST /api/v1/queries/{slug}; no running app is available to a test.

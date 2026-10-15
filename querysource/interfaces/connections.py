@@ -126,6 +126,16 @@ class Connection:
             **self.pgargs
         )
 
+    @property
+    def default_driver_name(self) -> str:
+        """Driver name of the default QS database connection."""
+        return self._default_driver
+
+    @property
+    def default_dsn(self) -> str:
+        """DSN of the default QS database connection."""
+        return self._dsn
+
     def default_connection(self, driver: str = 'pg', dsn: str = None, params: dict = None):
         """Useful for internal connections of QS.
         """
@@ -282,6 +292,10 @@ class Connection:
             )
             # conn = await self._postgres.acquire()
             return [conn, _provider]
+        elif provider == 'semantic':
+            # FEAT-175: the semantic provider resolves its own datasource.
+            _provider = self.load_provider('semantic')
+            return [None, _provider]
         elif provider in EXTERNAL_PROVIDERS:
             _provider = self.load_provider(provider)
             ## TODO: return a QS Provider for REST/External operations

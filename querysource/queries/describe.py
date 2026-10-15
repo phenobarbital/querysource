@@ -201,6 +201,32 @@ def redact_payload(payload: dict, grants: DescribeGrants) -> tuple[dict, list[st
     return new_payload, sorted(redacted_names)
 
 
+def _semantic_summary(base: dict[str, Any], *, raw: bool) -> dict[str, Any]:
+    """Summarize a semantic resource without importing a compiler (FEAT-175).
+
+    Callers without the raw grant only see non-sensitive metadata: the datasource name,
+    governance role names and parser error text are reserved for ``raw`` callers.
+    """
+    from ..semantic.exceptions import SemanticError
+    from ..semantic.models import SemanticResource
+
+    try:
+        resource = SemanticResource.from_yaml(base.get("query_raw"))
+    except SemanticError as err:
+        return {"error": str(err) if raw else "invalid semantic resource"}
+
+    definition = resource.semantic.definition
+    summary: dict[str, Any] = {
+        "format": resource.semantic.format,
+        "definition_kind": "inline" if isinstance(definition, dict) else "path",
+        "catalog": f"/api/v1/semantic/{base.get('query_slug')}/catalog",
+    }
+    if raw:
+        summary["connection"] = resource.connection
+        summary["governance_roles"] = [role for role in resource.governance.row_filters if role != "default"]
+    return summary
+
+
 def describe_slug(
     definition: QueryModel | dict,
     grants: DescribeGrants,
@@ -254,6 +280,8 @@ def describe_slug(
     }
     if "variables_error" in variables_result:
         derived["variables_error"] = variables_result["variables_error"]
+    if base.get("provider") == "semantic":
+        derived["semantic"] = _semantic_summary(base, raw=grants.raw)
 
     payload, redacted = redact_payload(base, grants)
 

@@ -32,6 +32,7 @@ from ..exceptions import (
 )
 from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
+from ..semantic.exceptions import SemanticError
 from ..tenant_errors import TenantError
 from ..utils.cache_serialization import deserialize_cache_payload, is_parquet_payload
 from ..utils.functions import check_empty
@@ -307,13 +308,14 @@ class QS(BaseQuery):
                     "definition": objquery,
                     "conditions": conditions,
                     "request": self._request,
-                    "loop": self._loop
+                    "loop": self._loop,
+                    "principal": self._principal,
                 }
                 self._qs = self._provider(**args)
                 await self._qs.prepare_connection()
                 return self
-            except RawQueryPlaceholderError:
-                # Operational error in the query itself: surface it as-is.
+            except (RawQueryPlaceholderError, SemanticError, QueryAccessDenied):
+                # Operational, semantic, and access errors surface with their own code.
                 raise
             except Exception as err:
                 self._logger.exception(

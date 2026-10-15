@@ -252,10 +252,10 @@ from querysource.datasources.drivers import SUPPORTED
 
 ## Completion Note
 
-*(Agent fills this in when done)*
+**Completed by**: sdd-worker (coder seat gpt-5.6-luna, codex, 1 attempt, 55s)
+**Date**: 2026-10-15
+**Notes**: Merge-tier tests green, no fixes. Review recorded as coder-review:9f732a6efeafdbfb7b47b2ce. Closed via close_task.sh (finalize_task needs a durable review EvidenceRef no available tool produces).
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Deviations from spec**: none
 
-**Deviations from spec**: none | describe if any
+**Late review fix**: 792a281 corrected filter column rendering (`"orders.region"` → `orders.region` as table+column); feedback coder-feedback:8993785c3d2180558c3236fe.

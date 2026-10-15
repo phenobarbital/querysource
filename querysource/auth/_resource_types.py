@@ -43,6 +43,13 @@ except (ImportError, AttributeError):
         DATASOURCE = _StringResourceType("datasource")
         DRIVER = _StringResourceType("driver")
         RAW_QUERY = _StringResourceType("raw_query")
+        SEMANTIC = _StringResourceType("semantic")
+
+
+if not hasattr(ResourceType, "SEMANTIC"):
+    # navigator-auth's upstream enum predates the semantic resource type.
+    # A string is accepted by its access checker, matching the local shim.
+    ResourceType.SEMANTIC = "semantic"
 
 
 __all__ = ("ResourceType",)

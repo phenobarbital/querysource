@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-14T20:38:12+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-14T22:58:51+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "root task: creates querysource/semantic/ package + tests/semantic/conftest.py; no dependencies",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-897-semantic-models-protocol.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:27:12+00:00",
+      "file": "sdd/tasks/completed/TASK-897-semantic-models-protocol.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-898",
@@ -34,16 +35,17 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": false,
       "parallelism_notes": "exclusive: edits pyproject.toml (+ uv.lock) and installs the semantic extra into the shared venv",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-898-semantic-dependencies.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:19:08+00:00",
+      "file": "sdd/tasks/completed/TASK-898-semantic-dependencies.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-899",
@@ -52,7 +54,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -61,9 +63,10 @@
       "parallel": true,
       "parallelism_notes": "imports SemanticError from TASK-897 (querysource/semantic/exceptions.py) into qs.py; tests use tests/semantic/conftest.py from TASK-897",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-899-semantic-wiring.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:32:50+00:00",
+      "file": "sdd/tasks/completed/TASK-899-semantic-wiring.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-900",
@@ -72,7 +75,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -81,9 +84,10 @@
       "parallel": true,
       "parallelism_notes": "imports SemanticFilter, CatalogField, FILTER_OPS, SemanticRequestError from TASK-897 (querysource/semantic/models.py, exceptions.py)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-900-semantic-dialects-filters.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:32:50+00:00",
+      "file": "sdd/tasks/completed/TASK-900-semantic-dialects-filters.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-901",
@@ -92,7 +96,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -102,9 +106,10 @@
       "parallel": true,
       "parallelism_notes": "imports SemanticResource/SemanticModelRef from TASK-897 (models.py); reads QS_SEMANTIC_MODELS_DIR/CACHE_SIZE/MAX_MODEL_BYTES added to conf.py by TASK-899",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-901-semantic-model-loader.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:35:21+00:00",
+      "file": "sdd/tasks/completed/TASK-901-semantic-model-loader.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-902",
@@ -113,7 +118,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -123,9 +128,10 @@
       "parallel": true,
       "parallelism_notes": "uses ResourceType.SEMANTIC added by TASK-899 (_resource_types.py); imports SemanticFieldDenied/SemanticQuery from TASK-897; tests use fake_evaluator from TASK-897 conftest",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-902-semantic-governance.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:35:21+00:00",
+      "file": "sdd/tasks/completed/TASK-902-semantic-governance.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-903",
@@ -134,7 +140,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -146,9 +152,10 @@
       "parallel": true,
       "parallelism_notes": "imports ModelLoader/get_loader from TASK-901 (loader.py), FilterValidator from TASK-900 (filters.py), models from TASK-897; needs sidemantic installed by the semantic extra declared in TASK-898 (pyproject.toml)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-903-sidemantic-compiler.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:44:51+00:00",
+      "file": "sdd/tasks/completed/TASK-903-sidemantic-compiler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-904",
@@ -157,7 +164,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "L",
       "depends_on": [
@@ -170,9 +177,10 @@
       "parallel": true,
       "parallelism_notes": "composes dialect_for_driver/FilterValidator (TASK-900), get_loader (TASK-901), governance (TASK-902), get_compiler (TASK-903); reachable via get_provider branch + principal kwarg from TASK-899 (connections.py, qs.py)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-904-semantic-provider.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:50:58+00:00",
+      "file": "sdd/tasks/completed/TASK-904-semantic-provider.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-905",
@@ -181,7 +189,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -190,9 +198,10 @@
       "parallel": true,
       "parallelism_notes": "reads semanticProvider.compiled from TASK-904 (providers/semantic.py); modifies querysource/semantic/__init__.py created by TASK-897 (reached transitively)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-905-semantic-python-api.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:53:27+00:00",
+      "file": "sdd/tasks/completed/TASK-905-semantic-python-api.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-906",
@@ -201,7 +210,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -214,9 +223,10 @@
       "parallel": true,
       "parallelism_notes": "uses get_loader (TASK-901), get_compiler().catalog (TASK-903), governance.check (TASK-902), dialect_for_driver (TASK-900), ResourceType.SEMANTIC (TASK-899)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-906-semantic-catalog-endpoint.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:51:00+00:00",
+      "file": "sdd/tasks/completed/TASK-906-semantic-catalog-endpoint.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-907",
@@ -225,16 +235,17 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
-      "parallelism_notes": "independent: touches only multi/__init__.py, multi/sources/query.py, executors.py, obj.py \u2014 no FEAT-175 symbol needed (spec Q13 answer)",
+      "parallelism_notes": "independent: touches only multi/__init__.py, multi/sources/query.py, executors.py, obj.py — no FEAT-175 symbol needed (spec Q13 answer)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-907-multiqs-principal-propagation.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:27:13+00:00",
+      "file": "sdd/tasks/completed/TASK-907-multiqs-principal-propagation.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-908",
@@ -243,7 +254,7 @@
       "feature_id": "FEAT-175",
       "feature": "semantic-layer",
       "spec": "sdd/specs/semantic-layer.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "low",
       "effort": "M",
       "depends_on": [
@@ -255,9 +266,10 @@
       "parallel": true,
       "parallelism_notes": "documents and exercises the provider (TASK-904), API (TASK-905), catalog routes (TASK-906) and MultiQS propagation (TASK-907)",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-908-semantic-docs-integration.md"
+      "started_at": "2026-10-14T22:16:02+00:00",
+      "completed_at": "2026-10-14T22:58:51+00:00",
+      "file": "sdd/tasks/completed/TASK-908-semantic-docs-integration.md",
+      "verification": "verified"
     }
   ]
 }
