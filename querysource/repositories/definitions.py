@@ -150,6 +150,16 @@ class DefinitionRepository:
             persisted["updated_at"] = data["updated_at"]
         return persisted, legacy_program_slug
 
+    def _project(self, row: Mapping[str, Any], store: QueryStore) -> dict:
+        """Return the persisted projection: legacy keeps its stored program_slug.
+
+        Tenant projections never carry ``program_slug`` (runtime-only).
+        """
+        persisted, legacy_program_slug = self._row_to_persisted(row, store)
+        if store.contract == "legacy" and legacy_program_slug is not None:
+            persisted["program_slug"] = legacy_program_slug
+        return persisted
+
     def _runtime_model(self, persisted: dict, store: QueryStore, legacy_program_slug: str | None) -> QueryModel:
         """Construct a fresh, detached runtime QueryModel for provider/parser use.
 
@@ -280,11 +290,13 @@ class DefinitionRepository:
             )
             rows = await conn.fetch_all(page_sql, *page_bind_values)
 
-        persisted_rows = tuple(self._row_to_persisted(row, store)[0] for row in (rows or []))
+        persisted_rows = tuple(self._project(row, store) for row in (rows or []))
         return DefinitionPage(rows=persisted_rows, total=int(total or 0))
 
     def schema(self, store: QueryStore) -> Mapping[str, Any]:
-        """Return persistence metadata, excluding tenant runtime-only program_slug."""
+        """Return persistence metadata: legacy keeps program_slug, tenant excludes it."""
+        if store.contract == "legacy":
+            return QueryModel.schema(as_dict=True)
         return TenantQueryDefinition(query_slug="__probe__").schema(as_dict=True)
 
     async def export_insert(self, identity: QueryIdentity) -> str:
@@ -303,8 +315,12 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
         data = dict(row)
-        data.pop("program_slug", None)
-        validated = TenantQueryDefinition(**data)
+        data.pop(RUN_AS_COLUMN, None)
+        if store.contract == "legacy":
+            validated: Any = QueryModel(**data)
+        else:
+            data.pop("program_slug", None)
+            validated = TenantQueryDefinition(**data)
 
         table = self._qualified_table(store)
         columns: list = []
@@ -429,8 +445,7 @@ class DefinitionRepository:
                 error_code="tenant_store_unavailable",
             )
 
-        persisted_result, _ = self._row_to_persisted(dict(row), store)
-        return persisted_result
+        return self._project(dict(row), store)
 
     async def upsert(
         self,
@@ -501,8 +516,7 @@ class DefinitionRepository:
         row_data = dict(row)
         row_data.pop("is_inserted", None)
 
-        persisted_result, _ = self._row_to_persisted(row_data, store)
-        return persisted_result, is_created
+        return self._project(row_data, store), is_created
 
     async def patch(
         self,
@@ -566,8 +580,7 @@ class DefinitionRepository:
                     f"Query not found: {identity.slug!r}",
                     error_code="query_not_found",
                 )
-            persisted_result, _ = self._row_to_persisted(dict(row), store)
-            return persisted_result
+            return self._project(dict(row), store)
 
         # Add updated_at timestamp
         set_clauses.append(f"{quote_identifier('updated_at')} = now()")
@@ -595,8 +608,7 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
 
-        persisted_result, _ = self._row_to_persisted(dict(row), store)
-        return persisted_result
+        return self._project(dict(row), store)
 
     @staticmethod
     def _reject_run_as(data: Mapping[str, Any]) -> None:
