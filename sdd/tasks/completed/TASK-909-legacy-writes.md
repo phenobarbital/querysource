@@ -166,4 +166,4 @@ Use existing asyncdb connection/transaction/advisory-lock conventions. New integ
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Implemented sequentially by sdd-worker (no coder MCP). Legacy create/upsert/PATCH keep program_slug (omitted preserved on conflict, default only on insert; unchanged value accepted), tenant rejects with invalid_tenant before SQL, PATCH allowlist rejects unknown keys, get() revision includes raw legacy program_slug. Tests: tests/tenants/test_tenant_repository_{writes,reads}.py 13 passed.
