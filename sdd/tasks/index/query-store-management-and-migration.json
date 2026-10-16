@@ -353,7 +353,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -363,8 +363,9 @@
       "parallelism_notes": "TASK-924: serialize overlapping writer of querysource/services.py",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-925-lifecycle-crud-gates.md"
+      "completed_at": "2026-10-16T15:00:20+00:00",
+      "file": "sdd/tasks/completed/TASK-925-lifecycle-crud-gates.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-926",
