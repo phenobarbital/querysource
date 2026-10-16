@@ -12,9 +12,11 @@ The control plane lives in the existing PostgreSQL metadata database (see
 
 Nothing here executes a source query: migration verification is metadata only.
 """
+import asyncio
 import hashlib
 import json
 import os
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
@@ -648,6 +650,83 @@ class ScheduleHandoffCoordinator:
                 except Exception:  # noqa: BLE001 - never mask the original error
                     logger.exception("Rollback failed while preparing move %s", operation_id)
                 raise
+
+    # -- drain ---------------------------------------------------------------------------
+
+    async def drain(
+        self, operation_id: str, *, timeout_seconds: float = 30.0, poll_seconds: float = 0.25
+    ) -> Mapping[str, Any]:
+        """Wait for already-admitted runs to finish; never cancel or replay them.
+
+        New admissions are already frozen (``prepare``). Every admitted run holds the
+        shared owner lock until its query/pipeline and awaited remote work finish, so
+        taking the exclusive locks of both identities — in deterministic order — proves
+        the drain. Lock waits are polled (bounded by ``timeout_seconds``) so the durable
+        operation stays resumable instead of blocking a worker forever.
+
+        A run row still open (``admitted``/``running``/``unknown``) while its lock is
+        acquirable means its process died without recording an outcome: it is marked
+        ``unknown`` and drain stays pending with an actionable message — an expired
+        heartbeat is never trusted as proof that the business work completed.
+
+        Returns:
+            The journal row plus ``drained`` (bool) and, when pending, ``pending_runs``.
+        """
+        async with await self.connection_factory() as conn:
+            op = await self.load_operation(conn, operation_id)
+            if op is None:
+                raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+            if op["state"] != "draining":
+                return {**op, "drained": op["state"] not in ("preparing",)}
+            slug = op["query_slug"]
+            owners = [
+                ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug),
+                ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug),
+            ]
+            deadline = time.monotonic() + timeout_seconds
+            held: list[int] = []
+            try:
+                for key in ordered_lock_keys(owners):
+                    while not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key, column=0):
+                        if time.monotonic() >= deadline:
+                            return {**op, "drained": False, "pending_runs": await self._open_run_ids(conn, owners)}
+                        await asyncio.sleep(poll_seconds)
+                    held.append(key)
+                leftovers = await self._open_run_ids(conn, owners)
+                if leftovers:
+                    await conn.fetch_all(
+                        "UPDATE management.qs_schedule_runs SET outcome = 'unknown', finished_at = now(), "
+                        "error = coalesce(error, 'worker lost before the outcome was recorded') "
+                        "WHERE run_id = ANY($1::uuid[]) AND outcome IN ('admitted', 'running') RETURNING run_id",
+                        [_uuid(r) for r in leftovers],
+                    )
+                    op = await self.update_operation(
+                        conn, operation_id, error_code="move_scheduler_not_ready",
+                        message="Admitted run(s) with an unknown outcome must be reconciled by an operator: "
+                        + ", ".join(leftovers),
+                    )
+                    return {**op, "drained": False, "pending_runs": leftovers}
+                if op.get("error_code"):
+                    op = await self.update_operation(conn, operation_id, error_code=None, message=None)
+                return {**op, "drained": True}
+            finally:
+                for key in reversed(held):
+                    try:
+                        await conn.fetchval("SELECT pg_advisory_unlock($1)", key, column=0)
+                    except Exception:  # noqa: BLE001 - a lost connection already dropped the lock
+                        logger.warning("Could not release drain lock %s", key)
+
+    async def _open_run_ids(self, conn: Any, owners: Sequence[ScheduleOwner]) -> list[str]:
+        ids: list[str] = []
+        for owner in owners:
+            rows = await conn.fetch_all(
+                "SELECT run_id FROM management.qs_schedule_runs WHERE owner_namespace = $1 AND owner_schema = $2 "
+                "AND owner_table = $3 AND query_slug = $4 AND outcome IN ('admitted', 'running', 'unknown') "
+                "ORDER BY admitted_at",
+                *owner.as_tuple(),
+            )
+            ids.extend(str(r["run_id"]) for r in rows or [])
+        return ids
 
     # -- due admission -------------------------------------------------------------------
 
