@@ -136,7 +136,7 @@ def _parse(schedule_type, schedule):
     return IntervalTrigger(start_date=T0, timezone="UTC", minutes=5)
 
 
-async def _build(dsn, faults: _Faults | None = None, grant_validator=None):
+async def _build(dsn, faults: _Faults | None = None, grant_validator=None, *, real_clock: bool = False):
     base = _factory(dsn)
 
     async def factory():
@@ -145,7 +145,8 @@ async def _build(dsn, faults: _Faults | None = None, grant_validator=None):
 
     repo = DefinitionRepository(_Registry(LEGACY), factory)
     coord = ScheduleHandoffCoordinator(
-        repo, deployment_id="d", worker_id="w", rollout_confirmed=True, trigger_parser=_parse, clock=lambda: T0
+        repo, deployment_id="d", worker_id="w", rollout_confirmed=True, trigger_parser=_parse,
+        clock=None if real_clock else (lambda: T0),
     )
     await coord.register_worker()
     return QueryMoveService(repo, coord, grant_validator=grant_validator), coord
