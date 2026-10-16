@@ -108,7 +108,10 @@ async def test_real_pg_connection_namespace(
     registry = TenantRegistry()
     await registry.discover(conn)
     assert registry.resolve("tenant1").database_namespace == namespace
-    assert registry.resolve(None).database_namespace == namespace
+    # The configured default table was not discovered: explicit unavailable store.
+    with pytest.raises(TenantError) as exc_info:
+        registry.resolve(None)
+    assert exc_info.value.error_code == "tenant_store_unavailable"
 
 
 @pytest.mark.asyncio
@@ -154,23 +157,23 @@ async def test_allowlist_none_empty_exact_and_duplicates() -> None:
     registry2 = TenantRegistry()
     await registry2.discover(conn, allowlist=[])
 
+    # The configured legacy store is registered independent of the tenant allowlist.
     stores2 = registry2.stores()
-    assert len(stores2) == 0, "Should have no stores with allowlist=[]"
+    assert [(s.schema, s.contract) for s in stores2] == [("public", "legacy")]
 
     # Test with allowlist containing exact names
     registry3 = TenantRegistry()
     await registry3.discover(conn, allowlist=["tenant1", "tenant2"])
 
     stores3 = registry3.stores()
-    assert len(stores3) == 2, "Should have exactly 2 stores in allowlist"
-    assert all(store.schema in ("tenant1", "tenant2") for store in stores3)
+    assert {s.schema for s in stores3} == {"tenant1", "tenant2", "public"}
 
     # Test with duplicate names in allowlist (should be deduplicated)
     registry4 = TenantRegistry()
     await registry4.discover(conn, allowlist=["tenant1", "tenant1", "tenant2"])
 
     stores4 = registry4.stores()
-    assert len(stores4) == 2, "Duplicates should be deduplicated"
+    assert len(stores4) == 3, "Duplicates should be deduplicated"
 
 
 @pytest.mark.asyncio
@@ -393,12 +396,106 @@ async def test_no_public_schema_never_picks_arbitrary_tenant_as_default() -> Non
     stores = registry.stores()
     assert {s.schema for s in stores} == {"tenant_z", "tenant_a"}
 
-    # ...but neither is silently promoted to "the default".
-    default_store = registry.resolve(None)
-    assert default_store.schema == "public"
-    assert default_store.contract == "legacy"
-    # And the fallback's namespace matches the REAL connection this
-    # registry actually discovered against — not a divergent hardcoded
-    # literal — so its cache-key/job-id digest is consistent with every
-    # other store on this same physical database.
-    assert default_store.database_namespace == "prod-db.internal:5432/querysource"
+    # ...but neither is silently promoted to "the default": the configured
+    # public.queries is missing, so the default is an explicit unavailable
+    # store, never public by substitution nor a tenant by catalog order.
+    with pytest.raises(TenantError) as exc_info:
+        registry.resolve(None)
+    assert exc_info.value.error_code == "tenant_store_unavailable"
+    # Literal public still resolves to literal public, on the real namespace.
+    literal = registry.resolve("public")
+    assert literal.schema == "public" and literal.contract == "legacy"
+    assert literal.database_namespace == "prod-db.internal:5432/querysource"
+
+
+def _catalog_conn(tables):
+    """Catalog double: ``tables`` is a list of (schema, table, extra_columns)."""
+
+    class MockConn:
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
+
+        async def query(self, sentence: str):
+            if "information_schema.columns" in sentence:
+                return (
+                    [
+                        (schema, table, col, "text", "NO")
+                        for schema, table, extra in tables
+                        for col in ("query_slug", *extra)
+                    ],
+                    None,
+                )
+            return ([(schema, table, "BASE TABLE") for schema, table, _ in tables], None)
+
+
+    return MockConn()
+
+
+@pytest.mark.asyncio
+async def test_configured_custom_default_and_public_stay_distinct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom configured schema/table is the default; public.queries stays literal public."""
+    from querysource.models import QueryModel
+
+    monkeypatch.setattr(QueryModel.Meta, "schema", "legacy_qs")
+    monkeypatch.setattr(QueryModel.Meta, "name", "saved_queries")
+    conn = _catalog_conn(
+        [
+            ("legacy_qs", "saved_queries", ("program_slug",)),
+            ("public", "queries", ("program_slug",)),
+            ("tenant1", "queries", ()),
+        ]
+    )
+    registry = TenantRegistry()
+    await registry.discover(conn, allowlist=[])  # empty tenant allowlist
+
+    default = registry.resolve(None)
+    assert (default.schema, default.table, default.contract) == ("legacy_qs", "saved_queries", "legacy")
+    literal_public = registry.resolve("public")
+    assert (literal_public.schema, literal_public.table) == ("public", "queries")
+    assert literal_public != default
+    # Empty allowlist keeps the configured physical store and excludes tenants.
+    assert [(s.schema, s.table) for s in registry.stores()] == [("legacy_qs", "saved_queries")]
+
+    registry_all = TenantRegistry()
+    await registry_all.discover(conn, allowlist=None)
+    by_schema = {s.schema: s for s in registry_all.stores()}
+    assert by_schema["public"].contract == "legacy"
+    assert by_schema["tenant1"].contract == "tenant"
+    # A schema selector addresses that schema's ``queries`` table only.
+    assert registry_all.resolve("tenant1").table == "queries"
+    with pytest.raises(TenantError):
+        registry_all.resolve("legacy_qs")
+
+
+@pytest.mark.asyncio
+async def test_missing_configured_table_is_unavailable_not_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing configured table never selects public or a tenant."""
+    from querysource.models import QueryModel
+
+    monkeypatch.setattr(QueryModel.Meta, "schema", "legacy_qs")
+    monkeypatch.setattr(QueryModel.Meta, "name", "saved_queries")
+    registry = TenantRegistry()
+    await registry.discover(
+        _catalog_conn([("public", "queries", ("program_slug",)), ("tenant1", "queries", ())])
+    )
+    with pytest.raises(TenantError) as exc_info:
+        registry.resolve(None)
+    assert exc_info.value.error_code == "tenant_store_unavailable"
+    assert registry.resolve("public").table == "queries"
+
+    empty = TenantRegistry()
+    await empty.discover(_catalog_conn([]))
+    with pytest.raises(TenantError):
+        empty.resolve(None)
+    assert any("configured default" in d["reason"] for d in empty.diagnostics())
+
+
+@pytest.mark.asyncio
+async def test_never_discovered_registry_keeps_legacy_fallback() -> None:
+    """A bare registry (scheduler bootstrap) keeps the synthetic public.queries fallback."""
+    store = TenantRegistry().resolve(None)
+    assert (store.schema, store.table, store.contract) == ("public", "queries", "legacy")
