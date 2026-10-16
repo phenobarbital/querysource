@@ -168,6 +168,20 @@ def _as_mapping(value: Any) -> dict | None:
     return dict(value) if isinstance(value, Mapping) else None
 
 
+def _anchor_of(schedule: Mapping[str, Any]) -> datetime | None:
+    """Return the persisted anchor (``start_date``) of an interval-style schedule, if any."""
+    value = schedule.get("start_date")
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
 def _iso(value: Any) -> str | None:
     if value is None:
         return None
@@ -296,6 +310,7 @@ class ScheduleHandoffCoordinator:
         self.heartbeat_ttl_seconds = heartbeat_ttl_seconds
         self._trigger_parser = trigger_parser
         self._clock = clock or utcnow
+        self._mirror: Any = None
 
     # -- readiness (read-only) -----------------------------------------------------------
 
@@ -423,14 +438,20 @@ class ScheduleHandoffCoordinator:
         max_instances: int = 1,
         coalesce_missed: bool = True,
         misfire_grace_seconds: int | None = None,
+        observed_paused: bool | None = None,
+        flag_trigger_change: bool = True,
     ) -> dict[str, Any]:
         """Create (once) the durable state of one owner/slug/kind and return it.
 
         Serialized per owner/slug/kind by a transaction-scoped advisory lock, so
         several processes backfilling at startup converge on a single row that
         keeps the first persisted anchor/cursor (it is never recomputed from now).
-        An existing row whose trigger or paused state disagrees with the caller's
-        is flagged ``mirror_conflict`` instead of being silently overwritten.
+        An existing row whose trigger definition disagrees with the caller's — or,
+        when ``observed_paused`` is given, whose paused state does — is flagged
+        ``mirror_conflict`` instead of being silently overwritten. (A starting
+        process has no paused opinion: it passes ``None`` and durable state wins. The
+        saved-definition bootstrap passes ``flag_trigger_change=False``: there a changed
+        trigger is an ordinary save the caller applies, not a conflicting mirror.)
         """
         if kind not in SCHEDULE_KINDS:
             raise ValueError(f"Unknown schedule kind: {kind!r}")
@@ -459,7 +480,8 @@ class ScheduleHandoffCoordinator:
         )
         state = _row_dict(existing)
         same_trigger = _canonical(state.get("trigger_spec")) == _canonical(dict(trigger_spec))
-        if (not same_trigger or bool(state.get("paused")) != paused) and not (
+        paused_differs = observed_paused is not None and bool(state.get("paused")) != observed_paused
+        if ((not same_trigger and flag_trigger_change) or paused_differs) and not (
             state.get("trigger_spec") or {}
         ).get("mirror_conflict"):
             flagged = {**(state.get("trigger_spec") or {}), "mirror_conflict": True}
@@ -650,6 +672,174 @@ class ScheduleHandoffCoordinator:
                 except Exception:  # noqa: BLE001 - never mask the original error
                     logger.exception("Rollback failed while preparing move %s", operation_id)
                 raise
+
+    # -- bootstrap / sync of durable schedule state -------------------------------------------
+
+    def attach_mirror(self, mirror: Any) -> None:
+        """Register the local scheduler (``QSScheduler``) whose APScheduler jobs mirror durable state."""
+        self._mirror = mirror
+
+    async def load_all_states(self, conn: Any) -> list[dict[str, Any]]:
+        """Read every durable schedule row (used by the mirror poller)."""
+        rows = await conn.fetch_all("SELECT * FROM management.qs_schedule_state ORDER BY logical_schedule_id")
+        return [_row_dict(row) for row in rows or []]
+
+    async def bootstrap_row(
+        self, owner: ScheduleOwner, row: Mapping[str, Any] | None, *, default_timezone: str = "UTC"
+    ) -> dict[str, dict[str, Any]]:
+        """Persist/refresh the durable state of every schedule of one definition (serialized).
+
+        For a definition seen for the first time the existing trigger anchor and the next
+        unclaimed fire time are persisted — an interval without a ``start_date`` is anchored
+        once, here, and never recomputed from a later migration time. A definition whose
+        schedule configuration changed (an ordinary save) bumps ``config_revision``, replaces
+        the trigger and re-derives the cursor. Schedules that disappeared are disabled.
+        ``row is None`` (definition deleted/moved away) disables everything of this owner.
+
+        Returns:
+            ``{kind: state_row}`` for every schedule the definition currently declares.
+        """
+        from querysource.conf import QS_SCHEDULER_COALESCE, QS_SCHEDULER_MAX_INSTANCES
+
+        inventory = schedule_inventory(row or {}) if row is not None else []
+        now = self._clock()
+        result: dict[str, dict[str, Any]] = {}
+        async with await self.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                for item in inventory:
+                    definition = {"schedule_type": item["schedule_type"], "schedule": dict(item["schedule"] or {})}
+                    effective = {**definition, "schedule": dict(definition["schedule"])}
+                    if item["schedule_type"] == "interval" and "start_date" not in effective["schedule"]:
+                        effective["schedule"]["start_date"] = now.isoformat()
+                    trigger = self._parse(str(item["schedule_type"]), dict(effective["schedule"]))
+                    if trigger is None:
+                        logger.warning("Schedule %s for %s is not parseable; not coordinated", item["kind"], owner.slug)
+                        continue
+                    next_fire = trigger.get_next_fire_time(None, now)
+                    tz = (effective["schedule"].get("timezone") or default_timezone)
+                    spec = {**effective, "definition": definition}
+                    state = await self.ensure_schedule_state(
+                        conn, owner, item["kind"], trigger_spec=spec, timezone_name=str(tz),
+                        anchor_at=_anchor_of(effective["schedule"]) or now, next_fire_at=next_fire,
+                        max_instances=int(QS_SCHEDULER_MAX_INSTANCES), coalesce_missed=bool(QS_SCHEDULER_COALESCE),
+                        flag_trigger_change=False,
+                    )
+                    stored_definition = (state.get("trigger_spec") or {}).get("definition")
+                    if stored_definition is not None and _canonical(stored_definition) != _canonical(definition) \
+                            and not (state.get("trigger_spec") or {}).get("mirror_conflict"):
+                        state = await self._replace_config(conn, state, spec, str(tz), next_fire)
+                    elif not state["enabled"]:
+                        state = await self._set_enabled(conn, state, True)
+                    result[item["kind"]] = state
+                kinds = {item["kind"] for item in inventory if item["kind"] in result}
+                await self._disable_missing(conn, owner, kinds)
+                await conn.commit()
+            except BaseException:
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    logger.exception("Rollback failed while bootstrapping %s", owner.slug)
+                raise
+        return result
+
+    async def _replace_config(
+        self, conn: Any, state: Mapping[str, Any], spec: Mapping[str, Any], tz: str, next_fire: datetime | None
+    ) -> dict[str, Any]:
+        row = await conn.fetch_one(
+            "UPDATE management.qs_schedule_state SET trigger_spec = $2, timezone = $3, next_fire_at = $4, "
+            "enabled = true, config_revision = config_revision + 1, updated_at = now() "
+            "WHERE logical_schedule_id = $1::uuid RETURNING *",
+            _uuid(state["logical_schedule_id"]), dict(spec), tz, next_fire,
+        )
+        return _row_dict(row)
+
+    async def _set_enabled(self, conn: Any, state: Mapping[str, Any], enabled: bool) -> dict[str, Any]:
+        row = await conn.fetch_one(
+            "UPDATE management.qs_schedule_state SET enabled = $2, config_revision = config_revision + 1, "
+            "updated_at = now() WHERE logical_schedule_id = $1::uuid RETURNING *",
+            _uuid(state["logical_schedule_id"]), enabled,
+        )
+        return _row_dict(row)
+
+    async def _disable_missing(self, conn: Any, owner: ScheduleOwner, keep_kinds: set[str]) -> None:
+        for state in await self.load_schedule_states(conn, owner):
+            if state["kind"] not in keep_kinds and state["enabled"]:
+                await self._set_enabled(conn, state, False)
+
+    # -- reconciliation ---------------------------------------------------------------------
+
+    async def reconcile(self, operation_id: str) -> Mapping[str, Any]:
+        """Idempotently mirror the durable owner/generation locally; never redo the row move.
+
+        Valid only once the cutover is durable (``moved`` is true). The old source mirrors are
+        removed and the target mirrors installed from durable state by this process' scheduler;
+        other processes converge through the mirror poller, and every stale mirror is fenced by
+        generation at admission regardless. On success the operation completes and its
+        reservations are released; a failure leaves ``reconciling`` with
+        ``scheduler_sync='failed'`` so the SAME operation can be retried.
+        """
+        async with await self.connection_factory() as conn:
+            op = await self.load_operation(conn, operation_id)
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        if op["moved"] is not True or op["state"] in TERMINAL_STATES:
+            return op
+        slug = op["query_slug"]
+        source = ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug)
+        target = ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug)
+        async with await self.connection_factory() as conn:
+            scheduled = bool(await self.load_schedule_states(conn, target))
+        sync, message = "not_configured", None
+        if scheduled:
+            sync = "ok"
+            try:
+                if self._mirror is not None:
+                    await self._mirror.reconcile_owner_change(source, target)
+            except Exception as exc:  # noqa: BLE001 - recorded so the same operation can be retried
+                logger.exception("Mirror reconciliation failed for operation %s", operation_id)
+                sync, message = "failed", f"Scheduler mirror update failed: {exc}"
+        async with await self.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                if sync == "failed":
+                    op = await self.update_operation(
+                        conn, operation_id, state="reconciling", scheduler_sync="failed",
+                        error_code="move_scheduler_not_ready", message=message,
+                    )
+                else:
+                    await self.set_gate(conn, [target], "open", None)
+                    await self.release_reservations(conn, operation_id)
+                    op = await self.update_operation(
+                        conn, operation_id, state="completed", scheduler_sync=sync, error_code=None, message=None
+                    )
+                await conn.commit()
+            except BaseException:
+                await conn.rollback()
+                raise
+        return op
+
+    async def heartbeat_loop(self, interval_seconds: float = 30.0) -> None:
+        """Refresh this worker's heartbeat until cancelled (best effort; failures are logged)."""
+        while True:
+            try:
+                await self.register_worker()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - heartbeats are advisory
+                logger.warning("Scheduler worker heartbeat failed: %s", exc)
+            await asyncio.sleep(interval_seconds)
+
+    async def unregister_worker(self) -> None:
+        """Remove this worker's row on clean shutdown."""
+        try:
+            async with await self.connection_factory() as conn:
+                await conn.fetch_all(
+                    "DELETE FROM management.qs_scheduler_workers WHERE worker_id = $1 RETURNING worker_id",
+                    self.worker_id,
+                )
+        except Exception as exc:  # noqa: BLE001 - shutdown must not fail on this
+            logger.warning("Could not unregister scheduler worker %s: %s", self.worker_id, exc)
 
     # -- drain ---------------------------------------------------------------------------
 
@@ -881,8 +1071,10 @@ class ScheduleHandoffCoordinator:
 
 
 def _canonical(value: Any) -> str:
+    """Canonical text of a trigger *definition* (the anchored copy and conflict flag are excluded)."""
     base = dict(value or {})
     base.pop("mirror_conflict", None)
+    base = dict(base.get("definition", base))
     return json.dumps(base, sort_keys=True, default=str)
 
 
