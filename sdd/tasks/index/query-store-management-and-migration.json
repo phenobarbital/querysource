@@ -395,7 +395,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -405,8 +405,9 @@
       "parallelism_notes": "TASK-925: consume the interfaces/contract in querysource/services.py",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-927-api-contract-parity.md"
+      "completed_at": "2026-10-16T15:07:05+00:00",
+      "file": "sdd/tasks/completed/TASK-927-api-contract-parity.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-928",
