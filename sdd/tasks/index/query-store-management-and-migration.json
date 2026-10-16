@@ -76,7 +76,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -84,8 +84,9 @@
       "parallelism_notes": "Independent root task for protocol-fixtures; writes only the declared files and imports no output from another task.",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-912-protocol-fixtures.md"
+      "completed_at": "2026-10-16T04:39:12+00:00",
+      "file": "sdd/tasks/completed/TASK-912-protocol-fixtures.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-913",

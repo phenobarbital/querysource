@@ -155,4 +155,4 @@ def test_protocol_fixtures():
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. Added 14 move_* error codes with spec statuses to OWNERSHIP_STATUS (preexisting retained), optional TenantError.details (backward compatible), canonical v1 fixture tests/fixtures/query_move_contract_v1.json and invariant tests (5 passed).
