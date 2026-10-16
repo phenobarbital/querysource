@@ -57,7 +57,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -65,8 +65,9 @@
       "parallelism_notes": "Independent root task for configured-registry; writes only the declared files and imports no output from another task.",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-911-configured-registry.md"
+      "completed_at": "2026-10-16T04:38:34+00:00",
+      "file": "sdd/tasks/completed/TASK-911-configured-registry.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-912",

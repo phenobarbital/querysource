@@ -145,4 +145,4 @@ Use existing asyncdb connection/transaction/advisory-lock conventions. New integ
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. discover() now also scans QueryModel.Meta.schema/name, registers it as legacy regardless of allowlist/schema filters, default = that physical store; literal public.queries legacy and distinct; schema selector addresses schema.queries only; after discover a missing configured table makes resolve(None) raise tenant_store_unavailable (never-discovered bare registry keeps its synthetic fallback for scheduler bootstrap). Updated 4 existing registry tests whose expectations contradicted the spec (empty allowlist now keeps configured store; missing public default now unavailable). tests/tenants + tests/scheduler: 14 failures identical to the pre-change baseline (pre-existing).
