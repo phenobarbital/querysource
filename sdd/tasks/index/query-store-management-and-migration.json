@@ -36,7 +36,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -46,8 +46,9 @@
       "parallelism_notes": "TASK-909: serialize overlapping writer of querysource/repositories/definitions.py, tests/tenants/test_tenant_repository_reads.py",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-910-legacy-projections.md"
+      "completed_at": "2026-10-16T04:34:55+00:00",
+      "file": "sdd/tasks/completed/TASK-910-legacy-projections.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-911",

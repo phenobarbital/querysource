@@ -166,4 +166,4 @@ def test_legacy_projections():
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. Legacy list/write returns/schema/export keep stored program_slug; tenant projections exclude it; export pops run-as column and uses QueryModel for legacy. Tests: reads/writes/exports 16 passed.
