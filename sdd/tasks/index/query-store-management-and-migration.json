@@ -114,7 +114,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -125,8 +125,9 @@
       "parallelism_notes": "TASK-912: consume the interfaces/contract in querysource/tenant_errors.py; TASK-913: consume the interfaces/contract in docs/sql/query_move_control.sql",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-914-handoff-state.md"
+      "completed_at": "2026-10-16T04:44:30+00:00",
+      "file": "sdd/tasks/completed/TASK-914-handoff-state.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-915",
