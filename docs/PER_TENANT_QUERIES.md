@@ -474,6 +474,178 @@ These remain deployment gates that operators must verify independently.
   correctly SKIPPED in any environment without
   `QS_TEST_POSTGRES_DSN`/`QS_TEST_REDIS_URL` configured (see "Unverified
   production gates" below).
+## Explicit query moves and live schedule transfer (FEAT-176)
+
+**Invariant.** Saving keeps the current store; creating chooses a store; *moving* is a separate,
+explicit, single-definition operation. Existing definitions never move on deployment, load or an
+ordinary save, and a program label or an output-table schema is never a store selector.
+
+### Store catalog and selectors
+
+`GET /api/v1/management/query-stores` returns `{version: 1, data: [StoreDescriptor]}` where a
+descriptor is `{tenant, schema, table, contract, is_default}` — never a host, DSN, credential,
+diagnostic or run-as identity. The configured default (`QS_QUERIES_SCHEMA` / `QS_QUERIES_TABLE`,
+including a custom table name) is listed first with `tenant: null`; every other store is addressed
+by its exact schema (a schema selector addresses that schema's `queries` table). Literal `public`
+stays distinct from a custom default. If the configured default store is unavailable the catalog
+answers `503 tenant_store_unavailable` instead of substituting `public`. Listing a store does not
+grant permission to write to it.
+
+Move requests carry the selectors in the JSON body only: `tenant` (the source) and
+`destination_tenant` are both **required**, `null` meaning the configured default. Empty strings,
+extra options, selectors in the URL/query string and identical canonical stores (`move_same_store`)
+are rejected.
+
+### Endpoints
+
+| Route | Success | Notes |
+|---|---|---|
+| `POST /api/v1/management/queries/{slug}/move/preview` | `200 MovePlan` | read-only |
+| `POST /api/v1/management/queries/{slug}/move` | `202 MoveOperation` | durable; the same operation is returned for an authorized retry |
+| `GET /api/v1/management/query-moves/{operation_id}` | `200 MoveOperation` | pure read |
+| `POST /api/v1/management/query-moves/{operation_id}/reconcile` | `200` (final) / `202` (in progress) | repairs the SAME operation; never repeats the row move |
+
+Authentication and authorization are the **existing management boundary** (database permissions and
+the existing PBAC rules). There is no administrators-only restriction, no new role and no
+`slug:move` action; the numeric authenticated actor is used for audit attribution only and a client
+acknowledgement is never authorization. The existing `datasource:use` on `pg_admin` gate still applies
+when the definition is a scheduled write-capable multi-query. The shared contract fixture is
+`tests/fixtures/query_move_contract_v1.json` (sha256
+`f4d3bada54a48886537cc853f6588ab3d4b8b33bc3be0510a6852b6da710af51`); the frontend release gate consumes
+that file and it must not change without an explicit contract revision.
+
+### Preview, acknowledgements and blockers
+
+Preview resolves both owners, digests the **raw** persisted source row (including the legacy
+`program_slug` and the run-as column), the canonical endpoints, the schedule *configuration* revision
+and the deterministic blocker/warning inventory. The advancing schedule cursor and worker heartbeats
+are excluded, so waiting for the next scheduled run does not stale an unchanged plan.
+
+* External consumers are **always** reported (`consumer_review_required: true`): nothing is redirected,
+  re-point them yourself after the move. `acknowledge_external_consumers` is always required.
+* The runtime program is reported as `before`/`after`; `acknowledge_runtime_program_change` is required only
+  when the two differ. Tenant rows never persist `program_slug` (it is the schema at runtime); moving into
+  a legacy store sets it from the source runtime value.
+* **Explicit child pinning.** A saved child in a multi-query pipeline that omits `tenant` inherits its
+  parent's owner, so moving the parent would silently re-point it. Such children block the move
+  (`move_inherited_references`, with the exact `queries.<alias>.tenant` path) until you pin `tenant`
+  explicitly (`null` = configured default). Dynamic or unknown reference forms block with
+  `move_dependency_analysis_unsupported`; `query_raw` is never rewritten and SQL text is never scanned.
+* A destination that already holds the slug is `move_target_exists`; nothing is overwritten.
+* External/DWH schedulers that QuerySource does not coordinate block with `move_scheduler_unsupported`;
+  a schedule that cannot be parsed blocks with `move_schedule_invalid`. There is no silent manual fallback.
+* An **unscheduled** definition that still stores a run-as identity is `move_stale_run_as`; clear it with the
+  documented attributed repair procedure first (a temporary schedule is never simulated).
+
+### Control-plane DDL, backfill and rollout (required before live transfer)
+
+1. Deploy the control tables explicitly, once per database, as a privileged role:
+   `psql -f docs/sql/query_move_control.sql` (optionally `SET qs.runtime_role = '<role>'` first for the
+   least-privilege grants). QuerySource **never** runs this DDL at startup or on a request and the file
+   never touches any `queries` table. It is repeatable.
+2. **Backfill is automatic and serialized.** The upgraded scheduler creates one durable schedule row per
+   owner/slug/kind at startup (and on a sync), persisting the existing trigger anchor and next-unclaimed
+   cursor — an interval is never re-anchored to the migration time. Mirrors that disagree on paused state
+   or anchor are reported as `move_scheduler_not_ready`.
+3. **Roll the protocol out to ALL scheduler and scheduled-job worker processes** of the deployment (every
+   gunicorn worker, every pod). Heartbeats alone cannot prove that an old, unreported process is gone, so
+   readiness also requires the operator gate `QS_SCHEDULE_HANDOFF_ROLLOUT_CONFIRMED=true`, set only after
+   step 3 is complete. `QS_SCHEDULE_DEPLOYMENT_ID` scopes idempotency keys and rollout (default `default`).
+4. Without the tables, the gate or a compatible worker, scheduled moves answer `move_scheduler_not_ready`
+   **before** any dispatch is frozen. Unscheduled moves need none of this and work even with
+   `ENABLE_QS_SCHEDULER` off (the durable operation worker is started by the QuerySource lifecycle, not by
+   the scheduler).
+5. The shared PostgreSQL metadata service is a deployment requirement for coordinated dispatch: if it is
+   lost, admission fails **closed** for coordinated schedules (with notifications); running work is not
+   cancelled. No manual per-slug schedule deactivation or restart is required once readiness is met.
+
+### Operation lifecycle
+
+`preparing` → `draining` → `cutover` → `reconciling` → `completed`, or `failed`. `moved` is `false`
+(row move not committed), `true` (durable cutover committed) or `null` (acknowledgement indeterminate until
+journal recovery resolves it). **Only `state: completed` with `moved: true` is final success.** A `202`, a
+`cutover` or a `reconciling` operation with `moved: true` is a *committed move still transferring
+schedules* — never a rollback. `failed` always has `moved: false` and leaves the source active with its
+dispatch and cursor restored.
+
+1. *Freeze/drain.* New source occurrences stop in shared state and both identities are reserved. Runs already
+   admitted finish normally under their original owner and run-as — they are never cancelled or replayed.
+   Other slugs continue. Ordinary CRUD and schedule pause/resume/sync of the two identities answer
+   `409 move_in_progress` until recovery releases them (a stale source is never resurrected, a target is never
+   overwritten).
+2. *Cutover (one transaction).* Ordered exclusive locks, source `SELECT ... FOR UPDATE`, revalidation against
+   the confirmed plan, a plain target `INSERT` (no upsert), persisted readback, a source `DELETE` that must
+   hit exactly one row, the schedule owner/generation change and the journal record. All business fields and
+   creation provenance are preserved; `updated_by/at` are stamped with the mover.
+3. *Run-as.* The ORIGINAL stored run-as user is preserved — a move never rebinds execution to the user who
+   pressed Move. For a non-null run-as, a source `clear` and a target `set` audit event attributed to the mover
+   are written in the same transaction (no null-to-null events). Missing audit infrastructure blocks readiness
+   before either row is touched.
+4. *Schedules.* The logical schedule id, trigger, timezone, anchor, paused state, coalescing/misfire policy and
+   next-unclaimed cursor are kept; the generation is incremented so any stale source mirror skips even if it has
+   not removed its in-memory job. Occurrences due during the drain stay in the cursor and are handled **once** on
+   the destination under the existing misfire/coalescing policy; a paused schedule stays paused; the transfer
+   itself never runs an extra occurrence. APScheduler is only a wake-up mirror — due times are claimed once per
+   occurrence in the shared state by whichever process wakes first.
+5. *Reconcile.* The mirrors are updated and the operation completes. A failure after cutover leaves
+   `reconciling` with `scheduler_sync: failed`; retry reconcile (or let the worker do it) — it never copies or
+   deletes a row again.
+
+### Idempotent retry and recovery
+
+* `idempotency_key` (UUID, required) is bound to the deployment, the authenticated actor and the full confirmed
+  request. The same authorized request returns the same operation — so a lost HTTP response never needs a new key
+  and never moves the row twice; a different request under the same key is `move_idempotency_conflict`.
+* A background worker polls the durable journal (notifications are never the only delivery path). Operations are
+  resumed under an expiring lease; the lease only serializes orchestration — it never proves a run finished and
+  never permits repeating a committed cutover or replaying a claimed attempt. Unfinished operations are recovered
+  at startup **before** the scheduler startup hook enables dispatch; the shared gate keeps affected schedules
+  fenced until then.
+* **Lost COMMIT acknowledgement.** The journal row is part of the cutover transaction, so `moved: true` proves the
+  commit. While the cutover transaction still holds its locks the outcome is reported as `move_outcome_unknown`
+  (`503`) — a connection error is never read as a rollback; poll or retry the same operation. Once the locks are
+  gone and `moved` is still `null`, the attempt provably did not commit and the operation returns to `draining`.
+* **Unknown remote effects.** A run whose worker died before recording an outcome is marked `unknown`; the drain
+  stays pending with an actionable message and an operator must reconcile that attempt. It is never retried
+  automatically at the destination. This protocol gives **one admission per scheduled occurrence**; it does not
+  promise exactly-once external effects after a process dies mid-query.
+* An invalidated delegated identity or revoked scheduled-output grant found at cutover fails the operation
+  *before* any row changes (`move_stale_run_as`), restoring source dispatch.
+
+### Rollback and disablement
+
+* Before cutover a failure is automatically rolled back (`failed`, `moved: false`); nothing needs undoing.
+* After a committed cutover there is no automatic reverse move: if the destination is wrong, run a *new* explicit
+  move in the opposite direction (it is a normal preview/submit with its own idempotency key).
+* To disable live transfer: leave `QS_SCHEDULE_HANDOFF_ROLLOUT_CONFIRMED` unset/false (scheduled moves answer
+  `move_scheduler_not_ready`; running operations finish or stay recoverable). The control tables may remain
+  deployed; dropping the `management` control tables is only safe with no unfinished operation and no scheduler
+  running the upgraded protocol. Do not run old and upgraded scheduler processes together while a move is open.
+* Consumers that call the old store must be re-pointed manually; QuerySource installs no redirect or fallback.
+
+### Verification evidence (disposable only)
+
+Everything below runs against a disposable PostgreSQL (`initdb` binaries on the path, or an explicit
+`QS_TEST_PG_DSN`); no business table, client query or production database is touched, and no stored
+query/pipeline is executed as a verification step.
+
+```bash
+pytest tests/tenants/test_handoff_state.py tests/tenants/test_handoff_admission.py \
+       tests/tenants/test_live_schedule_handoff.py tests/tenants/test_handoff_scheduler_mirrors.py \
+       tests/tenants/test_handoff_scheduler_controls.py tests/tenants/test_query_moves.py \
+       tests/tenants/test_query_move_idempotency.py tests/tenants/test_query_move_recovery.py \
+       tests/tenants/test_query_move_http.py tests/tenants/test_query_move_contract.py \
+       tests/tenants/test_query_move_lifecycle.py tests/tenants/test_query_store_catalog.py \
+       tests/integration/test_query_moves_postgres.py \
+       tests/integration/test_live_schedule_handoff_postgres.py
+```
+
+These cover two real scheduler processes racing the same due occurrence and a transfer, an admitted source run
+held through the drain, crashes before freeze/during drain/after cutover, lost COMMIT acknowledgement (before
+and after), stale mirrors, missed notifications, control-pool exhaustion, query/multi/cache kinds, same slug
+across stores, original run-as audit, and fault injection at insert/readback/delete/commit. Production rollout,
+all-process protocol upgrade and the operator gate remain deployment steps that this repository cannot verify.
+
 ## OneDrive source for MultiQS (FEAT-159)
 
 `OneDriveSource` downloads one CSV/Excel file from OneDrive. Install the extra with
