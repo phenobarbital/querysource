@@ -767,6 +767,86 @@ class ScheduleHandoffCoordinator:
             if state["kind"] not in keep_kinds and state["enabled"]:
                 await self._set_enabled(conn, state, False)
 
+    # -- durable desired-state controls (pause / resume / removal) --------------------------
+
+    async def find_reservation(self, conn: Any, owners: Sequence[ScheduleOwner]) -> dict[str, Any] | None:
+        """Return the unfinished move that reserves any of the given canonical identities."""
+        for owner in owners:
+            row = await conn.fetch_one(
+                "SELECT operation_id, role FROM management.qs_move_reservations WHERE namespace_id = $1 "
+                "AND schema_name = $2 AND table_name = $3 AND query_slug = $4",
+                *owner.as_tuple(),
+            )
+            if row is not None:
+                return _row_dict(row)
+        return None
+
+    async def assert_not_moving(self, owners: Sequence[ScheduleOwner]) -> None:
+        """Reject a write to an identity reserved by an unfinished move.
+
+        Raises:
+            TenantError: ``move_in_progress`` (409) while any identity is reserved.
+        """
+        async with await self.connection_factory() as conn:
+            held = await self.find_reservation(conn, owners)
+        if held is not None:
+            raise TenantError(
+                f"Query {owners[0].slug!r} is being moved (operation {held['operation_id']}); retry when it finishes",
+                error_code="move_in_progress",
+            )
+
+    async def set_desired(
+        self, logical_schedule_id: str, *, paused: bool | None = None, enabled: bool | None = None
+    ) -> dict[str, Any] | None:
+        """Persist a desired-state change (pause/resume/removal) of one logical schedule.
+
+        The change is refused with ``move_in_progress`` while the owner is reserved by a move or
+        its shared dispatch gate is frozen, so a local control can never bypass a frozen
+        generation. ``config_revision`` advances only when the desired state actually changes
+        (never on ordinary cursor advancement). Returns ``None`` for an unknown schedule.
+        """
+        async with await self.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                row = await conn.fetch_one(
+                    "SELECT * FROM management.qs_schedule_state WHERE logical_schedule_id = $1::uuid FOR UPDATE",
+                    _uuid(logical_schedule_id),
+                )
+                if row is None:
+                    await conn.rollback()
+                    return None
+                state = _row_dict(row)
+                owner = ScheduleOwner(
+                    state["owner_namespace"], state["owner_schema"], state["owner_table"], state["query_slug"]
+                )
+                held = await self.find_reservation(conn, [owner])
+                if held is not None or state.get("dispatch_gate") == "frozen":
+                    await conn.rollback()
+                    raise TenantError(
+                        f"Query {owner.slug!r} is being moved; its schedule cannot be changed right now",
+                        error_code="move_in_progress",
+                    )
+                new_paused = state["paused"] if paused is None else bool(paused)
+                new_enabled = state["enabled"] if enabled is None else bool(enabled)
+                if new_paused != state["paused"] or new_enabled != state["enabled"]:
+                    row = await conn.fetch_one(
+                        "UPDATE management.qs_schedule_state SET paused = $2, enabled = $3, "
+                        "config_revision = config_revision + 1, updated_at = now() "
+                        "WHERE logical_schedule_id = $1::uuid RETURNING *",
+                        _uuid(logical_schedule_id), new_paused, new_enabled,
+                    )
+                    state = _row_dict(row)
+                await conn.commit()
+                return state
+            except TenantError:
+                raise
+            except BaseException:
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    logger.exception("Rollback failed while changing schedule %s", logical_schedule_id)
+                raise
+
     # -- reconciliation ---------------------------------------------------------------------
 
     async def reconcile(self, operation_id: str) -> Mapping[str, Any]:

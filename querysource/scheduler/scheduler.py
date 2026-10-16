@@ -137,6 +137,9 @@ class QSScheduler:
     Gated behind ENABLE_QS_SCHEDULER config flag.
     """
 
+    # Class-level default so an instance built without ``__init__`` stays uncoordinated.
+    _coordinator: ScheduleHandoffCoordinator | None = None
+
     def __init__(self, loop: asyncio.AbstractEventLoop = None):
         self.logger = logger
         self._loop = loop
