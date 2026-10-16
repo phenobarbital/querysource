@@ -11,6 +11,7 @@ merely waiting for the next scheduled run never stales an unchanged preview.
 import hashlib
 import json
 import re
+import uuid
 from collections.abc import Mapping
 from typing import Any
 
@@ -20,6 +21,9 @@ from querysource.repositories.definitions import DefinitionRepository
 from querysource.scheduler.handoff import (
     ScheduleHandoffCoordinator,
     ScheduleOwner,
+    _iso,
+    _row_dict,
+    _uuid,
     is_default_store,
     selector_for,
 )
@@ -339,3 +343,190 @@ class QueryMoveService:
             "schedules": inspection["schedules"],
             "handoff_ready": bool(inspection["handoff_ready"]),
         }
+
+    # -- submission ----------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_key(idempotency_key: Any) -> str:
+        try:
+            if not isinstance(idempotency_key, (str, uuid.UUID)):
+                raise ValueError("not a string")
+            return str(uuid.UUID(str(idempotency_key)))
+        except ValueError as exc:
+            raise TenantError(
+                "idempotency_key must be a UUID", error_code="move_validation_failed"
+            ) from exc
+
+    @staticmethod
+    def _physical(store: QueryStore) -> list[str]:
+        return [store.database_namespace, store.schema, store.table]
+
+    def request_digest(
+        self, source: QueryIdentity, destination: QueryStore, plan_revision: str, acknowledgements: Mapping[str, bool]
+    ) -> str:
+        """Digest of the full confirmed request (never of the idempotency key itself)."""
+        return hashlib.sha256(
+            _canonical_json(
+                {
+                    "slug": source.slug,
+                    "source": self._physical(source.store),
+                    "destination": self._physical(destination),
+                    "plan_revision": plan_revision,
+                    "acknowledgements": sorted(k for k, v in acknowledgements.items() if v is True),
+                }
+            ).encode()
+        ).hexdigest()
+
+    def operation_view(self, op: Mapping[str, Any]) -> dict[str, Any]:
+        """Render a journal row as the ``MoveOperation`` payload (no internals, no secrets)."""
+        def store_of(prefix: str) -> QueryStore:
+            return QueryStore(
+                op[f"{prefix}_namespace"], op[f"{prefix}_schema"], op[f"{prefix}_table"],
+                op[f"{prefix}_contract"], frozenset(),
+            )
+
+        view: dict[str, Any] = {
+            "version": PLAN_VERSION,
+            "operation_id": str(op["operation_id"]),
+            "source": self.descriptor(store_of("source")),
+            "destination": self.descriptor(store_of("target")),
+            "query_slug": op["query_slug"],
+            "state": op["state"],
+            "moved": op["moved"],
+            "scheduler_sync": op["scheduler_sync"],
+            "updated_at": _iso(op["updated_at"]),
+        }
+        if op.get("error_code"):
+            view["error_code"] = op["error_code"]
+        if op.get("message"):
+            view["message"] = op["message"]
+        return view
+
+    async def _find_by_key(self, conn: Any, actor: int, key: str) -> dict[str, Any] | None:
+        row = await conn.fetch_one(
+            "SELECT * FROM management.qs_query_moves WHERE deployment_id = $1 AND actor_id = $2 "
+            "AND idempotency_key = $3::uuid",
+            self.coordinator.deployment_id, actor, _uuid(key),
+        )
+        return _row_dict(row) if row else None
+
+    def _replay(self, existing: Mapping[str, Any], digest: str) -> dict[str, Any]:
+        if existing["request_digest"] != digest:
+            raise TenantError(
+                "This idempotency key was already used for a different move request",
+                error_code="move_idempotency_conflict",
+            )
+        return self.operation_view(existing)
+
+    async def move(
+        self,
+        source: QueryIdentity,
+        destination: QueryStore,
+        *,
+        plan_revision: str,
+        idempotency_key: str,
+        actor: int,
+        acknowledgements: Mapping[str, bool],
+        request_info: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any]:
+        """Reserve (or return) the durable operation for one confirmed move request.
+
+        The key is bound to deployment + authenticated actor; the same authorized request
+        returns the SAME operation (a lost HTTP response never causes a new key or a second row
+        migration), a different request under the same key is ``move_idempotency_conflict``.
+        A new operation is only created after the preview is re-run: concrete blockers
+        (source/collision/readiness/dependency) take precedence over the generic
+        ``move_plan_stale``; required acknowledgements are then enforced exactly. Both
+        canonical identities are reserved in one transaction (a database primary key makes
+        overlapping/opposite-direction moves collide). Nothing is moved here: a bounded
+        worker advances the operation. ``request_info`` is accepted for audit context but is
+        deliberately not persisted (no client addresses or headers in the journal).
+
+        Raises:
+            TenantError: ``move_validation_failed``, ``move_idempotency_conflict``, any preview
+                blocker code, ``move_plan_stale``, ``move_acknowledgement_required`` or
+                ``move_in_progress``.
+        """
+        key = self._parse_key(idempotency_key)
+        if not isinstance(actor, int) or isinstance(actor, bool) or actor <= 0:
+            raise TenantError("A numeric authenticated actor is required", error_code="move_validation_failed")
+        if not isinstance(plan_revision, str) or not plan_revision:
+            raise TenantError("plan_revision is required", error_code="move_validation_failed")
+        if not isinstance(acknowledgements, Mapping):
+            raise TenantError("acknowledgements must be a mapping", error_code="move_validation_failed")
+        digest = self.request_digest(source, destination, plan_revision, acknowledgements)
+
+        async with await self.coordinator.connection_factory() as conn:
+            existing = await self._find_by_key(conn, actor, key)
+        if existing is not None:
+            return self._replay(existing, digest)
+
+        plan = await self.preview(source, destination, actor=actor)
+        if plan["blockers"]:
+            first = plan["blockers"][0]
+            raise TenantError(first["message"], error_code=first["code"], details={"blockers": plan["blockers"]})
+        if plan["plan_revision"] != plan_revision:
+            raise TenantError("The preview is out of date; review a fresh plan", error_code="move_plan_stale")
+        missing = [name for name in self.required_acknowledgements(plan) if acknowledgements.get(name) is not True]
+        if missing:
+            raise TenantError(
+                "Required acknowledgements are missing: " + ", ".join(missing),
+                error_code="move_acknowledgement_required",
+                details={"required": self.required_acknowledgements(plan)},
+            )
+
+        src_owner = ScheduleOwner.from_store(source.store, source.slug)
+        dst_owner = ScheduleOwner.from_store(destination, source.slug)
+        async with await self.coordinator.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                row = await conn.fetch_one(
+                    "INSERT INTO management.qs_query_moves (deployment_id, actor_id, idempotency_key, "
+                    "request_digest, query_slug, source_namespace, source_schema, source_table, source_contract, "
+                    "target_namespace, target_schema, target_table, target_contract, plan_snapshot, state, moved) "
+                    "VALUES ($1,$2,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'preparing',false) "
+                    "ON CONFLICT (deployment_id, actor_id, idempotency_key) DO NOTHING RETURNING *",
+                    self.coordinator.deployment_id, actor, _uuid(key), digest, source.slug,
+                    *src_owner.as_tuple()[:3], source.store.contract,
+                    *dst_owner.as_tuple()[:3], destination.contract, dict(plan),
+                )
+                if row is None:  # a concurrent submission of the same key won the race
+                    existing = await self._find_by_key(conn, actor, key)
+                    await conn.rollback()
+                    return self._replay(existing, digest)
+                op = _row_dict(row)
+                for role, owner in (("source", src_owner), ("target", dst_owner)):
+                    reserved = await conn.fetch_one(
+                        "INSERT INTO management.qs_move_reservations (namespace_id, schema_name, table_name, "
+                        "query_slug, operation_id, role) VALUES ($1,$2,$3,$4,$5::uuid,$6) "
+                        "ON CONFLICT DO NOTHING RETURNING query_slug",
+                        *owner.as_tuple(), _uuid(op["operation_id"]), role,
+                    )
+                    if reserved is None:
+                        await conn.rollback()
+                        raise TenantError(
+                            f"Another move already reserves {source.slug!r} in this source or destination",
+                            error_code="move_in_progress",
+                        )
+                await conn.commit()
+            except TenantError:
+                raise
+            except BaseException:
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    logger.exception("Rollback failed while reserving a move for %s", source.slug)
+                raise
+        return self.operation_view(op)
+
+    async def status(self, operation_id: str) -> Mapping[str, Any]:
+        """Return the persisted operation without mutating it (caller reauthorizes)."""
+        try:
+            op_id = _uuid(operation_id)
+        except (ValueError, AttributeError) as exc:
+            raise TenantError("operation_id must be a UUID", error_code="move_validation_failed") from exc
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, str(op_id))
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        return self.operation_view(op)
