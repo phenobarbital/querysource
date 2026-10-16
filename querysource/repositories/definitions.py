@@ -36,6 +36,8 @@ from querysource.types.validators import Entity
 _DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 200
 _DEFAULT_SORT_FIELD = "updated_at"
+# Established QueryModel default, applied only when a legacy row is inserted.
+_LEGACY_DEFAULT_PROGRAM = "default"
 
 # Every persistence column a tenant-contract store may project/filter/sort on.
 # program_slug is never a member here: a tenant-contract store never has that
@@ -208,7 +210,12 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
         persisted, legacy_program_slug = self._row_to_persisted(row, store)
-        revision = definition_revision(persisted)
+        # Legacy program edits change query meaning, so the raw stored value
+        # participates in the revision. Tenant program is runtime-only.
+        if store.contract == "legacy":
+            revision = definition_revision({**persisted, "program_slug": legacy_program_slug})
+        else:
+            revision = definition_revision(persisted)
         runtime = self._runtime_model(persisted, store, legacy_program_slug)
         return LoadedDefinition(identity=identity, runtime=runtime, revision=revision)
 
@@ -346,6 +353,50 @@ class DefinitionRepository:
 
     # -- mutation methods ----------------------------------------------------------
 
+    # -- write-contract helpers ----------------------------------------------------
+
+    @staticmethod
+    def _legacy_program_slug(data: Mapping[str, Any]) -> str | None:
+        """Return a validated legacy ``program_slug`` from a payload, or None if omitted."""
+        if "program_slug" not in data:
+            return None
+        value = data["program_slug"]
+        if not isinstance(value, str) or not value:
+            raise TenantError(
+                "program_slug must be a non-empty string",
+                error_code="invalid_tenant",
+            )
+        return value
+
+    def _validate_write(self, store: QueryStore, data: Mapping[str, Any]) -> tuple[dict, str | None]:
+        """Validate a create/upsert payload with the selected store contract.
+
+        Tenant stores reject ``program_slug`` before any SQL (it is runtime
+        derived, never persisted). Legacy stores validate the shared fields
+        and carry the stored ``program_slug`` separately: None means omitted,
+        so callers preserve the existing value on conflict and apply the
+        established default only on insert.
+        """
+        payload = dict(data)
+        if store.contract == "tenant":
+            if "program_slug" in payload:
+                raise TenantError(
+                    "program_slug cannot be set on a tenant store",
+                    error_code="invalid_tenant",
+                )
+            program_slug = None
+        else:
+            program_slug = self._legacy_program_slug(payload)
+            payload.pop("program_slug", None)
+        persisted = TenantQueryDefinition(**payload).to_dict()
+        # Remove None values to let database defaults apply
+        persisted = {k: v for k, v in persisted.items() if v is not None}
+        # FEAT-151: an empty declaration never requires the migrated column.
+        if not persisted.get("columns_definition"):
+            persisted.pop("columns_definition", None)
+        return persisted, program_slug
+
+
     async def create(self, store: QueryStore, data: Mapping[str, Any]) -> Mapping[str, Any]:
         """Validate and insert persisted fields, retaining database constraints.
 
@@ -353,15 +404,10 @@ class DefinitionRepository:
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
         self._reject_run_as(data)
-        # Validate input data with TenantQueryDefinition (rejects program_slug)
-        validated = TenantQueryDefinition(**data)
-        persisted = validated.to_dict()
-
-        # Remove None values to let database defaults apply
-        persisted = {k: v for k, v in persisted.items() if v is not None}
-        # FEAT-151: an empty declaration never requires the migrated column.
-        if not persisted.get("columns_definition"):
-            persisted.pop("columns_definition", None)
+        persisted, program_slug = self._validate_write(store, data)
+        if store.contract == "legacy":
+            # Established QueryModel default applies on insert only.
+            persisted["program_slug"] = program_slug or _LEGACY_DEFAULT_PROGRAM
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
@@ -406,15 +452,10 @@ class DefinitionRepository:
         store = identity.store
         self._reject_run_as(data)
 
-        # Validate input data with TenantQueryDefinition (rejects program_slug)
-        validated = TenantQueryDefinition(**data)
-        persisted = validated.to_dict()
-
-        # Remove None values to let database defaults apply
-        persisted = {k: v for k, v in persisted.items() if v is not None}
-        # FEAT-151: an empty declaration never requires the migrated column.
-        if not persisted.get("columns_definition"):
-            persisted.pop("columns_definition", None)
+        persisted, program_slug = self._validate_write(store, data)
+        if store.contract == "legacy":
+            # Default only on insert; an omitted value is preserved on conflict.
+            persisted["program_slug"] = program_slug or _LEGACY_DEFAULT_PROGRAM
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
@@ -424,6 +465,8 @@ class DefinitionRepository:
         # Build ON CONFLICT DO UPDATE using query_slug as the primary key
         update_clauses = []
         for col in columns:
+            if col == "program_slug" and program_slug is None:
+                continue
             if col != "query_slug":
                 update_clauses.append(f"{quote_identifier(col)} = EXCLUDED.{quote_identifier(col)}")
 
@@ -489,10 +532,19 @@ class DefinitionRepository:
 
         self._reject_run_as(data)
 
-        # Reject program_slug (never allowed for tenants)
-        if "program_slug" in data:
+        # program_slug is runtime-derived on tenant stores; legacy stores keep
+        # their stored value (an unchanged or edited value never moves the row).
+        if store.contract == "tenant" and "program_slug" in data:
             raise TenantError(
                 "program_slug cannot be modified",
+                error_code="invalid_tenant",
+            )
+        if store.contract == "legacy":
+            self._legacy_program_slug(data)
+        unknown = set(data) - self._allowed_columns(store)
+        if unknown:
+            raise TenantError(
+                f"Unknown or immutable field(s): {sorted(unknown)!r}",
                 error_code="invalid_tenant",
             )
 
@@ -500,8 +552,8 @@ class DefinitionRepository:
         set_clauses = []
         values = []
         for key, value in data.items():
-            # Skip query_slug (identity) and program_slug (forbidden)
-            if key in ("query_slug", "program_slug"):
+            # Skip identity and the server-managed timestamp
+            if key in ("query_slug", "updated_at"):
                 continue
             set_clauses.append(f"{quote_identifier(key)} = ${len(values) + 1}")
             values.append(value)

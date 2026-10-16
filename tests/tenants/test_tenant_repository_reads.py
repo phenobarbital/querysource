@@ -269,3 +269,23 @@ async def test_schedulable_preserves_existing_eligibility_predicate() -> None:
     assert "attributes IS NOT NULL" in sql
     assert "cache_options IS NOT NULL" in sql
     assert '"tenant1"."queries"' in sql
+
+
+@pytest.mark.asyncio
+async def test_legacy_program_only_change_alters_revision() -> None:
+    """A program-only legacy edit changes the revision; tenant revision is unchanged."""
+    store = _legacy_store()
+    identity = QueryIdentity(store=store, slug="test_query")
+    revisions = []
+    for program in ("alpha", "beta"):
+        conn = _MockConn(rows=[_base_row(program_slug=program)])
+        repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+        revisions.append((await repo.get(identity)).revision)
+    assert revisions[0] != revisions[1]
+    # Same raw program → stable revision, and cache keys stay owner-qualified.
+    conn = _MockConn(rows=[_base_row(program_slug="alpha")])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    assert (await repo.get(identity)).revision == revisions[0]
+    assert result_cache_key(identity, revisions[0], "sum") != result_cache_key(
+        QueryIdentity(store=_tenant_store(), slug="test_query"), revisions[0], "sum"
+    )
