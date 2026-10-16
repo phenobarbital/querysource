@@ -331,7 +331,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -342,8 +342,9 @@
       "parallelism_notes": "TASK-922: consume the interfaces/contract in querysource/query_moves.py; TASK-923: consume the interfaces/contract in querysource/handlers/query_stores.py",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-924-management-http.md"
+      "completed_at": "2026-10-16T14:56:43+00:00",
+      "file": "sdd/tasks/completed/TASK-924-management-http.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-925",
