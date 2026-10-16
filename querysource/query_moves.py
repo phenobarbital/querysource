@@ -8,23 +8,28 @@ legacy program and the run-as column), the canonical endpoints, the schedule
 excludes the naturally advancing schedule cursor and worker heartbeats, so
 merely waiting for the next scheduled run never stales an unchanged preview.
 """
+import asyncio
 import hashlib
 import json
 import re
+import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from navconfig.logging import logging
 
-from querysource.repositories.definitions import DefinitionRepository
+from querysource.repositories.definitions import RUN_AS_COLUMN, DefinitionRepository
 from querysource.scheduler.handoff import (
+    TERMINAL_STATES,
     ScheduleHandoffCoordinator,
     ScheduleOwner,
     _iso,
     _row_dict,
     _uuid,
+    config_digest,
     is_default_store,
+    ordered_lock_keys,
     selector_for,
 )
 from querysource.tenant_errors import TenantError
@@ -33,7 +38,6 @@ from querysource.tenants import QueryIdentity, QueryStore, TenantRegistry
 logger = logging.getLogger("QS.QueryMoves")
 
 PLAN_VERSION = 1
-RUN_AS_COLUMN = "run_as_user_id"
 # A selector/slug that is not a literal string (templated, computed) cannot be proven safe.
 _DYNAMIC = re.compile(r"\{\{|\{%|\$\{|\$\(")
 ACK_CONSUMERS = "acknowledge_external_consumers"
@@ -171,11 +175,23 @@ class QueryMoveService:
         coordinator: ScheduleHandoffCoordinator,
         *,
         registry: TenantRegistry | None = None,
+        grant_validator: Callable[[int | None, Mapping[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind the repository boundary and the shared schedule coordinator."""
+        """Bind the repository boundary and the shared schedule coordinator.
+
+        Args:
+            repository: Saved-definition repository (connection factory and store policy).
+            coordinator: Shared live-transfer coordinator and journal helpers.
+            registry: Tenant registry (defaults to the repository's).
+            grant_validator: Optional ``async (run_as_user_id, raw_row)`` hook run inside the
+                cutover transaction; it must raise ``TenantError`` when the preserved delegated
+                identity or its scheduled-output grants are no longer valid. The background
+                worker has no request, so the management boundary supplies this check.
+        """
         self.repository = repository
         self.coordinator = coordinator
         self.registry = registry or repository.registry
+        self._grant_validator = grant_validator
 
     # -- helpers ---------------------------------------------------------------------
 
@@ -216,7 +232,17 @@ class QueryMoveService:
     # -- preview ----------------------------------------------------------------------
 
     async def preview(self, source: QueryIdentity, destination: QueryStore, *, actor: int) -> Mapping[str, Any]:
-        """Return the read-only ``MovePlan`` for moving one definition.
+        """Return the read-only ``MovePlan`` for moving one definition (see ``_build_plan``)."""
+        plan, _ = await self._build_plan(source, destination, actor=actor)
+        return plan
+
+    async def _build_plan(
+        self, source: QueryIdentity, destination: QueryStore, *, actor: int
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Build the ``MovePlan`` plus the internal facts a durable operation must re-verify.
+
+        The second element (raw source digest and schedule configuration revision) is only
+        ever stored in the immutable journal snapshot, never returned to clients.
 
         Raises:
             TenantError: ``move_same_store`` (400) for identical canonical stores,
@@ -327,7 +353,7 @@ class QueryMoveService:
                 }
             ).encode()
         ).hexdigest()
-        return {
+        plan = {
             "version": PLAN_VERSION,
             "source": self.descriptor(src_store),
             "destination": self.descriptor(destination),
@@ -343,6 +369,11 @@ class QueryMoveService:
             "schedules": inspection["schedules"],
             "handoff_ready": bool(inspection["handoff_ready"]),
         }
+        internal = {
+            "raw_sha256": hashlib.sha256(_canonical_json(raw).encode()).hexdigest(),
+            "schedule_revision": inspection["schedule_revision"],
+        }
+        return plan, internal
 
     # -- submission ----------------------------------------------------------------------
 
@@ -461,7 +492,7 @@ class QueryMoveService:
         if existing is not None:
             return self._replay(existing, digest)
 
-        plan = await self.preview(source, destination, actor=actor)
+        plan, internal = await self._build_plan(source, destination, actor=actor)
         if plan["blockers"]:
             first = plan["blockers"][0]
             raise TenantError(first["message"], error_code=first["code"], details={"blockers": plan["blockers"]})
@@ -488,7 +519,7 @@ class QueryMoveService:
                     "ON CONFLICT (deployment_id, actor_id, idempotency_key) DO NOTHING RETURNING *",
                     self.coordinator.deployment_id, actor, _uuid(key), digest, source.slug,
                     *src_owner.as_tuple()[:3], source.store.contract,
-                    *dst_owner.as_tuple()[:3], destination.contract, dict(plan),
+                    *dst_owner.as_tuple()[:3], destination.contract, {**plan, "_internal": internal},
                 )
                 if row is None:  # a concurrent submission of the same key won the race
                     existing = await self._find_by_key(conn, actor, key)
@@ -530,3 +561,390 @@ class QueryMoveService:
         if op is None:
             raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
         return self.operation_view(op)
+
+    # -- atomic cutover ------------------------------------------------------------------
+
+    _STAMPED = frozenset({"updated_at", "updated_by"})
+
+    @staticmethod
+    def _normalize(value: Any) -> Any:
+        """Comparable form of a column value (jsonb text and mappings compare equal)."""
+        if isinstance(value, (str, bytes)):
+            try:
+                loaded = json.loads(value)
+            except ValueError:
+                return value
+            return loaded if isinstance(loaded, (dict, list)) else value
+        return value
+
+    @staticmethod
+    def _param(value: Any, udt: str) -> Any:
+        """Bind value for a destination column (jsonb text is decoded so it is not double-encoded)."""
+        if udt in ("jsonb", "json") and isinstance(value, (str, bytes)):
+            try:
+                return json.loads(value)
+            except ValueError:
+                return value
+        return value
+
+    async def _destination_columns(self, conn: Any, store: QueryStore) -> dict[str, str]:
+        rows = await conn.fetch_all(
+            "SELECT column_name, udt_name FROM information_schema.columns "
+            "WHERE table_schema = $1 AND table_name = $2",
+            store.schema, store.table,
+        )
+        return {r["column_name"]: r["udt_name"] for r in rows or []}
+
+    def _insert_plan(
+        self, raw: Mapping[str, Any], dest: QueryStore, dest_cols: Mapping[str, str], program: Any, actor: int
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Columns/values for the plain destination INSERT, preserving every business field.
+
+        Tenant persistence omits ``program_slug``; moving into legacy sets it from the source
+        runtime value. ``updated_at``/``updated_by`` are stamped with the migration actor/time;
+        creation provenance (``created_*``) is preserved verbatim.
+        """
+        allowed = set(self.repository._allowed_columns(dest)) | {RUN_AS_COLUMN}
+        values: dict[str, Any] = {}
+        for name, value in raw.items():
+            if name == "program_slug":
+                continue
+            if name == RUN_AS_COLUMN and value is None:
+                continue
+            if name not in allowed:
+                raise TenantError(
+                    f"Source column {name!r} has no counterpart in the destination contract",
+                    error_code="move_validation_failed",
+                    details={"column": name},
+                )
+            values[name] = value
+        if dest.contract == "legacy":
+            values["program_slug"] = program
+        stamped = [c for c in self._STAMPED if c in dest_cols]
+        missing = sorted(c for c in values if c not in dest_cols)
+        if missing:
+            raise TenantError(
+                "Destination table lacks column(s): " + ", ".join(missing),
+                error_code="move_validation_failed",
+                details={"columns": missing},
+            )
+        values.pop("updated_at", None)
+        values.pop("updated_by", None)
+        if "updated_by" in stamped:
+            values["updated_by"] = actor
+        return values, stamped
+
+    async def _view_of(self, operation_id: str) -> dict[str, Any]:
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, operation_id)
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        return self.operation_view(op)
+
+    async def _fail_pre_cutover(self, op: Mapping[str, Any], error_code: str, message: str) -> None:
+        """Record a PROVEN pre-cutover failure: source dispatch is restored, no target row remains."""
+        slug = op["query_slug"]
+        owners = [
+            ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug),
+            ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug),
+        ]
+        async with await self.coordinator.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                await self.coordinator.set_gate(conn, owners, "open", None)
+                await self.coordinator.release_reservations(conn, str(op["operation_id"]))
+                await self.coordinator.update_operation(
+                    conn, str(op["operation_id"]), state="failed", moved=False,
+                    error_code=error_code, message=message[:500],
+                )
+                await conn.commit()
+            except BaseException:
+                await conn.rollback()
+                raise
+
+    async def _revert_to_draining(self, operation_id: str, message: str) -> None:
+        """Proven not-committed attempt that is still retryable: back to ``draining``, moved=false."""
+        async with await self.coordinator.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                await self.coordinator.update_operation(
+                    conn, operation_id, state="draining", moved=False, message=message[:500]
+                )
+                await conn.commit()
+            except BaseException:
+                await conn.rollback()
+                raise
+
+    async def resolve_cutover(self, operation_id: str) -> Mapping[str, Any]:
+        """Resolve an indeterminate cutover (``moved`` null) from the durable journal.
+
+        The journal row is part of the cutover transaction, so ``moved = true`` proves the
+        commit. While the cutover transaction still holds the identities' advisory locks the
+        outcome is genuinely unknown (``move_outcome_unknown``): a connection error is never
+        read as a rollback. Once both locks are free and the journal is still null the
+        transaction is gone and provably did not commit; the operation returns to
+        ``draining`` and may be retried — it can never produce a second row move.
+        """
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, operation_id)
+            if op is None:
+                raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+            if op["moved"] is not None or op["state"] in TERMINAL_STATES:
+                return self.operation_view(op)
+            slug = op["query_slug"]
+            owners = [
+                ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug),
+                ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug),
+            ]
+            await conn.transaction()
+            try:
+                for key in ordered_lock_keys(owners):
+                    if not await conn.fetchval("SELECT pg_try_advisory_xact_lock($1)", key, column=0):
+                        await conn.rollback()
+                        raise TenantError(
+                            "The cutover outcome is not yet known; retry the same operation",
+                            error_code="move_outcome_unknown",
+                        )
+                op = await self.coordinator.load_operation(conn, operation_id)
+                if op["moved"] is None:
+                    await self.coordinator.update_operation(
+                        conn, operation_id, state="draining", moved=False,
+                        message="A previous cutover attempt did not commit; it will be retried.",
+                    )
+                    op = await self.coordinator.load_operation(conn, operation_id)
+                await conn.commit()
+            except TenantError:
+                raise
+            except BaseException:
+                await conn.rollback()
+                raise
+        return self.operation_view(op)
+
+    async def cutover(
+        self, operation_id: str, *, lock_timeout_seconds: float = 30.0, poll_seconds: float = 0.25
+    ) -> Mapping[str, Any]:
+        """Move the row and the live schedule ownership in ONE transaction.
+
+        Valid for a drained operation (``draining``): the exclusive identity fences taken here
+        are the final proof that no admitted run is still active. On one connection and in one
+        transaction: ordered exclusive advisory locks, source ``SELECT ... FOR UPDATE``,
+        revalidation against the confirmed plan, a plain destination ``INSERT`` (no upsert),
+        persisted readback, a source ``DELETE`` that must affect exactly one row, run-as audit
+        events for a nonnull transfer, the durable schedule owner/generation change (the
+        logical id and cursor are kept) and the journal cutover record. Known pre-commit
+        failures roll back and are recorded as ``failed, moved=false``. An ambiguous COMMIT is
+        resolved from the same journal (``resolve_cutover``); it is never reported as a
+        rollback and never repeated. ``moved=true`` operations are returned unchanged.
+
+        Returns:
+            The ``MoveOperation`` view after the attempt.
+        """
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, operation_id)
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        if op["moved"] is True or op["state"] in TERMINAL_STATES:
+            return self.operation_view(op)
+        if op["state"] == "cutover" and op["moved"] is None:
+            resolved = await self.resolve_cutover(operation_id)
+            if resolved["state"] != "draining":
+                return resolved
+            async with await self.coordinator.connection_factory() as conn:
+                op = await self.coordinator.load_operation(conn, operation_id)
+        if op["state"] != "draining":
+            return self.operation_view(op)
+
+        # Durable "outcome indeterminate" marker BEFORE the transaction (committed on its own).
+        async with await self.coordinator.connection_factory() as conn:
+            await conn.transaction()
+            try:
+                op = await self.coordinator.update_operation(conn, operation_id, state="cutover", moved=None)
+                await conn.commit()
+            except BaseException:
+                await conn.rollback()
+                raise
+
+        conn_cm = await self.coordinator.connection_factory()
+        committed = False
+        async with conn_cm as conn:
+            await conn.transaction()
+            try:
+                result = await self._cutover_statements(conn, op, lock_timeout_seconds, poll_seconds)
+            except _NotReady as pending:
+                await self._rollback_quietly(conn, operation_id)
+                await self._revert_to_draining(operation_id, str(pending))
+                return await self._view_of(operation_id)
+            except BaseException as exc:  # noqa: BLE001 - classified below
+                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                    raise
+                if await self._rollback_quietly(conn, operation_id):
+                    code, message = self._classify(exc)
+                    await self._fail_pre_cutover(op, code, message)
+                    return await self._view_of(operation_id)
+                return await self._resolve_after_error(operation_id)
+            try:
+                await conn.commit()
+                committed = True
+            except BaseException:  # noqa: BLE001 - ambiguous acknowledgement
+                logger.warning("COMMIT acknowledgement lost for move %s; resolving from the journal", operation_id)
+        if committed:
+            return result
+        return await self._resolve_after_error(operation_id)
+
+    async def _resolve_after_error(self, operation_id: str) -> Mapping[str, Any]:
+        try:
+            return await self.resolve_cutover(operation_id)
+        except TenantError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - journal unreachable: honest unknown
+            raise TenantError(
+                "The cutover outcome could not be established; retry the same operation",
+                error_code="move_outcome_unknown",
+            ) from exc
+
+    async def _rollback_quietly(self, conn: Any, operation_id: str) -> bool:
+        """Roll back; True only when the rollback was acknowledged (a proven non-commit)."""
+        try:
+            await conn.rollback()
+            return True
+        except Exception:  # noqa: BLE001 - the caller resolves the outcome from the journal
+            logger.exception("Rollback failed for move %s", operation_id)
+            return False
+
+    @staticmethod
+    def _classify(exc: BaseException) -> tuple[str, str]:
+        if isinstance(exc, TenantError):
+            return exc.error_code, str(exc)
+        text = str(exc).lower()
+        if "duplicate key" in text or "unique" in text:
+            return "move_target_exists", "Destination already holds this slug; nothing was overwritten."
+        if "permission denied" in text:
+            return "move_validation_failed", "A database permission is missing for the move."
+        return "move_validation_failed", f"The move failed before cutover ({type(exc).__name__})."
+
+    async def _cutover_statements(
+        self, conn: Any, op: Mapping[str, Any], timeout: float, poll: float
+    ) -> dict[str, Any]:
+        """Everything inside the single cutover transaction (never commits)."""
+        operation_id = str(op["operation_id"])
+        slug = op["query_slug"]
+        src_owner = ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug)
+        dst_owner = ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug)
+        src = QueryStore(op["source_namespace"], op["source_schema"], op["source_table"], op["source_contract"], frozenset())
+        dst = QueryStore(op["target_namespace"], op["target_schema"], op["target_table"], op["target_contract"], frozenset())
+        snapshot = op["plan_snapshot"] or {}
+        internal = snapshot.get("_internal") or {}
+        actor = int(op["actor_id"])
+
+        deadline = time.monotonic() + timeout
+        for key in ordered_lock_keys([src_owner, dst_owner]):
+            while not await conn.fetchval("SELECT pg_try_advisory_xact_lock($1)", key, column=0):
+                if time.monotonic() >= deadline:
+                    raise _NotReady("Admitted runs have not finished; cutover will be retried.")
+                await asyncio.sleep(poll)
+        open_runs = await self.coordinator._open_run_ids(conn, [src_owner, dst_owner])
+        if open_runs:
+            raise _NotReady("Admitted run(s) with an unknown outcome must be reconciled by an operator.")
+
+        current = await self.coordinator.load_operation(conn, operation_id, for_update=True)
+        if current["moved"] is not None or current["state"] != "cutover":
+            raise _NotReady("The operation changed state concurrently.")
+
+        src_table = self.repository._qualified_table(src)
+        dst_table = self.repository._qualified_table(dst)
+        raw_row = await conn.fetch_one(f"SELECT * FROM {src_table} WHERE query_slug = $1 FOR UPDATE", slug)
+        if raw_row is None:
+            raise TenantError(f"Query not found: {slug!r}", error_code="query_not_found")
+        raw = dict(raw_row)
+        if hashlib.sha256(_canonical_json(raw).encode()).hexdigest() != internal.get("raw_sha256"):
+            raise TenantError("The source changed after the plan was confirmed", error_code="move_plan_stale")
+        states = await self.coordinator.load_schedule_states(conn, src_owner)
+        revision = (
+            hashlib.sha256(json.dumps(sorted(config_digest(st) for st in states)).encode()).hexdigest()
+            if states else None
+        )
+        if revision != internal.get("schedule_revision"):
+            raise TenantError("The schedule configuration changed after the plan was confirmed",
+                              error_code="move_plan_stale")
+        run_as = raw.get(RUN_AS_COLUMN)
+        if self._grant_validator is not None:
+            await self._grant_validator(run_as, raw)
+        if await conn.fetch_one(f"SELECT 1 AS present FROM {dst_table} WHERE query_slug = $1", slug) is not None:
+            raise TenantError("Destination already holds this slug", error_code="move_target_exists")
+        for leftover in await self.coordinator.load_schedule_states(conn, dst_owner):
+            if leftover["enabled"]:
+                raise TenantError("The destination identity already has an enabled schedule",
+                                  error_code="move_scheduler_not_ready")
+
+        dest_cols = await self._destination_columns(conn, dst)
+        if not dest_cols:
+            raise TenantError(f"Store table not available: {dst.schema}.{dst.table}",
+                              error_code="tenant_store_unavailable")
+        program = (snapshot.get("runtime_program") or {}).get("before")
+        values, stamped = self._insert_plan(raw, dst, dest_cols, program, actor)
+        names = list(values)
+        placeholders = [f"${i + 1}" for i in range(len(names))]
+        columns = [self._ident(n) for n in names]
+        if "updated_at" in stamped:
+            columns.append(self._ident("updated_at"))
+            placeholders.append("now()")
+        params = [self._param(values[n], dest_cols[n]) for n in names]
+        inserted = await conn.fetch_one(
+            f"INSERT INTO {dst_table} ({', '.join(columns)}) VALUES ({', '.join(placeholders)}) RETURNING *",
+            *params,
+        )
+        if inserted is None:
+            raise TenantError("The destination insert returned no row", error_code="move_validation_failed")
+
+        readback = await conn.fetch_one(f"SELECT * FROM {dst_table} WHERE query_slug = $1", slug)
+        if readback is None:
+            raise TenantError("The destination row could not be read back", error_code="move_validation_failed")
+        mismatched = [
+            n for n in names
+            if n not in self._STAMPED and self._normalize(readback.get(n)) != self._normalize(values[n])
+        ]
+        if mismatched:
+            raise TenantError(
+                "The destination row does not match the source: " + ", ".join(sorted(mismatched)),
+                error_code="move_validation_failed",
+            )
+
+        deleted = await conn.fetch_all(f"DELETE FROM {src_table} WHERE query_slug = $1 RETURNING query_slug", slug)
+        if len(deleted or []) != 1:
+            raise TenantError("The source delete did not affect exactly one row", error_code="move_validation_failed")
+
+        if run_as is not None:
+            for store, old, new, operation in ((src, run_as, None, "clear"), (dst, None, run_as, "set")):
+                await conn.fetch_one(
+                    f"INSERT INTO {self.repository._run_as_audit_table(store)} "
+                    "(query_slug, old_user_id, new_user_id, operation, changed_by, request_info) "
+                    "VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING audit_id",
+                    slug, old, new, operation, actor,
+                    json.dumps({"move_operation_id": operation_id}),
+                )
+
+        await conn.fetch_all(
+            "DELETE FROM management.qs_schedule_state WHERE owner_namespace = $1 AND owner_schema = $2 "
+            "AND owner_table = $3 AND query_slug = $4 RETURNING logical_schedule_id",
+            *dst_owner.as_tuple(),
+        )
+        await conn.fetch_all(
+            "UPDATE management.qs_schedule_state SET owner_namespace = $5, owner_schema = $6, owner_table = $7, "
+            "generation = generation + 1, dispatch_gate = 'frozen', gate_operation_id = $8::uuid, updated_at = now() "
+            "WHERE owner_namespace = $1 AND owner_schema = $2 AND owner_table = $3 AND query_slug = $4 "
+            "RETURNING logical_schedule_id",
+            *src_owner.as_tuple(), *dst_owner.as_tuple()[:3], _uuid(operation_id),
+        )
+        moved = await self.coordinator.update_operation(
+            conn, operation_id, state="cutover", moved=True, cutover_at=self.coordinator._clock(),
+            error_code=None, message=None,
+        )
+        return self.operation_view(moved)
+
+    @staticmethod
+    def _ident(name: str) -> str:
+        return '"' + name.replace('"', '""') + '"'
+
+
+class _NotReady(Exception):
+    """The cutover cannot start yet (runs still draining); the operation stays retryable."""

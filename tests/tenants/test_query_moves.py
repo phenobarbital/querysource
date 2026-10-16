@@ -21,6 +21,7 @@ from querysource.query_moves import (
     analyze_references,
     store_descriptor,
 )
+from querysource.repositories.definitions import RUN_AS_COLUMN
 from querysource.scheduler.handoff import ScheduleHandoffCoordinator, ScheduleOwner
 from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity
@@ -67,7 +68,7 @@ class _Repo:
 
 def _row(**over):
     base = {"query_slug": "s", "provider": "db", "attributes": {}, "program_slug": "prog", "is_cached": False,
-            "cache_options": {}, "query_raw": "SELECT 1", "run_as_user_id": None}
+            "cache_options": {}, "query_raw": "SELECT 1", RUN_AS_COLUMN: None}
     base.update(over)
     return base
 
@@ -220,7 +221,7 @@ async def test_revision_ignores_cursor_but_tracks_source_and_schedule_changes(pg
     rows[("public", "s")] = _row(attributes=SCHEDULED, program_slug="other")
     assert (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"] != first
     # Only the run-as column changed: the digest moves.
-    rows[("public", "s")] = _row(attributes=SCHEDULED, run_as_user_id=5)
+    rows[("public", "s")] = _row(attributes=SCHEDULED, **{RUN_AS_COLUMN: 5})
     changed = (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"]
     assert changed != first
 
@@ -236,11 +237,11 @@ async def test_external_scheduler_is_unsupported(pg_dsn) -> None:
 @pytest.mark.asyncio
 async def test_stale_unscheduled_run_as_is_separate_from_valid_scheduled_run_as(pg_dsn) -> None:
     await _reset(pg_dsn)
-    svc, _, coord = await _service(pg_dsn, {("public", "s"): _row(run_as_user_id=5)})
+    svc, _, coord = await _service(pg_dsn, {("public", "s"): _row(**{RUN_AS_COLUMN: 5})})
     plan = await svc.preview(_ident(), TENANT, actor=7)
     assert _codes(plan) == {"move_stale_run_as"}
 
-    rows = {("public", "s"): _row(attributes=SCHEDULED, run_as_user_id=5)}
+    rows = {("public", "s"): _row(attributes=SCHEDULED, **{RUN_AS_COLUMN: 5})}
     svc, _, coord = await _service(pg_dsn, rows)
     await coord.bootstrap_row(ScheduleOwner.from_store(LEGACY, "s"), rows[("public", "s")])
     plan = await svc.preview(_ident(), TENANT, actor=7)
