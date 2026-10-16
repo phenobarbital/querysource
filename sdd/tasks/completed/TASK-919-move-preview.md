@@ -163,4 +163,4 @@ This interface is created/extended by this task and consumed by its dependents; 
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. query_moves.py: QueryMoveService.preview (read-only MovePlan; explicit identities, raw source row digest incl. legacy program/run-as, collision blocker, reservation + coordinator readiness/inspect, schedule inventory without cursor/heartbeat in digest), analyze_references (inherited vs pinned vs explicit-null children, unknown/dynamic forms blocked with path, SQL never scanned), consumer warning always + runtime_program before/after, required_acknowledgements (program ack only if differs), stale unscheduled run-as vs valid scheduled run-as with audit-table readiness. Uses repository._fetch_row for the raw row (no new public persistence API). 13 tests pass (real PostgreSQL control plane, fake repository).
