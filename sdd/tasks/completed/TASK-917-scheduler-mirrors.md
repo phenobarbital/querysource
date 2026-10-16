@@ -168,4 +168,4 @@ This interface is created/extended by this task and consumed by its dependents; 
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker (resumed from WIP). handoff.py: bootstrap_row (serialized per owner/slug/kind, anchors persisted once, config change bumps config_revision, vanished schedules disabled), reconcile(operation_id) idempotent/retryable (scheduler_sync=failed keeps state reconciling), attach_mirror, heartbeat/unregister; ensure_schedule_state gained observed_paused/flag_trigger_change. scheduler.py: durable owner/generation consumed by register_slug/startup, fail-closed when bootstrap fails, mirror poller + reconcile_owner_change; APScheduler only wakes, admission via shared fence. 7 real-PostgreSQL tests pass.
