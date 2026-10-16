@@ -308,7 +308,7 @@ class QueryMoveService:
                             "The definition is unscheduled but still stores a run-as identity; clear it with "
                             "the attributed repair procedure before moving."
                         ),
-                        "path": RUN_AS_COLUMN,
+                        "path": "run_as",
                     }
                 )
             else:

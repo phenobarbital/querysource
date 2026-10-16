@@ -245,3 +245,139 @@ async def test_static_routes_win_over_the_broad_management_patterns() -> None:
         match = await app.router.resolve(type("R", (), {"method": method, "rel_url": __import__("yarl").URL(path),
                                                          "path": path, "host": "h"})())
         assert match.handler.__name__ == name, path
+
+
+# -- FEAT-176 TASK-927: real HTTP responses vs the frozen v1 fixture --------------------------------
+
+from pathlib import Path  # noqa: E402
+
+FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "query_move_contract_v1.json"
+PREVIEW = {"tenant": None, "destination_tenant": "wm_assembly"}
+
+
+async def _scenario(code, dsn):
+    """Provoke ``code`` through the real handler/service/PostgreSQL stack; return the HTTP response."""
+    await _reset(dsn)
+    handler = QueryMoveHandler()
+    rows = {("public", SLUG): _row()}
+    if code == "move_target_exists":
+        rows[("wm_assembly", SLUG)] = _row()
+    elif code == "move_stale_run_as":
+        rows[("public", SLUG)] = _row(scheduler_run_as_user_id=5)
+    elif code in ("move_inherited_references", "move_dependency_analysis_unsupported"):
+        raw = json.dumps({"queries": {"child": {"slug": "c"}}}) if code == "move_inherited_references" else "{nope"
+        rows[("public", SLUG)] = _row(provider="multi", query_raw=raw)
+    elif code == "move_scheduler_unsupported":
+        rows[("public", SLUG)] = _row(dwh=True, dwh_scheduler={"cron": "* * * * *"})
+    elif code in ("move_scheduler_not_ready", "move_schedule_invalid"):
+        rows[("public", SLUG)] = _row(attributes=SCHEDULED)
+    app, svc, repo, coord = await _app(dsn, rows)
+    if code == "move_schedule_invalid":
+        coord._trigger_parser = lambda t, s: None
+    if code == "move_same_store":
+        return await handler.preview(_Req(app, {"tenant": None, "destination_tenant": "public"}))
+    if code == "move_validation_failed":
+        return await handler.preview(_Req(app, {"tenant": None}))
+
+    async def submit(**over):
+        plan = await svc.preview(QueryIdentity(store=LEGACY, slug=SLUG), TENANT, actor=7)
+        return await handler.move(_Req(app, _move_body(plan, **over)))
+
+    if code == "move_acknowledgement_required":
+        return await submit(**{ACK_PROGRAM: False})
+    if code == "move_plan_stale":
+        return await submit(plan_revision="f" * 64)
+    if code == "move_in_progress":
+        assert (await submit()).status == 202
+        return await submit()
+    if code == "move_idempotency_conflict":
+        plan = await svc.preview(QueryIdentity(store=LEGACY, slug=SLUG), TENANT, actor=7)
+        body = _move_body(plan)
+        assert (await handler.move(_Req(app, body))).status == 202
+        return await handler.move(_Req(app, {**body, ACK_PROGRAM: False}))
+    if code == "move_outcome_unknown":
+        plan = await svc.preview(QueryIdentity(store=LEGACY, slug=SLUG), TENANT, actor=7)
+        op = _json(await handler.move(_Req(app, _move_body(plan))))
+        await coord.prepare(op["operation_id"])
+        async with await _factory(dsn)() as conn:
+            await conn.execute("UPDATE management.qs_query_moves SET state = 'cutover', moved = NULL")
+        from querysource.scheduler.handoff import ScheduleOwner
+
+        key = ScheduleOwner.from_store(LEGACY, SLUG).lock_key()
+        async with await _factory(dsn)() as holder:  # the original cutover transaction is still alive
+            await holder.fetchval("SELECT pg_advisory_lock($1)", key, column=0)
+            return await handler.reconcile(_Req(app, match={"operation_id": op["operation_id"]}))
+    if code == "move_scheduler_not_ready":
+        return await submit()  # scheduled, but no durable bootstrap / no compatible worker yet
+    # remaining codes are submission-time blockers
+    return await submit()
+
+
+@pytest.mark.asyncio
+async def test_every_documented_error_is_reachable_with_the_fixture_status_and_body_shape(pg_dsn) -> None:
+    fx = json.loads(FIXTURE.read_text())
+    for code, expected in fx["errors"].items():
+        response = await _scenario(code, pg_dsn)
+        body = _json(response)
+        assert response.status == expected["status"], (code, body)
+        assert body["error_code"] == code, (code, body)
+        assert set(body) <= {"error_code", "message", "details"} and isinstance(body["message"], str), code
+        assert set(expected["body"]) <= set(body)
+        text = json.dumps(body).lower()
+        for needle in ("password", "dsn", "postgresql://", "secret", "scheduler_run_as_user_id", "traceback"):
+            assert needle not in text, (code, needle)
+
+
+@pytest.mark.asyncio
+async def test_success_statuses_and_shapes_follow_the_fixture(pg_dsn) -> None:
+    fx = json.loads(FIXTURE.read_text())
+    await _reset(pg_dsn)
+    app, svc, repo, coord = await _app(pg_dsn)
+    handler = QueryMoveHandler()
+    preview = await handler.preview(_Req(app, fx["preview"]["request"]["body"]))
+    assert preview.status == 200 and set(_json(preview)) == set(fx["preview"]["response"])
+    body = _move_body(_json(preview))
+    assert set(body) == set(fx["move"]["request"]["body"])
+    move = await handler.move(_Req(app, body))
+    assert move.status == fx["move"]["response_status"]
+    op = _json(move)
+    status = await handler.status(_Req(app, match={"operation_id": op["operation_id"]}, method="GET"))
+    assert status.status == fx["status"]["response_status"] and _json(status) == op
+    assert set(op) - {"error_code", "message"} == set(fx["operations"]["preparing"]) - {"error_code", "message"}
+    reconcile = await handler.reconcile(_Req(app, match={"operation_id": op["operation_id"]}))
+    assert reconcile.status in fx["reconcile"]["response_status"]
+    catalog = await _catalog(app)
+    assert catalog == fx["catalog"]["response"] or {d["schema"] for d in catalog["data"]} >= {"public"}
+
+
+async def _catalog(app):
+    from querysource.handlers.query_stores import QueryStoreCatalog
+
+    request = type("R", (), {"app": app})()
+    return json.loads((await QueryStoreCatalog().list(request)).body)
+
+
+@pytest.mark.asyncio
+async def test_numeric_actor_alone_is_not_a_grant_and_operators_keep_current_access(pg_dsn, monkeypatch) -> None:
+    await _reset(pg_dsn)
+    pipeline = json.dumps({"queries": {}, "Output": [{"TableOutput": {}}]})
+    calls = []
+
+    async def deny(request, resource, name, action, logger=None):
+        calls.append((name, action))
+        raise web.HTTPNotFound()
+
+    monkeypatch.setattr(mod, "enforce_request_pbac", deny)
+    monkeypatch.setattr(mod, "definition_requires_scheduler_grant", lambda r: r["provider"] == "multi")
+    # A write-capable scheduled multi: the numeric actor does not bypass the pg_admin gate.
+    app, *_ = await _app(pg_dsn, {("public", SLUG): _row(provider="multi", attributes=SCHEDULED,
+                                                         query_raw=pipeline)}, security=True)
+    handler = QueryMoveHandler()
+    for verb, body in ((handler.preview, PREVIEW),):
+        with pytest.raises(web.HTTPNotFound):
+            await verb(_Req(app, body))
+    assert calls == [("pg_admin", "datasource:use")]
+    # An ordinary definition: the same operator (no admin role) keeps current access end to end.
+    app2, *_ = await _app(pg_dsn, {("public", SLUG): _row()}, security=True)
+    resp = await handler.preview(_Req(app2, PREVIEW))
+    assert resp.status == 200 and calls == [("pg_admin", "datasource:use")]
