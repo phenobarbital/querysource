@@ -309,7 +309,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -320,8 +320,9 @@
       "parallelism_notes": "TASK-911: consume the interfaces/contract in querysource/tenants.py; TASK-912: consume the interfaces/contract in querysource/tenant_errors.py",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-923-store-catalog.md"
+      "completed_at": "2026-10-16T14:54:36+00:00",
+      "file": "sdd/tasks/completed/TASK-923-store-catalog.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-924",

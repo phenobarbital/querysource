@@ -158,4 +158,4 @@ This interface is created/extended by this task and consumed by its dependents; 
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. handlers/query_stores.py: QueryStoreCatalog.list + catalog_descriptors — exact v1 {version:1,data:[StoreDescriptor]}, configured default first with tenant null, physical aliases deduplicated, only selectors that round-trip through registry.resolve are offered (custom default table, literal public and same-schema tenant queries stay distinct), registry snapshot only (no rediscovery/DDL), no host/DSN/credentials/diagnostics/run-as, 503 tenant_store_unavailable when the registry is unpublished or the configured default is unavailable (never public). Auth: same app-level management boundary as CRUD; listing grants nothing. 8 tests pass incl. shared v1 fixture equality.
