@@ -176,6 +176,42 @@ def _to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
     return _prefer_ns(parsed)
 
 
+def parse_datetime_series(
+    series: pd.Series, infer_tz: bool = False, field: Optional[str] = None
+) -> pd.Series:
+    """Parse a Series to datetimes, preserving every parseable timezone-bearing value.
+
+    Public entry point for the FEAT-171 parser (same contract as ``_to_datetime_series``).
+
+    Args:
+        series: Raw or datetime-like values.
+        infer_tz: When false, heterogeneous offsets are normalized to UTC (a warning is
+            logged); when true, an ``object`` Series keeps each value's own offset.
+        field: Column name, used only for logging.
+
+    Returns:
+        The parsed Series with the same index and name; unparseable values become ``NaT``.
+    """
+    return _to_datetime_series(series, infer_tz=infer_tz, field=field)
+
+
+def to_wall_clock(series: pd.Series, field: Optional[str] = None) -> pd.Series:
+    """Return naive datetime64 values holding each value's own local wall-clock.
+
+    Public entry point for ``_to_wall_clock``: values with an offset keep their local
+    time, values without an offset are unchanged, date-only values with an offset
+    become local midnight, unparseable values become ``NaT``.
+
+    Args:
+        series: Values to convert.
+        field: Column name, used only for logging.
+
+    Returns:
+        A naive datetime64 Series with the same index and name.
+    """
+    return _to_wall_clock(series, field=field)
+
+
 def _convert_datetime_column(
     df: pd.DataFrame, field: str, infer_tz: bool = False
 ) -> pd.DataFrame:
@@ -632,22 +668,46 @@ def add_days(df: pd.DataFrame, field: str, column="", days=1):
     return df
 
 
-def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str):
-    """
-    Takes a pandas DataFrame and combines the values from a date column and a time column
-    to create a new timestamp column.
+def add_timestamp_to_time(df: pd.DataFrame, field: str, date: str, time: str) -> pd.DataFrame:
+    """Combine local dates and times, preserving timezone information from the time.
 
-    :param df: pandas DataFrame to be modified.
-    :param field: Name of the new column to store the combined timestamp.
-    :param date: Name of the column in the df DataFrame containing date values.
-    :param time: Name of the column in the df DataFrame containing time values.
-    :return: Modified pandas DataFrame with the combined timestamp stored in a new column.
+    Mixed timezones remain an object column so each row retains its own offset.
+    Date-column offsets determine the local date only, as for naive time inputs.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output timestamp column.
+        date: Source date column.
+        time: Source time or timedelta column.
+
+    Returns:
+        The DataFrame with the combined timestamp column.
     """
     date_part = _to_wall_clock(df[date], field=date)
     if pd.api.types.is_timedelta64_dtype(df[time]):
         offset = df[time]
     else:
-        time_part = _to_wall_clock(df[time], field=time)
+        # Anchor time-only strings so pandas uses its datetime parser, preserving
+        # nanoseconds instead of truncating them through the time-only fallback.
+        time_values = df[time].map(
+            lambda value: (
+                f"1900-01-01 {value}" if isinstance(value, str) and re.match(r"^\d{1,2}:\d{2}", value) else value
+            )
+        )
+        time_part = parse_datetime_series(time_values, infer_tz=True, field=time)
+        if isinstance(time_part.dtype, pd.DatetimeTZDtype) or time_part.dtype == object:
+            combined: list[pd.Timestamp] = []
+            for day, moment in zip(date_part, time_part):
+                if pd.isna(day) or pd.isna(moment):
+                    combined.append(pd.NaT)
+                    continue
+                local_time = moment.tz_localize(None)
+                timestamp = day.normalize() + (local_time - local_time.normalize())
+                combined.append(timestamp.tz_localize(moment.tzinfo))
+            df[field] = parse_datetime_series(
+                pd.Series(combined, index=df.index, dtype=object), infer_tz=True, field=field
+            )
+            return df
         offset = time_part - time_part.dt.normalize()
     df[field] = date_part.dt.normalize() + offset
     return df
@@ -2379,35 +2439,134 @@ def split_into_series(df: pd.DataFrame, field: str):
     return df
 
 
-def change_timezone(df: pd.DataFrame, field: str, from_tz: str = None, to_tz: str = "UTC"):
-    """
-    Changes the timezone of a datetime field in a DataFrame.
+def change_timezone(
+    df: pd.DataFrame,
+    field: str,
+    from_tz: Optional[str] = None,
+    to_tz: Optional[str] = "UTC",
+    *,
+    column: Optional[str] = None,
+    tz_column: Optional[str] = None,
+    default_timezone: str = "UTC",
+) -> pd.DataFrame:
+    """Convert a datetime column to a target timezone.
 
-    Timezone-aware input is converted directly; ``from_tz`` is ignored.
+    Timezone-aware values are converted directly (``from_tz`` is ignored, with a
+    warning when given). Naive values are localized to ``from_tz`` (UTC when not
+    given): ambiguous wall-clock times are read as standard time and nonexistent
+    times are shifted forward.
 
-    :param df: The DataFrame containing the datetime field.
-    :param field: The name of the field to change the timezone for.
-    :param from_tz: The original timezone of the field.
-    :param to_tz: The target timezone for the field.
-    :return: The DataFrame with the timezone changed field.
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        from_tz: Timezone of naive values (defaults to UTC).
+        to_tz: Target timezone (``default_timezone`` when ``None``).
+        column: Source column (defaults to ``field``).
+        tz_column: Column holding a target timezone per row; overrides ``to_tz``.
+        default_timezone: Fallback for null/invalid ``tz_column`` values and for ``to_tz=None``.
+
+    Returns:
+        The DataFrame with ``field`` set.
     """
+    if column is None:
+        column = field
     try:
-        values = _to_datetime_series(df[field], infer_tz=False, field=field)
+        values = parse_datetime_series(df[column], infer_tz=False, field=column)
         if isinstance(values.dtype, pd.DatetimeTZDtype):
             if from_tz:
                 logging.warning(
-                    f"change_timezone: {field!r} is already timezone-aware; "
+                    f"change_timezone: {column!r} is already timezone-aware; "
                     f"ignoring from_tz={from_tz!r}"
                 )
-            df[field] = values.dt.tz_convert(to_tz)
         else:
             infer_dst = np.array([False] * df.shape[0])
-            df[field] = (
-                values.dt.tz_localize(from_tz, ambiguous=infer_dst).dt.tz_convert(to_tz)
+            values = values.dt.tz_localize(
+                from_tz or "UTC", ambiguous=infer_dst, nonexistent="shift_forward"
             )
+        if tz_column is None:
+            df[field] = values.dt.tz_convert(to_tz or default_timezone)
+        else:
+            timezones = df[tz_column].astype("string").fillna(default_timezone)
+            utc_times = values.dt.tz_convert("UTC")
+            converted_times = []
+            for moment, tz_name in zip(utc_times, timezones, strict=True):
+                if pd.isna(moment):
+                    converted_times.append(pd.NaT)
+                    continue
+                try:
+                    converted_times.append(moment.tz_convert(ZoneInfo(tz_name)))
+                except Exception:
+                    converted_times.append(moment.tz_convert(ZoneInfo(default_timezone)))
+            df[field] = pd.Series(converted_times, index=df.index)
     except Exception as err:
-        logging.error(f"Error changing timezone of {field!r}: {err}")
+        logging.error(f"Error changing timezone of {column!r}: {err}")
     return df
+
+
+def drop_timezone(df: pd.DataFrame, field: str, column: Optional[str] = None) -> pd.DataFrame:
+    """Drop timezone information, keeping each value's local wall-clock.
+
+    Datetime-aware columns lose their timezone (``tz_localize(None)``); object or
+    string columns are parsed and each value keeps its own local wall-clock
+    (date-only values with an offset become local midnight, unparseable values
+    become ``NaT``); naive datetimes and non-datetime columns are copied unchanged.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        column: Source column (defaults to ``field``).
+
+    Returns:
+        The DataFrame with ``field`` set.
+    """
+    if column is None:
+        column = field
+    try:
+        series = df[column]
+        if isinstance(series.dtype, pd.DatetimeTZDtype):
+            df[field] = series.dt.tz_localize(None)
+        elif pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            df[field] = to_wall_clock(series, field=field)
+        else:
+            df[field] = series
+    except Exception as err:
+        logging.error(f"Error on drop_timezone {field!r}: {err}")
+    return df
+
+
+def convert_timezone(
+    df: pd.DataFrame,
+    field: str,
+    *,
+    column: Optional[str] = None,
+    from_tz: Optional[str] = None,
+    to_tz: Optional[str] = None,
+    tz_column: Optional[str] = None,
+    default_timezone: str = "UTC",
+) -> pd.DataFrame:
+    """Flowtask-compatible alias of :func:`change_timezone`.
+
+    Args:
+        df: DataFrame to modify.
+        field: Output column.
+        column: Source column (defaults to ``field``).
+        from_tz: Timezone of naive values (defaults to UTC).
+        to_tz: Target timezone (defaults to ``default_timezone``).
+        tz_column: Column holding a target timezone per row.
+        default_timezone: Fallback timezone.
+
+    Returns:
+        The DataFrame with ``field`` set.
+    """
+    return change_timezone(
+        df,
+        field,
+        from_tz=from_tz,
+        to_tz=to_tz or default_timezone,
+        column=column,
+        tz_column=tz_column,
+        default_timezone=default_timezone,
+    )
 
 
 def to_numeric(df: pd.DataFrame, field: str, remove_alpha: bool = True, to_integer: bool = False):

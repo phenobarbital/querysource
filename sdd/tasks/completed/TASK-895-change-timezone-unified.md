@@ -338,8 +338,8 @@ Spec §4 rows tagged M3.
 
 ## Completion Note
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-10-13
+**Notes**: change_timezone extended (keyword-only column/tz_column/default_timezone, UTC default for naive, shift_forward); tz_column per-row block ported with NaT guard; convert_timezone is a pure alias. 38 passed (incl. FEAT-171 regression); ruff clean. Code commit a54f8bc.
 
 **Deviations from spec**: none

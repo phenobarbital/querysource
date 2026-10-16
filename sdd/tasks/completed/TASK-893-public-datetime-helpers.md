@@ -218,8 +218,8 @@ Spec §4 row `test_public_helpers_delegate` (M1).
 
 ## Completion Note
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-10-13
+**Notes**: Wrappers added as pure delegations; test_public_helpers_delegate passes; FEAT-171 regression 21 passed; ruff clean. Env: Cython 0.29 in shared venv cannot build .pyx, so prebuilt (gitignored) .so files were copied from the main checkout into the worktree. Code commit 252bfb3.
 
 **Deviations from spec**: none

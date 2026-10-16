@@ -27,6 +27,7 @@ from .handlers import (
     QueryHandler,
     QueryManager,
     QueryService,
+    SemanticCatalog,
     VariablesService,
 )
 from .template import TemplateParser
@@ -223,6 +224,13 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/describe', dh.describe)
         routes.append(r)
         r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
+        routes.append(r)
+
+        ### Semantic catalog (FEAT-175): metrics/dimensions with per-field grants.
+        sc = SemanticCatalog()
+        r = self.app.router.add_get('/api/v1/semantic/{slug}/catalog', sc.catalog)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/semantic/{slug}/catalog', sc.catalog)
         routes.append(r)
 
         ### Logging Service:

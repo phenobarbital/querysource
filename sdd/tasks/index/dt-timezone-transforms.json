@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-14T03:29:19+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-14T03:51:43+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,7 +16,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Root task: creates parse_datetime_series / to_wall_clock in querysource/types/dt/transforms.py and creates tests/unit/test_dt_timezone_transforms.py, both used by TASK-894/895.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-893-public-datetime-helpers.md"
+      "completed_at": "2026-10-14T03:49:31+00:00",
+      "file": "sdd/tasks/completed/TASK-893-public-datetime-helpers.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-894",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -44,8 +45,9 @@
       "parallelism_notes": "Calls to_wall_clock created by TASK-893 (querysource/types/dt/transforms.py) and appends to tests/unit/test_dt_timezone_transforms.py created by TASK-893.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-894-drop-timezone.md"
+      "completed_at": "2026-10-14T03:50:03+00:00",
+      "file": "sdd/tasks/completed/TASK-894-drop-timezone.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-895",
@@ -54,7 +56,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -64,8 +66,9 @@
       "parallelism_notes": "Calls parse_datetime_series (TASK-893) and inserts convert_timezone right after drop_timezone created by TASK-894; same files querysource/types/dt/transforms.py and tests/unit/test_dt_timezone_transforms.py as TASK-894.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-895-change-timezone-unified.md"
+      "completed_at": "2026-10-14T03:50:46+00:00",
+      "file": "sdd/tasks/completed/TASK-895-change-timezone-unified.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-896",
@@ -74,7 +77,7 @@
       "feature_id": "FEAT-174",
       "feature": "dt-timezone-transforms",
       "spec": "sdd/specs/dt-timezone-transforms.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -85,8 +88,9 @@
       "parallelism_notes": "Imports drop_timezone from TASK-894 in tests/integration/test_offers_hires_datetime.py; CHANGES.rst entry documents change_timezone/convert_timezone from TASK-895.",
       "assigned_to": null,
       "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-896-real-data-and-changelog.md"
+      "completed_at": "2026-10-14T03:51:43+00:00",
+      "file": "sdd/tasks/completed/TASK-896-real-data-and-changelog.md",
+      "verification": "verified"
     }
   ]
 }

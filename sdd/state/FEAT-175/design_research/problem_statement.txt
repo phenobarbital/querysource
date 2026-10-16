@@ -1,0 +1,30 @@
+QuerySource executes stored queries (slugs) whose `query_raw` is SQL or a
+provider-specific payload. Business metrics such as "net sales" or "units" are
+therefore re-written by hand in every slug, every MultiQS pipeline and every AI
+agent that reaches the warehouse. The same KPI drifts between consumers, there
+is no single description of what a metric means, and governance (who may see
+which metric, which rows) is applied per slug instead of per metric.
+
+We want a **semantic resource** type: a slug whose definition is a semantic
+model (Apache Ossie YAML, or Sidemantic native YAML) plus operational
+configuration (connection, compiler). Callers never write SQL; they send a
+structured request (metrics, dimensions, filters, time grain, limit). QuerySource
+compiles it to SQL for the target warehouse dialect, applies governance
+(PBAC on the catalog, row-level security at compile time) and executes it
+through the existing provider/connection machinery, returning the usual
+QuerySource outputs.
+
+Affected users:
+
+- **API consumers and dashboards** get governed metrics through the existing
+  `/api/v1/queries/{slug}` route with the usual output formats.
+- **AI agents (ai-parrot / MCP tools)** get a deterministic, SQL-free contract
+  that cannot leak metrics or rows the principal is not entitled to.
+- **Data owners** version metric definitions in the query store or in a
+  repo directory and change them through PR / management endpoints.
+- **Operators** keep one execution path (asyncdb providers, PBAC, cache).
+
+Why now: PBAC (FEAT-150/151) and the per-tenant query store already give us the
+catalog, ownership and principal plumbing; Sidemantic 0.12.0 (2026-09-13)
+ships compile-time RLS and a first-class Apache Ossie importer, so the compiler
+no longer has to be written in-house.

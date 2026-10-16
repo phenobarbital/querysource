@@ -220,8 +220,8 @@ Spec §4 rows tagged M2.
 
 ## Completion Note
 
-**Completed by**: <session or agent ID>
-**Date**: YYYY-MM-DD
-**Notes**:
+**Completed by**: sdd-worker (Claude)
+**Date**: 2026-10-13
+**Notes**: drop_timezone added before to_numeric; 5 new-file tests (4 M2 + mirror) pass (26 total with FEAT-171 regression); ruff clean. Code commit bcbf9c8.
 
 **Deviations from spec**: none
