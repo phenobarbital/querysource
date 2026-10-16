@@ -149,4 +149,4 @@ This interface is created/extended by this task and consumed by its dependents; 
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. query_moves.py: QueryMoveService.move (UUID key bound to deployment+actor, request digest over canonical endpoints/slug/plan_revision/acks; same request replays the same operation before any revalidation, different request => move_idempotency_conflict; re-runs preview, concrete blockers precede move_plan_stale, exact acknowledgements enforced; operation + both canonical reservations inserted in one transaction, concurrent same-key race resolved by ON CONFLICT), status (pure read, moved false/true/null), operation_view/request_digest. request_info accepted but intentionally not persisted. 9 tests pass.
