@@ -43,6 +43,8 @@ CONTROL_TABLES = (
 )
 # Operation states in which no further orchestration happens.
 TERMINAL_STATES = ("completed", "failed")
+# APScheduler's own default misfire grace (QSScheduler sets only coalesce/max_instances).
+DEFAULT_MISFIRE_GRACE_SECONDS = 1
 
 ConnectionFactory = Callable[[], Awaitable[AbstractAsyncContextManager[Any]]]
 
@@ -202,6 +204,53 @@ def config_digest(state: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode()).hexdigest()
 
 
+class AdmittedRun(dict):
+    """One admitted occurrence; retains the shared owner lock until :meth:`finish`.
+
+    A ``dict`` of the run row (``run_id``, ``logical_schedule_id``, ``generation``,
+    ``scheduled_fire_at``, owner fields, ``kind``). The dedicated lock connection is
+    released in ``finish`` — callers MUST call it from a ``finally``.
+    """
+
+    def __init__(self, data: Mapping[str, Any], *, conn: Any, cm: Any, lock_key: int) -> None:
+        super().__init__(data)
+        self._conn = conn
+        self._cm = cm
+        self._lock_key = lock_key
+        self._finished = False
+
+    async def mark_running(self) -> None:
+        """Record that business work has started (still counts toward max_instances)."""
+        await self._conn.fetch_one(
+            "UPDATE management.qs_schedule_runs SET outcome = 'running' WHERE run_id = $1::uuid "
+            "AND outcome = 'admitted' RETURNING run_id", _uuid(self["run_id"]),
+        )
+
+    async def finish(self, outcome: str = "completed", error: str | None = None) -> None:
+        """Record the outcome, then release the shared lock and the connection (idempotent).
+
+        ``outcome`` is ``completed``, ``failed`` or ``unknown`` (external effect could not
+        be established — retained for operator reconciliation, never replayed).
+        """
+        if self._finished:
+            return
+        self._finished = True
+        try:
+            await self._conn.fetch_one(
+                "UPDATE management.qs_schedule_runs SET outcome = $2, error = $3, finished_at = now() "
+                "WHERE run_id = $1::uuid RETURNING run_id", _uuid(self["run_id"]), outcome, error,
+            )
+        except Exception:  # noqa: BLE001 - the lock must still be released
+            logger.exception("Could not record outcome for run %s", self.get("run_id"))
+        finally:
+            try:
+                await self._conn.fetchval("SELECT pg_advisory_unlock_shared($1)", self._lock_key, column=0)
+            except Exception:  # noqa: BLE001 - a lost connection already dropped the session lock
+                logger.warning("Could not release shared owner lock %s", self._lock_key)
+            finally:
+                await self._cm.__aexit__(None, None, None)
+
+
 # -- coordinator -------------------------------------------------------------------------
 
 
@@ -218,6 +267,7 @@ class ScheduleHandoffCoordinator:
         rollout_confirmed: bool | None = None,
         heartbeat_ttl_seconds: int = HEARTBEAT_TTL_SECONDS,
         trigger_parser: Callable[[str, dict], Any] | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         """Use ``repository.registry`` / its connection factory for shared state and owners.
 
@@ -232,6 +282,7 @@ class ScheduleHandoffCoordinator:
             heartbeat_ttl_seconds: A worker heartbeat older than this is ignored.
             trigger_parser: ``(schedule_type, schedule) -> trigger | None``; defaults to
                 the scheduler's own parser so validity matches registration.
+            clock: Aware-UTC time source (a test seam; defaults to the wall clock).
         """
         self.repository = repository
         self.registry: TenantRegistry = repository.registry
@@ -242,6 +293,7 @@ class ScheduleHandoffCoordinator:
         self._rollout_confirmed = rollout_confirmed
         self.heartbeat_ttl_seconds = heartbeat_ttl_seconds
         self._trigger_parser = trigger_parser
+        self._clock = clock or utcnow
 
     # -- readiness (read-only) -----------------------------------------------------------
 
@@ -597,6 +649,157 @@ class ScheduleHandoffCoordinator:
                     logger.exception("Rollback failed while preparing move %s", operation_id)
                 raise
 
+    # -- due admission -------------------------------------------------------------------
+
+    async def admit(self, logical_schedule_id: str, generation: int) -> Mapping[str, Any] | None:
+        """Claim one due occurrence once, holding the shared owner fence until the run ends.
+
+        The shared owner advisory lock is taken FIRST (on a dedicated connection);
+        only then are gate/generation/owner/pause/due state revalidated and the
+        occurrence claimed in a short transaction that persists the attempt and
+        atomically advances the durable next-fire cursor. APScheduler is only a
+        wakeup: several processes waking for the same slot admit it once because
+        ``(logical_schedule_id, scheduled_fire_at)`` is unique.
+
+        Cadence is never reset to now: the cursor advances with the trigger's own
+        ``get_next_fire_time`` (timezone, interval/biweekly anchor preserved), and
+        coalescing/misfire follow the stored policy (default: the scheduler's own,
+        coalesce on and a 1 s misfire grace).
+
+        Returns:
+            An :class:`AdmittedRun` that retains the lock connection — call
+            ``finish()`` in a ``finally`` — or ``None`` when the occurrence was
+            rejected (stale generation, frozen gate, paused, not due, misfired,
+            ``max_instances`` reached, or already claimed elsewhere).
+        """
+        cm = await self.connection_factory()
+        conn = await cm.__aenter__()
+        lock_key: int | None = None
+        keep = False
+        try:
+            sid = _uuid(logical_schedule_id)
+            peek = await conn.fetch_one(
+                "SELECT owner_namespace, owner_schema, owner_table, query_slug, generation "
+                "FROM management.qs_schedule_state WHERE logical_schedule_id = $1::uuid", sid,
+            )
+            if peek is None or int(peek["generation"]) != int(generation):
+                return None
+            owner = ScheduleOwner(
+                peek["owner_namespace"], peek["owner_schema"], peek["owner_table"], peek["query_slug"]
+            )
+            lock_key = owner.lock_key()
+            got = await conn.fetchval("SELECT pg_try_advisory_lock_shared($1)", lock_key, column=0)
+            if not got:
+                lock_key = None  # an exclusive holder (a move) owns the fence: frozen
+                return None
+            run = await self._claim(conn, sid, int(generation), owner)
+            if run is None:
+                return None
+            keep = True
+            return AdmittedRun(run, conn=conn, cm=cm, lock_key=lock_key)
+        finally:
+            if not keep:
+                await self._unlock_and_close(cm, conn, lock_key)
+
+    async def _claim(
+        self, conn: Any, sid: uuid.UUID, generation: int, owner: ScheduleOwner
+    ) -> dict[str, Any] | None:
+        """Revalidate under the shared fence and claim the due slot in one short transaction."""
+        await conn.transaction()
+        try:
+            row = await conn.fetch_one(
+                "SELECT * FROM management.qs_schedule_state WHERE logical_schedule_id = $1::uuid FOR UPDATE", sid
+            )
+            state = _row_dict(row) if row else None
+            claim = self._evaluate_claim(state, generation, owner)
+            if claim is None or claim.get("claim") is None:
+                if claim is not None:  # misfire / max_instances: the slot is consumed, nothing runs
+                    await self._advance(conn, sid, claim["slot"], claim["next"])
+                await conn.commit()
+                return None
+            slot = claim["slot"]
+            open_runs = await conn.fetchval(
+                "SELECT count(*) FROM management.qs_schedule_runs WHERE logical_schedule_id = $1::uuid "
+                "AND outcome IN ('admitted', 'running')", sid, column=0,
+            )
+            if int(open_runs or 0) >= int(state["max_instances"]):
+                await self._advance(conn, sid, slot, claim["next"])
+                await conn.commit()
+                return None
+            inserted = await conn.fetch_one(
+                "INSERT INTO management.qs_schedule_runs (logical_schedule_id, generation, scheduled_fire_at, "
+                "owner_namespace, owner_schema, owner_table, query_slug, worker_id) "
+                "VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8) "
+                "ON CONFLICT (logical_schedule_id, scheduled_fire_at) DO NOTHING RETURNING *",
+                sid, generation, slot, *owner.as_tuple(), self.worker_id,
+            )
+            if inserted is None:  # another process already admitted this occurrence
+                await conn.commit()
+                return None
+            await self._advance(conn, sid, slot, claim["next"])
+            await conn.commit()
+            data = _row_dict(inserted)
+            data["kind"] = state["kind"]
+            return data
+        except BaseException:
+            try:
+                await conn.rollback()
+            except Exception:  # noqa: BLE001 - never mask the original error
+                logger.exception("Rollback failed while admitting %s", sid)
+            raise
+
+    def _evaluate_claim(
+        self, state: Mapping[str, Any] | None, generation: int, owner: ScheduleOwner
+    ) -> dict[str, Any] | None:
+        """Decide, without side effects, which slot (if any) this wakeup may claim.
+
+        Returns ``None`` for a plain rejection, ``{"claim": None, "slot", "next"}`` when a
+        due slot must be consumed without running (misfire), or ``{"claim": True, ...}``.
+        """
+        if state is None or int(state["generation"]) != generation:
+            return None
+        if (state["owner_namespace"], state["owner_schema"], state["owner_table"], state["query_slug"]) != owner.as_tuple():
+            return None  # ownership moved between the peek and the lock
+        if state["dispatch_gate"] != "open" or state["paused"] or not state["enabled"]:
+            return None
+        cursor = state["next_fire_at"]
+        now = self._clock()
+        if cursor is None or cursor > now:
+            return None
+        spec = state.get("trigger_spec") or {}
+        trigger = self._parse(str(spec.get("schedule_type")), dict(spec.get("schedule") or {}))
+        if trigger is None:
+            logger.error("Schedule %s has an unparsable stored trigger; refusing admission", state["logical_schedule_id"])
+            return None
+        due = [cursor]
+        following = trigger.get_next_fire_time(cursor, now)
+        while following is not None and following <= now and len(due) < 10000:
+            due.append(following)
+            following = trigger.get_next_fire_time(following, now)
+        slot = due[-1] if state["coalesce_missed"] else due[0]
+        next_fire = following if state["coalesce_missed"] else trigger.get_next_fire_time(slot, now)
+        grace = state["misfire_grace_seconds"]
+        grace = DEFAULT_MISFIRE_GRACE_SECONDS if grace is None else grace
+        if (now - slot).total_seconds() > grace:
+            return {"claim": None, "slot": slot, "next": next_fire}
+        return {"claim": True, "slot": slot, "next": next_fire}
+
+    async def _advance(self, conn: Any, sid: uuid.UUID, slot: datetime, next_fire: datetime | None) -> None:
+        await conn.fetch_one(
+            "UPDATE management.qs_schedule_state SET last_claimed_fire_at = $2, next_fire_at = $3, "
+            "updated_at = now() WHERE logical_schedule_id = $1::uuid RETURNING logical_schedule_id",
+            sid, slot, next_fire,
+        )
+
+    async def _unlock_and_close(self, cm: Any, conn: Any, lock_key: int | None) -> None:
+        try:
+            if lock_key is not None:
+                await conn.fetchval("SELECT pg_advisory_unlock_shared($1)", lock_key, column=0)
+        except Exception:  # noqa: BLE001 - a lost connection already dropped the session lock
+            logger.warning("Could not release shared owner lock %s", lock_key)
+        finally:
+            await cm.__aexit__(None, None, None)
+
 
 def _canonical(value: Any) -> str:
     base = dict(value or {})
@@ -610,6 +813,7 @@ def utcnow() -> datetime:
 
 
 __all__ = [
+    "AdmittedRun",
     "CONTROL_TABLES",
     "PROTOCOL_VERSION",
     "SCHEDULE_KINDS",
