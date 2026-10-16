@@ -254,3 +254,21 @@ async def test_pool_exhaustion_is_a_recoverable_visible_state_and_worker_polls_w
     assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "completed"
     assert await _scalar(pg_dsn, 'SELECT count(*) FROM "wm_assembly"."queries"') == 1
     assert await _scalar(pg_dsn, 'SELECT count(*) FROM "public"."queries"') == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_orchestrator_cannot_overwrite_a_committed_journal(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    oid = await _submit(svc)
+    await coord.prepare(oid)
+    assert (await svc.cutover(oid))["moved"] is True
+    op = {"operation_id": oid, "query_slug": "s", **{
+        f"{p}_{c}": v for p, vals in (("source", (OWNER.namespace, "public", "queries")),
+                                      ("target", (OWNER.namespace, "wm_assembly", "queries")))
+        for c, v in zip(("namespace", "schema", "table"), vals)}}
+    await svc._revert_to_draining(oid, "late loser")
+    await svc._fail_pre_cutover(op, "move_validation_failed", "late loser")
+    assert await _scalar(pg_dsn, "SELECT moved FROM management.qs_query_moves") is True
+    assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "cutover"

@@ -651,24 +651,36 @@ class QueryMoveService:
         async with await self.coordinator.connection_factory() as conn:
             await conn.transaction()
             try:
-                await self.coordinator.set_gate(conn, owners, "open", None)
-                await self.coordinator.release_reservations(conn, str(op["operation_id"]))
-                await self.coordinator.update_operation(
-                    conn, str(op["operation_id"]), state="failed", moved=False,
-                    error_code=error_code, message=message[:500],
+                # Compare-and-set: only an attempt that is STILL indeterminate may be failed. A
+                # concurrent resolver/orchestrator that already committed or reset it wins.
+                changed = await conn.fetch_one(
+                    "UPDATE management.qs_query_moves SET state = 'failed', moved = false, error_code = $2, "
+                    "message = $3, updated_at = now() WHERE operation_id = $1::uuid AND state = 'cutover' "
+                    "AND moved IS NULL RETURNING operation_id",
+                    _uuid(str(op["operation_id"])), error_code, message[:500],
                 )
+                if changed is not None:
+                    await self.coordinator.set_gate(conn, owners, "open", None)
+                    await self.coordinator.release_reservations(conn, str(op["operation_id"]))
                 await conn.commit()
             except BaseException:
                 await conn.rollback()
                 raise
 
     async def _revert_to_draining(self, operation_id: str, message: str) -> None:
-        """Proven not-committed attempt that is still retryable: back to ``draining``, moved=false."""
+        """Proven not-committed attempt that is still retryable: back to ``draining``, moved=false.
+
+        Compare-and-set on ``state='cutover' AND moved IS NULL`` so it can never overwrite a
+        committed (``moved=true``) or already-resolved journal.
+        """
         async with await self.coordinator.connection_factory() as conn:
             await conn.transaction()
             try:
-                await self.coordinator.update_operation(
-                    conn, operation_id, state="draining", moved=False, message=message[:500]
+                await conn.fetch_all(
+                    "UPDATE management.qs_query_moves SET state = 'draining', moved = false, message = $2, "
+                    "updated_at = now() WHERE operation_id = $1::uuid AND state = 'cutover' AND moved IS NULL "
+                    "RETURNING operation_id",
+                    _uuid(operation_id), message[:500],
                 )
                 await conn.commit()
             except BaseException:
@@ -775,7 +787,10 @@ class QueryMoveService:
                 await self._revert_to_draining(operation_id, str(pending))
                 return await self._view_of(operation_id)
             except BaseException as exc:  # noqa: BLE001 - classified below
-                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                if isinstance(exc, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
+                    # Cancellation (shutdown, startup timeout) must leave the operation recoverable,
+                    # never a terminal failure: roll back and let resolve_cutover decide later.
+                    await asyncio.shield(self._rollback_quietly(conn, operation_id))
                     raise
                 if await self._rollback_quietly(conn, operation_id):
                     code, message = self._classify(exc)
@@ -785,6 +800,8 @@ class QueryMoveService:
             try:
                 await conn.commit()
                 committed = True
+            except asyncio.CancelledError:
+                raise
             except BaseException:  # noqa: BLE001 - ambiguous acknowledgement
                 logger.warning("COMMIT acknowledgement lost for move %s; resolving from the journal", operation_id)
         if committed:

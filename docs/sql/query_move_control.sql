@@ -176,7 +176,8 @@ BEGIN
         EXECUTE format(
             'GRANT SELECT, INSERT, DELETE ON management.qs_move_reservations TO %I', runtime_role);
         EXECUTE format(
-            'GRANT DELETE ON management.qs_scheduler_workers TO %I', runtime_role);
+            'GRANT DELETE ON management.qs_scheduler_workers, management.qs_schedule_state TO %I',
+            runtime_role);
     END IF;
 END
 $grants$;
