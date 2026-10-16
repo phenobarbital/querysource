@@ -244,6 +244,11 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
         routes.append(r)
 
+        ### Query stores catalog and explicit moves (FEAT-176) ###
+        # Exact static routes MUST precede the broad management routes below.
+        from .handlers.query_moves import register_routes as register_move_routes
+        routes.extend(register_move_routes(self.app.router))
+
         ### Query Manager ###
         r = self.app.router.add_view(
             r'/api/v1/management/queries/{slug}', QueryManager
