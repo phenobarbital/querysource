@@ -946,5 +946,162 @@ class QueryMoveService:
         return '"' + name.replace('"', '""') + '"'
 
 
+    # -- orchestration and recovery ------------------------------------------------------
+
+    async def reconcile(self, operation_id: str) -> Mapping[str, Any]:
+        """Idempotently repair the SAME operation; never copies or deletes a row.
+
+        After a durable cutover it mirrors the owner/generation into the schedulers and
+        completes the operation. An indeterminate cutover is first resolved from the journal.
+        An operation that has not cut over is returned unchanged: reconcile cannot start a move.
+        """
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, operation_id)
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        if op["moved"] is None and op["state"] == "cutover":
+            return await self.resolve_cutover(operation_id)
+        if op["moved"] is True and op["state"] not in TERMINAL_STATES:
+            return self.operation_view(await self.coordinator.reconcile(operation_id))
+        return self.operation_view(op)
+
+    async def _note(self, operation_id: str, message: str) -> None:
+        """Best-effort visible message on a still-unfinished operation (never changes state)."""
+        try:
+            async with await self.coordinator.connection_factory() as conn:
+                await conn.fetch_all(
+                    "UPDATE management.qs_query_moves SET message = $2, updated_at = now() "
+                    "WHERE operation_id = $1::uuid AND state NOT IN ('completed', 'failed') RETURNING operation_id",
+                    _uuid(operation_id), message[:500],
+                )
+        except Exception:  # noqa: BLE001 - the metadata service itself may be unreachable
+            logger.warning("Could not record a status message for move %s", operation_id)
+
+    async def advance(
+        self,
+        operation_id: str,
+        *,
+        lease_ttl_seconds: float = 60.0,
+        drain_timeout_seconds: float = 20.0,
+    ) -> Mapping[str, Any]:
+        """Advance one operation as far as the durable state allows, under a recovery lease.
+
+        Every stage re-reads the journal, so a lease takeover resumes exactly where the previous
+        owner stopped: a committed cutover is only ever reconciled, never repeated; drain stays
+        pending (visibly) while admitted work or an unknown run outcome remains; an
+        indeterminate cutover is resolved before anything else. Unexpected infrastructure
+        errors leave the operation recoverable with an actionable message.
+        """
+        lease = await self.coordinator.claim_operation_lease(operation_id, ttl_seconds=lease_ttl_seconds)
+        if lease is None:
+            return await self._view_of(operation_id)
+        try:
+            for _ in range(8):
+                async with await self.coordinator.connection_factory() as conn:
+                    op = await self.coordinator.load_operation(conn, operation_id)
+                if op is None or op["state"] in TERMINAL_STATES:
+                    break
+                await self.coordinator.claim_operation_lease(operation_id, ttl_seconds=lease_ttl_seconds)
+                state = op["state"]
+                if state == "preparing":
+                    await self.coordinator.prepare(operation_id)
+                elif state == "draining":
+                    drained = await self.coordinator.drain(operation_id, timeout_seconds=drain_timeout_seconds)
+                    if not drained.get("drained"):
+                        if drained.get("pending_runs") and not drained.get("message"):
+                            await self._note(operation_id, "Waiting for admitted run(s) to finish.")
+                        break
+                    result = await self.cutover(operation_id, lock_timeout_seconds=drain_timeout_seconds)
+                    if result["state"] == "draining":
+                        break
+                elif op["moved"] is None:  # cutover, outcome indeterminate
+                    resolved = await self.resolve_cutover(operation_id)
+                    if resolved["state"] == "cutover" and resolved["moved"] is None:
+                        break
+                elif op["moved"] is True:  # cutover/reconciling after a durable commit
+                    after = await self.coordinator.reconcile(operation_id)
+                    if after["state"] == "reconciling":
+                        break  # scheduler_sync failed: retried on the next pass, never re-moved
+                else:  # pragma: no cover - moved=false outside draining cannot occur
+                    break
+        except TenantError as exc:
+            if exc.error_code == "move_outcome_unknown":
+                await self._note(operation_id, "The cutover outcome is not yet known; resolving from the journal.")
+            else:
+                raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - pool exhaustion, lost connection...: recoverable
+            logger.warning("Move %s paused by an infrastructure error: %s", operation_id, exc)
+            await self._note(operation_id, f"Paused by an infrastructure error ({type(exc).__name__}); will retry.")
+        finally:
+            await self.coordinator.release_operation_lease(operation_id)
+        return await self._view_of(operation_id)
+
+    async def recover(self, *, limit: int = 50) -> list[Mapping[str, Any]]:
+        """Resume unfinished operations (startup, BEFORE affected dispatch is enabled, and by polling).
+
+        Operations whose lease is held by a live worker are skipped; an expired lease is taken
+        over from the journal. Returns the resulting views.
+        """
+        views: list[Mapping[str, Any]] = []
+        for operation_id in await self.coordinator.list_recoverable_operations(limit=limit):
+            try:
+                views.append(await self.advance(operation_id))
+            except TenantError as exc:
+                logger.warning("Move %s could not be advanced: %s", operation_id, exc)
+        return views
+
+
+class MoveWorker:
+    """Bounded background worker that polls the durable journal (no notification required)."""
+
+    def __init__(self, service: QueryMoveService, *, poll_seconds: float = 5.0, max_concurrent: int = 2) -> None:
+        """Bound concurrency so long-lived run locks and moves cannot starve the control pool."""
+        self.service = service
+        self.poll_seconds = poll_seconds
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._wake = asyncio.Event()
+        self._stopping = False
+
+    def wake(self) -> None:
+        """Optional accelerator after a submission; losing it only delays the next poll."""
+        self._wake.set()
+
+    async def run_once(self) -> int:
+        """One polling pass; a failure of one operation never stops the others."""
+        handled = 0
+        for operation_id in await self.service.coordinator.list_recoverable_operations():
+            async with self._semaphore:
+                try:
+                    await self.service.advance(operation_id)
+                    handled += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - polled again on the next pass
+                    logger.warning("Move %s failed this pass: %s", operation_id, exc)
+        return handled
+
+    async def run(self) -> None:
+        """Poll until cancelled; independent of ENABLE_QS_SCHEDULER."""
+        while not self._stopping:
+            try:
+                await self.run_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - e.g. metadata service down: retry later
+                logger.warning("Move worker pass failed: %s", exc)
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=self.poll_seconds)
+            except asyncio.TimeoutError:
+                pass
+            self._wake.clear()
+
+    def stop(self) -> None:
+        """Ask the loop to end after the current pass."""
+        self._stopping = True
+        self._wake.set()
+
+
 class _NotReady(Exception):
     """The cutover cannot start yet (runs still draining); the operation stays retryable."""

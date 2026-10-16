@@ -921,6 +921,49 @@ class ScheduleHandoffCoordinator:
         except Exception as exc:  # noqa: BLE001 - shutdown must not fail on this
             logger.warning("Could not unregister scheduler worker %s: %s", self.worker_id, exc)
 
+    # -- operation leases (durable recovery) ---------------------------------------------------
+
+    async def claim_operation_lease(self, operation_id: str, *, ttl_seconds: float = 60.0) -> dict[str, Any] | None:
+        """Take (or renew) the recovery lease of an unfinished operation, or return ``None``.
+
+        A lease is only an exclusivity token for ORCHESTRATION: it expires on its own and lets
+        another worker resume from the durable journal. It never proves that a run finished and
+        never authorizes replaying an admitted attempt or repeating a committed cutover.
+        """
+        async with await self.connection_factory() as conn:
+            row = await conn.fetch_one(
+                "UPDATE management.qs_query_moves SET lease_owner = $2, "
+                "lease_expires_at = now() + make_interval(secs => $3), updated_at = now() "
+                "WHERE operation_id = $1::uuid AND state NOT IN ('completed', 'failed') "
+                "AND (lease_owner IS NULL OR lease_owner = $2 OR lease_expires_at IS NULL "
+                "OR lease_expires_at < now()) RETURNING *",
+                _uuid(operation_id), self.worker_id, float(ttl_seconds),
+            )
+        return _row_dict(row) if row else None
+
+    async def release_operation_lease(self, operation_id: str) -> None:
+        """Drop this worker's lease (best effort; expiry covers a crash)."""
+        try:
+            async with await self.connection_factory() as conn:
+                await conn.fetch_all(
+                    "UPDATE management.qs_query_moves SET lease_owner = NULL, lease_expires_at = NULL "
+                    "WHERE operation_id = $1::uuid AND lease_owner = $2 RETURNING operation_id",
+                    _uuid(operation_id), self.worker_id,
+                )
+        except Exception as exc:  # noqa: BLE001 - expiry releases it anyway
+            logger.warning("Could not release the lease of move %s: %s", operation_id, exc)
+
+    async def list_recoverable_operations(self, *, limit: int = 50) -> list[str]:
+        """Unfinished operations whose lease is free or expired, oldest first (polled; never notified)."""
+        async with await self.connection_factory() as conn:
+            rows = await conn.fetch_all(
+                "SELECT operation_id FROM management.qs_query_moves WHERE state NOT IN ('completed', 'failed') "
+                "AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at < now() "
+                "OR lease_owner = $1) ORDER BY created_at LIMIT $2",
+                self.worker_id, int(limit),
+            )
+        return [str(r["operation_id"]) for r in rows or []]
+
     # -- drain ---------------------------------------------------------------------------
 
     async def drain(
