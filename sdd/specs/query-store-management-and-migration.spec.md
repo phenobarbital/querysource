@@ -10,7 +10,8 @@ tags: [query-stores, legacy-compatibility, explicit-migration, frontend-contract
 **Feature ID**: FEAT-176
 **Date**: 2026-10-15
 **Author**: Codex, from decisions agreed with Juanfran
-**Status**: review
+**Status**: approved
+**Approved by**: User, 2026-10-15; approval includes live transfer and existing management permissions.
 **Target version**: Next compatible release; no package version bump prescribed
 **Companion**: `navigator-frontend-next/sdd/specs/querysource-store-selection-and-migration.spec.md` (frontend **FEAT-252**, independently allocated).
 
