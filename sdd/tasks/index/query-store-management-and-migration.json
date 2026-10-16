@@ -95,7 +95,7 @@
       "feature_id": "FEAT-176",
       "feature": "query-store-management-and-migration",
       "spec": "sdd/specs/query-store-management-and-migration.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -103,8 +103,9 @@
       "parallelism_notes": "Exclusive: applies DDL or drives concurrent fault/race scenarios against shared disposable PostgreSQL resources; never production.",
       "assigned_to": null,
       "started_at": "2026-10-16T04:32:37+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-913-control-ddl.md"
+      "completed_at": "2026-10-16T04:40:33+00:00",
+      "file": "sdd/tasks/completed/TASK-913-control-ddl.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-914",

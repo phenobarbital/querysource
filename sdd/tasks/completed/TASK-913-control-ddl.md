@@ -147,4 +147,4 @@ def test_control_ddl():
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. docs/sql/query_move_control.sql defines management.qs_query_moves, qs_schedule_state, qs_schedule_runs, qs_scheduler_workers per spec plus qs_move_reservations (PK-enforced canonical identity reservations for source and target; opposite-direction/overlap collide in the DB). Repeatable, no runtime DDL, optional least-privilege grants via qs.runtime_role. Verified on a disposable local PostgreSQL 14 cluster booted by the test (or QS_TEST_PG_DSN): 5 passed. Deviation: one extra table (reservations) beyond the four named, needed for 'canonical identity reservations'.
