@@ -161,4 +161,4 @@ def test_scheduler_controls():
 5. Commit only scoped implementation/SDD state and close the task using the repository close-task tooling; fill in Completion Note.
 
 ## Completion Note
-Pending implementation. Record implementer, commit, validation evidence, deviations and any recovery/rollout evidence here when done.
+Sequential sdd-worker. handoff.py: find_reservation/assert_not_moving (move_in_progress 409) and set_desired (row-locked durable pause/resume/enable; refuses reserved or frozen owners; config_revision bumps only on real change, never on cursor advancement). handlers/scheduler.py: PATCH/DELETE write durable desired state first (409 leaves local mirror untouched), POST sync rejects reserved identities before register_slug; existing access checks, grants, ids and responses unchanged; uncoordinated schedulers behave as before. Deviation: scheduler.py got a class-level _coordinator=None default (fixes TASK-917 regression for instances built without __init__). 7 PG-backed tests pass; unrelated pre-existing failures in tests/tenants (read-only templates dir, 'principal' kwarg) untouched.
