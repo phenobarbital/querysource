@@ -91,7 +91,7 @@ dependencies = [
     # Geospatial
     "folium>=0.20.0",
     "geopandas==1.1.2",
-    "geographiclib==2.0",
+    "geographiclib==2.1",
     "geopy==2.4.1",
     "polars==1.27.1",
     "contextily==1.6.2",
