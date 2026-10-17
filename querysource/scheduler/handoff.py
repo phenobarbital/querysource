@@ -843,6 +843,27 @@ class ScheduleHandoffCoordinator:
                 error_code="move_in_progress",
             )
 
+    async def fence_definition_write(self, conn: Any, store: QueryStore, slug: str) -> None:
+        """Guard one definition write INSIDE its transaction (installed as ``repository.write_fence``).
+
+        Takes the owner's advisory lock SHARED for the rest of the write transaction — the move
+        cutover takes the same key (:meth:`ScheduleOwner.lock_key`) EXCLUSIVE for its whole
+        transaction — and re-checks the move reservation on that same connection. A write
+        therefore either commits before a cutover can start (the cutover's revalidation then
+        sees the changed row and reports ``move_plan_stale``) or sees the reservation and is
+        refused; a write can never resurrect a source the cutover just deleted.
+
+        Raises:
+            TenantError: ``move_in_progress`` (409) while either identity is reserved.
+        """
+        owner = ScheduleOwner.from_store(store, slug)
+        await conn.fetch_one("SELECT pg_advisory_xact_lock_shared($1) AS locked", owner.lock_key())
+        if await self.find_reservation(conn, [owner]) is not None:
+            raise TenantError(
+                f"Query {slug!r} is being moved; retry when the move finishes",
+                error_code="move_in_progress",
+            )
+
     async def set_desired(
         self, logical_schedule_id: str, *, paused: bool | None = None, enabled: bool | None = None
     ) -> dict[str, Any] | None:

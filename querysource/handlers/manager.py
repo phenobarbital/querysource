@@ -234,12 +234,19 @@ class QueryManager(QueryView):
                 [ScheduleOwner.from_store(identity.store, identity.slug)]
             )
         except TenantError as err:
-            # navigator's ``error()`` only knows a handful of statuses (409 would collapse to 400),
-            # so the conflict is raised with its own stable machine code.
-            raise web.HTTPConflict(
-                text=json.dumps({"error_code": err.error_code, "message": str(err)}),
-                content_type="application/json",
-            ) from err
+            raise self._move_conflict(err) from err
+
+    @staticmethod
+    def _move_conflict(err: TenantError) -> web.HTTPConflict:
+        """``409 move_in_progress`` with its own stable machine code.
+
+        navigator's ``error()`` only knows a handful of statuses (409 would collapse to 400).
+        Used for the fast pre-check and for the in-transaction fence the repository applies.
+        """
+        return web.HTTPConflict(
+            text=json.dumps({"error_code": err.error_code, "message": str(err)}),
+            content_type="application/json",
+        )
 
     def _scheduler_selector(self, store: QueryStore) -> str | None:
         """Scheduler selector by PHYSICAL equality with the configured default (never by contract)."""
@@ -614,6 +621,8 @@ class QueryManager(QueryView):
             except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,
@@ -735,6 +744,8 @@ class QueryManager(QueryView):
             except web.HTTPConflict:
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 if err.error_code == "query_not_found":
                     headers = {
                         'X-STATUS': 'EMPTY',
@@ -880,6 +891,8 @@ class QueryManager(QueryView):
             except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,
@@ -1003,6 +1016,8 @@ class QueryManager(QueryView):
             except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,

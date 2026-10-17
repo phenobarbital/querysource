@@ -367,3 +367,24 @@ async def test_sync_selector_is_physical_default_not_legacy_contract() -> None:
     manager3.request.app["qs_scheduler"] = scheduler3
     await manager3._sync_definition_jobs(QueryIdentity(store=public, slug="same"))
     assert scheduler3.calls == [("same", "public")]
+
+
+@pytest.mark.asyncio
+async def test_in_transaction_move_fence_refusal_is_a_409_not_a_400() -> None:
+    """I3: the repository's in-transaction fence raises move_in_progress after the pre-check passed."""
+    registry = _mock_registry()
+    fenced = TenantError("Query 'test_query' is being moved", error_code="move_in_progress")
+    for verb, method, data, op in (
+        ("patch", "PATCH", {"description": "x"}, "patch"),
+        ("delete", "DELETE", None, "delete"),
+        ("post", "POST", {"description": "x"}, "upsert"),
+        ("put", "PUT", {"query_slug": "test_query", "description": "x"}, "upsert"),
+    ):
+        repo = _FakeRepo(raise_on={op: fenced})
+        request = _mock_request(method=method, match_info={"slug": "test_query"}, json_data=data)
+        manager = _manager_with_app(request, registry=registry, repo=repo)
+        _with_move_service(manager, set())  # the fast pre-check sees no reservation (TOCTOU window)
+        with pytest.raises(web.HTTPConflict) as raised:
+            await getattr(manager, verb)()
+        assert json.loads(raised.value.text)["error_code"] == "move_in_progress", verb
+        assert repo.calls and repo.calls[0][0] == op, verb

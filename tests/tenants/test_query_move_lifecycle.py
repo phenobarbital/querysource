@@ -65,6 +65,8 @@ async def test_startup_recovers_unfinished_operations_then_worker_polls_and_stop
     await QuerySource._start_move_service(qs, app)
     try:
         assert app["qs_move_service"] is not None and app["qs_move_worker"] is not None
+        # I3: every CRUD write re-checks the reservation under the owner fence in its own transaction.
+        assert svc.repository.write_fence == app["qs_move_service"].coordinator.fence_definition_write
         # Recovery ran inside startup, before any scheduler hook could enable dispatch.
         assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "completed"
         assert await _row(pg_dsn, LEGACY) is None and await _row(pg_dsn, TENANT) is not None

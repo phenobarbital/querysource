@@ -567,6 +567,9 @@ class QuerySource(metaclass=Singleton):
             log.warning("Query moves are disabled: control plane unavailable (%s)", exc)
             return
         service = QueryMoveService(repository, coordinator)
+        # Close the check-then-act window of CRUD writes: every definition write re-checks the
+        # move reservation under the shared owner fence inside its own transaction.
+        repository.write_fence = coordinator.fence_definition_write
         app["qs_move_service"] = service
         try:
             await asyncio.wait_for(service.recover(), timeout=60)

@@ -433,3 +433,51 @@ async def test_concurrent_cutovers_move_exactly_once(pg_dsn) -> None:
     assert [r for r in results if isinstance(r, dict) and r["moved"] is True]
     assert await _scalar(pg_dsn, 'SELECT count(*) FROM "wm_assembly"."queries"') == 1
     assert await _scalar(pg_dsn, 'SELECT count(*) FROM "public"."queries"') == 0
+
+
+# -- I3: CRUD writes re-check the reservation under the owner fence, inside their transaction ----
+
+
+UPSERT = {"query_slug": "s", "description": "resurrected", "query_raw": "SELECT 2", "program_slug": "prog"}
+
+
+@pytest.mark.asyncio
+async def test_definition_writes_are_refused_inside_their_transaction_while_reserved(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    repo = svc.repository
+    repo.write_fence = coord.fence_definition_write
+    await repo.patch(_ident(), {"description": "edited"})  # no move: the fence is transparent
+    assert (await _row(pg_dsn, LEGACY))["description"] == "edited"
+    await _draining(svc, coord)
+    for write in (lambda: repo.patch(_ident(), {"description": "x"}),
+                  lambda: repo.upsert(_ident(), dict(UPSERT)),
+                  lambda: repo.delete(_ident())):
+        with pytest.raises(TenantError) as err:
+            await write()
+        assert err.value.error_code == "move_in_progress"
+    assert (await _row(pg_dsn, LEGACY))["description"] == "edited"
+
+
+@pytest.mark.asyncio
+async def test_upsert_racing_a_cutover_waits_for_the_fence_and_never_resurrects_the_source(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    repo = svc.repository
+    repo.write_fence = coord.fence_definition_write
+    await _draining(svc, coord)
+    key = ScheduleOwner.from_store(LEGACY, "s").lock_key()
+    async with await _factory(pg_dsn)() as cutover:  # stands in for the cutover transaction
+        await cutover.transaction()
+        await cutover.fetch_one("SELECT pg_advisory_xact_lock($1) AS locked", key)
+        write = asyncio.ensure_future(repo.upsert(_ident(), dict(UPSERT)))
+        await asyncio.sleep(0.3)
+        assert not write.done()  # blocked on the shared owner fence
+        await cutover.fetch_all('DELETE FROM "public"."queries" WHERE query_slug = $1 RETURNING query_slug', "s")
+        await cutover.commit()
+    with pytest.raises(TenantError) as err:
+        await asyncio.wait_for(write, 5)
+    assert err.value.error_code == "move_in_progress"
+    assert await _row(pg_dsn, LEGACY) is None  # the moved source is not resurrected
