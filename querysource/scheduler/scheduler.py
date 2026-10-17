@@ -17,6 +17,9 @@ Reserved JSON sub-key:
 import asyncio
 import hashlib
 import json
+import os
+import socket
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any, Optional, Union
@@ -32,12 +35,18 @@ from apscheduler.triggers.interval import IntervalTrigger
 from navconfig.logging import logging
 
 from querysource.conf import (
+    QS_SCHEDULE_DEPLOYMENT_ID,
     QS_SCHEDULER_COALESCE,
     QS_SCHEDULER_MAX_INSTANCES,
     QS_SCHEDULER_TIMEZONE,
 )
 from querysource.repositories import DefinitionRepository
 from querysource.repositories.definitions import RUN_AS_COLUMN
+from querysource.scheduler.handoff import (
+    ScheduleHandoffCoordinator,
+    ScheduleOwner,
+    selector_for,
+)
 from querysource.scheduler.jobs import (
     cache_refresh_job,
     scheduled_multiqs_job,
@@ -48,6 +57,10 @@ from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity, QueryStore, TenantOwnerEnvelope, TenantRegistry
 
 logger = logging.getLogger("QSScheduler")
+
+# Cadence of the durable-state heartbeat and of the mirror poller (seconds).
+_HEARTBEAT_SECONDS = 30.0
+_MIRROR_POLL_SECONDS = 15.0
 
 # Mapping from day-of-week string to Python weekday int (mon=0 .. sun=6).
 # Used by _biweekly_anchor to roll an anchor date to the target weekday.
@@ -125,6 +138,9 @@ class QSScheduler:
     Gated behind ENABLE_QS_SCHEDULER config flag.
     """
 
+    # Class-level default so an instance built without ``__init__`` stays uncoordinated.
+    _coordinator: ScheduleHandoffCoordinator | None = None
+
     def __init__(self, loop: asyncio.AbstractEventLoop = None):
         self.logger = logger
         self._loop = loop
@@ -144,6 +160,18 @@ class QSScheduler:
         # connection_factory from QuerySource's own connection (TASK-720),
         # not a scheduler-owned one.
         self._repository: DefinitionRepository | None = None
+        # Live-transfer coordination (None until startup finds the deployed control DDL;
+        # without it jobs register uncoordinated, exactly as before).
+        self._coordinator: ScheduleHandoffCoordinator | None = None
+        # (owner tuple, kind) -> durable schedule state backing the registered mirror.
+        self._durable: dict[tuple, dict] = {}
+        # logical schedule id -> (owner tuple, generation, paused, enabled, config revision,
+        # trigger digest) of the local mirror (see ``_mirror_key``).
+        self._mirror_index: dict[str, tuple] = {}
+        # owner tuple -> store whose durable bootstrap failed (metadata unreachable at that time);
+        # retried by the mirror poller so the slug is not left unscheduled until a restart.
+        self._pending_bootstrap: dict[tuple, QueryStore] = {}
+        self._background: list[asyncio.Task] = []
 
     def _create_scheduler(self) -> AsyncIOScheduler:
         """Create an AsyncIOScheduler with MemoryJobStore and AsyncIOExecutor."""
@@ -176,7 +204,11 @@ class QSScheduler:
         """
         if self._registry is None:
             return True
-        return store == self._registry.resolve()
+        try:
+            return store == self._registry.resolve()
+        except TenantError:
+            # Configured default unavailable: nothing is "the default".
+            return False
 
     def _qualified_job_id(self, base_id: str, slug: str, store: QueryStore) -> str:
         """Retain the legacy id for the configured default store; qualify every other store.
@@ -200,6 +232,182 @@ class QSScheduler:
         store_key = f"{store.database_namespace}:{store.schema}:{store.table}"
         store_digest = hashlib.sha256(store_key.encode()).hexdigest()[:12]
         return f"qsj2-{kind}-{store_digest}-{quote(slug, safe='')}"
+
+    # ─── Durable (live-transfer) coordination ────────────────────────────────
+
+    def _durable_state(self, store: QueryStore, slug: str, kind: str) -> dict | None:
+        """Return the durable state backing a registered mirror (None when uncoordinated)."""
+        if self._coordinator is None:
+            return None
+        return self._durable.get((ScheduleOwner.from_store(store, slug).as_tuple(), kind))
+
+    def _durable_trigger(self, durable: dict) -> Optional[BaseTrigger]:
+        """Rebuild the trigger from its persisted (anchored) definition — never from now."""
+        spec = durable.get("trigger_spec") or {}
+        return self._parse_trigger(str(spec.get("schedule_type")), dict(spec.get("schedule") or {}))
+
+    def _coordination_kwargs(self, durable: dict | None) -> dict:
+        """Job kwargs that make a mirror admit through the shared generation gate."""
+        if durable is None:
+            return {}
+        return {
+            "coordinator": self._coordinator,
+            "logical_schedule_id": durable["logical_schedule_id"],
+            "generation": int(durable["generation"]),
+        }
+
+    @staticmethod
+    def _mirror_key(owner_tuple: tuple, durable: dict) -> tuple:
+        """What a local mirror must match: owner, fence, desired state AND trigger configuration.
+
+        ``config_revision`` and the trigger digest are included so a trigger changed by another
+        worker (an ordinary save) is reinstalled here too, not only owner/paused changes.
+        """
+        trigger = json.dumps(durable.get("trigger_spec") or {}, sort_keys=True, default=str)
+        return (
+            owner_tuple,
+            int(durable["generation"]),
+            bool(durable["paused"]),
+            bool(durable["enabled"]),
+            int(durable.get("config_revision") or 0),
+            hashlib.sha256(trigger.encode()).hexdigest(),
+        )
+
+    def _note_mirror(self, store: QueryStore, slug: str, durable: dict) -> None:
+        self._mirror_index[durable["logical_schedule_id"]] = self._mirror_key(
+            ScheduleOwner.from_store(store, slug).as_tuple(), durable
+        )
+
+    async def _bootstrap_for(self, store: QueryStore, slug: str, row: dict | None) -> bool:
+        """Persist/refresh durable state for one definition; False means "do not register".
+
+        Fails closed: if the shared metadata service cannot be reached the slug is not
+        mirrored uncoordinated (it could otherwise run alongside another process).
+        """
+        if self._coordinator is None:
+            return True
+        owner = ScheduleOwner.from_store(store, slug)
+        try:
+            states = await self._coordinator.bootstrap_row(owner, row, default_timezone=str(self._timezone))
+        except Exception as exc:  # noqa: BLE001 - fail closed, logged, retried by the poller
+            self.logger.error(
+                "QSScheduler: durable schedule bootstrap failed for '%s' in %s.%s (will retry): %s",
+                slug, store.schema, store.table, exc,
+            )
+            self._pending_bootstrap[owner.as_tuple()] = store
+            return False
+        self._pending_bootstrap.pop(owner.as_tuple(), None)
+        for key in [k for k in self._durable if k[0] == owner.as_tuple()]:
+            self._durable.pop(key, None)
+        for kind, state in states.items():
+            self._durable[(owner.as_tuple(), kind)] = state
+        return True
+
+    def _store_for_owner(self, owner: ScheduleOwner) -> QueryStore:
+        """Resolve a canonical owner back to its registered physical store."""
+        candidates = list(self._registry.stores())
+        try:
+            candidates.append(self._registry.resolve())
+        except TenantError:
+            pass
+        for store in candidates:
+            if (store.database_namespace, store.schema, store.table) == (
+                owner.namespace, owner.schema, owner.table,
+            ):
+                return store
+        raise TenantError(
+            f"Owner store {owner.schema}.{owner.table} is not registered", error_code="tenant_not_available"
+        )
+
+    async def reconcile_owner_change(self, source: ScheduleOwner, target: ScheduleOwner) -> None:
+        """Re-sync local mirrors after a committed move (idempotent, no row migration).
+
+        Removes the source owner's mirrors and installs the target's from durable state.
+        A stale source mirror that survives anywhere is still fenced by generation.
+        """
+        for owner in (source, target):
+            store = self._store_for_owner(owner)
+            await self.register_slug(owner.slug, tenant=selector_for(self._registry, store))
+
+    async def sync_mirrors_from_durable(self) -> int:
+        """Converge local mirrors with durable state (owner/generation/paused/enabled/trigger config).
+
+        This is the polling half of durable reconciliation: it does not rely on any
+        notification, so a process that missed a cutover catches up on its next pass.
+
+        Returns:
+            Number of (owner, slug) pairs that were re-synced.
+        """
+        if self._coordinator is None or self._scheduler is None:
+            return 0
+        async with await self._coordinator.connection_factory() as conn:
+            states = await self._coordinator.load_all_states(conn)
+        desired = {s["logical_schedule_id"]: s for s in states}
+        resync: dict[tuple, None] = {}
+        for lid, state in desired.items():
+            owner_tuple = (
+                state["owner_namespace"], state["owner_schema"], state["owner_table"], state["query_slug"],
+            )
+            known = self._mirror_index.get(lid)
+            current = self._mirror_key(owner_tuple, state)
+            if known != current:
+                resync[owner_tuple] = None
+                if known is not None and known[0] != owner_tuple:
+                    resync[known[0]] = None
+        for lid, known in list(self._mirror_index.items()):
+            if lid not in desired:
+                resync[known[0]] = None
+                self._mirror_index.pop(lid, None)
+        # Definitions whose bootstrap failed (often with no durable row yet) are retried here.
+        for owner_tuple in list(self._pending_bootstrap):
+            resync[owner_tuple] = None
+        count = 0
+        for owner_tuple in resync:
+            owner = ScheduleOwner(*owner_tuple)
+            try:
+                store = self._store_for_owner(owner)
+                await self.register_slug(owner.slug, tenant=selector_for(self._registry, store))
+                count += 1
+            except Exception as exc:  # noqa: BLE001 - retried on the next poll
+                self.logger.warning("QSScheduler: mirror re-sync of '%s' failed: %s", owner.slug, exc)
+        return count
+
+    async def _poll_mirrors(self) -> None:
+        while True:
+            await asyncio.sleep(_MIRROR_POLL_SECONDS)
+            try:
+                await self.sync_mirrors_from_durable()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - polling must survive transient failures
+                self.logger.warning("QSScheduler: durable mirror poll failed: %s", exc)
+
+    async def _init_coordinator(self) -> None:
+        """Enable durable coordination when the control DDL is deployed (never runs DDL)."""
+        if self._repository is None:
+            return
+        try:
+            coordinator = ScheduleHandoffCoordinator(
+                self._repository,
+                deployment_id=QS_SCHEDULE_DEPLOYMENT_ID,
+                worker_id=f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}",
+                trigger_parser=self._parse_trigger,
+            )
+            info = await coordinator.readiness()
+            if info["missing"]:
+                self.logger.info(
+                    "QSScheduler: live schedule transfer control tables are not deployed (%s); "
+                    "registering jobs uncoordinated", ", ".join(info["missing"]),
+                )
+                return
+            coordinator.attach_mirror(self)
+            await coordinator.register_worker()
+        except Exception as exc:  # noqa: BLE001 - stay uncoordinated rather than fail startup
+            self.logger.warning("QSScheduler: durable coordination unavailable: %s", exc)
+            return
+        self._coordinator = coordinator
+        self._background.append(asyncio.ensure_future(coordinator.heartbeat_loop(_HEARTBEAT_SECONDS)))
+        self._background.append(asyncio.ensure_future(self._poll_mirrors()))
 
     def _parse_trigger(
         self, schedule_type: str, schedule: dict
@@ -313,8 +521,15 @@ class QSScheduler:
         if trigger is None:
             return None
 
-        owner_envelope = self._owner_envelope(store)
         provider = row.get("provider")
+        durable = self._durable_state(
+            store, slug, "multi" if provider == "multi" else "query"
+        )
+        if self._coordinator is not None and (durable is None or not durable["enabled"]):
+            return None  # not coordinated (bootstrap failed/disabled): never mirror unfenced
+        if durable is not None:
+            trigger = self._durable_trigger(durable) or trigger
+        owner_envelope = self._owner_envelope(store)
         if provider == "multi":
             # Reserved output sub-key — parse, log at DEBUG, do NOT pass into kwargs.
             reserved_output = scheduler_def.get("output")
@@ -359,8 +574,10 @@ class QSScheduler:
                     "job_id": job_id,
                     "run_as_user_id": row.get(RUN_AS_COLUMN),
                     "identity_auth": getattr(self, "_auth", None),
+                    **self._coordination_kwargs(durable),
                 },
             )
+            self._finish_mirror(job_id, store, slug, durable)
             self.logger.info("Registered scheduled multi-query job: %s", job_id)
             return job_id
 
@@ -379,10 +596,22 @@ class QSScheduler:
                 # See the multi-query registration above — the job's own
                 # real registered id, not a guessed legacy shape.
                 "job_id": job_id,
+                **self._coordination_kwargs(durable),
             },
         )
+        self._finish_mirror(job_id, store, slug, durable)
         self.logger.info(f"Registered scheduled query job: {job_id}")
         return job_id
+
+    def _finish_mirror(
+        self, job_id: str, store: QueryStore, slug: str, durable: dict | None
+    ) -> None:
+        """Apply durable paused state to the new APScheduler mirror and index it."""
+        if durable is None:
+            return
+        if durable["paused"]:
+            self._scheduler.pause_job(job_id)
+        self._note_mirror(store, slug, durable)
 
     def _load_scheduled_queries(self, rows: list) -> int:
         """Register ScheduledQueryJob for rows with attributes.scheduler.
@@ -430,6 +659,11 @@ class QSScheduler:
             return None
         if store is None:
             store = self._registry.resolve()
+        durable = self._durable_state(store, slug, "cache")
+        if self._coordinator is not None and (durable is None or not durable["enabled"]):
+            return None  # not coordinated (bootstrap failed/disabled): never mirror unfenced
+        if durable is not None:
+            trigger = self._durable_trigger(durable) or trigger
         owner_envelope = self._owner_envelope(store)
         job_id = self._qualified_job_id(f"cache_{slug}", slug, store)
         self._scheduler.add_job(
@@ -445,8 +679,10 @@ class QSScheduler:
                 # See the multi-query registration above — the job's own
                 # real registered id, not a guessed legacy shape.
                 "job_id": job_id,
+                **self._coordination_kwargs(durable),
             },
         )
+        self._finish_mirror(job_id, store, slug, durable)
         self.logger.info(f"Registered cache refresh job: {job_id}")
         return job_id
 
@@ -646,6 +882,13 @@ class QSScheduler:
 
         registered = []
         row = await self._fetch_slug_row(slug, tenant=tenant)
+        if self._coordinator is not None:
+            for kind in ("query", "multi", "cache"):
+                state = self._durable.get((ScheduleOwner.from_store(store, slug).as_tuple(), kind))
+                if state is not None:
+                    self._mirror_index.pop(state["logical_schedule_id"], None)
+            if not await self._bootstrap_for(store, slug, row):
+                row = None
         if row is not None:
             qjob = self._register_query_row(row, store=store)
             if qjob:
@@ -716,11 +959,16 @@ class QSScheduler:
         # Create the scheduler
         self.logger.info("QSScheduler: creating AsyncIOScheduler instance")
         self._scheduler = self._create_scheduler()
+        await self._init_coordinator()
 
         # Discovery is already complete (see docstring); enumerate every
         # unique eligible physical store, falling back to just the
         # configured/legacy default when discovery found none.
-        stores = self._registry.stores() or (self._registry.resolve(),)
+        try:
+            stores = self._registry.stores() or (self._registry.resolve(),)
+        except TenantError as exc:
+            self.logger.error("QSScheduler: no schedulable store is available: %s", exc)
+            stores = ()
         self.logger.info(
             "QSScheduler: loading schedulable queries from %d store(s)",
             len(stores),
@@ -766,6 +1014,8 @@ class QSScheduler:
                     if store_slug_key in seen_store_slugs:
                         continue
                     seen_store_slugs.add(store_slug_key)
+                    if not await self._bootstrap_for(store, slug, row):
+                        continue
                     if self._register_query_row(row, store=store) is not None:
                         total_query_count += 1
                     if self._register_cache_row(row, store=store) is not None:
@@ -795,6 +1045,16 @@ class QSScheduler:
         Args:
             app: The aiohttp web application.
         """
+        for task in self._background:
+            task.cancel()
+        for task in self._background:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 - shutting down
+                pass
+        self._background.clear()
+        if self._coordinator is not None:
+            await self._coordinator.unregister_worker()
         if self._scheduler and self._scheduler.running:
             self._scheduler.shutdown(wait=True)
             self.logger.info("QSScheduler stopped")

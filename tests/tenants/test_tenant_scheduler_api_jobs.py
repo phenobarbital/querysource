@@ -301,7 +301,9 @@ async def test_crud_commit_then_sync_failure_header() -> None:
     resp_ok = await manager_ok.patch()
     assert resp_ok.status == 200
     assert "X-QS-Scheduler-Sync" not in resp_ok.headers
-    assert ok_scheduler.calls == [("shared", "tenant1")]
+    # FEAT-176: the selector follows PHYSICAL equality with the configured default (here tenant1 IS
+    # the default store, so its selector is null); it is never chosen by legacy/tenant contract.
+    assert ok_scheduler.calls == [("shared", None)]
 
     # No scheduler at all (feature/route not wired) -> treated as success,
     # no failure header, no crash.

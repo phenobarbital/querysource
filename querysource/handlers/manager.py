@@ -25,6 +25,7 @@ from ..auth.request_gate import enforce_request_pbac
 from ..models import QueryModel
 from ..queries.multi import definition_requires_scheduler_grant
 from ..repositories import DefinitionRepository
+from ..scheduler.handoff import ScheduleOwner, selector_for
 from ..tenant_errors import TenantError
 from ..tenants import QueryIdentity, QueryStore, TenantRegistry
 from ..types.validators import Entity
@@ -215,6 +216,49 @@ class QueryManager(QueryView):
                 logger=self.logger,
             )
 
+    async def _assert_not_moving(self, identity: QueryIdentity) -> None:
+        """Reject a write to an identity reserved by an unfinished move (FEAT-176).
+
+        Applies to the source AND the destination of a move until its recovery releases the
+        reservations, so an ordinary save/delete/create can neither resurrect a moved source
+        nor overwrite a target. A deployment without the move service is unaffected.
+
+        Raises:
+            web.HTTPConflict: ``move_in_progress`` (409, JSON ``{error_code, message}``).
+        """
+        service = self.request.app.get("qs_move_service")
+        if service is None:
+            return
+        try:
+            await service.coordinator.assert_not_moving(
+                [ScheduleOwner.from_store(identity.store, identity.slug)]
+            )
+        except TenantError as err:
+            raise self._move_conflict(err) from err
+
+    @staticmethod
+    def _move_conflict(err: TenantError) -> web.HTTPConflict:
+        """``409 move_in_progress`` with its own stable machine code.
+
+        navigator's ``error()`` only knows a handful of statuses (409 would collapse to 400).
+        Used for the fast pre-check and for the in-transaction fence the repository applies.
+        """
+        return web.HTTPConflict(
+            text=json.dumps({"error_code": err.error_code, "message": str(err)}),
+            content_type="application/json",
+        )
+
+    def _scheduler_selector(self, store: QueryStore) -> str | None:
+        """Scheduler selector by PHYSICAL equality with the configured default (never by contract)."""
+        registry = self.request.app.get("qs_tenant_registry")
+        if registry is None:
+            return store.schema if store.contract == "tenant" else None
+        try:
+            return selector_for(registry, store)
+        except TenantError:
+            # Configured default unavailable: only an exact registered schema can address it.
+            return store.schema
+
     async def _sync_definition_jobs(self, identity: QueryIdentity) -> bool:
         """Synchronize jobs only after the definition transaction commits.
         
@@ -233,7 +277,9 @@ class QueryManager(QueryView):
             
         try:
             # Synchronize only the selected owner's scheduled jobs
-            await scheduler.register_slug(identity.slug, tenant=identity.store.schema if identity.store.contract == "tenant" else None)
+            await scheduler.register_slug(
+                identity.slug, tenant=self._scheduler_selector(identity.store)
+            )
             return True
         except Exception as exc:
             # Failure logs and returns False; callers set failure header
@@ -557,6 +603,7 @@ class QueryManager(QueryView):
             # Call repository patch
             try:
                 identity = QueryIdentity(store=store, slug=query_slug)
+                await self._assert_not_moving(identity)
                 await self._enforce_scheduler_grant(repo, identity, data)
                 actor, info = await self._run_as_context()
                 result = await repo.patch(
@@ -571,9 +618,11 @@ class QueryManager(QueryView):
                     return self.json_response(result, headers=headers)
                 
                 return self.json_response(result)
-            except web.HTTPNotFound:
+            except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,
@@ -670,6 +719,7 @@ class QueryManager(QueryView):
             # Call repository delete
             try:
                 identity = QueryIdentity(store=store, slug=query_slug)
+                await self._assert_not_moving(identity)
                 result = await repo.delete(identity)
                 
                 # Sync definition jobs if scheduler is active
@@ -691,7 +741,11 @@ class QueryManager(QueryView):
                     headers=headers,
                     status=202
                 )
+            except web.HTTPConflict:
+                raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 if err.error_code == "query_not_found":
                     headers = {
                         'X-STATUS': 'EMPTY',
@@ -818,6 +872,7 @@ class QueryManager(QueryView):
             # Call repository upsert
             try:
                 identity = QueryIdentity(store=store, slug=data['query_slug'])
+                await self._assert_not_moving(identity)
                 await self._enforce_scheduler_grant(repo, identity, data)
                 actor, info = await self._run_as_context()
                 result, is_created = await repo.upsert(
@@ -833,9 +888,11 @@ class QueryManager(QueryView):
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
-            except web.HTTPNotFound:
+            except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,
@@ -940,6 +997,7 @@ class QueryManager(QueryView):
             # Call repository upsert
             try:
                 identity = QueryIdentity(store=store, slug=slug['query_slug'])
+                await self._assert_not_moving(identity)
                 await self._enforce_scheduler_grant(repo, identity, data)
                 actor, info = await self._run_as_context()
                 result, is_created = await repo.upsert(
@@ -955,9 +1013,11 @@ class QueryManager(QueryView):
                 
                 status = 201 if is_created else 202
                 return self.json_response(result, status=status)
-            except web.HTTPNotFound:
+            except (web.HTTPNotFound, web.HTTPConflict):
                 raise
             except TenantError as err:
+                if err.error_code == "move_in_progress":  # raised by the in-transaction fence
+                    raise self._move_conflict(err) from err
                 return self.error(
                     reason=str(err),
                     exception=err,

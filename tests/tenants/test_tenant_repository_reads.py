@@ -269,3 +269,45 @@ async def test_schedulable_preserves_existing_eligibility_predicate() -> None:
     assert "attributes IS NOT NULL" in sql
     assert "cache_options IS NOT NULL" in sql
     assert '"tenant1"."queries"' in sql
+
+
+@pytest.mark.asyncio
+async def test_legacy_program_only_change_alters_revision() -> None:
+    """A program-only legacy edit changes the revision; tenant revision is unchanged."""
+    store = _legacy_store()
+    identity = QueryIdentity(store=store, slug="test_query")
+    revisions = []
+    for program in ("alpha", "beta"):
+        conn = _MockConn(rows=[_base_row(program_slug=program)])
+        repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+        revisions.append((await repo.get(identity)).revision)
+    assert revisions[0] != revisions[1]
+    # Same raw program → stable revision, and cache keys stay owner-qualified.
+    conn = _MockConn(rows=[_base_row(program_slug="alpha")])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    assert (await repo.get(identity)).revision == revisions[0]
+    assert result_cache_key(identity, revisions[0], "sum") != result_cache_key(
+        QueryIdentity(store=_tenant_store(), slug="test_query"), revisions[0], "sum"
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_list_and_schema_retain_program_slug() -> None:
+    """Legacy listing/metadata keep the stored program; raw updated_at and nulls survive."""
+    legacy = _legacy_store()
+    row = _base_row(program_slug="alpha")
+    conn = _MockConn(rows=[row], scalar=1)
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+
+    page = await repo.list(legacy, {"page": 1, "page_size": 10})
+    assert page.rows[0]["program_slug"] == "alpha"
+    assert page.rows[0]["updated_at"] == row["updated_at"]
+    assert page.rows[0]["description"] == row["description"]
+    assert page.rows[0]["source"] is None
+    assert "program_slug" in repo.schema(legacy).get("properties", {})
+    assert "program_slug" not in repo.schema(_tenant_store()).get("properties", {})
+
+    tenant_page = await DefinitionRepository(
+        registry=None, connection_factory=_factory(_MockConn(rows=[_base_row()], scalar=1))
+    ).list(_tenant_store(), {})
+    assert "program_slug" not in tenant_page.rows[0]

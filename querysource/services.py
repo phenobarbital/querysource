@@ -244,6 +244,11 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
         routes.append(r)
 
+        ### Query stores catalog and explicit moves (FEAT-176) ###
+        # Exact static routes MUST precede the broad management routes below.
+        from .handlers.query_moves import register_routes as register_move_routes
+        routes.extend(register_move_routes(self.app.router))
+
         ### Query Manager ###
         r = self.app.router.add_view(
             r'/api/v1/management/queries/{slug}', QueryManager
@@ -446,6 +451,7 @@ class QuerySource(metaclass=Singleton):
             from .scheduler import QSScheduler
             self._scheduler = QSScheduler()
             self._scheduler.setup(self.app)
+            self.app.on_startup.append(self._attach_move_mirror)
             from .handlers.scheduler import SchedulerJobsView
             r = self.app.router.add_view(
                 '/api/v1/qs/scheduler/jobs', SchedulerJobsView
@@ -528,6 +534,67 @@ class QuerySource(metaclass=Singleton):
         registry = await self.initialize_tenants()
         app["qs_tenant_registry"] = registry
         app["qs_definition_repository"] = self._definition_repository
+        await self._start_move_service(app)
+
+    async def _start_move_service(self, app: WebApp) -> None:
+        """Start the durable query-move service and worker (independent of ENABLE_QS_SCHEDULER).
+
+        Runs only when the explicitly deployed control tables exist: this never runs DDL and never
+        migrates anything. Unfinished operations are recovered BEFORE the scheduler's startup hook
+        enables dispatch (the shared dispatch gate also keeps affected schedules fenced until then).
+        An unscheduled move needs no scheduler; a scheduled one is gated by protocol readiness at
+        preview/submission time.
+        """
+        import os
+        import socket
+        import uuid
+
+        from .conf import QS_SCHEDULE_DEPLOYMENT_ID
+        from .query_moves import MoveWorker, QueryMoveService
+        from .scheduler.handoff import ScheduleHandoffCoordinator
+
+        log = logging.getLogger("querysource.services")
+        repository = self._definition_repository
+        try:
+            coordinator = ScheduleHandoffCoordinator(
+                repository,
+                deployment_id=QS_SCHEDULE_DEPLOYMENT_ID,
+                worker_id=f"{socket.gethostname()}:{os.getpid()}:moves-{uuid.uuid4().hex[:6]}",
+            )
+            if (await coordinator.readiness())["missing"]:
+                log.info("Query moves are disabled: the control tables are not deployed")
+                return
+        except Exception as exc:  # noqa: BLE001 - startup must not fail because of an optional feature
+            log.warning("Query moves are disabled: control plane unavailable (%s)", exc)
+            return
+        service = QueryMoveService(repository, coordinator)
+        # Close the check-then-act window of CRUD writes: every definition write re-checks the
+        # move reservation under the shared owner fence inside its own transaction.
+        repository.write_fence = coordinator.fence_definition_write
+        app["qs_move_service"] = service
+        try:
+            await asyncio.wait_for(service.recover(), timeout=60)
+        except Exception as exc:  # noqa: BLE001 - recovery continues in the worker; gates stay fenced
+            log.warning("Move recovery did not finish at startup (%s); the worker will continue", exc)
+        worker = MoveWorker(service)
+        app["qs_move_worker"] = worker
+        self._move_worker_task = asyncio.ensure_future(worker.run())
+
+    async def _attach_move_mirror(self, app: WebApp) -> None:
+        """Let move reconciliation update this process' scheduler mirrors (after scheduler startup)."""
+        service = app.get("qs_move_service")
+        if service is not None and getattr(self, "_scheduler", None) is not None:
+            service.coordinator.attach_mirror(self._scheduler)
 
     async def qs_stop(self, app: WebApp) -> None:
-        pass
+        worker = app.get("qs_move_worker")
+        task = getattr(self, "_move_worker_task", None)
+        if worker is not None:
+            worker.stop()
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 - shutting down
+                pass
+            self._move_worker_task = None

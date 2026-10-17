@@ -92,6 +92,10 @@ class TenantRegistry:
         # database's other, actually-discovered stores. None until
         # discover() has run at least once.
         self._database_namespace: str | None = None
+        # True once discover() has published a snapshot (even an empty one).
+        # After that, a missing configured table is an explicit unavailable
+        # store rather than a silent public.queries substitute.
+        self._discovered: bool = False
 
     def _is_system_schema(self, schema: str) -> bool:
         """Check if a schema is a system schema."""
@@ -166,6 +170,12 @@ class TenantRegistry:
         self._stores = ()
         self._diagnostics = ()
         self._default_store = None
+        self._discovered = False
+
+        # Honor QS_QUERIES_SCHEMA / QS_QUERIES_TABLE as the configured legacy store.
+        configured_schema = QueryModel.Meta.schema
+        configured_table = QueryModel.Meta.name
+        configured_key = (configured_schema, configured_table)
 
         # Get database connection info without secrets
         # Acquired pg wrappers keep their DSN on the owning pool.
@@ -195,13 +205,17 @@ class TenantRegistry:
                     )
 
         # Query information_schema for tables named 'queries'
-        tables_query = """
+        configured_filter = (
+            f"(table_schema = {_sql_literal(configured_schema)} "
+            f"AND table_name = {_sql_literal(configured_table)})"
+        )
+        tables_query = f"""
         SELECT
             table_schema,
             table_name,
             table_type
         FROM information_schema.tables
-        WHERE table_name = 'queries'
+        WHERE (table_name = 'queries' OR {configured_filter})
         AND table_type = 'BASE TABLE'
         """
 
@@ -227,12 +241,21 @@ class TenantRegistry:
         tables = result or []
 
         if not tables:
-            # No queries tables found - no stores to register
+            # No queries tables found - no stores to register. The configured
+            # default is explicitly unavailable (resolve(None) will say so).
+            self._diagnostics = (
+                {
+                    "schema": configured_schema,
+                    "table": configured_table,
+                    "reason": "configured default table not found",
+                },
+            )
+            self._discovered = True
             return
 
         # Read the full shape: program_slug distinguishes legacy rows and
         # disqualifies nonlegacy tables from the tenant contract.
-        columns_query = """
+        columns_query = f"""
         SELECT
             table_schema,
             table_name,
@@ -240,7 +263,7 @@ class TenantRegistry:
             data_type,
             is_nullable
         FROM information_schema.columns
-        WHERE table_name = 'queries'
+        WHERE (table_name = 'queries' OR {configured_filter})
         """
 
         try:
@@ -276,8 +299,13 @@ class TenantRegistry:
         diagnostics: list[Mapping[str, Any]] = []
 
         for schema, table, _table_type in tables:
+            is_configured = (schema, table) == configured_key
+            # Tenant tables are always named 'queries'; the configured table is
+            # additionally registered irrespective of schema filters/allowlist.
+            if not is_configured and table != "queries":
+                continue
             # Skip system schemas
-            if self._is_system_schema(schema):
+            if not is_configured and self._is_system_schema(schema):
                 diagnostics.append(
                     {
                         "schema": schema,
@@ -288,7 +316,7 @@ class TenantRegistry:
                 continue
 
             # Skip reserved schemas
-            if self._is_reserved_schema(schema):
+            if not is_configured and self._is_reserved_schema(schema):
                 diagnostics.append(
                     {
                         "schema": schema,
@@ -299,7 +327,7 @@ class TenantRegistry:
                 continue
 
             # Skip schemas with slashes
-            if self._has_slash(schema):
+            if not is_configured and self._has_slash(schema):
                 diagnostics.append(
                     {
                         "schema": schema,
@@ -310,7 +338,7 @@ class TenantRegistry:
                 continue
 
             # Check if table is in allowlist
-            if allowlist_set is not None and schema not in allowlist_set:
+            if not is_configured and allowlist_set is not None and schema not in allowlist_set:
                 diagnostics.append(
                     {
                         "schema": schema,
@@ -338,7 +366,7 @@ class TenantRegistry:
 
             # public.queries retains the legacy row contract. Only other
             # schemas must satisfy the tenant contract (no program_slug).
-            is_legacy = schema == "public"
+            is_legacy = is_configured or (schema == "public" and table == "queries")
             is_compatible, reason = self._is_compatible_store(
                 columns_set, has_program_slug and not is_legacy
             )
@@ -366,13 +394,23 @@ class TenantRegistry:
 
             discovered_stores.append(store)
 
-            # Track default store (public schema or configured default)
-            if schema == "public":
+            # The default is exactly the configured physical store, never "public" by name.
+            if is_configured:
                 self._default_store = store
+
+        if self._default_store is None:
+            diagnostics.append(
+                {
+                    "schema": configured_schema,
+                    "table": configured_table,
+                    "reason": "configured default table not found",
+                }
+            )
 
         # Deduplicate stores
         self._stores = self._deduplicate_stores(discovered_stores)
         self._diagnostics = tuple(diagnostics)
+        self._discovered = True
 
         # No owner fallback (repeated, explicit constraint throughout this
         # feature's spec/tasks): if no "public" schema was discovered,
@@ -402,20 +440,23 @@ class TenantRegistry:
     def resolve(self, tenant: str | None = None) -> QueryStore:
         """Resolve exact selector; never fall back from an explicit name."""
         if tenant is None:
-            # Return configured default store
+            # Return the configured physical default store
             if self._default_store is None:
+                if self._discovered:
+                    raise TenantError(
+                        "Configured default query store is not available",
+                        error_code="tenant_store_unavailable",
+                    )
                 return self._legacy_fallback_store()
             return self._default_store
 
-        # Check if tenant is in allowlist
+        # A schema selector addresses that schema's ``queries`` table.
         for store in self._stores:
-            if store.schema == tenant:
+            if store.schema == tenant and store.table == "queries":
                 return store
 
-        # Check if tenant is public (literal)
+        # Literal public stays public, distinct from a custom configured default.
         if tenant == "public":
-            if self._default_store is not None and self._default_store.schema == "public":
-                return self._default_store
             return self._legacy_fallback_store()
 
         # Tenant not found
@@ -431,6 +472,13 @@ class TenantRegistry:
     def diagnostics(self) -> tuple[Mapping[str, Any], ...]:
         """Return administrative discovery reasons without secrets."""
         return self._diagnostics
+
+
+def _sql_literal(value: str) -> str:
+    """Render a catalog-filter string literal with embedded quotes doubled."""
+    if "\0" in value:
+        raise ValueError(f"Invalid literal: {value!r}")
+    return "'" + value.replace("'", "''") + "'"
 
 
 def quote_identifier(value: str) -> str:

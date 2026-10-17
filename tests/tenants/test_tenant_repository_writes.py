@@ -332,3 +332,76 @@ async def test_delete_missing_permission_and_store_loss() -> None:
     repo_unrelated = DefinitionRepository(registry=None, connection_factory=_factory(conn_unrelated))
     with pytest.raises(RuntimeError, match="connection reset by peer"):
         await repo_unrelated.delete(identity)
+
+@pytest.mark.asyncio
+async def test_legacy_write_contract() -> None:
+    """Legacy PATCH accepts unchanged/changed program_slug; omission preserves it."""
+    store = _legacy_store()
+    identity = QueryIdentity(store=store, slug="test_query")
+    row = _base_row(program_slug="alpha")
+
+    for payload in ({"program_slug": "alpha"}, {"program_slug": "beta"}):
+        conn = _MockConn(rows=[row])
+        repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+        await repo.patch(identity, payload)
+        update = next(c for c in conn.calls if c[1].lstrip().upper().startswith("UPDATE"))
+        assert '"program_slug" = $1' in update[1]
+        assert update[2][0] == payload["program_slug"]
+
+    # Omitted: program_slug is not touched.
+    conn = _MockConn(rows=[row])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    await repo.patch(identity, {"description": "x"})
+    update = next(c for c in conn.calls if c[1].lstrip().upper().startswith("UPDATE"))
+    assert "program_slug" not in update[1]
+
+    # Unknown keys are rejected before any SQL.
+    conn = _MockConn(rows=[row])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    with pytest.raises(TenantError) as exc_info:
+        await repo.patch(identity, {"bogus": 1})
+    assert exc_info.value.error_code == "invalid_tenant"
+    assert conn.calls == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_upsert_preserves_program_on_conflict() -> None:
+    """Omitted program_slug defaults on insert only; explicit value updates on conflict."""
+    store = _legacy_store()
+    identity = QueryIdentity(store=store, slug="test_query")
+    row = _base_row(program_slug="alpha", is_inserted=False)
+
+    conn = _MockConn(rows=[row])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    await repo.upsert(identity, {"query_slug": "test_query", "query_raw": "SELECT 1"}, run_as_actor=1)
+    sql = next(c for c in conn.calls if "INSERT" in c[1].upper())
+    assert '"program_slug"' in sql[1].split("ON CONFLICT")[0]
+    assert "program_slug" not in sql[1].split("ON CONFLICT")[1]
+    assert "default" in sql[2]
+
+    conn = _MockConn(rows=[row])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    await repo.upsert(
+        identity, {"query_slug": "test_query", "program_slug": "beta"}, run_as_actor=1
+    )
+    sql = next(c for c in conn.calls if "INSERT" in c[1].upper())
+    assert 'program_slug" = EXCLUDED."program_slug"' in sql[1]
+
+
+@pytest.mark.asyncio
+async def test_tenant_rejects_program_slug_before_sql() -> None:
+    """Tenant create/upsert/patch reject program_slug without touching the database."""
+    store = _tenant_store()
+    identity = QueryIdentity(store=store, slug="test_query")
+    conn = _MockConn(rows=[_base_row()])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+    payload = {"query_slug": "test_query", "program_slug": "x"}
+    for call in (
+        repo.create(store, payload),
+        repo.upsert(identity, payload),
+        repo.patch(identity, {"program_slug": "x"}),
+    ):
+        with pytest.raises(TenantError) as exc_info:
+            await call
+        assert exc_info.value.error_code == "invalid_tenant"
+    assert conn.calls == []
