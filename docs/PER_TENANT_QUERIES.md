@@ -569,6 +569,23 @@ are excluded, so waiting for the next scheduled run does not stale an unchanged 
    lost, admission fails **closed** for coordinated schedules (with notifications); running work is not
    cancelled. No manual per-slug schedule deactivation or restart is required once readiness is met.
 
+#### Deployment requirements
+
+* **PostgreSQL 13 or newer** for the metadata/definition database: the control tables use the built-in
+  `gen_random_uuid()`. On PostgreSQL 12 or older run `CREATE EXTENSION IF NOT EXISTS pgcrypto;` before the DDL.
+* The definition stores and the `management` control tables must live in the **same database**: the cutover is
+  one transaction and the advisory-lock fences are per database.
+* **No PgBouncer (or any pooler) in transaction/statement pooling mode** between QuerySource and that database.
+  Admitted runs hold a *session-level* shared advisory lock on a dedicated connection until they finish, and the
+  drain/cutover/CRUD fences rely on it; a pooler that reassigns server sessions between transactions silently
+  breaks the fence. Session pooling (or a direct connection) is required.
+* **Restart every QuerySource worker after deploying (or upgrading) the DDL.** Each process decides at startup
+  whether the control tables exist: before the restart, a process keeps registering jobs uncoordinated, has no
+  move service and does not install the in-transaction CRUD fence. Confirm the rollout gate only after all
+  processes have restarted.
+* `QS_SCHEDULE_DEPLOYMENT_ID` is a navconfig setting (environment or `.ini`), identical on every process of one
+  deployment.
+
 ### Operation lifecycle
 
 `preparing` → `draining` → `cutover` → `reconciling` → `completed`, or `failed`. `moved` is `false`

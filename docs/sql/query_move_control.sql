@@ -11,6 +11,10 @@
 -- The grants below never include DDL, TRUNCATE or REFERENCES. No credential,
 -- DSN or run-as secret is ever stored in these tables.
 --
+-- Requirements: PostgreSQL 13+ (built-in gen_random_uuid(); on 12 or older run
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto first), no transaction-pooling proxy
+-- (session advisory locks), and a restart of every QuerySource worker afterwards.
+--
 -- Backfill: schedule state rows are created by the upgraded scheduler during its
 -- serialized bootstrap (one row per canonical owner/slug/kind, persisting the
 -- existing trigger anchor and cursor). There is nothing to backfill in SQL.
