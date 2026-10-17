@@ -1,5 +1,6 @@
 """Lease-based orchestration and recovery of durable moves (disposable PostgreSQL)."""
 import asyncio
+import json
 import sys
 import uuid
 from pathlib import Path
@@ -441,3 +442,25 @@ async def test_abort_is_refused_once_the_cutover_marker_exists(pg_dsn) -> None:
     with pytest.raises(TenantError) as missing:
         await svc.abort(str(uuid.uuid4()), actor=77)
     assert missing.value.error_code == "query_not_found"
+
+
+@pytest.mark.asyncio
+async def test_mirror_failure_journal_message_never_carries_exception_text(pg_dsn) -> None:
+    """I2: GET /query-moves/{id} returns the journal; exception detail stays in the log only."""
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY, attributes=SCHEDULED)
+    svc, coord = await _build(pg_dsn)
+    await coord.bootstrap_row(OWNER, BOOT)
+    oid = await _submit(svc)
+    await coord.prepare(oid)
+    assert (await svc.cutover(oid))["moved"] is True
+
+    class _Boom:
+        async def reconcile_owner_change(self, source, target):
+            raise RuntimeError("connect to 10.0.0.7:5432 as qs_admin password=hunter2 failed")
+
+    coord.attach_mirror(_Boom())
+    view = svc.operation_view(await coord.reconcile(oid))
+    assert view["state"] == "reconciling" and view["scheduler_sync"] == "failed"
+    assert view["message"] == "Scheduler mirror update failed (RuntimeError); reconcile will be retried."
+    assert "hunter2" not in json.dumps(await svc.status(oid))

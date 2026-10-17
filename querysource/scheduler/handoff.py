@@ -926,7 +926,10 @@ class ScheduleHandoffCoordinator:
                     await self._mirror.reconcile_owner_change(source, target)
             except Exception as exc:  # noqa: BLE001 - recorded so the same operation can be retried
                 logger.exception("Mirror reconciliation failed for operation %s", operation_id)
-                sync, message = "failed", f"Scheduler mirror update failed: {exc}"
+                # The journal is returned to clients: persist a fixed message, keep the detail in the log.
+                sync, message = "failed", (
+                    f"Scheduler mirror update failed ({type(exc).__name__}); reconcile will be retried."
+                )
         async with await self.connection_factory() as conn:
             await conn.transaction()
             try:
