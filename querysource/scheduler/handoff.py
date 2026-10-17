@@ -50,6 +50,8 @@ _JOURNAL_COLUMNS = frozenset({
     "state", "moved", "scheduler_sync", "error_code", "message", "cutover_at",
     "lease_owner", "lease_expires_at",
 })
+# ``cas_operation`` sentinel: do not constrain ``moved``.
+ANY_MOVED = object()
 # APScheduler's own default misfire grace (QSScheduler sets only coalesce/max_instances).
 DEFAULT_MISFIRE_GRACE_SECONDS = 1
 
@@ -413,7 +415,7 @@ class ScheduleHandoffCoordinator:
         operation_id: str,
         *,
         expect_states: Sequence[str],
-        expect_moved: bool | None,
+        expect_moved: bool | None | object = ANY_MOVED,
         **fields: Any,
     ) -> dict[str, Any] | None:
         """Compare-and-set journal columns: apply ``fields`` only while state/moved still match.
@@ -422,7 +424,8 @@ class ScheduleHandoffCoordinator:
             conn: Caller-owned connection (inside its transaction).
             operation_id: Journal row to update.
             expect_states: The operation must currently be in one of these states.
-            expect_moved: The current ``moved`` value the caller observed (``None`` means SQL NULL).
+            expect_moved: The current ``moved`` value the caller observed (``None`` means SQL NULL);
+                ``ANY_MOVED`` (default) does not constrain it.
             **fields: Journal columns to set (same allowlist as :meth:`update_operation`).
 
         Returns:
@@ -433,7 +436,9 @@ class ScheduleHandoffCoordinator:
             raise ValueError(f"Unsupported journal columns: {sorted(unknown)}")
         sets = [f"{name} = ${i + 3}" for i, name in enumerate(fields)]
         sets.append("updated_at = now()")
-        moved_sql = {None: "moved IS NULL", True: "moved IS TRUE", False: "moved IS FALSE"}[expect_moved]
+        moved_sql = "TRUE" if expect_moved is ANY_MOVED else {
+            None: "moved IS NULL", True: "moved IS TRUE", False: "moved IS FALSE"
+        }[expect_moved]
         row = await conn.fetch_one(
             f"UPDATE management.qs_query_moves SET {', '.join(sets)} "
             f"WHERE operation_id = $1::uuid AND state = ANY($2::text[]) AND {moved_sql} RETURNING *",
@@ -1092,7 +1097,7 @@ class ScheduleHandoffCoordinator:
                         [_uuid(r) for r in leftovers],
                     )
                     noted = await self.cas_operation(
-                        conn, operation_id, expect_states=("draining",), expect_moved=False,
+                        conn, operation_id, expect_states=("draining",),
                         error_code="move_scheduler_not_ready",
                         message="Admitted run(s) with an unknown outcome must be resolved by an operator "
                         "(resolve them, or abort the move): " + ", ".join(leftovers),
@@ -1100,7 +1105,7 @@ class ScheduleHandoffCoordinator:
                     return {**(noted or op), "drained": False, "pending_runs": leftovers}
                 if op.get("error_code"):
                     cleared = await self.cas_operation(
-                        conn, operation_id, expect_states=("draining",), expect_moved=False, error_code=None, message=None
+                        conn, operation_id, expect_states=("draining",), error_code=None, message=None
                     )
                     if cleared is None:  # aborted/changed concurrently: never report it as drained
                         return {**await self.load_operation(conn, operation_id), "drained": False}
