@@ -660,7 +660,7 @@ class QueryMoveService:
                     _uuid(str(op["operation_id"])), error_code, message[:500],
                 )
                 if changed is not None:
-                    await self.coordinator.set_gate(conn, owners, "open", None)
+                    await self.coordinator.set_gate(conn, owners, "open", str(op["operation_id"]))
                     await self.coordinator.release_reservations(conn, str(op["operation_id"]))
                 await conn.commit()
             except BaseException:
@@ -767,14 +767,20 @@ class QueryMoveService:
             return self.operation_view(op)
 
         # Durable "outcome indeterminate" marker BEFORE the transaction (committed on its own).
+        # Compare-and-set: a concurrent abort/orchestrator that already changed the operation wins.
         async with await self.coordinator.connection_factory() as conn:
             await conn.transaction()
             try:
-                op = await self.coordinator.update_operation(conn, operation_id, state="cutover", moved=None)
+                marked = await self.coordinator.cas_operation(
+                    conn, operation_id, expect_states=("draining",), expect_moved=False, state="cutover", moved=None
+                )
                 await conn.commit()
             except BaseException:
                 await conn.rollback()
                 raise
+        if marked is None:
+            return await self._view_of(operation_id)
+        op = marked
 
         conn_cm = await self.coordinator.connection_factory()
         committed = False
@@ -1018,7 +1024,10 @@ class QueryMoveService:
                     op = await self.coordinator.load_operation(conn, operation_id)
                 if op is None or op["state"] in TERMINAL_STATES:
                     break
-                await self.coordinator.claim_operation_lease(operation_id, ttl_seconds=lease_ttl_seconds)
+                if await self.coordinator.claim_operation_lease(operation_id, ttl_seconds=lease_ttl_seconds) is None:
+                    # Lease lost (expired and taken over, or the operation finished): stop orchestrating.
+                    logger.warning("Move %s: recovery lease lost; another worker continues it", operation_id)
+                    break
                 state = op["state"]
                 if state == "preparing":
                     await self.coordinator.prepare(operation_id)

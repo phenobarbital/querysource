@@ -272,3 +272,101 @@ async def test_stale_orchestrator_cannot_overwrite_a_committed_journal(pg_dsn) -
     await svc._fail_pre_cutover(op, "move_validation_failed", "late loser")
     assert await _scalar(pg_dsn, "SELECT moved FROM management.qs_query_moves") is True
     assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "cutover"
+
+
+@pytest.mark.asyncio
+async def test_cutover_marker_is_compare_and_set_on_draining(pg_dsn) -> None:
+    """B3: a stale read of 'draining' must never overwrite a concurrently failed/aborted journal."""
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    oid = await _submit(svc)
+    await coord.prepare(oid)
+    async with await _factory(pg_dsn)() as conn:
+        stale = await coord.load_operation(conn, oid)
+    assert stale["state"] == "draining"
+    await _sql(pg_dsn, "UPDATE management.qs_query_moves SET state = 'failed', moved = false, "
+                       "error_code = 'move_validation_failed'")
+    real_load = coord.load_operation
+    calls = {"n": 0}
+
+    async def stale_first(conn, operation_id, *, for_update=False):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return dict(stale)
+        return await real_load(conn, operation_id, for_update=for_update)
+
+    coord.load_operation = stale_first
+    view = await svc.cutover(oid)
+    assert view["state"] == "failed" and view["moved"] is False
+    assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "failed"
+    assert await _row(pg_dsn, LEGACY) is not None and await _row(pg_dsn, TENANT) is None
+
+
+@pytest.mark.asyncio
+async def test_cas_operation_and_gate_opening_respect_the_owning_operation(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY, attributes=SCHEDULED)
+    svc, coord = await _build(pg_dsn)
+    await coord.bootstrap_row(OWNER, BOOT)
+    oid = await _submit(svc)
+    async with await _factory(pg_dsn)() as conn:
+        assert await coord.cas_operation(conn, oid, expect_states=("draining",), expect_moved=False,
+                                         message="x") is None  # still preparing
+        assert (await coord.cas_operation(conn, oid, expect_states=("preparing",), expect_moved=False,
+                                          message="y"))["message"] == "y"
+    await coord.prepare(oid)
+    other = str(uuid.uuid4())
+    async with await _factory(pg_dsn)() as conn:
+        # A different operation can never release the gate this operation froze.
+        assert await coord.set_gate(conn, [OWNER], "open", other) == 0
+        assert await coord.set_gate(conn, [OWNER], "open", None) == 0
+        assert await _scalar(pg_dsn, "SELECT dispatch_gate FROM management.qs_schedule_state") == "frozen"
+        assert await coord.set_gate(conn, [OWNER], "open", oid) == 1
+    assert await _scalar(pg_dsn, "SELECT dispatch_gate FROM management.qs_schedule_state") == "open"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_final_write_is_compare_and_set(pg_dsn) -> None:
+    """A late reconcile cannot re-open gates or rewrite a journal another resolver already finished."""
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    oid = await _submit(svc)
+    await coord.prepare(oid)
+    assert (await svc.cutover(oid))["moved"] is True
+
+    class _Mirror:
+        async def reconcile_owner_change(self, source, target):
+            # Another worker completes the operation while this one is still mirroring.
+            await _sql(pg_dsn, "UPDATE management.qs_query_moves SET state = 'completed', "
+                               "scheduler_sync = 'not_configured', message = 'winner'")
+
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute("INSERT INTO management.qs_schedule_state (owner_namespace, owner_schema, owner_table, "
+                           "query_slug, kind, trigger_spec, dispatch_gate) VALUES ($1, 'wm_assembly', 'queries', "
+                           "'s', 'query', '{}'::jsonb, 'frozen')", OWNER.namespace)
+    coord.attach_mirror(_Mirror())
+    result = await coord.reconcile(oid)
+    assert result["state"] == "completed" and result["message"] == "winner"
+    assert await _scalar(pg_dsn, "SELECT scheduler_sync FROM management.qs_query_moves") == "not_configured"
+    assert await _scalar(pg_dsn, "SELECT dispatch_gate FROM management.qs_schedule_state") == "frozen"
+
+
+@pytest.mark.asyncio
+async def test_advance_stops_when_the_recovery_lease_is_lost(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    oid = await _submit(svc)
+    real_claim = coord.claim_operation_lease
+    claims = {"n": 0}
+
+    async def lose_after_first(operation_id, *, ttl_seconds=60.0):
+        claims["n"] += 1
+        return await real_claim(operation_id, ttl_seconds=ttl_seconds) if claims["n"] == 1 else None
+
+    coord.claim_operation_lease = lose_after_first
+    view = await svc.advance(oid)
+    assert view["state"] == "preparing" and claims["n"] == 2
+    assert await _row(pg_dsn, LEGACY) is not None

@@ -45,6 +45,11 @@ CONTROL_TABLES = (
 )
 # Operation states in which no further orchestration happens.
 TERMINAL_STATES = ("completed", "failed")
+# Journal columns orchestration may write (never identity, actor or plan snapshot).
+_JOURNAL_COLUMNS = frozenset({
+    "state", "moved", "scheduler_sync", "error_code", "message", "cutover_at",
+    "lease_owner", "lease_expires_at",
+})
 # APScheduler's own default misfire grace (QSScheduler sets only coalesce/max_instances).
 DEFAULT_MISFIRE_GRACE_SECONDS = 1
 
@@ -388,11 +393,7 @@ class ScheduleHandoffCoordinator:
 
     async def update_operation(self, conn: Any, operation_id: str, **fields: Any) -> dict[str, Any]:
         """Update journal columns on the caller's connection and return the new row."""
-        allowed = {
-            "state", "moved", "scheduler_sync", "error_code", "message", "cutover_at",
-            "lease_owner", "lease_expires_at",
-        }
-        unknown = set(fields) - allowed
+        unknown = set(fields) - _JOURNAL_COLUMNS
         if unknown:
             raise ValueError(f"Unsupported journal columns: {sorted(unknown)}")
         sets = [f"{name} = ${i + 2}" for i, name in enumerate(fields)]
@@ -405,6 +406,40 @@ class ScheduleHandoffCoordinator:
         if row is None:
             raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
         return _row_dict(row)
+
+    async def cas_operation(
+        self,
+        conn: Any,
+        operation_id: str,
+        *,
+        expect_states: Sequence[str],
+        expect_moved: bool | None,
+        **fields: Any,
+    ) -> dict[str, Any] | None:
+        """Compare-and-set journal columns: apply ``fields`` only while state/moved still match.
+
+        Args:
+            conn: Caller-owned connection (inside its transaction).
+            operation_id: Journal row to update.
+            expect_states: The operation must currently be in one of these states.
+            expect_moved: The current ``moved`` value the caller observed (``None`` means SQL NULL).
+            **fields: Journal columns to set (same allowlist as :meth:`update_operation`).
+
+        Returns:
+            The updated row, or ``None`` when a concurrent writer already changed the operation.
+        """
+        unknown = set(fields) - _JOURNAL_COLUMNS
+        if unknown:
+            raise ValueError(f"Unsupported journal columns: {sorted(unknown)}")
+        sets = [f"{name} = ${i + 3}" for i, name in enumerate(fields)]
+        sets.append("updated_at = now()")
+        moved_sql = {None: "moved IS NULL", True: "moved IS TRUE", False: "moved IS FALSE"}[expect_moved]
+        row = await conn.fetch_one(
+            f"UPDATE management.qs_query_moves SET {', '.join(sets)} "
+            f"WHERE operation_id = $1::uuid AND state = ANY($2::text[]) AND {moved_sql} RETURNING *",
+            _uuid(operation_id), list(expect_states), *fields.values(),
+        )
+        return _row_dict(row) if row else None
 
     async def release_reservations(self, conn: Any, operation_id: str) -> None:
         """Release both identity reservations held by a finished operation."""
@@ -496,17 +531,30 @@ class ScheduleHandoffCoordinator:
     async def set_gate(
         self, conn: Any, owners: Sequence[ScheduleOwner], gate: str, operation_id: str | None
     ) -> int:
-        """Open or freeze the shared dispatch gate for every schedule of the given owners."""
+        """Open or freeze the shared dispatch gate for every schedule of the given owners.
+
+        Opening only touches gates that are open already or were frozen by ``operation_id``
+        itself: one operation can never release a gate another operation froze.
+        """
         if gate not in ("open", "frozen"):
             raise ValueError(f"Unknown gate: {gate!r}")
         changed = 0
         for owner in owners:
-            rows = await conn.fetch_all(
-                "UPDATE management.qs_schedule_state SET dispatch_gate = $5, gate_operation_id = $6::uuid, "
-                "updated_at = now() WHERE owner_namespace = $1 AND owner_schema = $2 AND owner_table = $3 "
-                "AND query_slug = $4 RETURNING logical_schedule_id",
-                *owner.as_tuple(), gate, _uuid(operation_id) if gate == "frozen" else None,
-            )
+            if gate == "frozen":
+                rows = await conn.fetch_all(
+                    "UPDATE management.qs_schedule_state SET dispatch_gate = 'frozen', "
+                    "gate_operation_id = $5::uuid, updated_at = now() WHERE owner_namespace = $1 "
+                    "AND owner_schema = $2 AND owner_table = $3 AND query_slug = $4 RETURNING logical_schedule_id",
+                    *owner.as_tuple(), _uuid(operation_id),
+                )
+            else:
+                rows = await conn.fetch_all(
+                    "UPDATE management.qs_schedule_state SET dispatch_gate = 'open', gate_operation_id = NULL, "
+                    "updated_at = now() WHERE owner_namespace = $1 AND owner_schema = $2 AND owner_table = $3 "
+                    "AND query_slug = $4 AND (gate_operation_id IS NULL OR gate_operation_id = $5::uuid) "
+                    "RETURNING logical_schedule_id",
+                    *owner.as_tuple(), _uuid(operation_id),
+                )
             changed += len(rows or [])
         return changed
 
@@ -882,22 +930,28 @@ class ScheduleHandoffCoordinator:
         async with await self.connection_factory() as conn:
             await conn.transaction()
             try:
+                # Compare-and-set: only a committed, still-unfinished operation is finalized here.
                 if sync == "failed":
-                    op = await self.update_operation(
-                        conn, operation_id, state="reconciling", scheduler_sync="failed",
+                    changed = await self.cas_operation(
+                        conn, operation_id, expect_states=("cutover", "reconciling"), expect_moved=True,
+                        state="reconciling", scheduler_sync="failed",
                         error_code="move_scheduler_not_ready", message=message,
                     )
                 else:
-                    await self.set_gate(conn, [target], "open", None)
-                    await self.release_reservations(conn, operation_id)
-                    op = await self.update_operation(
-                        conn, operation_id, state="completed", scheduler_sync=sync, error_code=None, message=None
+                    changed = await self.cas_operation(
+                        conn, operation_id, expect_states=("cutover", "reconciling"), expect_moved=True,
+                        state="completed", scheduler_sync=sync, error_code=None, message=None,
                     )
+                    if changed is not None:
+                        await self.set_gate(conn, [target], "open", operation_id)
+                        await self.release_reservations(conn, operation_id)
+                if changed is None:
+                    changed = await self.load_operation(conn, operation_id)
                 await conn.commit()
             except BaseException:
                 await conn.rollback()
                 raise
-        return op
+        return changed
 
     async def heartbeat_loop(self, interval_seconds: float = 30.0) -> None:
         """Refresh this worker's heartbeat until cancelled (best effort; failures are logged)."""
@@ -1013,14 +1067,20 @@ class ScheduleHandoffCoordinator:
                         "WHERE run_id = ANY($1::uuid[]) AND outcome IN ('admitted', 'running') RETURNING run_id",
                         [_uuid(r) for r in leftovers],
                     )
-                    op = await self.update_operation(
-                        conn, operation_id, error_code="move_scheduler_not_ready",
-                        message="Admitted run(s) with an unknown outcome must be reconciled by an operator: "
-                        + ", ".join(leftovers),
+                    noted = await self.cas_operation(
+                        conn, operation_id, expect_states=("draining",), expect_moved=False,
+                        error_code="move_scheduler_not_ready",
+                        message="Admitted run(s) with an unknown outcome must be resolved by an operator "
+                        "(resolve them, or abort the move): " + ", ".join(leftovers),
                     )
-                    return {**op, "drained": False, "pending_runs": leftovers}
+                    return {**(noted or op), "drained": False, "pending_runs": leftovers}
                 if op.get("error_code"):
-                    op = await self.update_operation(conn, operation_id, error_code=None, message=None)
+                    cleared = await self.cas_operation(
+                        conn, operation_id, expect_states=("draining",), expect_moved=False, error_code=None, message=None
+                    )
+                    if cleared is None:  # aborted/changed concurrently: never report it as drained
+                        return {**await self.load_operation(conn, operation_id), "drained": False}
+                    op = cleared
                 return {**op, "drained": True}
             finally:
                 for key in reversed(held):
