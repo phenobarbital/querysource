@@ -549,6 +549,7 @@ class QuerySource(metaclass=Singleton):
         import socket
         import uuid
 
+        from .conf import QS_SCHEDULE_DEPLOYMENT_ID
         from .query_moves import MoveWorker, QueryMoveService
         from .scheduler.handoff import ScheduleHandoffCoordinator
 
@@ -557,7 +558,7 @@ class QuerySource(metaclass=Singleton):
         try:
             coordinator = ScheduleHandoffCoordinator(
                 repository,
-                deployment_id=os.environ.get("QS_SCHEDULE_DEPLOYMENT_ID", "default"),
+                deployment_id=QS_SCHEDULE_DEPLOYMENT_ID,
                 worker_id=f"{socket.gethostname()}:{os.getpid()}:moves-{uuid.uuid4().hex[:6]}",
             )
             if (await coordinator.readiness())["missing"]:

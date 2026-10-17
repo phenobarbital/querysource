@@ -113,3 +113,21 @@ async def test_unscheduled_move_never_needs_a_scheduler_worker(pg_dsn) -> None:
     assert plan["can_move"] is True and plan["schedules"] == []
     oid = await _submit(svc)
     assert (await svc.advance(oid))["state"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_deployment_id_comes_from_navconfig_settings(pg_dsn, monkeypatch) -> None:
+    """QS_SCHEDULE_DEPLOYMENT_ID is read through querysource.conf (navconfig), not os.environ."""
+    import querysource.conf as conf
+
+    await _setup(pg_dsn)
+    svc, _ = await _build(pg_dsn)
+    monkeypatch.setattr(conf, "QS_SCHEDULE_DEPLOYMENT_ID", "blue")
+    monkeypatch.setenv("QS_SCHEDULE_DEPLOYMENT_ID", "ignored-env")
+    app: dict = {}
+    qs = _qs(svc.repository)
+    await QuerySource._start_move_service(qs, app)
+    try:
+        assert app["qs_move_service"].coordinator.deployment_id == "blue"
+    finally:
+        await QuerySource.qs_stop(qs, app)

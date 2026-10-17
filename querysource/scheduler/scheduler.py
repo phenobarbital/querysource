@@ -35,6 +35,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from navconfig.logging import logging
 
 from querysource.conf import (
+    QS_SCHEDULE_DEPLOYMENT_ID,
     QS_SCHEDULER_COALESCE,
     QS_SCHEDULER_MAX_INSTANCES,
     QS_SCHEDULER_TIMEZONE,
@@ -388,7 +389,7 @@ class QSScheduler:
         try:
             coordinator = ScheduleHandoffCoordinator(
                 self._repository,
-                deployment_id=os.environ.get("QS_SCHEDULE_DEPLOYMENT_ID", "default"),
+                deployment_id=QS_SCHEDULE_DEPLOYMENT_ID,
                 worker_id=f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}",
                 trigger_parser=self._parse_trigger,
             )
