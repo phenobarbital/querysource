@@ -510,7 +510,11 @@ Authentication and authorization are the **existing management boundary** (datab
 the existing PBAC rules). There is no administrators-only restriction, no new role and no
 `slug:move` action; the numeric authenticated actor is used for audit attribution only and a client
 acknowledgement is never authorization. The existing `datasource:use` on `pg_admin` gate still applies
-when the definition is a scheduled write-capable multi-query. The shared contract fixture is
+when the definition is a scheduled write-capable multi-query. An existing operation (`GET` status,
+`reconcile`, `abort`) is accessible only to the user who submitted it or to an operator holding
+`datasource:use` on `pg_admin`; anyone else receives `403 tenant_write_forbidden` (without PBAC the grant
+cannot be proven, so only the submitter is accepted). Conflict messages and preview blockers shown to other
+users never include an operation id. The shared contract fixture is
 `tests/fixtures/query_move_contract_v1.json` (sha256
 `3c3e745d3f957b02b8194aa99b2a673a9425084bef3e7b2e974773ecd871553f`; revised for the pre-cutover `abort`
 endpoint, the `operations.aborted` sample and the journal-only `move_aborted` code); the frontend release gate consumes

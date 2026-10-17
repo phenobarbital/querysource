@@ -839,7 +839,7 @@ class ScheduleHandoffCoordinator:
             held = await self.find_reservation(conn, owners)
         if held is not None:
             raise TenantError(
-                f"Query {owners[0].slug!r} is being moved (operation {held['operation_id']}); retry when it finishes",
+                f"Query {owners[0].slug!r} is being moved; retry when the move finishes",
                 error_code="move_in_progress",
             )
 

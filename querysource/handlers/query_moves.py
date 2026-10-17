@@ -14,6 +14,8 @@ routes (app-level auth, database permissions, existing PBAC). No administrators-
 new role and no ``slug:move`` action is added: the numeric authenticated actor is resolved for
 move audit attribution only and a client acknowledgement is never authorization. The existing
 ``datasource:use`` on ``pg_admin`` gate still applies to a scheduled write-capable multi.
+An existing operation (status/reconcile/abort) is only accessible to the actor that submitted it
+or to an operator holding that same ``pg_admin`` scheduler grant; anyone else gets ``403``.
 """
 import uuid
 from collections.abc import Mapping
@@ -148,7 +150,41 @@ class QueryMoveHandler:
             "attributes": getattr(runtime, "attributes", None),
         }
         if definition_requires_scheduler_grant(row):
-            await enforce_request_pbac(request, ResourceType.DATASOURCE, "pg_admin", "datasource:use", logger=logger)
+            await self._require_scheduler_grant(request)
+
+    @staticmethod
+    async def _require_scheduler_grant(request: web.Request) -> None:
+        """The existing ``datasource:use`` on ``pg_admin`` PBAC decision (raises ``HTTPNotFound`` on deny)."""
+        await enforce_request_pbac(request, ResourceType.DATASOURCE, "pg_admin", "datasource:use", logger=logger)
+
+    async def _authorize_operation(self, request: web.Request, service: QueryMoveService, operation_id: str) -> None:
+        """Allow the submitting actor, or an operator holding the ``pg_admin`` scheduler grant.
+
+        A move operation names identities and carries a journal; another user's operation is
+        never readable or actionable by id alone. Without PBAC the grant cannot be proven, so
+        only the submitting actor is accepted.
+
+        Raises:
+            TenantError: ``move_validation_failed``/``query_not_found`` for a bad/missing id,
+                ``tenant_write_forbidden`` (403) for anyone else.
+        """
+        owner = await service.operation_actor(operation_id)
+        actor = await _actor(request)
+        if actor is not None and actor == owner:
+            return
+        if request.app.get("security") is not None:
+            try:
+                await self._require_scheduler_grant(request)
+                return
+            except web.HTTPException as exc:
+                raise TenantError(
+                    "Only the user who submitted this move or an operator holding the scheduler grant can access it",
+                    error_code="tenant_write_forbidden",
+                ) from exc
+        raise TenantError(
+            "Only the user who submitted this move or an operator holding the scheduler grant can access it",
+            error_code="tenant_write_forbidden",
+        )
 
     @staticmethod
     def _unexpected(request: web.Request, exc: Exception) -> web.Response:
@@ -217,10 +253,12 @@ class QueryMoveHandler:
             return self._unexpected(request, exc)
 
     async def status(self, request: web.Request) -> web.Response:
-        """``200 MoveOperation``: pure read under the existing management read boundary."""
+        """``200 MoveOperation``: pure read, for the submitting actor or a scheduler-grant operator."""
         try:
             service = self._service(request)
-            operation = await service.status(request.match_info.get("operation_id", ""))
+            operation_id = request.match_info.get("operation_id", "")
+            await self._authorize_operation(request, service, operation_id)
+            operation = await service.status(operation_id)
             return web.json_response(operation, status=200)
         except TenantError as exc:
             return _tenant_error(exc)
@@ -261,7 +299,7 @@ class QueryMoveHandler:
             service = self._service(request)
             actor = await self._require_actor(request)
             operation_id = request.match_info.get("operation_id", "")
-            await service.status(operation_id)  # 404/400 before any mutation
+            await self._authorize_operation(request, service, operation_id)  # 400/404/403 before any mutation
             resolve = await self._abort_options(request)
             operation = await service.abort(operation_id, actor=actor, resolve_unknown_runs=resolve)
             return web.json_response(operation, status=200)
@@ -282,7 +320,7 @@ class QueryMoveHandler:
             service = self._service(request)
             await self._require_actor(request)
             operation_id = request.match_info.get("operation_id", "")
-            await service.status(operation_id)  # 404/400 before any mutation
+            await self._authorize_operation(request, service, operation_id)  # 400/404/403 before any mutation
             operation = await service.reconcile(operation_id)
             final = operation["state"] in _TERMINAL
             return web.json_response(operation, status=200 if final else 202)

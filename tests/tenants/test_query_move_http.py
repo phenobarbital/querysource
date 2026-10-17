@@ -161,12 +161,16 @@ async def test_unauthenticated_actor_is_refused_and_status_is_a_read(pg_dsn) -> 
     anon["actor"] = None
     resp = await handler.preview(anon)
     assert resp.status == 403 and _json(resp)["error_code"] == "tenant_write_forbidden"
-    # status needs only the management read boundary (no numeric actor, no admin role)
+    # status is a pure read for the submitting actor (no admin role) ...
     plan = _json(await handler.preview(_Req(app, {"tenant": None, "destination_tenant": "wm_assembly"})))
     op = _json(await handler.move(_Req(app, _move_body(plan))))
-    reader = _Req(app, match={"operation_id": op["operation_id"]}, method="GET")
-    reader["actor"] = None
-    assert (await handler.status(reader)).status == 200
+    assert (await handler.status(_Req(app, match={"operation_id": op["operation_id"]}, method="GET"))).status == 200
+    # ... but never for an anonymous or a different user (I1: no cross-actor access by id).
+    for other in (None, 8):
+        reader = _Req(app, match={"operation_id": op["operation_id"]}, method="GET")
+        reader["actor"] = other
+        resp = await handler.status(reader)
+        assert resp.status == 403 and _json(resp)["error_code"] == "tenant_write_forbidden"
     for bad in ("nope", str(uuid.uuid4())):
         resp = await handler.status(_Req(app, match={"operation_id": bad}, method="GET"))
         assert resp.status in (400, 404)
@@ -415,3 +419,63 @@ async def test_abort_endpoint_statuses_and_body_validation(pg_dsn) -> None:
     refused = await handler.abort(_Req(app, None, match={"operation_id": op2["operation_id"]}))
     assert refused.status == fx["abort"]["refused"]["status"]
     assert _json(refused)["error_code"] == fx["abort"]["refused"]["error_code"]
+
+
+@pytest.mark.asyncio
+async def test_operation_actions_require_the_submitter_or_the_scheduler_grant(pg_dsn, monkeypatch) -> None:
+    """I1: status/reconcile/abort of another actor's move need the pg_admin grant; ids never leak."""
+    await _reset(pg_dsn)
+    app, svc, repo, coord = await _app(pg_dsn, security=True)
+    handler = QueryMoveHandler()
+    decisions = {"allow": False}
+    calls = []
+
+    async def pbac(request, resource, name, action, logger=None):
+        calls.append((name, action))
+        if not decisions["allow"]:
+            raise web.HTTPNotFound()
+
+    monkeypatch.setattr(mod, "enforce_request_pbac", pbac)
+    plan = _json(await handler.preview(_Req(app, PREVIEW)))
+    op = _json(await handler.move(_Req(app, _move_body(plan))))
+    oid = op["operation_id"]
+
+    def as_user(actor, verb_method="POST", body=None):
+        req = _Req(app, body, match={"operation_id": oid}, method=verb_method)
+        req["actor"] = actor
+        return req
+
+    # Another user without the grant: 403 everywhere, nothing mutated.
+    for verb, method in ((handler.status, "GET"), (handler.reconcile, "POST"), (handler.abort, "POST")):
+        resp = await verb(as_user(8, method))
+        assert resp.status == 403 and _json(resp)["error_code"] == "tenant_write_forbidden"
+        assert oid not in _json(resp)["message"]
+    assert calls == [("pg_admin", "datasource:use")] * 3
+    assert (await svc.status(oid))["state"] == "preparing"
+    # A second actor's overlapping submission is refused without revealing the operation id.
+    other = _Req(app, _move_body(plan))
+    other["actor"] = 8
+    resp = await handler.move(other)
+    assert resp.status == 409 and oid not in json.dumps(_json(resp))
+    preview = await handler.preview(as_user(8, body=PREVIEW))
+    assert oid not in json.dumps(_json(preview))
+    # An operator holding the scheduler grant keeps access.
+    decisions["allow"] = True
+    assert (await handler.status(as_user(8, "GET"))).status == 200
+    resp = await handler.abort(as_user(8))
+    assert resp.status == 200 and _json(resp)["error_code"] == "move_aborted"
+
+
+@pytest.mark.asyncio
+async def test_crud_conflict_message_never_names_the_operation(pg_dsn) -> None:
+    await _reset(pg_dsn)
+    app, svc, repo, coord = await _app(pg_dsn)
+    handler = QueryMoveHandler()
+    plan = _json(await handler.preview(_Req(app, PREVIEW)))
+    op = _json(await handler.move(_Req(app, _move_body(plan))))
+    from querysource.scheduler.handoff import ScheduleOwner
+    from querysource.tenant_errors import TenantError
+
+    with pytest.raises(TenantError) as err:
+        await coord.assert_not_moving([ScheduleOwner.from_store(LEGACY, SLUG)])
+    assert err.value.error_code == "move_in_progress" and op["operation_id"] not in str(err.value)

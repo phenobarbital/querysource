@@ -285,7 +285,7 @@ class QueryMoveService:
             blockers.append(
                 {
                     "code": "move_in_progress",
-                    "message": f"Another move (operation {held['operation_id']}) holds this identity.",
+                    "message": "Another unfinished move holds this source or destination identity.",
                 }
             )
 
@@ -549,6 +549,22 @@ class QueryMoveService:
                     logger.exception("Rollback failed while reserving a move for %s", source.slug)
                 raise
         return self.operation_view(op)
+
+    async def operation_actor(self, operation_id: str) -> int:
+        """Return the numeric actor that submitted an operation (for per-operation authorization).
+
+        Raises:
+            TenantError: ``move_validation_failed`` for a non-UUID id, ``query_not_found`` when missing.
+        """
+        try:
+            op_id = _uuid(operation_id)
+        except (ValueError, AttributeError) as exc:
+            raise TenantError("operation_id must be a UUID", error_code="move_validation_failed") from exc
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, str(op_id))
+        if op is None:
+            raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+        return int(op["actor_id"])
 
     async def status(self, operation_id: str) -> Mapping[str, Any]:
         """Return the persisted operation without mutating it (caller reauthorizes)."""
