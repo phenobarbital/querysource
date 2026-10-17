@@ -876,13 +876,28 @@ class QueryMoveService:
             return False
 
     @staticmethod
-    def _classify(exc: BaseException) -> tuple[str, str]:
+    def _sqlstate(exc: BaseException) -> str | None:
+        """SQLSTATE of a driver error, also when the driver wrapped it (``__cause__``/``__context__``)."""
+        seen: set[int] = set()
+        current: BaseException | None = exc
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            state = getattr(current, "sqlstate", None)
+            if isinstance(state, str) and state:
+                return state
+            current = current.__cause__ or current.__context__
+        return None
+
+    @classmethod
+    def _classify(cls, exc: BaseException) -> tuple[str, str]:
+        """Map a known pre-commit failure to a journal code (SQLSTATE first, text only as fallback)."""
         if isinstance(exc, TenantError):
             return exc.error_code, str(exc)
+        state = cls._sqlstate(exc)
         text = str(exc).lower()
-        if "duplicate key" in text or "unique" in text:
+        if state == "23505" or (state is None and "duplicate key" in text):
             return "move_target_exists", "Destination already holds this slug; nothing was overwritten."
-        if "permission denied" in text:
+        if state == "42501" or (state is None and "permission denied" in text):
             return "move_validation_failed", "A database permission is missing for the move."
         return "move_validation_failed", f"The move failed before cutover ({type(exc).__name__})."
 

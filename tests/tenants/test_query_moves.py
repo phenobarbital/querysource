@@ -317,3 +317,21 @@ async def test_preview_blocks_when_the_destination_cannot_hold_the_row(pg_dsn) -
     finally:
         async with await _factory(pg_dsn)() as conn:
             await conn.execute('DROP TABLE "wm_assembly"."queries"')
+
+
+def test_cutover_failure_classification_prefers_sqlstate() -> None:
+    import asyncpg
+
+    unique = asyncpg.exceptions.UniqueViolationError("violates constraint qs_pk")
+    try:
+        raise RuntimeError("driver wrapper") from unique
+    except RuntimeError as wrapped:
+        assert QueryMoveService._classify(wrapped)[0] == "move_target_exists"
+    # A different constraint whose text merely mentions "unique" is not a slug collision.
+    check = asyncpg.exceptions.CheckViolationError('new row violates check "unique_name_format"')
+    assert QueryMoveService._classify(check)[0] == "move_validation_failed"
+    denied = asyncpg.exceptions.InsufficientPrivilegeError("nope")
+    assert QueryMoveService._classify(denied) == (
+        "move_validation_failed", "A database permission is missing for the move.")
+    assert QueryMoveService._classify(RuntimeError("duplicate key value"))[0] == "move_target_exists"
+    assert QueryMoveService._classify(RuntimeError("some unique thing"))[0] == "move_validation_failed"
