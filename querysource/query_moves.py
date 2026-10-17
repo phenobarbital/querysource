@@ -337,6 +337,8 @@ class QueryMoveService:
             }
         )
 
+        blockers.extend(await self._destination_blockers(raw, destination, program["before"], actor))
+
         blockers.sort(key=lambda b: (b["code"], b.get("path") or ""))
         warnings.sort(key=lambda w: w["code"])
         digest = hashlib.sha256(
@@ -374,6 +376,29 @@ class QueryMoveService:
             "schedule_revision": inspection["schedule_revision"],
         }
         return plan, internal
+
+    async def _destination_blockers(
+        self, raw: Mapping[str, Any], destination: QueryStore, program: Any, actor: int
+    ) -> list[dict[str, Any]]:
+        """Dry-run the cutover's column mapping so preview never promises an impossible move.
+
+        Uses the same ``_destination_columns``/``_insert_plan`` the cutover uses (read-only:
+        catalog introspection only), so ``can_move: true`` implies the destination table exists
+        and has a counterpart for every persisted source field.
+        """
+        async with await self.repository.connection_factory() as conn:
+            dest_cols = await self._destination_columns(conn, destination)
+        if not dest_cols:
+            return [{
+                "code": "move_validation_failed",
+                "message": f"Destination table {destination.schema}.{destination.table} is not available.",
+                "path": "destination_tenant",
+            }]
+        try:
+            self._insert_plan(raw, destination, dest_cols, program, actor)
+        except TenantError as exc:
+            return [{"code": "move_validation_failed", "message": str(exc), "path": "destination_columns"}]
+        return []
 
     # -- submission ----------------------------------------------------------------------
 

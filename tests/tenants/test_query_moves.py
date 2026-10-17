@@ -21,7 +21,7 @@ from querysource.query_moves import (
     analyze_references,
     store_descriptor,
 )
-from querysource.repositories.definitions import RUN_AS_COLUMN
+from querysource.repositories.definitions import RUN_AS_COLUMN, DefinitionRepository
 from querysource.scheduler.handoff import ScheduleHandoffCoordinator, ScheduleOwner
 from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity
@@ -65,6 +65,21 @@ class _Repo:
     def _run_as_audit_table(self, store):
         return f'"{store.schema}"."{store.table}_run_as_audit"'
 
+    def _allowed_columns(self, store):
+        return DefinitionRepository._allowed_columns(self, store)
+
+
+# The destination tables preview introspects (I6): every business column ``_row`` can carry.
+DEST_COLUMNS = (
+    "query_slug text PRIMARY KEY, description text, provider text, attributes jsonb, is_cached boolean, "
+    "cache_options jsonb, query_raw text, dwh boolean, dwh_scheduler jsonb, scheduler_run_as_user_id int, "
+    "updated_at timestamptz, updated_by int"
+)
+DEST_DDL = (
+    f'CREATE TABLE IF NOT EXISTS "wm_assembly"."queries" ({DEST_COLUMNS}); '
+    f'CREATE TABLE IF NOT EXISTS "public"."queries" ({DEST_COLUMNS}, program_slug text)'
+)
+
 
 def _row(**over):
     base = {"query_slug": "s", "provider": "db", "attributes": {}, "program_slug": "prog", "is_cached": False,
@@ -78,6 +93,9 @@ async def _reset_workers(coord):
 
 
 async def _service(dsn, rows):
+    async with await _factory(dsn)() as conn:
+        await conn.execute('CREATE SCHEMA IF NOT EXISTS "wm_assembly"')
+        await conn.execute(DEST_DDL)
     repo = _Repo(dsn, rows)
     coord = ScheduleHandoffCoordinator(
         repo, deployment_id="d", worker_id="w", rollout_confirmed=True, trigger_parser=_parse, clock=lambda: T0
@@ -276,3 +294,26 @@ async def test_reserved_identity_blocks_preview(pg_dsn) -> None:
     await _reserve(pg_dsn, ScheduleOwner.from_store(LEGACY, "s"), ScheduleOwner.from_store(TENANT, "s"))
     plan = await svc.preview(_ident(), TENANT, actor=7)
     assert "move_in_progress" in _codes(plan) and plan["can_move"] is False
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_when_the_destination_cannot_hold_the_row(pg_dsn) -> None:
+    """I6: can_move is never true for a move the cutover's column mapping would reject."""
+    await _reset(pg_dsn)
+    svc, *_ = await _service(pg_dsn, {("public", "s"): _row()})
+    assert (await svc.preview(_ident(), TENANT, actor=7))["can_move"] is True
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute('ALTER TABLE "wm_assembly"."queries" DROP COLUMN query_raw')
+    try:
+        plan = await svc.preview(_ident(), TENANT, actor=7)
+        assert plan["can_move"] is False
+        blocker = next(b for b in plan["blockers"] if b["code"] == "move_validation_failed")
+        assert blocker["path"] == "destination_columns" and "query_raw" in blocker["message"]
+        missing = _store("nowhere", contract="tenant")
+        svc.registry._stores = (LEGACY, TENANT, missing)
+        plan = await svc.preview(_ident(), missing, actor=7)
+        assert any(b["code"] == "move_validation_failed" and b["path"] == "destination_tenant"
+                   for b in plan["blockers"])
+    finally:
+        async with await _factory(pg_dsn)() as conn:
+            await conn.execute('DROP TABLE "wm_assembly"."queries"')

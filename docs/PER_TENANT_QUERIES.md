@@ -527,6 +527,10 @@ Preview resolves both owners, digests the **raw** persisted source row (includin
 and the deterministic blocker/warning inventory. The advancing schedule cursor and worker heartbeats
 are excluded, so waiting for the next scheduled run does not stale an unchanged plan.
 
+* **Destination fit.** Preview dry-runs the cutover's own column mapping against the destination table (catalog
+  introspection only): a missing table or a source field without a destination column is a
+  `move_validation_failed` blocker (`path: destination_tenant` / `destination_columns`), so `can_move: true`
+  never promises a move the cutover would reject. The cutover still revalidates (the schema may drift later).
 * External consumers are **always** reported (`consumer_review_required: true`): nothing is redirected,
   re-point them yourself after the move. `acknowledge_external_consumers` is always required.
 * The runtime program is reported as `before`/`after`; `acknowledge_runtime_program_change` is required only

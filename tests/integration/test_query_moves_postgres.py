@@ -327,10 +327,11 @@ async def test_schedule_change_after_plan_is_stale(pg_dsn) -> None:
 async def test_missing_destination_column_fails_before_the_source_is_touched(pg_dsn) -> None:
     await _setup(pg_dsn)
     await _insert(pg_dsn, LEGACY)
-    async with await _factory(pg_dsn)() as conn:
-        await conn.execute('ALTER TABLE "wm_assembly"."queries" DROP COLUMN dwh_driver')
     svc, coord = await _build(pg_dsn)
     oid = await _draining(svc, coord)
+    # The destination drifts AFTER the confirmed preview (which checks columns too): cutover revalidates.
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute('ALTER TABLE "wm_assembly"."queries" DROP COLUMN dwh_driver')
     op = await svc.cutover(oid)
     assert op["error_code"] == "move_validation_failed" and op["moved"] is False
     await _assert_untouched(pg_dsn)
@@ -481,3 +482,21 @@ async def test_upsert_racing_a_cutover_waits_for_the_fence_and_never_resurrects_
         await asyncio.wait_for(write, 5)
     assert err.value.error_code == "move_in_progress"
     assert await _row(pg_dsn, LEGACY) is None  # the moved source is not resurrected
+
+
+@pytest.mark.asyncio
+async def test_preview_reports_a_missing_destination_column_before_submission(pg_dsn) -> None:
+    """I6: the same column mapping the cutover uses is dry-run at preview."""
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY, dwh_driver="x")
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute('ALTER TABLE "wm_assembly"."queries" DROP COLUMN dwh_driver')
+    svc, coord = await _build(pg_dsn)
+    plan = await svc.preview(_ident(), TENANT, actor=ACTOR)
+    assert plan["can_move"] is False
+    assert [b["path"] for b in plan["blockers"] if b["code"] == "move_validation_failed"] == ["destination_columns"]
+    with pytest.raises(TenantError) as err:
+        await svc.move(_ident(), TENANT, plan_revision=plan["plan_revision"], idempotency_key=str(uuid.uuid4()),
+                       actor=ACTOR, acknowledgements=ACKS)
+    assert err.value.error_code == "move_validation_failed"
+    assert await _scalar(pg_dsn, "SELECT count(*) FROM management.qs_query_moves") == 0
