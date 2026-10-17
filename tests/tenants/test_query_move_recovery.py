@@ -370,3 +370,74 @@ async def test_advance_stops_when_the_recovery_lease_is_lost(pg_dsn) -> None:
     view = await svc.advance(oid)
     assert view["state"] == "preparing" and claims["n"] == 2
     assert await _row(pg_dsn, LEGACY) is not None
+
+
+async def _stuck_on_unknown_run(pg_dsn):
+    """A draining move blocked forever by an 'unknown' run (e.g. a gunicorn rolling restart)."""
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY, attributes=SCHEDULED)
+    svc, coord = await _build(pg_dsn)
+    state = (await coord.bootstrap_row(OWNER, BOOT))["query"]
+    await _sql(pg_dsn,
+               "INSERT INTO management.qs_schedule_runs (logical_schedule_id, generation, scheduled_fire_at, "
+               "owner_namespace, owner_schema, owner_table, query_slug, outcome) "
+               "VALUES ($1::uuid, 1, now(), $2, $3, $4, $5, 'unknown')",
+               uuid.UUID(state["logical_schedule_id"]), *OWNER.as_tuple())
+    oid = await _submit(svc)
+    pending = await svc.advance(oid, drain_timeout_seconds=0.3)
+    assert pending["state"] == "draining" and pending["moved"] is False
+    assert await _scalar(pg_dsn, "SELECT dispatch_gate FROM management.qs_schedule_state") == "frozen"
+    return svc, coord, oid
+
+
+@pytest.mark.asyncio
+async def test_abort_releases_a_move_stuck_in_draining(pg_dsn) -> None:
+    """B2: an explicit abort is the exit for a pre-cutover move that can never drain."""
+    svc, coord, oid = await _stuck_on_unknown_run(pg_dsn)
+    view = await svc.abort(oid, actor=77)
+    assert view["state"] == "failed" and view["moved"] is False and view["error_code"] == "move_aborted"
+    assert await _scalar(pg_dsn, "SELECT dispatch_gate FROM management.qs_schedule_state") == "open"
+    assert await _scalar(pg_dsn, "SELECT gate_operation_id IS NULL FROM management.qs_schedule_state")
+    assert await _scalar(pg_dsn, "SELECT count(*) FROM management.qs_move_reservations") == 0
+    assert await _row(pg_dsn, LEGACY) is not None and await _row(pg_dsn, TENANT) is None
+    await coord.assert_not_moving([OWNER])  # ordinary writes are accepted again
+    # Without the option the unknown run is left for the operator; nothing is replayed.
+    assert await _scalar(pg_dsn, "SELECT outcome FROM management.qs_schedule_runs") == "unknown"
+    assert (await svc.abort(oid, actor=77))["error_code"] == "move_aborted"  # idempotent
+    assert (await svc.advance(oid))["state"] == "failed"  # never resumed
+
+
+@pytest.mark.asyncio
+async def test_abort_can_resolve_blocking_unknown_runs_so_a_new_move_completes(pg_dsn) -> None:
+    svc, coord, oid = await _stuck_on_unknown_run(pg_dsn)
+    await svc.abort(oid, actor=77, resolve_unknown_runs=True)
+    row = await _scalar(pg_dsn, "SELECT outcome || '|' || error FROM management.qs_schedule_runs")
+    assert row.startswith("failed|") and "resolved by user 77" in row
+    again = await _submit(svc)
+    assert (await svc.advance(again))["state"] == "completed"
+    assert await _row(pg_dsn, TENANT) is not None and await _row(pg_dsn, LEGACY) is None
+    assert await _scalar(pg_dsn, "SELECT count(*) FROM management.qs_schedule_runs") == 1
+
+
+@pytest.mark.asyncio
+async def test_abort_is_refused_once_the_cutover_marker_exists(pg_dsn) -> None:
+    await _setup(pg_dsn)
+    await _insert(pg_dsn, LEGACY)
+    svc, coord = await _build(pg_dsn)
+    oid = await _submit(svc)
+    await coord.prepare(oid)
+    await _sql(pg_dsn, "UPDATE management.qs_query_moves SET state = 'cutover', moved = NULL")
+    with pytest.raises(TenantError) as err:
+        await svc.abort(oid, actor=77)
+    assert err.value.error_code == "move_in_progress"
+    assert await _scalar(pg_dsn, "SELECT state FROM management.qs_query_moves") == "cutover"
+    await _sql(pg_dsn, "UPDATE management.qs_query_moves SET moved = true")
+    with pytest.raises(TenantError):
+        await svc.abort(oid, actor=77)
+    assert await _scalar(pg_dsn, "SELECT count(*) FROM management.qs_move_reservations") == 2
+    with pytest.raises(TenantError) as bad:
+        await svc.abort("nope", actor=77)
+    assert bad.value.error_code == "move_validation_failed"
+    with pytest.raises(TenantError) as missing:
+        await svc.abort(str(uuid.uuid4()), actor=77)
+    assert missing.value.error_code == "query_not_found"

@@ -1089,6 +1089,29 @@ class ScheduleHandoffCoordinator:
                     except Exception:  # noqa: BLE001 - a lost connection already dropped the lock
                         logger.warning("Could not release drain lock %s", key)
 
+    async def resolve_unknown_runs(self, conn: Any, owners: Sequence[ScheduleOwner], *, note: str) -> list[str]:
+        """Close ``unknown`` run outcomes of the given identities after an operator decision.
+
+        Only rows already recorded as ``unknown`` change (to ``failed`` with an attributed
+        note); a live ``admitted``/``running`` attempt is never touched and nothing is replayed.
+
+        Returns:
+            The resolved run ids.
+        """
+        resolved: list[str] = []
+        for owner in owners:
+            rows = await conn.fetch_all(
+                "UPDATE management.qs_schedule_runs SET outcome = 'failed', "
+                "error = left(coalesce(error, 'unknown outcome') || ' | ' || $5, 1000), "
+                "finished_at = coalesce(finished_at, now()) WHERE owner_namespace = $1 AND owner_schema = $2 "
+                "AND owner_table = $3 AND query_slug = $4 AND outcome = 'unknown' RETURNING run_id",
+                *owner.as_tuple(), note,
+            )
+            resolved.extend(str(r["run_id"]) for r in rows or [])
+        if resolved:
+            logger.warning("Operator resolved %d unknown run outcome(s): %s", len(resolved), ", ".join(resolved))
+        return resolved
+
     async def _open_run_ids(self, conn: Any, owners: Sequence[ScheduleOwner]) -> list[str]:
         ids: list[str] = []
         for owner in owners:

@@ -1,4 +1,22 @@
 {
+  "abort": {
+    "abortable_states": [
+      "preparing",
+      "draining"
+    ],
+    "refused": {
+      "error_code": "move_in_progress",
+      "status": 409
+    },
+    "request": {
+      "body": {
+        "resolve_unknown_runs": false
+      },
+      "method": "POST",
+      "path": "/api/v1/management/query-moves/0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a/abort"
+    },
+    "response_status": 200
+  },
   "catalog": {
     "request": {
       "method": "GET",
@@ -124,6 +142,9 @@
       "status": 400
     }
   },
+  "journal_error_codes": {
+    "move_aborted": "The operation was explicitly aborted before cutover (moved=false); source dispatch was restored."
+  },
   "move": {
     "request": {
       "body": {
@@ -140,6 +161,31 @@
     "response_status": 202
   },
   "operations": {
+    "aborted": {
+      "destination": {
+        "contract": "tenant",
+        "is_default": false,
+        "schema": "wm_assembly",
+        "table": "queries",
+        "tenant": "wm_assembly"
+      },
+      "error_code": "move_aborted",
+      "message": "Aborted before cutover by user 7; source dispatch restored.",
+      "moved": false,
+      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
+      "query_slug": "wm_pipeline",
+      "scheduler_sync": "pending",
+      "source": {
+        "contract": "legacy",
+        "is_default": true,
+        "schema": "public",
+        "table": "queries",
+        "tenant": null
+      },
+      "state": "failed",
+      "updated_at": "2026-10-15T12:00:00+00:00",
+      "version": 1
+    },
     "completed": {
       "destination": {
         "contract": "tenant",

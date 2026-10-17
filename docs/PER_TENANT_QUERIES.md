@@ -504,6 +504,7 @@ are rejected.
 | `POST /api/v1/management/queries/{slug}/move` | `202 MoveOperation` | durable; the same operation is returned for an authorized retry |
 | `GET /api/v1/management/query-moves/{operation_id}` | `200 MoveOperation` | pure read |
 | `POST /api/v1/management/query-moves/{operation_id}/reconcile` | `200` (final) / `202` (in progress) | repairs the SAME operation; never repeats the row move |
+| `POST /api/v1/management/query-moves/{operation_id}/abort` | `200 MoveOperation` (`failed`, `error_code: move_aborted`) | only before cutover (`preparing`/`draining`, `moved: false`); `409 move_in_progress` afterwards. Optional body `{"resolve_unknown_runs": bool}` |
 
 Authentication and authorization are the **existing management boundary** (database permissions and
 the existing PBAC rules). There is no administrators-only restriction, no new role and no
@@ -511,7 +512,8 @@ the existing PBAC rules). There is no administrators-only restriction, no new ro
 acknowledgement is never authorization. The existing `datasource:use` on `pg_admin` gate still applies
 when the definition is a scheduled write-capable multi-query. The shared contract fixture is
 `tests/fixtures/query_move_contract_v1.json` (sha256
-`f4d3bada54a48886537cc853f6588ab3d4b8b33bc3be0510a6852b6da710af51`); the frontend release gate consumes
+`3c3e745d3f957b02b8194aa99b2a673a9425084bef3e7b2e974773ecd871553f`; revised for the pre-cutover `abort`
+endpoint, the `operations.aborted` sample and the journal-only `move_aborted` code); the frontend release gate consumes
 that file and it must not change without an explicit contract revision.
 
 ### Preview, acknowledgements and blockers
@@ -605,10 +607,47 @@ dispatch and cursor restored.
   commit. While the cutover transaction still holds its locks the outcome is reported as `move_outcome_unknown`
   (`503`) — a connection error is never read as a rollback; poll or retry the same operation. Once the locks are
   gone and `moved` is still `null`, the attempt provably did not commit and the operation returns to `draining`.
-* **Unknown remote effects.** A run whose worker died before recording an outcome is marked `unknown`; the drain
-  stays pending with an actionable message and an operator must reconcile that attempt. It is never retried
-  automatically at the destination. This protocol gives **one admission per scheduled occurrence**; it does not
-  promise exactly-once external effects after a process dies mid-query.
+* **Unknown remote effects.** A run whose worker died before recording an outcome is marked `unknown` (by the
+  drain, or by the next admission of that schedule once no live session holds the owner fence). It is never
+  retried automatically at the destination. This protocol gives **one admission per scheduled occurrence**; it
+  does not promise exactly-once external effects after a process dies mid-query. While such a run exists the
+  drain stays pending (`draining`, message *"Admitted run(s) with an unknown outcome must be resolved…"*): the
+  source gate stays frozen, both reservations are held and ordinary writes answer `409`. See the runbook below.
+
+#### Runbook: a move stuck in `draining`
+
+A move can only stay in `draining` because an admitted run is still alive (wait for it) or because a run has an
+`unknown` outcome (any cancellation — a gunicorn rolling restart, SIGKILL, OOM — produces one). It never resolves
+by itself. Pick one:
+
+1. **Inspect** the blocking runs (both identities of the operation):
+
+   ```sql
+   SELECT r.run_id, r.outcome, r.error, r.admitted_at, r.worker_id
+     FROM management.qs_schedule_runs r
+     JOIN management.qs_query_moves m ON m.query_slug = r.query_slug
+      AND (r.owner_namespace, r.owner_schema, r.owner_table) IN
+          ((m.source_namespace, m.source_schema, m.source_table),
+           (m.target_namespace, m.target_schema, m.target_table))
+    WHERE m.operation_id = '<operation_id>' AND r.outcome IN ('admitted', 'running', 'unknown');
+   ```
+
+   Check the external effect of each `unknown` run (did the job's output land?) before deciding.
+2. **Abort the move** (the source stays where it is, dispatch resumes): `POST
+   /api/v1/management/query-moves/{operation_id}/abort`. With `{"resolve_unknown_runs": true}` the same
+   transaction also closes the `unknown` runs of both identities (outcome `failed`, error annotated
+   *"resolved by user N while aborting move …"*) so that a later move of the slug is not blocked again. Live
+   `admitted`/`running` attempts are never touched and nothing is replayed. Abort is refused (`409
+   move_in_progress`) once the cutover marker exists — an indeterminate or committed cutover is only reconciled.
+3. **Or resolve the unknown run and let the move continue** (no abort): after verifying the external effect,
+   record the decision explicitly; the worker then finishes the drain and cuts over on its next pass:
+
+   ```sql
+   UPDATE management.qs_schedule_runs
+      SET outcome = 'failed', finished_at = coalesce(finished_at, now()),
+          error = coalesce(error, 'unknown outcome') || ' | resolved by <operator> on <date>: <reason>'
+    WHERE run_id = '<run_id>' AND outcome = 'unknown';
+   ```
 * An invalidated delegated identity or revoked scheduled-output grant found at cutover fails the operation
   *before* any row changes (`move_stale_run_as`), restoring source dispatch.
 

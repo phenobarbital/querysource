@@ -988,6 +988,79 @@ class QueryMoveService:
             return self.operation_view(await self.coordinator.reconcile(operation_id))
         return self.operation_view(op)
 
+    async def abort(
+        self, operation_id: str, *, actor: int, resolve_unknown_runs: bool = False
+    ) -> Mapping[str, Any]:
+        """Explicitly abandon an operation that has NOT cut over (``preparing``/``draining``).
+
+        Compare-and-set on ``moved IS FALSE AND state IN ('preparing', 'draining')``: the
+        operation becomes ``failed, moved=false`` (``move_aborted``), the gates it froze are
+        re-opened and both reservations are released, in one transaction. Nothing is copied or
+        deleted. Once the cutover marker is written (``cutover``, or any committed state) an
+        abort is refused: an indeterminate or committed cutover is only ever reconciled.
+        An already failed operation is returned unchanged (idempotent).
+
+        Args:
+            operation_id: The operation to abort.
+            actor: Numeric authenticated actor (recorded in the journal message).
+            resolve_unknown_runs: Also close the ``unknown`` run outcomes of both identities that
+                block a drain (outcome becomes ``failed`` with an attributed operator note). Only
+                runs already recorded as ``unknown`` are touched — never an ``admitted``/
+                ``running`` attempt — and nothing is replayed.
+
+        Raises:
+            TenantError: ``move_validation_failed`` (bad id), ``query_not_found``, or
+                ``move_in_progress`` (409) when the operation already reached cutover.
+        """
+        try:
+            op_id = str(_uuid(operation_id))
+        except (ValueError, AttributeError) as exc:
+            raise TenantError("operation_id must be a UUID", error_code="move_validation_failed") from exc
+        async with await self.coordinator.connection_factory() as conn:
+            op = await self.coordinator.load_operation(conn, op_id)
+            if op is None:
+                raise TenantError(f"Move operation not found: {operation_id}", error_code="query_not_found")
+            if op["state"] == "failed":
+                return self.operation_view(op)
+            await conn.transaction()
+            try:
+                aborted = await self.coordinator.cas_operation(
+                    conn, op_id, expect_states=("preparing", "draining"), expect_moved=False,
+                    state="failed", moved=False, error_code="move_aborted",
+                    message=f"Aborted before cutover by user {int(actor)}; source dispatch restored.",
+                )
+                if aborted is None:
+                    await conn.rollback()
+                    current = await self.coordinator.load_operation(conn, op_id)
+                    if current is not None and current["state"] == "failed":
+                        return self.operation_view(current)
+                    raise TenantError(
+                        "The move already reached cutover and can no longer be aborted; reconcile it instead",
+                        error_code="move_in_progress",
+                    )
+                slug = op["query_slug"]
+                owners = [
+                    ScheduleOwner(op["source_namespace"], op["source_schema"], op["source_table"], slug),
+                    ScheduleOwner(op["target_namespace"], op["target_schema"], op["target_table"], slug),
+                ]
+                await self.coordinator.set_gate(conn, owners, "open", op_id)
+                await self.coordinator.release_reservations(conn, op_id)
+                if resolve_unknown_runs:
+                    await self.coordinator.resolve_unknown_runs(
+                        conn, owners, note=f"resolved by user {int(actor)} while aborting move {op_id}"
+                    )
+                await conn.commit()
+            except TenantError:
+                raise
+            except BaseException:
+                try:
+                    await conn.rollback()
+                except Exception:  # noqa: BLE001 - never mask the original error
+                    logger.exception("Rollback failed while aborting move %s", op_id)
+                raise
+        logger.info("Move %s aborted before cutover by user %s", op_id, actor)
+        return self.operation_view(aborted)
+
     async def _note(self, operation_id: str, message: str) -> None:
         """Best-effort visible message on a still-unfinished operation (never changes state)."""
         try:

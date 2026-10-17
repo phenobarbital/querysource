@@ -228,7 +228,7 @@ async def test_missing_service_is_an_explicit_conflict_not_a_crash(pg_dsn) -> No
 async def test_static_routes_win_over_the_broad_management_patterns() -> None:
     app = web.Application()
     routes = register_routes(app.router)
-    assert len(routes) == 5
+    assert len(routes) == 6
     # The broad management pattern registered AFTER would otherwise swallow /queries/{slug}/move.
     async def broad(request):  # pragma: no cover - must never be selected
         return web.Response(text="broad")
@@ -240,6 +240,7 @@ async def test_static_routes_win_over_the_broad_management_patterns() -> None:
         ("POST", "/api/v1/management/queries/wm_pipeline/move", "move"),
         ("GET", "/api/v1/management/query-moves/abc", "status"),
         ("POST", "/api/v1/management/query-moves/abc/reconcile", "reconcile"),
+        ("POST", "/api/v1/management/query-moves/abc/abort", "abort"),
         ("GET", "/api/v1/management/query-stores", "list"),
     ]:
         match = await app.router.resolve(type("R", (), {"method": method, "rel_url": __import__("yarl").URL(path),
@@ -381,3 +382,36 @@ async def test_numeric_actor_alone_is_not_a_grant_and_operators_keep_current_acc
     app2, *_ = await _app(pg_dsn, {("public", SLUG): _row()}, security=True)
     resp = await handler.preview(_Req(app2, PREVIEW))
     assert resp.status == 200 and calls == [("pg_admin", "datasource:use")]
+
+
+@pytest.mark.asyncio
+async def test_abort_endpoint_statuses_and_body_validation(pg_dsn) -> None:
+    fx = json.loads(FIXTURE.read_text())
+    await _reset(pg_dsn)
+    app, svc, repo, coord = await _app(pg_dsn)
+    handler = QueryMoveHandler()
+    plan = _json(await handler.preview(_Req(app, PREVIEW)))
+    op = _json(await handler.move(_Req(app, _move_body(plan))))
+    oid = op["operation_id"]
+    bad = await handler.abort(_Req(app, {"force": True}, match={"operation_id": oid}))
+    assert bad.status == 400 and _json(bad)["error_code"] == "move_validation_failed"
+    bad = await handler.abort(_Req(app, {"resolve_unknown_runs": "yes"}, match={"operation_id": oid}))
+    assert bad.status == 400
+    anon = _Req(app, None, match={"operation_id": oid})
+    anon["actor"] = None
+    assert (await handler.abort(anon)).status == 403
+    assert (await handler.abort(_Req(app, None, match={"operation_id": str(uuid.uuid4())}))).status == 404
+    resp = await handler.abort(_Req(app, fx["abort"]["request"]["body"], match={"operation_id": oid}))
+    body = _json(resp)
+    assert resp.status == fx["abort"]["response_status"]
+    assert body["state"] == "failed" and body["moved"] is False and body["error_code"] == "move_aborted"
+    assert set(body) == set(fx["operations"]["aborted"])
+    # Past cutover the abort is refused with the documented status/code.
+    plan = _json(await handler.preview(_Req(app, PREVIEW)))
+    op2 = _json(await handler.move(_Req(app, _move_body(plan))))
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute("UPDATE management.qs_query_moves SET state = 'cutover', moved = true "
+                           "WHERE operation_id = $1::uuid", uuid.UUID(op2["operation_id"]))
+    refused = await handler.abort(_Req(app, None, match={"operation_id": op2["operation_id"]}))
+    assert refused.status == fx["abort"]["refused"]["status"]
+    assert _json(refused)["error_code"] == fx["abort"]["refused"]["error_code"]

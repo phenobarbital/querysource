@@ -64,6 +64,7 @@ def test_operation_state_invariants(fx: dict) -> None:
             assert op["moved"] is True
         if op["state"] == "failed":
             assert op["moved"] is False and "error_code" in op
+            assert op["error_code"] in fx["errors"] or op["error_code"] in fx["journal_error_codes"]
         if op["state"] == "reconciling":
             assert op["moved"] is True
         if op.get("error_code") == "move_outcome_unknown":
@@ -110,7 +111,7 @@ from test_handoff_state import pg_dsn  # noqa: E402,F401 - fixture
 
 # Pinned content hash of the approved v1 fixture: the frontend release gate consumes THIS file.
 # Changing the approved contract silently must fail here; bump only with an explicit contract revision.
-FIXTURE_SHA256 = "f4d3bada54a48886537cc853f6588ab3d4b8b33bc3be0510a6852b6da710af51"
+FIXTURE_SHA256 = "3c3e745d3f957b02b8194aa99b2a673a9425084bef3e7b2e974773ecd871553f"
 PLAN_KEYS = {
     "version", "source", "destination", "query_slug", "plan_revision", "can_move", "blockers", "warnings",
     "inherited_references", "runtime_program", "consumer_review_required", "schedule_policy", "schedules",
@@ -161,7 +162,8 @@ def _assert_operation_shape(op: dict, fx: dict) -> None:
     if op["state"] == "completed":
         assert op["moved"] is True and "error_code" not in op
     if op["state"] == "failed":
-        assert op["moved"] is False and op["error_code"] in fx["errors"]
+        assert op["moved"] is False
+        assert op["error_code"] in fx["errors"] or op["error_code"] in fx["journal_error_codes"]
     if op["state"] == "reconciling":
         assert op["moved"] is True
 
@@ -295,3 +297,19 @@ def test_no_admin_only_rule_or_new_move_action_was_introduced() -> None:
     # The only PBAC check is the pre-existing scheduled write-capable multi gate.
     assert handler.count("enforce_request_pbac(") == 1
     assert '"pg_admin", "datasource:use"' in handler
+
+
+def test_abort_contract_shape(fx: dict) -> None:
+    """B2: the explicit pre-cutover abort is part of the shared contract."""
+    abort = fx["abort"]
+    assert abort["request"]["method"] == "POST"
+    assert abort["request"]["path"].endswith("/abort")
+    assert set(abort["request"]["body"]) == {"resolve_unknown_runs"}
+    assert abort["response_status"] == 200
+    assert abort["abortable_states"] == ["preparing", "draining"]
+    assert abort["refused"] == {"status": 409, "error_code": "move_in_progress"}
+    aborted = fx["operations"]["aborted"]
+    assert aborted["state"] == "failed" and aborted["moved"] is False
+    assert aborted["error_code"] == "move_aborted" and "move_aborted" in fx["journal_error_codes"]
+    # A journal-only code is never an HTTP error and never a preview blocker code.
+    assert "move_aborted" not in fx["errors"]

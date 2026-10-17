@@ -7,6 +7,7 @@ Routes (static, registered before the broad management/tenant routes):
     POST /api/v1/management/queries/{slug}/move
     GET  /api/v1/management/query-moves/{operation_id}
     POST /api/v1/management/query-moves/{operation_id}/reconcile
+    POST /api/v1/management/query-moves/{operation_id}/abort
 
 Authentication/authorization is the SAME deployed management boundary as the existing CRUD
 routes (app-level auth, database permissions, existing PBAC). No administrators-only rule, no
@@ -35,6 +36,7 @@ logger = logging.getLogger("QS.QueryMoves")
 
 _PREVIEW_KEYS = frozenset({"tenant", "destination_tenant"})
 _MOVE_KEYS = _PREVIEW_KEYS | {"plan_revision", ACK_CONSUMERS, ACK_PROGRAM, "idempotency_key"}
+_ABORT_KEYS = frozenset({"resolve_unknown_runs"})
 _TERMINAL = ("completed", "failed")
 
 
@@ -227,6 +229,49 @@ class QueryMoveHandler:
         except Exception as exc:  # noqa: BLE001
             return self._unexpected(request, exc)
 
+    @staticmethod
+    async def _abort_options(request: web.Request) -> bool:
+        """Parse the optional abort body ``{"resolve_unknown_runs": bool}`` (an empty body is allowed)."""
+        if getattr(request, "body_exists", True) is False:
+            return False
+        try:
+            body = await request.json()
+        except Exception as exc:  # noqa: BLE001 - any parse failure is the same 400
+            raise _invalid("The request body must be a JSON object") from exc
+        if body is None:
+            return False
+        if not isinstance(body, dict):
+            raise _invalid("The request body must be a JSON object")
+        unknown = sorted(set(body) - _ABORT_KEYS)
+        if unknown:
+            raise _invalid("Unsupported abort option(s): " + ", ".join(unknown))
+        value = body.get("resolve_unknown_runs", False)
+        if not isinstance(value, bool):
+            raise _invalid("'resolve_unknown_runs' must be a boolean")
+        return value
+
+    async def abort(self, request: web.Request) -> web.Response:
+        """``200 MoveOperation`` (``failed``/``move_aborted``): abandon a move that has not cut over.
+
+        Only ``preparing``/``draining`` operations with ``moved=false`` can be aborted; the source
+        gates are re-opened and the reservations released. ``409 move_in_progress`` once the
+        cutover marker exists (an indeterminate or committed cutover is only ever reconciled).
+        """
+        try:
+            service = self._service(request)
+            actor = await self._require_actor(request)
+            operation_id = request.match_info.get("operation_id", "")
+            await service.status(operation_id)  # 404/400 before any mutation
+            resolve = await self._abort_options(request)
+            operation = await service.abort(operation_id, actor=actor, resolve_unknown_runs=resolve)
+            return web.json_response(operation, status=200)
+        except TenantError as exc:
+            return _tenant_error(exc)
+        except web.HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            return self._unexpected(request, exc)
+
     async def reconcile(self, request: web.Request) -> web.Response:
         """Repair the SAME operation (never repeats the row move).
 
@@ -263,4 +308,5 @@ def register_routes(router: web.UrlDispatcher) -> list[Any]:
         router.add_post("/api/v1/management/queries/{slug}/move", handler.move),
         router.add_get("/api/v1/management/query-moves/{operation_id}", handler.status, allow_head=False),
         router.add_post("/api/v1/management/query-moves/{operation_id}/reconcile", handler.reconcile),
+        router.add_post("/api/v1/management/query-moves/{operation_id}/abort", handler.abort),
     ]
