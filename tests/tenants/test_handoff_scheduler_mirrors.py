@@ -217,3 +217,89 @@ async def test_wakeup_after_cutover_cannot_add_catch_up_run(pg_dsn) -> None:
     # A mirror holding a stale generation is fenced.
     assert await coord.admit(sid, int(again["generation"]) + 1) is None
     assert await _scalar(pg_dsn, "SELECT count(*) FROM management.qs_schedule_runs") == 1
+
+
+# -- I4/I5: the mirror poller converges trigger changes and retries failed bootstraps ---------------
+
+
+class _PollCoordinator:
+    """Durable state source for ``sync_mirrors_from_durable`` (no database involved)."""
+
+    def __init__(self, states, *, fail_bootstrap: bool = False) -> None:
+        self.states, self.fail_bootstrap, self.bootstraps = states, fail_bootstrap, 0
+
+    async def connection_factory(self):
+        class _Conn:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _Conn()
+
+    async def load_all_states(self, conn):
+        return [dict(s) for s in self.states]
+
+    async def bootstrap_row(self, owner, row, default_timezone="UTC"):
+        self.bootstraps += 1
+        if self.fail_bootstrap:
+            raise ConnectionError("metadata service unreachable")
+        return {}
+
+
+def _poll_scheduler(coord):
+    from test_handoff_state import _store
+
+    from querysource.scheduler.scheduler import QSScheduler
+    from querysource.tenants import TenantRegistry
+
+    store = _store("public", contract="legacy")
+    sched = QSScheduler()
+    registry = TenantRegistry()
+    registry._stores, registry._default_store, registry._discovered = (store,), store, True
+    sched._registry, sched._coordinator, sched._scheduler = registry, coord, object()
+    synced: list[str] = []
+
+    async def register_slug(slug, *, tenant=None):
+        synced.append(slug)
+        return {}
+
+    sched.register_slug = register_slug
+    return sched, store, synced
+
+
+def _durable(store, **over):
+    state = {"logical_schedule_id": "lid-1", "owner_namespace": store.database_namespace,
+             "owner_schema": store.schema, "owner_table": store.table, "query_slug": "s", "generation": 1,
+             "paused": False, "enabled": True, "config_revision": 1,
+             "trigger_spec": {"schedule_type": "interval", "schedule": {"minutes": 5}}}
+    state.update(over)
+    return state
+
+
+@pytest.mark.asyncio
+async def test_poller_reinstalls_a_trigger_changed_by_another_worker() -> None:
+    coord = _PollCoordinator([])
+    sched, store, synced = _poll_scheduler(coord)
+    sched._note_mirror(store, "s", _durable(store))
+    coord.states = [_durable(store)]
+    assert await sched.sync_mirrors_from_durable() == 0 and synced == []  # nothing changed
+    coord.states = [_durable(store, config_revision=2,
+                             trigger_spec={"schedule_type": "interval", "schedule": {"minutes": 10}})]
+    assert await sched.sync_mirrors_from_durable() == 1 and synced == ["s"]
+
+
+@pytest.mark.asyncio
+async def test_failed_startup_bootstrap_is_retried_by_the_poller() -> None:
+    coord = _PollCoordinator([], fail_bootstrap=True)
+    sched, store, synced = _poll_scheduler(coord)
+    assert await sched._bootstrap_for(store, "s", _row()) is False  # fail closed, no durable row yet
+    owner = ScheduleOwner.from_store(store, "s").as_tuple()
+    assert owner in sched._pending_bootstrap
+    assert await sched.sync_mirrors_from_durable() == 1 and synced == ["s"]  # retried without a state row
+    coord.fail_bootstrap = False
+    assert await sched._bootstrap_for(store, "s", _row()) is True
+    assert owner not in sched._pending_bootstrap
+    synced.clear()
+    assert await sched.sync_mirrors_from_durable() == 0 and synced == []

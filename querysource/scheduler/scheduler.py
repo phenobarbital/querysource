@@ -164,8 +164,12 @@ class QSScheduler:
         self._coordinator: ScheduleHandoffCoordinator | None = None
         # (owner tuple, kind) -> durable schedule state backing the registered mirror.
         self._durable: dict[tuple, dict] = {}
-        # logical schedule id -> (owner tuple, generation, paused, enabled) of the local mirror.
+        # logical schedule id -> (owner tuple, generation, paused, enabled, config revision,
+        # trigger digest) of the local mirror (see ``_mirror_key``).
         self._mirror_index: dict[str, tuple] = {}
+        # owner tuple -> store whose durable bootstrap failed (metadata unreachable at that time);
+        # retried by the mirror poller so the slug is not left unscheduled until a restart.
+        self._pending_bootstrap: dict[tuple, QueryStore] = {}
         self._background: list[asyncio.Task] = []
 
     def _create_scheduler(self) -> AsyncIOScheduler:
@@ -251,12 +255,26 @@ class QSScheduler:
             "generation": int(durable["generation"]),
         }
 
-    def _note_mirror(self, store: QueryStore, slug: str, durable: dict) -> None:
-        self._mirror_index[durable["logical_schedule_id"]] = (
-            ScheduleOwner.from_store(store, slug).as_tuple(),
+    @staticmethod
+    def _mirror_key(owner_tuple: tuple, durable: dict) -> tuple:
+        """What a local mirror must match: owner, fence, desired state AND trigger configuration.
+
+        ``config_revision`` and the trigger digest are included so a trigger changed by another
+        worker (an ordinary save) is reinstalled here too, not only owner/paused changes.
+        """
+        trigger = json.dumps(durable.get("trigger_spec") or {}, sort_keys=True, default=str)
+        return (
+            owner_tuple,
             int(durable["generation"]),
             bool(durable["paused"]),
             bool(durable["enabled"]),
+            int(durable.get("config_revision") or 0),
+            hashlib.sha256(trigger.encode()).hexdigest(),
+        )
+
+    def _note_mirror(self, store: QueryStore, slug: str, durable: dict) -> None:
+        self._mirror_index[durable["logical_schedule_id"]] = self._mirror_key(
+            ScheduleOwner.from_store(store, slug).as_tuple(), durable
         )
 
     async def _bootstrap_for(self, store: QueryStore, slug: str, row: dict | None) -> bool:
@@ -270,12 +288,14 @@ class QSScheduler:
         owner = ScheduleOwner.from_store(store, slug)
         try:
             states = await self._coordinator.bootstrap_row(owner, row, default_timezone=str(self._timezone))
-        except Exception as exc:  # noqa: BLE001 - fail closed, logged
+        except Exception as exc:  # noqa: BLE001 - fail closed, logged, retried by the poller
             self.logger.error(
-                "QSScheduler: durable schedule bootstrap failed for '%s' in %s.%s: %s",
+                "QSScheduler: durable schedule bootstrap failed for '%s' in %s.%s (will retry): %s",
                 slug, store.schema, store.table, exc,
             )
+            self._pending_bootstrap[owner.as_tuple()] = store
             return False
+        self._pending_bootstrap.pop(owner.as_tuple(), None)
         for key in [k for k in self._durable if k[0] == owner.as_tuple()]:
             self._durable.pop(key, None)
         for kind, state in states.items():
@@ -309,7 +329,7 @@ class QSScheduler:
             await self.register_slug(owner.slug, tenant=selector_for(self._registry, store))
 
     async def sync_mirrors_from_durable(self) -> int:
-        """Converge local mirrors with durable state (owner/generation/paused/enabled).
+        """Converge local mirrors with durable state (owner/generation/paused/enabled/trigger config).
 
         This is the polling half of durable reconciliation: it does not rely on any
         notification, so a process that missed a cutover catches up on its next pass.
@@ -328,7 +348,7 @@ class QSScheduler:
                 state["owner_namespace"], state["owner_schema"], state["owner_table"], state["query_slug"],
             )
             known = self._mirror_index.get(lid)
-            current = (owner_tuple, int(state["generation"]), bool(state["paused"]), bool(state["enabled"]))
+            current = self._mirror_key(owner_tuple, state)
             if known != current:
                 resync[owner_tuple] = None
                 if known is not None and known[0] != owner_tuple:
@@ -337,6 +357,9 @@ class QSScheduler:
             if lid not in desired:
                 resync[known[0]] = None
                 self._mirror_index.pop(lid, None)
+        # Definitions whose bootstrap failed (often with no durable row yet) are retried here.
+        for owner_tuple in list(self._pending_bootstrap):
+            resync[owner_tuple] = None
         count = 0
         for owner_tuple in resync:
             owner = ScheduleOwner(*owner_tuple)
