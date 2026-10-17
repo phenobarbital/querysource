@@ -223,3 +223,91 @@ async def test_timezone_and_biweekly_anchor_survive_via_real_trigger_parser(pg_d
     assert run is not None and run["scheduled_fire_at"] == first
     assert await _scalar(pg_dsn, "SELECT next_fire_at FROM management.qs_schedule_state") == first + timedelta(weeks=2)
     await run.finish()
+
+
+async def _orphan_run(dsn, sid, slot, *, outcome="running", slug="s"):
+    """A run row whose worker died (SIGKILL/OOM): no session holds the owner fence any more."""
+    import uuid as _uuid
+
+    async with await _factory(dsn)() as conn:
+        await conn.fetch_one(
+            "INSERT INTO management.qs_schedule_runs (logical_schedule_id, generation, scheduled_fire_at, "
+            "owner_namespace, owner_schema, owner_table, query_slug, worker_id, outcome) "
+            "VALUES ($1::uuid, 1, $2, $3, 'public', 'queries', $4, 'dead-worker', $5) RETURNING run_id",
+            _uuid.UUID(sid), slot, NS, slug, outcome,
+        )
+
+
+@pytest.mark.asyncio
+async def test_orphaned_open_run_is_expired_unknown_and_never_blocks_future_occurrences(pg_dsn) -> None:
+    """B1: a dead worker's open run must not consume every future occurrence as max_instances."""
+    await _reset(pg_dsn)
+    clock = _Clock(T0 + timedelta(minutes=5, seconds=1))
+    coord = _admission_coordinator(pg_dsn, clock)
+    sid = (await _seed(pg_dsn, coord, cursor=T0 + timedelta(minutes=5), max_instances=1))["logical_schedule_id"]
+    await _orphan_run(pg_dsn, sid, T0)
+
+    run = await coord.admit(sid, 1)
+    assert run is not None and run["scheduled_fire_at"] == T0 + timedelta(minutes=5)
+    await run.finish()
+    rows = await _all(pg_dsn, "SELECT outcome FROM management.qs_schedule_runs ORDER BY scheduled_fire_at")
+    assert rows == ["unknown", "completed"]
+    error = await _scalar(pg_dsn, "SELECT error FROM management.qs_schedule_runs WHERE outcome = 'unknown'")
+    assert "worker lost" in error
+    assert await _scalar(pg_dsn, "SELECT finished_at IS NOT NULL FROM management.qs_schedule_runs "
+                                 "WHERE outcome = 'unknown'")
+
+
+@pytest.mark.asyncio
+async def test_open_run_with_a_live_fence_holder_is_not_expired(pg_dsn) -> None:
+    """A run whose session still holds the shared owner fence is alive: it keeps max_instances."""
+    await _reset(pg_dsn)
+    clock = _Clock(T0 + timedelta(minutes=5, seconds=1))
+    coord = _admission_coordinator(pg_dsn, clock)
+    sid = (await _seed(pg_dsn, coord, cursor=T0 + timedelta(minutes=5), max_instances=1))["logical_schedule_id"]
+    await _orphan_run(pg_dsn, sid, T0)
+    key = ScheduleOwner(NS, "public", "queries", "s").lock_key()
+    async with await _factory(pg_dsn)() as live:
+        await live.fetchval("SELECT pg_advisory_lock_shared($1)", key, column=0)
+        assert await coord.admit(sid, 1) is None  # max_instances reached by a LIVE run
+        await live.fetchval("SELECT pg_advisory_unlock_shared($1)", key, column=0)
+    assert await _all(pg_dsn, "SELECT outcome FROM management.qs_schedule_runs") == ["running"]
+
+
+@pytest.mark.asyncio
+async def test_run_outcome_is_recorded_even_when_cancelled_twice() -> None:
+    """``finish`` is shielded: a second cancellation cannot skip the outcome/fence release."""
+    from querysource.scheduler.jobs import _fenced
+
+    started, done = asyncio.Event(), asyncio.Event()
+    recorded: list = []
+
+    class _Run(dict):
+        async def mark_running(self) -> None:
+            return None
+
+        async def finish(self, outcome, error=None) -> None:
+            started.set()
+            await asyncio.sleep(0.1)
+            recorded.append(outcome)
+            done.set()
+
+    class _Coord:
+        async def admit(self, sid, generation):
+            return _Run()
+
+    async def execute() -> None:
+        await asyncio.sleep(3600)
+
+    task = asyncio.ensure_future(_fenced(
+        label="job", slug="s", owner=None, job_id="j", notification_manager=None, coordinator=_Coord(),
+        logical_schedule_id="x", generation=1, execute=execute,
+    ))
+    await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.wait_for(started.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.wait_for(done.wait(), 1)
+    assert recorded == ["unknown"]

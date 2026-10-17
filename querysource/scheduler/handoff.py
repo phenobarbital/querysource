@@ -1110,6 +1110,7 @@ class ScheduleHandoffCoordinator:
                 await conn.commit()
                 return None
             slot = claim["slot"]
+            await self._expire_orphaned_runs(conn, sid, owner)
             open_runs = await conn.fetchval(
                 "SELECT count(*) FROM management.qs_schedule_runs WHERE logical_schedule_id = $1::uuid "
                 "AND outcome IN ('admitted', 'running')", sid, column=0,
@@ -1139,6 +1140,39 @@ class ScheduleHandoffCoordinator:
             except Exception:  # noqa: BLE001 - never mask the original error
                 logger.exception("Rollback failed while admitting %s", sid)
             raise
+
+    async def _expire_orphaned_runs(self, conn: Any, sid: uuid.UUID, owner: ScheduleOwner) -> list[str]:
+        """Mark open runs whose process died (no live session holds the owner fence) ``unknown``.
+
+        Every live admitted run keeps the shared owner lock on its own session until
+        ``finish``. This connection already holds that lock shared, and a session's own locks
+        never conflict with each other, so an exclusive *try* succeeds exactly when no OTHER
+        session holds the key — proving that every still-open run of this owner lost its
+        process (SIGKILL/OOM) before recording an outcome. Those rows are closed as
+        ``unknown`` (never replayed) so they stop consuming ``max_instances`` forever.
+
+        Returns:
+            The run ids that were expired (empty when another session still holds the fence).
+        """
+        key = owner.lock_key()
+        if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", key, column=0):
+            return []
+        # Release the probe at once: runs of this schedule are only inserted under the state row
+        # lock this transaction holds, so no new live run can appear before the UPDATE below.
+        await conn.fetchval("SELECT pg_advisory_unlock($1)", key, column=0)
+        rows = await conn.fetch_all(
+            "UPDATE management.qs_schedule_runs SET outcome = 'unknown', finished_at = now(), "
+            "error = coalesce(error, 'worker lost before the outcome was recorded (detected at admission)') "
+            "WHERE logical_schedule_id = $1::uuid AND outcome IN ('admitted', 'running') RETURNING run_id",
+            sid,
+        )
+        expired = [str(r["run_id"]) for r in rows or []]
+        if expired:
+            logger.warning(
+                "Schedule %s: %d run(s) lost their worker before recording an outcome; marked unknown: %s",
+                sid, len(expired), ", ".join(expired),
+            )
+        return expired
 
     def _evaluate_claim(
         self, state: Mapping[str, Any] | None, generation: int, owner: ScheduleOwner

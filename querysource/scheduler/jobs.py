@@ -138,7 +138,9 @@ async def _fenced(
             )
     finally:
         if run is not None:
-            await run.finish(outcome, error)
+            # Shielded: a second cancellation (shutdown) must not interrupt recording the outcome
+            # and releasing the shared owner fence.
+            await asyncio.shield(run.finish(outcome, error))
 
 
 async def scheduled_query_job(
