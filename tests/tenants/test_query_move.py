@@ -380,3 +380,43 @@ async def test_a_run_executing_right_now_refuses_the_move(env) -> None:
 
     status, _ = await _move(env["client"], "daily", {"tenant": None, "destination_tenant": "qsmv_a"})
     assert status == 200, "the move succeeds once the run finishes"
+
+
+async def test_a_destination_that_persists_something_else_aborts_the_move(env) -> None:
+    """The INSERT only fails on a hard type mismatch.
+
+    A destination whose stored value differs from what was sent — a coercing column
+    type, a rewriting trigger — would otherwise commit a move that quietly changed
+    the definition. The readback catches it while the origin row is still there.
+    """
+    async with await _factory(env["dsn"])() as conn:
+        await conn.execute("""
+            CREATE FUNCTION qsmv_a.mangle() RETURNS trigger AS $$
+            BEGIN NEW.description := 'mangled'; RETURN NEW; END;
+            $$ LANGUAGE plpgsql;
+            CREATE TRIGGER mangle BEFORE INSERT ON qsmv_a.queries
+            FOR EACH ROW EXECUTE FUNCTION qsmv_a.mangle();
+        """)
+
+    status, body = await _move(env["client"], "wide", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 400, body
+    assert body["error_code"] == "move_validation_failed"
+    assert body["details"]["columns"] == ["description"]
+    # Rolled back: the origin keeps the definition and the destination holds nothing.
+    assert await _fetch(env["dsn"], "qsmv_default", "wide") is not None
+    assert await _fetch(env["dsn"], "qsmv_a", "wide") is None
+
+
+async def test_a_jsonb_round_trip_is_not_reported_as_a_mismatch(env) -> None:
+    """The same JSON value read back as text or as a mapping is the same value."""
+    await _seed(env["dsn"], {"qsmv_default": [{
+        "query_slug": "jsonrow", "description": "j", "program_slug": "acme",
+        "attributes": {"a": [1, 2], "b": {"c": True}}, "params": {"x": None},
+    }]})
+
+    status, body = await _move(env["client"], "jsonrow", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 200, body
+    moved = await _fetch(env["dsn"], "qsmv_a", "jsonrow")
+    assert json.loads(moved["attributes"]) if isinstance(moved["attributes"], str) else moved["attributes"]

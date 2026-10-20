@@ -293,7 +293,11 @@ the same management boundary as the CRUD writes (authenticated actor required,
    refuse a pipeline whose saved children would be silently re-pointed (below),
    check the destination has none (`move_target_exists` 409), record the run-as
    transfer (below), project the row onto the destination's live columns,
-   `INSERT`, `DELETE` exactly one origin row.
+   `INSERT`, read the persisted row back and compare it field by field, then
+   `DELETE` exactly one origin row. The readback catches a destination that
+   stored something other than what was sent (a coercing column type, a
+   rewriting trigger) while the origin row is still there to roll back to:
+   `move_validation_failed` 400 with `details.columns`.
    `program_slug` is dropped when the destination lacks it; a destination that has
    it receives the origin's runtime value (its schema). Any other non-null,
    non-empty origin value without a destination column fails with

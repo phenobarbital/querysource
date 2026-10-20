@@ -85,6 +85,21 @@ def _is_missing_run_as_column(exc: Exception) -> bool:
     return RUN_AS_COLUMN in msg and "does not exist" in msg
 
 
+def _comparable(value: Any) -> Any:
+    """Normalize a column value for an origin/destination comparison.
+
+    A jsonb column may come back as text from one table and as a mapping from the
+    other, and both are the same value; anything else compares as-is.
+    """
+    if isinstance(value, (str, bytes)):
+        try:
+            loaded = json.loads(value)
+        except (ValueError, TypeError):
+            return value
+        return loaded if isinstance(loaded, (dict, list)) else value
+    return value
+
+
 _SCHEDULABLE_COLUMNS = "query_slug, attributes, cache_options, provider, is_cached, query_raw"
 _SCHEDULABLE_PREDICATE = (
     "(attributes IS NOT NULL AND attributes != '{}') "
@@ -930,11 +945,30 @@ class DefinitionRepository:
                     if "updated_at" in dest_columns:
                         names.append(quote_identifier("updated_at"))
                         placeholders.append("now()")
-                    await conn.fetch_one(
+                    inserted = await conn.fetch_one(
                         f"INSERT INTO {dst} ({', '.join(names)}) "
-                        f"VALUES ({', '.join(placeholders)}) RETURNING query_slug",
+                        f"VALUES ({', '.join(placeholders)}) RETURNING *",
                         *projected.values(),
                     )
+                    if inserted is None:
+                        raise TenantError(
+                            "The destination insert returned no row", error_code="tenant_store_unavailable"
+                        )
+                    # The INSERT only fails on a hard type mismatch. Compare what the
+                    # destination actually persisted so a silent coercion (a jsonb or
+                    # array column whose type differs between the two tables) is caught
+                    # while the origin row is still there to roll back to.
+                    mismatched = sorted(
+                        name for name in columns
+                        if name not in ("updated_at", "updated_by")
+                        and _comparable(dict(inserted).get(name)) != _comparable(projected[name])
+                    )
+                    if mismatched:
+                        raise TenantError(
+                            "The destination row does not match the origin: " + ", ".join(mismatched),
+                            error_code="move_validation_failed",
+                            details={"columns": mismatched},
+                        )
                     deleted = await conn.fetch_all(f"DELETE FROM {src} WHERE query_slug = $1 RETURNING query_slug", slug)
                     if len(deleted or []) != 1:
                         raise TenantError(

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "feature": "FEAT-176 query store catalog and synchronous move",
-  "notes": "Replayed in order against the real handlers by tests/tenants/test_query_move.py::test_responses_match_the_v2_contract_fixture (seed: qsmv_default.queries [daily, dup, wide], qsmv_a.queries [dup], qsmv_narrow.queries [] ). 'actor': null means no authenticated user. A move is refused when a saved child inherits the parent's owner (move_inherited_references), when a reference form cannot be analysed (move_dependency_analysis_unsupported), or while a scheduled run of the definition is executing (move_run_in_flight). A 409 body may carry details.blockers: [{code, message, path}].",
+  "notes": "Replayed in order against the real handlers by tests/tenants/test_query_move.py::test_responses_match_the_v2_contract_fixture (seed: qsmv_default.queries [daily, dup, wide], qsmv_a.queries [dup], qsmv_narrow.queries [] ). 'actor': null means no authenticated user. A move is refused when a saved child inherits the parent's owner (move_inherited_references), when a reference form cannot be analysed (move_dependency_analysis_unsupported), or while a scheduled run of the definition is executing (move_run_in_flight). A 409 body may carry details.blockers: [{code, message, path}]. move_validation_failed also covers a destination that persisted something other than what was sent (details.columns) and a missing run-as audit table (details.run_as_audit).",
   "endpoints": {
     "catalog": {
       "method": "GET",
