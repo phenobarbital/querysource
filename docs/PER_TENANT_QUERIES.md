@@ -282,8 +282,29 @@ On QuerySource initialization:
 3. Exclude the system schemas `information_schema`, `pg_catalog`, `pg_toast`, `pg_temp`
 4. Exclude the reserved `management` schema (reserved for legacy routes)
 5. Exclude any schema whose name contains a `/`
-6. Validate complete column contract for tenant compatibility
-7. Publish immutable registry snapshot
+6. Require a `query_slug` column — that is the whole eligibility test
+7. Classify each eligible table's **contract by its physical shape** (below)
+8. Publish immutable registry snapshot
+
+#### The contract is the table's shape
+
+A store's persistence contract is derived from one fact and nothing else:
+
+```python
+contract = "legacy" if "program_slug" in columns else "tenant"
+```
+
+A legacy-contract store persists `program_slug`; a tenant-contract store does not and derives
+the runtime program from its schema. **No schema name confers a contract.** `public` is simply
+the tenant that is usually the configured default — it earns the legacy contract because the
+classic `public.queries` table stores `program_slug`, not because of its name. Consequences
+worth knowing:
+
+- A **non-public** table that stores `program_slug` is registered as a legacy-contract store
+  and addressed by its own schema selector, instead of being discarded as incompatible.
+- A `public.queries` **without** `program_slug` is a tenant-contract store.
+- Being the configured default (`QS_QUERIES_SCHEMA` / `QS_QUERIES_TABLE`) confers no contract
+  either; the default is classified by shape like every other store.
 
 ### Allowlist behavior
 

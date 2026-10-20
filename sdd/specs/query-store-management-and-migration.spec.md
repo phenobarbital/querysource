@@ -72,6 +72,34 @@ rule that verification is metadata-only and never executes the stored query.
   QSScheduler runs in this process"*, in addition to an external/DWH scheduler.
 - A missing run-as audit table is `move_validation_failed` (was `move_scheduler_not_ready`).
 
+### Second amendment — the contract is derived from the column
+
+The original spec said *"Both the configured table and literal public.queries retain the
+legacy contract; all other eligible `queries` tables use tenant contract"*, and
+`_is_compatible_store` additionally rejected any other table carrying `program_slug`. Those
+were two rules for one fact, and the name-based one won — so the physical check only ever
+fired on tenants, discarding them.
+
+**Superseded.** The contract is now derived from the physical shape alone:
+
+```python
+contract = "legacy" if "program_slug" in columns else "tenant"
+```
+
+`public` is the tenant that is usually the configured default; it earns the legacy contract
+from its table's shape, never from its name, and neither does the configured default.
+
+Behaviour changes to be aware of when deploying:
+
+- A non-public table carrying `program_slug` is now **registered** as a legacy-contract store
+  rather than discarded with a diagnostic.
+- `public.queries` without `program_slug` is now a tenant-contract store.
+- `_is_compatible_store` is purely an eligibility check (`query_slug` present); eligibility and
+  contract are no longer entangled.
+
+No consumer changed: every `store.contract == "legacy"` site already meant *"this store
+persists program_slug"*, which is now literally true rather than true by convention.
+
 ### Accepted trade-offs
 
 - A move must run in the scheduler's process when the definition is scheduled.
@@ -248,6 +276,12 @@ Keep existing tenant ownership status mappings for unknown/unavailable stores,
 missing queries and database permission errors. No fallback writes on failure.
 
 ### Configured default and scheduler identity
+
+> **PARTIALLY SUPERSEDED by the second amendment in section 0.** The discovery/resolution
+> repair below stands (honour `QueryModel.Meta.schema`/`.name`, never fall back to public,
+> map selectors by physical default identity). What no longer holds is the contract rule in
+> the next paragraph: the contract is derived from the `program_slug` column, so neither the
+> configured table nor literal `public.queries` is forced to the legacy contract by name.
 Source review found a prerequisite gap: the current TenantRegistry scans only
 tables named `queries`, classifies legacy by schema==public and assigns only
 public as default. M2 must repair discovery/resolution to honor
