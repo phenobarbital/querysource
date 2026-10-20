@@ -20,6 +20,7 @@ from asyncdb.drivers.pg import UndefinedColumnError, UndefinedTableError, pg
 
 from querysource.cache_identity import definition_revision
 from querysource.models import QueryModel
+from querysource.query_moves import analyze_references
 from querysource.tenant_errors import TenantError
 from querysource.tenant_models import TenantQueryDefinition
 from querysource.tenants import (
@@ -82,6 +83,21 @@ def _is_missing_run_as_column(exc: Exception) -> bool:
         return True
     msg = str(exc).lower()
     return RUN_AS_COLUMN in msg and "does not exist" in msg
+
+
+def _comparable(value: Any) -> Any:
+    """Normalize a column value for an origin/destination comparison.
+
+    A jsonb column may come back as text from one table and as a mapping from the
+    other, and both are the same value; anything else compares as-is.
+    """
+    if isinstance(value, (str, bytes)):
+        try:
+            loaded = json.loads(value)
+        except (ValueError, TypeError):
+            return value
+        return loaded if isinstance(loaded, (dict, list)) else value
+    return value
 
 
 _SCHEDULABLE_COLUMNS = "query_slug, attributes, cache_options, provider, is_cached, query_raw"
@@ -803,20 +819,76 @@ class DefinitionRepository:
             projected["program_slug"] = origin.schema
         return projected
 
-    async def move(self, slug: str, origin: QueryStore, destination: QueryStore) -> None:
+    async def _audit_move_run_as(
+        self,
+        conn: Any,
+        raw: Mapping[str, Any],
+        origin: QueryStore,
+        destination: QueryStore,
+        actor: int | None,
+        request_info: Mapping[str, Any] | None,
+    ) -> None:
+        """Record a transferred run-as identity on both stores, inside the move transaction.
+
+        A delegated execution identity changing owner store with no trail is not
+        auditable, so the origin gets a ``clear`` event and the destination a ``set``
+        event, both attributed to the mover. A null run-as emits nothing. A missing
+        audit table is fatal here: the move must not commit a silent transfer.
+        """
+        run_as = raw.get(RUN_AS_COLUMN)
+        if run_as is None:
+            return
+        slug = raw.get("query_slug")
+        for store in (origin, destination):
+            table = self._run_as_audit_table(store)
+            found = await conn.fetch_one("SELECT to_regclass($1) AS found", table)
+            if not (found and found.get("found")):
+                raise TenantError(
+                    f"{store.schema}.{store.table}_run_as_audit is missing, so the delegated "
+                    "run-as identity cannot be transferred with an audit trail",
+                    error_code="move_validation_failed",
+                    details={"run_as_audit": f"{store.schema}.{store.table}_run_as_audit"},
+                )
+        context = json.dumps(dict(request_info or {}))
+        for store, old, new, operation in (
+            (origin, run_as, None, "clear"),
+            (destination, None, run_as, "set"),
+        ):
+            await conn.fetch_one(
+                f"INSERT INTO {self._run_as_audit_table(store)} "
+                "(query_slug, old_user_id, new_user_id, operation, changed_by, request_info) "
+                "VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING audit_id",
+                slug, old, new, operation, actor, context,
+            )
+
+    async def move(
+        self,
+        slug: str,
+        origin: QueryStore,
+        destination: QueryStore,
+        *,
+        actor: int | None = None,
+        request_info: Mapping[str, Any] | None = None,
+    ) -> None:
         """Move one definition row between two stores in ONE transaction.
 
-        Locks the origin row (``FOR UPDATE``), checks the destination has no
-        row, projects the row onto the destination's live columns, inserts it
-        and deletes exactly one origin row. Any failure rolls everything back.
+        Locks the origin row (``FOR UPDATE``), refuses a pipeline whose saved
+        children would be silently re-pointed, checks the destination has no row,
+        projects the row onto the destination's live columns, inserts it, deletes
+        exactly one origin row and records the move: ``updated_by``/``updated_at``
+        are stamped with the mover, and a transferred run-as identity gets the
+        paired ``clear``/``set`` audit events. Any failure rolls everything back.
 
         Args:
             slug: The definition slug.
             origin: The store currently holding the row.
             destination: The store receiving the row (same database).
+            actor: The authenticated user performing the move, for attribution.
+            request_info: Optional request context recorded on the audit events.
 
         Raises:
             TenantError: ``query_not_found``, ``move_target_exists``,
+                ``move_inherited_references``, ``move_dependency_analysis_unsupported``,
                 ``move_validation_failed``, ``tenant_write_forbidden`` or
                 ``tenant_store_unavailable``.
         """
@@ -834,6 +906,17 @@ class DefinitionRepository:
                     row = await conn.fetch_one(f"SELECT * FROM {src} WHERE query_slug = $1 FOR UPDATE", slug)
                     if row is None:
                         raise TenantError(f"Query not found: {slug!r}", error_code="query_not_found")
+                    raw = dict(row)
+                    # A saved child that omits ``tenant`` inherits the parent's owner, so moving
+                    # the parent would re-point it with nothing failing. Refuse until it is pinned.
+                    _inherited, ref_blockers = analyze_references(raw.get("provider"), raw.get("query_raw"))
+                    if ref_blockers:
+                        first = ref_blockers[0]
+                        raise TenantError(
+                            first["message"],
+                            error_code=first["code"],
+                            details={"blockers": ref_blockers},
+                        )
                     if await conn.fetch_one(f"SELECT 1 AS present FROM {dst} WHERE query_slug = $1", slug):
                         raise TenantError(
                             f"The destination store already has {slug!r}", error_code="move_target_exists"
@@ -849,13 +932,43 @@ class DefinitionRepository:
                             f"Store table not available: {destination.schema}.{destination.table}",
                             error_code="tenant_store_unavailable",
                         )
-                    projected = self._project_move(dict(row), origin, dest_columns)
+                    await self._audit_move_run_as(conn, raw, origin, destination, actor, request_info)
+                    projected = self._project_move(raw, origin, dest_columns)
+                    # Stamp the move so the destination row is not indistinguishable from
+                    # one that was never touched.
+                    if actor is not None and "updated_by" in dest_columns:
+                        projected["updated_by"] = actor
+                    projected.pop("updated_at", None)
                     columns = list(projected)
-                    await conn.fetch_one(
-                        f"INSERT INTO {dst} ({', '.join(quote_identifier(c) for c in columns)}) "
-                        f"VALUES ({', '.join(f'${i + 1}' for i in range(len(columns)))}) RETURNING query_slug",
+                    placeholders = [f"${i + 1}" for i in range(len(columns))]
+                    names = [quote_identifier(c) for c in columns]
+                    if "updated_at" in dest_columns:
+                        names.append(quote_identifier("updated_at"))
+                        placeholders.append("now()")
+                    inserted = await conn.fetch_one(
+                        f"INSERT INTO {dst} ({', '.join(names)}) "
+                        f"VALUES ({', '.join(placeholders)}) RETURNING *",
                         *projected.values(),
                     )
+                    if inserted is None:
+                        raise TenantError(
+                            "The destination insert returned no row", error_code="tenant_store_unavailable"
+                        )
+                    # The INSERT only fails on a hard type mismatch. Compare what the
+                    # destination actually persisted so a silent coercion (a jsonb or
+                    # array column whose type differs between the two tables) is caught
+                    # while the origin row is still there to roll back to.
+                    mismatched = sorted(
+                        name for name in columns
+                        if name not in ("updated_at", "updated_by")
+                        and _comparable(dict(inserted).get(name)) != _comparable(projected[name])
+                    )
+                    if mismatched:
+                        raise TenantError(
+                            "The destination row does not match the origin: " + ", ".join(mismatched),
+                            error_code="move_validation_failed",
+                            details={"columns": mismatched},
+                        )
                     deleted = await conn.fetch_all(f"DELETE FROM {src} WHERE query_slug = $1 RETURNING query_slug", slug)
                     if len(deleted or []) != 1:
                         raise TenantError(

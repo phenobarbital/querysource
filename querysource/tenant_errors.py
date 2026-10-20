@@ -13,6 +13,9 @@ OWNERSHIP_STATUS = {
     "move_same_store": 400,
     "move_validation_failed": 400,
     "move_target_exists": 409,
+    "move_inherited_references": 409,
+    "move_dependency_analysis_unsupported": 409,
+    "move_run_in_flight": 409,
 }
 
 

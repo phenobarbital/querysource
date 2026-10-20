@@ -98,7 +98,8 @@ async def test_exact_callable_and_owner_envelope() -> None:
         "database_namespace": "localhost:5432/querysource",
         "schema": "tenant1",
         "table": "queries",
-        "has_program_slug": False,
+        # Frozen v1 wire key: the envelope keeps "contract", not the internal flag.
+        "contract": "tenant",
     }
 
     # AC-1: alias queue output preserved — keyed by `name`, not the slug.
@@ -236,3 +237,24 @@ async def test_timeout_cleanup_and_queue_alias() -> None:
     result = await queue.get()
     assert result == {"out_alias": "healthy-df"}
     assert "monthly_revenue" not in result
+
+
+def test_owner_envelope_v1_shape_is_frozen() -> None:
+    """The v1 envelope is a wire contract: its keys may not drift.
+
+    It is serialized to remote qworkers under
+    ``querysource.remote.tenant_query_handler_v1``. Renaming a key here while
+    leaving ``version: 1`` and the ``_v1`` handler name in place breaks every
+    worker running the released code, silently and across a deploy boundary.
+    Changing the shape requires a ``_v2`` handler, not an edit to this test.
+    """
+    from querysource.tenants import contract_of, owner_envelope
+
+    envelope = owner_envelope(_tenant_store("wm_assembly"))
+    assert set(envelope) == {"version", "database_namespace", "schema", "table", "contract"}
+    assert envelope["version"] == 1
+    assert envelope["contract"] == "tenant"
+    assert owner_envelope(_legacy_store())["contract"] == "legacy"
+    # The internal flag never reaches the wire.
+    assert "has_program_slug" not in envelope
+    assert contract_of(True) == "legacy" and contract_of(False) == "tenant"

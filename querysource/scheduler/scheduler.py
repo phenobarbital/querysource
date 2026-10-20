@@ -46,7 +46,13 @@ from querysource.scheduler.jobs import (
 )
 from querysource.scheduler.notifications import NotificationManager
 from querysource.tenant_errors import TenantError
-from querysource.tenants import QueryIdentity, QueryStore, TenantOwnerEnvelope, TenantRegistry
+from querysource.tenants import (
+    QueryIdentity,
+    QueryStore,
+    TenantOwnerEnvelope,
+    TenantRegistry,
+    owner_envelope,
+)
 
 logger = logging.getLogger("QSScheduler")
 
@@ -160,13 +166,7 @@ class QSScheduler:
 
     def _owner_envelope(self, store: QueryStore) -> TenantOwnerEnvelope:
         """Build the validated owner envelope carried in every scheduled job's kwargs."""
-        return TenantOwnerEnvelope(
-            version=1,
-            database_namespace=store.database_namespace,
-            schema=store.schema,
-            table=store.table,
-            has_program_slug=store.has_program_slug,
-        )
+        return owner_envelope(store)
 
     def _is_default_store(self, store: QueryStore) -> bool:
         """True when ``store`` is the registry's configured/legacy default.

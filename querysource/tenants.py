@@ -67,13 +67,44 @@ class DefinitionPage:
 
 
 class TenantOwnerEnvelope(TypedDict):
-    """Versioned remote/job identity; no database secrets or connections."""
+    """Versioned remote/job identity; no database secrets or connections.
+
+    This is a WIRE contract: it is serialized to remote qworkers under the
+    ``querysource.remote.tenant_query_handler_v1`` handler, so its v1 shape is
+    frozen and keeps the ``contract`` key even though :class:`QueryStore` now
+    models the same fact as ``has_program_slug``. Build it with
+    :func:`owner_envelope`, never by hand, and bump to a ``_v2`` handler rather
+    than renaming a key here.
+    """
 
     version: Literal[1]
     database_namespace: str
     schema: str
     table: str
-    has_program_slug: bool
+    contract: Literal["legacy", "tenant"]
+
+
+def contract_of(has_program_slug: bool) -> str:
+    """Map the internal shape flag to the frozen v1 wire name."""
+    return "legacy" if has_program_slug else "tenant"
+
+
+def owner_envelope(store: QueryStore) -> TenantOwnerEnvelope:
+    """Build the frozen v1 owner envelope for a physical store.
+
+    Args:
+        store: The resolved physical store the job/query is bound to.
+
+    Returns:
+        The v1 envelope; never contains credentials, a DSN or a run-as identity.
+    """
+    return TenantOwnerEnvelope(
+        version=1,
+        database_namespace=store.database_namespace,
+        schema=store.schema,
+        table=store.table,
+        contract=contract_of(store.has_program_slug),
+    )
 
 
 def is_configured_default(store: QueryStore) -> bool:

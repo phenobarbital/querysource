@@ -286,18 +286,46 @@ the same management boundary as the CRUD writes (authenticated actor required,
 `datasource:use` on `pg_admin` for a scheduled write-capable multi). Procedure:
 
 1. Resolve both stores (`move_same_store` 400, `tenant_not_available` 404).
-2. If this process runs the scheduler, pause the slug's origin jobs.
-3. One transaction: `SELECT ... FOR UPDATE` the origin row (`query_not_found` 404),
-   check the destination has none (`move_target_exists` 409), project the row onto
-   the destination's live columns, `INSERT`, `DELETE` exactly one origin row.
+2. Refuse while a scheduled run of this definition is executing in this worker
+   (`move_run_in_flight` 409) — pausing stops future dispatches, not a live run.
+3. If this process runs the scheduler, pause the slug's origin jobs.
+4. One transaction: `SELECT ... FOR UPDATE` the origin row (`query_not_found` 404),
+   refuse a pipeline whose saved children would be silently re-pointed (below),
+   check the destination has none (`move_target_exists` 409), record the run-as
+   transfer (below), project the row onto the destination's live columns,
+   `INSERT`, read the persisted row back and compare it field by field, then
+   `DELETE` exactly one origin row. The readback catches a destination that
+   stored something other than what was sent (a coercing column type, a
+   rewriting trigger) while the origin row is still there to roll back to:
+   `move_validation_failed` 400 with `details.columns`.
    `program_slug` is dropped when the destination lacks it; a destination that has
    it receives the origin's runtime value (its schema). Any other non-null,
    non-empty origin value without a destination column fails with
-   `move_validation_failed` 400 and `details.columns`.
-4. On failure before commit the paused jobs are resumed and the error returned.
-5. After commit: `register_slug(slug, tenant=destination)` and remove the origin
+   `move_validation_failed` 400 and `details.columns`. `updated_by`/`updated_at`
+   are stamped with the mover; `created_*` is preserved verbatim.
+5. On failure before commit the paused jobs are resumed and the error returned.
+6. After commit: `register_slug(slug, tenant=destination)` and remove the origin
    jobs. A re-registration failure keeps the move committed and answers 200 with
    `scheduler.status: "failed"` (`"not_configured"` without a scheduler).
+
+**Inherited child references.** A saved child inside a multi pipeline that omits
+`tenant` resolves against its parent's owner, so moving the parent re-points it —
+silently, because nothing fails at move time. The pipeline then breaks on its next
+run, or quietly runs a *different* definition that happens to share the slug in the
+destination. The move refuses with `move_inherited_references` 409 and
+`details.blockers: [{code, message, path}]` naming each `queries.<alias>.tenant` to
+pin first (an explicit `null` selects the default store and is a valid pin). A
+reference whose slug or tenant is templated or computed cannot be proven safe and
+refuses with `move_dependency_analysis_unsupported` 409. `query_raw` is never
+rewritten and SQL text is never scanned with a regex.
+
+**Run-as transfer.** When the definition carries `scheduler_run_as_user_id`, the
+move writes a `clear` event on the origin's `{table}_run_as_audit` and a `set`
+event on the destination's, both attributed to the user performing the move — a
+delegated execution identity never changes owner store without a trail. The
+original stored identity is preserved: a move never rebinds execution to whoever
+pressed Move. If either audit table is missing, the move refuses with
+`move_validation_failed` 400 and `details.run_as_audit` before anything is written.
 
 Errors use `{error_code, message, details?}`; the exact request/response contract
 is `tests/fixtures/query_move_contract_v2.json`, replayed against the real handler.

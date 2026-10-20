@@ -44,9 +44,20 @@ _FULL_COLUMNS = """
   dwh_scheduler jsonb, created_at timestamptz, created_by int, updated_at timestamptz,
   updated_by int, scheduler_run_as_user_id int{extra}
 """
+# A store that can hold a scheduled definition must also have its run-as audit
+# table: transferring a delegated identity without a trail is refused.
+_AUDIT_DDL = """
+CREATE TABLE {schema}.queries_run_as_audit (
+  audit_id bigserial PRIMARY KEY, query_slug varchar NOT NULL, old_user_id int, new_user_id int,
+  operation varchar NOT NULL, changed_by int, changed_at timestamptz NOT NULL DEFAULT now(),
+  request_info jsonb
+)
+"""
 DDL = {
-    "qsmv_default": "CREATE TABLE qsmv_default.queries (" + _FULL_COLUMNS.format(extra=", program_slug text") + ")",
-    "qsmv_a": "CREATE TABLE qsmv_a.queries (" + _FULL_COLUMNS.format(extra="") + ")",
+    "qsmv_default": "CREATE TABLE qsmv_default.queries (" + _FULL_COLUMNS.format(extra=", program_slug text") + ");"
+    + _AUDIT_DDL.format(schema="qsmv_default"),
+    "qsmv_a": "CREATE TABLE qsmv_a.queries (" + _FULL_COLUMNS.format(extra="") + ");"
+    + _AUDIT_DDL.format(schema="qsmv_a"),
     "qsmv_narrow": "CREATE TABLE qsmv_narrow.queries (query_slug text PRIMARY KEY, description text, provider text)",
 }
 
@@ -240,3 +251,172 @@ async def test_responses_match_the_v2_contract_fixture(env) -> None:
         assert await response.json() == case["response"], case["name"]
         if case["status"] >= 400:
             assert fixture["error_codes"][case["response"]["error_code"]] == case["status"]
+
+
+# -- ported guards (FEAT-176 review): references, audit, attribution, in-flight ----------
+
+
+async def _audit(dsn: str, schema: str, slug: str) -> list[dict]:
+    async with await _factory(dsn)() as conn:
+        rows = await conn.fetch_all(
+            f"SELECT * FROM {schema}.queries_run_as_audit WHERE query_slug = $1 ORDER BY audit_id", slug
+        )
+    return [dict(r) for r in rows or []]
+
+
+async def test_a_pipeline_whose_children_inherit_the_owner_is_refused(env) -> None:
+    """A saved child that omits 'tenant' resolves against its parent's owner.
+
+    Moving the parent would re-point it with nothing failing: the pipeline breaks on
+    its next run, or quietly runs a different definition that shares the slug in the
+    destination. The move must refuse until the child is pinned.
+    """
+    await _seed(env["dsn"], {"qsmv_default": [{
+        "query_slug": "parent", "description": "p", "program_slug": "acme", "provider": "multi",
+        "query_raw": json.dumps({"queries": {"detail": {"slug": "child_detail"}}}),
+    }]})
+
+    status, body = await _move(env["client"], "parent", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 409, body
+    assert body["error_code"] == "move_inherited_references"
+    assert body["details"]["blockers"][0]["path"] == "queries.detail.tenant"
+    # Nothing moved.
+    assert await _fetch(env["dsn"], "qsmv_default", "parent") is not None
+    assert await _fetch(env["dsn"], "qsmv_a", "parent") is None
+
+
+async def test_a_pinned_child_does_not_block_the_move(env) -> None:
+    """An explicit 'tenant' (including an explicit null) is pinned and never blocks."""
+    await _seed(env["dsn"], {"qsmv_default": [{
+        "query_slug": "pinned", "description": "p", "program_slug": "acme", "provider": "multi",
+        "query_raw": json.dumps({"queries": {
+            "a": {"slug": "child_a", "tenant": "qsmv_a"},
+            "b": {"slug": "child_b", "tenant": None},
+            "c": {"raw": "SELECT 1"},
+        }}),
+    }]})
+
+    status, body = await _move(env["client"], "pinned", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 200, body
+    assert await _fetch(env["dsn"], "qsmv_a", "pinned") is not None
+
+
+async def test_a_dynamic_reference_cannot_be_proven_safe(env) -> None:
+    """A templated slug/tenant is reported, never guessed at."""
+    await _seed(env["dsn"], {"qsmv_default": [{
+        "query_slug": "dynamic", "description": "d", "program_slug": "acme", "provider": "multi",
+        "query_raw": json.dumps({"queries": {"x": {"slug": "{{ var }}"}}}),
+    }]})
+
+    status, body = await _move(env["client"], "dynamic", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 409, body
+    assert body["error_code"] == "move_dependency_analysis_unsupported"
+
+
+async def test_a_transferred_run_as_leaves_an_attributed_audit_trail(env) -> None:
+    """'daily' carries run_as=5: the origin records a clear, the destination a set."""
+    status, body = await _move(env["client"], "daily", {"tenant": None, "destination_tenant": "qsmv_a"})
+    assert status == 200, body
+
+    [cleared] = await _audit(env["dsn"], "qsmv_default", "daily")
+    assert (cleared["operation"], cleared["old_user_id"], cleared["new_user_id"]) == ("clear", 5, None)
+    [was_set] = await _audit(env["dsn"], "qsmv_a", "daily")
+    assert (was_set["operation"], was_set["old_user_id"], was_set["new_user_id"]) == ("set", None, 5)
+    # Attributed to the mover, not to the delegated identity.
+    assert cleared["changed_by"] == ACTOR and was_set["changed_by"] == ACTOR
+
+
+async def test_a_definition_without_run_as_writes_no_audit_events(env) -> None:
+    """Null-to-null is not an identity change and must not emit events."""
+    status, body = await _move(env["client"], "wide", {"tenant": None, "destination_tenant": "qsmv_a"})
+    assert status == 200, body
+    assert await _audit(env["dsn"], "qsmv_default", "wide") == []
+    assert await _audit(env["dsn"], "qsmv_a", "wide") == []
+
+
+async def test_a_missing_audit_table_refuses_the_transfer_before_anything_moves(env) -> None:
+    """Without the destination audit table a run-as transfer has no trail, so it is refused."""
+    async with await _factory(env["dsn"])() as conn:
+        await conn.execute("DROP TABLE qsmv_a.queries_run_as_audit")
+
+    status, body = await _move(env["client"], "daily", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 400, body
+    assert body["error_code"] == "move_validation_failed"
+    assert body["details"]["run_as_audit"] == "qsmv_a.queries_run_as_audit"
+    assert await _fetch(env["dsn"], "qsmv_default", "daily") is not None
+    assert await _fetch(env["dsn"], "qsmv_a", "daily") is None
+
+
+async def test_the_move_is_stamped_with_the_mover(env) -> None:
+    """A moved row must not be indistinguishable from one that was never touched."""
+    before = await _fetch(env["dsn"], "qsmv_default", "wide")
+    status, _ = await _move(env["client"], "wide", {"tenant": None, "destination_tenant": "qsmv_a"})
+    assert status == 200
+
+    moved = await _fetch(env["dsn"], "qsmv_a", "wide")
+    assert moved["updated_by"] == ACTOR
+    assert moved["updated_at"] is not None and moved["updated_at"] != before["updated_at"]
+    # Creation provenance is preserved verbatim.
+    assert moved["created_by"] == before["created_by"]
+
+
+async def test_a_run_executing_right_now_refuses_the_move(env) -> None:
+    """Pausing stops future dispatches, not one already running: refuse instead of racing it."""
+    from querysource.scheduler import jobs
+
+    origin = env["registry"].resolve(None)
+    owner = {"schema": origin.schema, "table": origin.table}
+    with jobs._running(owner, "daily"):
+        status, body = await _move(env["client"], "daily", {"tenant": None, "destination_tenant": "qsmv_a"})
+        assert status == 409, body
+        assert body["error_code"] == "move_run_in_flight"
+        assert await _fetch(env["dsn"], "qsmv_default", "daily") is not None
+        # The origin schedule was not left paused by the refusal.
+        assert all(job.next_run_time is not None for job in _job(env, "daily", None))
+
+    status, _ = await _move(env["client"], "daily", {"tenant": None, "destination_tenant": "qsmv_a"})
+    assert status == 200, "the move succeeds once the run finishes"
+
+
+async def test_a_destination_that_persists_something_else_aborts_the_move(env) -> None:
+    """The INSERT only fails on a hard type mismatch.
+
+    A destination whose stored value differs from what was sent — a coercing column
+    type, a rewriting trigger — would otherwise commit a move that quietly changed
+    the definition. The readback catches it while the origin row is still there.
+    """
+    async with await _factory(env["dsn"])() as conn:
+        await conn.execute("""
+            CREATE FUNCTION qsmv_a.mangle() RETURNS trigger AS $$
+            BEGIN NEW.description := 'mangled'; RETURN NEW; END;
+            $$ LANGUAGE plpgsql;
+            CREATE TRIGGER mangle BEFORE INSERT ON qsmv_a.queries
+            FOR EACH ROW EXECUTE FUNCTION qsmv_a.mangle();
+        """)
+
+    status, body = await _move(env["client"], "wide", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 400, body
+    assert body["error_code"] == "move_validation_failed"
+    assert body["details"]["columns"] == ["description"]
+    # Rolled back: the origin keeps the definition and the destination holds nothing.
+    assert await _fetch(env["dsn"], "qsmv_default", "wide") is not None
+    assert await _fetch(env["dsn"], "qsmv_a", "wide") is None
+
+
+async def test_a_jsonb_round_trip_is_not_reported_as_a_mismatch(env) -> None:
+    """The same JSON value read back as text or as a mapping is the same value."""
+    await _seed(env["dsn"], {"qsmv_default": [{
+        "query_slug": "jsonrow", "description": "j", "program_slug": "acme",
+        "attributes": {"a": [1, 2], "b": {"c": True}}, "params": {"x": None},
+    }]})
+
+    status, body = await _move(env["client"], "jsonrow", {"tenant": None, "destination_tenant": "qsmv_a"})
+
+    assert status == 200, body
+    moved = await _fetch(env["dsn"], "qsmv_a", "jsonrow")
+    assert json.loads(moved["attributes"]) if isinstance(moved["attributes"], str) else moved["attributes"]

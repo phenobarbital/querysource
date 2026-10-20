@@ -24,7 +24,7 @@ def _envelope(store: QueryStore) -> dict:
         "database_namespace": store.database_namespace,
         "schema": store.schema,
         "table": store.table,
-        "has_program_slug": store.has_program_slug,
+        "contract": "legacy" if store.has_program_slug else "tenant",
     }
 
 
@@ -175,7 +175,7 @@ async def test_api_serialization_filter_pause_resume_delete() -> None:
     serialized = view._serialize_job(_mock_job("qsj2-query-abc123-shared", tenant_owner))
     assert serialized["kind"] == "query"
     assert serialized["owner"]["schema"] == "tenant1"
-    assert serialized["owner"]["has_program_slug"] is False
+    assert serialized["owner"]["contract"] == "tenant"
 
     # A legacy job (owner=None in kwargs, e.g. pre-TASK-730 registration)
     # must not surface a bogus "owner" key.

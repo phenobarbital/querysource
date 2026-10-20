@@ -131,10 +131,10 @@ async def test_startup_all_stores_and_legacy_override() -> None:
 
         # Every registered job kwargs carries a validated owner envelope.
         legacy_job = scheduler._scheduler.get_job("query_legacy_slug")
-        assert legacy_job.kwargs["owner"]["has_program_slug"] is True
+        assert legacy_job.kwargs["owner"]["contract"] == "legacy"
         assert legacy_job.kwargs["owner"]["schema"] == "configured_default"
         tenant_job = scheduler._scheduler.get_job(qualified[0])
-        assert tenant_job.kwargs["owner"]["has_program_slug"] is False
+        assert tenant_job.kwargs["owner"]["contract"] == "tenant"
         assert tenant_job.kwargs["owner"]["schema"] == "tenant1"
         assert tenant_job.kwargs["owner"]["version"] == 1
     finally:
