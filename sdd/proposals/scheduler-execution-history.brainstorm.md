@@ -94,6 +94,24 @@ Three more defects showed up while diagnosing it. They are in scope:
 
 ---
 
+## Prior Art: Flowtask `NavScheduler`
+
+Flowtask (`~/Documents/navigator/flowtask`) has run APScheduler in production for
+years. I researched it through its wiki (`wikitoolkit query "scheduler service jobs"`)
+and then read the source directly (flowtask branch `feat-FEAT-576-workday-fetch-many`).
+
+| Concern | How flowtask does it | Lesson for QS |
+|---|---|---|
+| **Single execution** | `gunicorn_config.py` hard-codes `workers = 1`, and the scheduler starts in that single worker. A Redis singleton lock (`SCHEDULER_LOCK_KEY = "navigator_singleton_lock"`, `acquire_scheduler_lock` / `renew_scheduler_lock` / `periodic_lock_check`) was built and then **disabled: "cluster feature has design flaws"** (`flowtask/scheduler/scheduler.py:118,158-161,282-295,406-436`). | QS cannot copy `workers = 1`: navigator-api serves web traffic with 4 workers. The abandoned TTL/renewal leader lock is real evidence against Option B. A per-occurrence claim (Option A) needs no lease, renewal or failover. |
+| **Durable pause** | `troc.jobs.enabled`. Startup loads `SELECT * FROM troc.jobs WHERE enabled = true` (`scheduler.py:473`). PATCH flips `enabled` and removes or re-adds the job in the jobstore (`handlers/manager.py:_patch_response`, ~412-452). | The DB is the source of truth for paused state. That works in flowtask only because there is one worker. In QS the flag must also be **checked at fire time**, because the other workers' in-memory jobs are not touched. |
+| **Run outcome** | APScheduler **listeners**: `EVENT_JOB_EXECUTED`, `EVENT_JOB_ERROR \| EVENT_JOB_MISSED`, `EVENT_JOB_SUBMITTED` and `EVENT_JOB_ADDED` (`add_listeners`, `scheduler.py:643`). They read `event.scheduled_run_time`, `event.exception` and `event.traceback`. | This is how to get the real `scheduled_run_time`, and how to record **missed** and **max-instances** occurrences, which never reach the job body. Listeners fire after submission, so they cannot be the dedup gate; the claim still has to live in the job wrapper. |
+| **History storage** | Only the last run is kept, overwritten in place on `troc.jobs` (`last_exec_time`, `next_run_time`, `job_status` 1=ok/2=error/3=missed/4=max-instances, `job_state`, `traceback`) via `update_task_status` (`scheduler.py:868`). Per-run task history goes to **InfluxDB** (`events/events/exec.py` `LogExecution`, `TASK_EXEC_TABLE`). | Keep both: a denormalized "last run" for a cheap jobs list, and an append-only run table for history. Do not put history in Influx: Concierge and SQL users need it in Postgres. |
+| **Run identity** | NAV-6365 (`sdd/proposals/SDD_NAV-6365.md`): scheduler-dispatched runs reused a stale `execution_id`; manual runs were fine. | Generate the run id **at claim time** (the run row PK) and pass it down. Never store it on the job definition. |
+| **Alerts** | Telegram via `scheduler/notifications.send_notification`, called from `job_status`. | Same idea: pluggable callback, channel from config. |
+| **Anti-patterns to avoid** | `save_db_event` builds SQL with `str.format` ("TODO: migrate to Prepared statements") and runs it on a **new event loop inside a `ThreadPoolExecutor`** from a sync listener (`scheduler.py:726-893`). | Use parameterized asyncpg queries on the running loop. Listeners should be cheap and `asyncio.create_task` the DB write. |
+
+---
+
 ## Options Explored
 
 ### Option A: The run ledger is the lock (fire-time claim + durable job state)
@@ -135,6 +153,17 @@ per failure.
 APScheduler 3.11 does not pass `scheduled_run_time` to the job callable. So
 `scheduled_for` is derived inside the job from the job's trigger, as the latest
 fire time ≤ now within the misfire grace. It is not truncated wall-clock time.
+
+Following flowtask, A also registers APScheduler listeners:
+- **`EVENT_JOB_MISSED` and `EVENT_JOB_MAX_INSTANCES`** record `missed` /
+  `skipped` rows, which never reach the job body. These rows use the event's real
+  `scheduled_run_time`, through the same `ON CONFLICT DO NOTHING` key, so only one
+  is kept.
+- **`EVENT_JOB_SUBMITTED`** can cross-check the derived slot in tests.
+
+`qs_scheduler_job_state` also holds a denormalized `last_run_id` / `last_status` /
+`last_run_at`, which keeps the flowtask `troc.jobs` "last run" convenience for the
+jobs list.
 
 ✅ **Pros:**
 - One mechanism solves history, the N-fold execution and the one-alert-per-failure
@@ -206,6 +235,9 @@ table that the leader polls or listens to (`LISTEN/NOTIFY`).
   hosts it becomes one leader across hosts, which is fine but harder to reason
   about during deploys.
 - Failover gap: an occurrence due during takeover may be missed or coalesced.
+- **Already tried and abandoned in flowtask.** Its Redis singleton lock with TTL
+  renewal is commented out as "cluster feature has design flaws"
+  (`flowtask/scheduler/scheduler.py:118,282-295,406-436`).
 - Still needs the durable pause table and the history table, so it costs more than A.
 
 📊 **Effort:** Medium-High
@@ -237,6 +269,9 @@ pause/run-now are requests that the scheduler process picks up (DB queue or
 - Long-running jobs no longer tie up a web worker's event loop.
 
 ❌ **Cons:**
+- This is what flowtask effectively does, by forcing `workers = 1` in
+  `gunicorn_config.py`. QS cannot do the same inside navigator-api without
+  dropping its web concurrency, so it needs a separate process.
 - **Ops change on every host:** a new supervisor program, plus env and deploy
   changes in `navigator-api` (outside this repo), which has already drifted from its
   pinned QS version.
@@ -302,7 +337,11 @@ primary, so all workers share job definitions, `next_run_time` and paused state.
     lead's rejection of heavy machinery in FEAT-176 and the fact that prod
     `navigator-api` is already hard to change.
 - **Why not B:** it needs the same tables and also forces a handler rewrite, because
-  of the leader/non-leader split for HTTP.
+  of the leader/non-leader split for HTTP. Flowtask already built and disabled a
+  leader lock of this kind.
+- **What A takes from flowtask:** DB-as-truth for pause, listeners for
+  missed/max-instances and the real `scheduled_run_time`, a denormalized last-run,
+  and per-run ids generated at dispatch (the NAV-6365 lesson).
 - **Why not C:** it is the cleanest long term, but needs infra changes on every
   host, and without A's claim it still double-runs if deployed twice.
 - **D** does not work in APScheduler 3.x.
@@ -559,6 +598,23 @@ from apscheduler.triggers.interval import IntervalTrigger                 # sche
 - Job id shapes: `query_<slug>`, `multi_<slug>`, `cache_<slug>`; non-default stores use the qualified `qsj2-…` ids (`scheduler.py:181` `_qualified_job_id`).
 - `async-notify` 2.0.0 is in `uv.lock:659-660` and declared in `pyproject.toml:71`.
 - Frontend (`navigator-frontend-next`): `getSchedulerJobs`, `getSchedulerJob` and `syncSchedulerSlug` in `src/lib/api/querysource.ts:561,576,592`. `interface SchedulerJob` is in `src/lib/types/querysource.ts:519`, with fields id, name, kind, slug, next_run_time, trigger, coalesce, max_instances, misfire_grace_time and pending. `SchedulerMonitor.svelte` has 637 lines and `SlugInspectorPanel.svelte` 690. `CrewBuilder/ExecutionHistory.svelte` is an existing execution-history table pattern to mirror (uses `Badge`, `AppDatePicker`, `AppDialog` from `$lib/ui/components`).
+
+#### Flowtask references (other repo; read-only prior art, do not import)
+```python
+# ~/Documents/navigator/flowtask/flowtask/scheduler/scheduler.py (997 lines)
+class NavScheduler:
+    async def startup(self, app, conn)                       # line 387 — "Always start the scheduler (no cluster lock)" (416)
+    async def create_jobs(self)                              # line 466 — SELECT * FROM troc.jobs WHERE enabled = true (473)
+    def add_listeners(self)                                  # line 643 — EXECUTED / ERROR|MISSED / SUBMITTED / ADDED
+    def job_success(self, event: JobExecutionEvent)          # line 726
+    def job_status(self, event: JobExecutionEvent)           # line 759 — status + telegram notification
+    def save_db_event(self, event_loop, event, job)          # line 836 — 1=ok 2=error 3=missed 4=max-instances
+    async def update_task_status(self, event_loop, status)   # line 868 — UPDATE troc.jobs SET last_exec_time, next_run_time, job_status, job_state, traceback
+# ~/Documents/navigator/flowtask/gunicorn_config.py — workers = 1 (single scheduler by deployment)
+# ~/Documents/navigator/flowtask/flowtask/scheduler/handlers/manager.py — _patch_response: enabled flag → remove/re-add job
+# ~/Documents/navigator/flowtask/flowtask/events/events/exec.py — LogExecution → InfluxDB TASK_EXEC_TABLE
+# ~/Documents/navigator/flowtask/sdd/proposals/SDD_NAV-6365.md — duplicate execution_id on scheduler dispatch
+```
 
 ### Does NOT Exist (Anti-Hallucination)
 - ~~Any run/execution history table or model in `querysource/`~~: no `qs_scheduler_runs`, `job_runs` or similar.
