@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tenants"))
+# Appended, never inserted at 0: prepending would shadow tests/integration/conftest.py
+sys.path.append(str(Path(__file__).resolve().parents[1] / "tenants"))
 from _movefixtures import (  # noqa: E402,F401 - pg_dsn is a fixture
     ACKS,
     ACTOR,
