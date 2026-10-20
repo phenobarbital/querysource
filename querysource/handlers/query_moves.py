@@ -16,6 +16,7 @@ from aiohttp import web
 
 from querysource.handlers.manager import QueryManager
 from querysource.handlers.query_stores import store_selector, tenant_error_response
+from querysource.scheduler.jobs import in_flight
 from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity, QueryStore, TenantRegistry
 
@@ -83,7 +84,7 @@ class QueryMoveView(QueryManager):
                 destination.database_namespace, destination.schema, destination.table,
             ):
                 raise TenantError("Origin and destination are the same store", error_code="move_same_store")
-            actor, _ = await self._run_as_context()
+            actor, request_info = await self._run_as_context()
             if actor is None:
                 raise TenantError(
                     "An authenticated user is required to move a definition", error_code="tenant_write_forbidden"
@@ -91,9 +92,21 @@ class QueryMoveView(QueryManager):
             await self._enforce_scheduler_grant(repo, QueryIdentity(store=origin, slug=slug), {})
 
             scheduler = self.request.app.get("qs_scheduler")
+            if in_flight(origin, slug):
+                raise TenantError(
+                    "A scheduled run of this definition is executing right now; retry when it finishes",
+                    error_code="move_run_in_flight",
+                )
             paused = scheduler.pause_slug_jobs(slug, origin) if scheduler is not None else []
             try:
-                await repo.move(slug, origin, destination)
+                # Pausing stops future dispatches, not one that started in between.
+                if in_flight(origin, slug):
+                    raise TenantError(
+                        "A scheduled run of this definition started while the move was being "
+                        "prepared; retry it",
+                        error_code="move_run_in_flight",
+                    )
+                await repo.move(slug, origin, destination, actor=actor, request_info=request_info)
             except BaseException:
                 for job_id in paused:
                     scheduler.set_job_paused(job_id, False)

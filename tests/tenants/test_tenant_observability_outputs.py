@@ -47,7 +47,7 @@ async def test_ownership_fields_exclude_secrets() -> None:
         "database_namespace": "localhost:5432/querysource",
         "schema": "tenant3",
         "table": "queries",
-        "has_program_slug": False,
+        "contract": "tenant",
     }
     envelope_fields = ownership_fields(envelope)
     assert envelope_fields == {"owner": "tenant3", "schema": "tenant3", "table": "queries"}
@@ -184,7 +184,7 @@ async def test_event_context_non_http_and_nested() -> None:
         "database_namespace": "localhost:5432/querysource",
         "schema": "tenant1",
         "table": "queries",
-        "has_program_slug": False,
+        "contract": "tenant",
     }
 
     class _FailingQS:

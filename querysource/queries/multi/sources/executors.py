@@ -16,7 +16,13 @@ from aiohttp import web
 from navconfig.logging import logging
 
 from querysource.ownership_logging import ownership_fields
-from querysource.tenants import LoadedDefinition, QueryStore, TenantOwnerEnvelope, is_configured_default
+from querysource.tenants import (
+    LoadedDefinition,
+    QueryStore,
+    TenantOwnerEnvelope,
+    is_configured_default,
+    owner_envelope,
+)
 
 from ....conf import QWORKER_QUERY_TIMEOUT, QWORKER_TIMEOUT
 from ....exceptions import QueryException
@@ -220,13 +226,7 @@ class RemoteExecutor(QueryExecutor):
         owner: TenantOwnerEnvelope | None = None
         if is_tenant:
             handler = "querysource.remote.tenant_query_handler_v1"
-            owner = TenantOwnerEnvelope(
-                version=1,
-                database_namespace=store.database_namespace,
-                schema=store.schema,
-                table=store.table,
-                has_program_slug=store.has_program_slug,
-            )
+            owner = owner_envelope(store)
         else:
             handler = "querysource.remote.query_handler"
 

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "feature": "FEAT-176 query store catalog and synchronous move",
-  "notes": "Replayed in order against the real handlers by tests/tenants/test_query_move.py::test_responses_match_the_v2_contract_fixture (seed: qsmv_default.queries [daily, dup, wide], qsmv_a.queries [dup], qsmv_narrow.queries [] ). 'actor': null means no authenticated user.",
+  "notes": "Replayed in order against the real handlers by tests/tenants/test_query_move.py::test_responses_match_the_v2_contract_fixture (seed: qsmv_default.queries [daily, dup, wide], qsmv_a.queries [dup], qsmv_narrow.queries [] ). 'actor': null means no authenticated user. A move is refused when a saved child inherits the parent's owner (move_inherited_references), when a reference form cannot be analysed (move_dependency_analysis_unsupported), or while a scheduled run of the definition is executing (move_run_in_flight). A 409 body may carry details.blockers: [{code, message, path}].",
   "endpoints": {
     "catalog": {
       "method": "GET",
@@ -67,7 +67,10 @@
     "tenant_not_available": 404,
     "tenant_write_forbidden": 403,
     "move_target_exists": 409,
-    "tenant_store_unavailable": 503
+    "tenant_store_unavailable": 503,
+    "move_inherited_references": 409,
+    "move_dependency_analysis_unsupported": 409,
+    "move_run_in_flight": 409
   },
   "cases": [
     {
