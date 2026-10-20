@@ -14,7 +14,7 @@ def _tenant_store(schema: str = "tenant1") -> QueryStore:
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug", "description"}),
     )
 
@@ -24,7 +24,7 @@ def _legacy_store() -> QueryStore:
         database_namespace="localhost:5432/querysource",
         schema="public",
         table="queries",
-        contract="legacy",
+        has_program_slug=True,
         columns=frozenset({"query_slug", "description", "program_slug"}),
     )
 

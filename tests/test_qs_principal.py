@@ -17,7 +17,7 @@ def _tenant_store(schema: str = "client_a") -> QueryStore:
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug"}),
     )
 

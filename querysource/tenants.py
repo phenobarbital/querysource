@@ -24,21 +24,20 @@ _RESERVED_SCHEMAS = ("management",)
 # Schemas containing slashes are excluded
 _SLASH_EXCLUDED = True
 
-# Legacy contract marker
-_LEGACY_CONTRACT = "legacy"
-
-# Tenant contract marker
-_TENANT_CONTRACT = "tenant"
-
 
 @dataclass(frozen=True)
 class QueryStore:
-    """Canonical physical identity and validated persistence contract."""
+    """Canonical physical identity plus its single shape flag.
+
+    ``has_program_slug`` is ``"program_slug" in columns`` at discovery: when
+    True the stored ``program_slug`` is persisted and used as-is; when False
+    it is runtime-derived from ``schema`` and never persisted.
+    """
 
     database_namespace: str
     schema: str
     table: str
-    contract: Literal["legacy", "tenant"]
+    has_program_slug: bool
     columns: frozenset[str]
 
 
@@ -68,13 +67,49 @@ class DefinitionPage:
 
 
 class TenantOwnerEnvelope(TypedDict):
-    """Versioned remote/job identity; no database secrets or connections."""
+    """Versioned remote/job identity; no database secrets or connections.
+
+    This is a WIRE contract: it is serialized to remote qworkers under the
+    ``querysource.remote.tenant_query_handler_v1`` handler, so its v1 shape is
+    frozen and keeps the ``contract`` key even though :class:`QueryStore` now
+    models the same fact as ``has_program_slug``. Build it with
+    :func:`owner_envelope`, never by hand, and bump to a ``_v2`` handler rather
+    than renaming a key here.
+    """
 
     version: Literal[1]
     database_namespace: str
     schema: str
     table: str
     contract: Literal["legacy", "tenant"]
+
+
+def contract_of(has_program_slug: bool) -> str:
+    """Map the internal shape flag to the frozen v1 wire name."""
+    return "legacy" if has_program_slug else "tenant"
+
+
+def owner_envelope(store: QueryStore) -> TenantOwnerEnvelope:
+    """Build the frozen v1 owner envelope for a physical store.
+
+    Args:
+        store: The resolved physical store the job/query is bound to.
+
+    Returns:
+        The v1 envelope; never contains credentials, a DSN or a run-as identity.
+    """
+    return TenantOwnerEnvelope(
+        version=1,
+        database_namespace=store.database_namespace,
+        schema=store.schema,
+        table=store.table,
+        contract=contract_of(store.has_program_slug),
+    )
+
+
+def is_configured_default(store: QueryStore) -> bool:
+    """Return True when ``store`` is the configured QS_QUERIES_SCHEMA/QS_QUERIES_TABLE table."""
+    return (store.schema, store.table) == (QueryModel.Meta.schema, QueryModel.Meta.name)
 
 
 class TenantRegistry:
@@ -133,28 +168,6 @@ class TenantRegistry:
                 unique_stores.append(store)
         return tuple(unique_stores)
 
-    def _is_compatible_store(
-        self,
-        columns: frozenset[str],
-        has_program_slug: bool,
-    ) -> tuple[bool, str | None]:
-        """Check if a store is compatible with the tenant contract."""
-        # Check for program_slug - incompatible with tenant contract
-        if has_program_slug:
-            return False, "contains program_slug column (incompatible with tenant contract)"
-
-        # Check for required columns
-        required_columns = {"query_slug"}
-        if not required_columns.issubset(columns):
-            return False, f"missing required columns: {required_columns - columns}"
-
-        # Check for slug non-null uniqueness (we can't verify this from catalog alone,
-        # but we can check the column exists and is not null)
-        if "query_slug" not in columns:
-            return False, "query_slug column not found"
-
-        return True, None
-
     async def discover(
         self,
         conn: pg,
@@ -166,6 +179,8 @@ class TenantRegistry:
         self._stores = ()
         self._diagnostics = ()
         self._default_store = None
+        # QS_QUERIES_SCHEMA / QS_QUERIES_TABLE name the default store.
+        configured_key = (QueryModel.Meta.schema, QueryModel.Meta.name)
 
         # Get database connection info without secrets
         # Acquired pg wrappers keep their DSN on the owning pool.
@@ -194,14 +209,18 @@ class TenantRegistry:
                         error_code="invalid_tenant",
                     )
 
-        # Query information_schema for tables named 'queries'
-        tables_query = """
+        # Tenant tables are named 'queries'; the configured default may not be.
+        configured_filter = (
+            f"(table_schema = {_sql_literal(configured_key[0])} "
+            f"AND table_name = {_sql_literal(configured_key[1])})"
+        )
+        tables_query = f"""
         SELECT
             table_schema,
             table_name,
             table_type
         FROM information_schema.tables
-        WHERE table_name = 'queries'
+        WHERE (table_name = 'queries' OR {configured_filter})
         AND table_type = 'BASE TABLE'
         """
 
@@ -230,9 +249,8 @@ class TenantRegistry:
             # No queries tables found - no stores to register
             return
 
-        # Read the full shape: program_slug distinguishes legacy rows and
-        # disqualifies nonlegacy tables from the tenant contract.
-        columns_query = """
+        # Read the full shape: program_slug presence sets has_program_slug.
+        columns_query = f"""
         SELECT
             table_schema,
             table_name,
@@ -240,7 +258,7 @@ class TenantRegistry:
             data_type,
             is_nullable
         FROM information_schema.columns
-        WHERE table_name = 'queries'
+        WHERE (table_name = 'queries' OR {configured_filter})
         """
 
         try:
@@ -276,6 +294,9 @@ class TenantRegistry:
         diagnostics: list[Mapping[str, Any]] = []
 
         for schema, table, _table_type in tables:
+            is_configured = (schema, table) == configured_key
+            if not is_configured and table != "queries":
+                continue
             # Skip system schemas
             if self._is_system_schema(schema):
                 diagnostics.append(
@@ -332,56 +353,27 @@ class TenantRegistry:
                 continue
 
             columns_set = schema_columns[schema][table]
-
-            # Check for program_slug column
-            has_program_slug = "program_slug" in columns_set
-
-            # public.queries retains the legacy row contract. Only other
-            # schemas must satisfy the tenant contract (no program_slug).
-            is_legacy = schema == "public"
-            is_compatible, reason = self._is_compatible_store(
-                columns_set, has_program_slug and not is_legacy
-            )
-            if not is_compatible:
-                diagnostics.append(
-                    {
-                        "schema": schema,
-                        "table": table,
-                        "reason": reason,
-                    }
-                )
-                continue
-
-            # Determine contract
-            contract = _LEGACY_CONTRACT if is_legacy else _TENANT_CONTRACT
-
-            # Create store
             store = QueryStore(
                 database_namespace=database_namespace,
                 schema=schema,
                 table=table,
-                contract=contract,
+                has_program_slug="program_slug" in columns_set,
                 columns=columns_set,
             )
-
             discovered_stores.append(store)
-
-            # Track default store (public schema or configured default)
-            if schema == "public":
+            if is_configured:
                 self._default_store = store
 
         # Deduplicate stores
         self._stores = self._deduplicate_stores(discovered_stores)
         self._diagnostics = tuple(diagnostics)
 
-        # No owner fallback (repeated, explicit constraint throughout this
-        # feature's spec/tasks): if no "public" schema was discovered,
-        # _default_store stays None — resolve(None) then falls through to
-        # its own well-defined hardcoded legacy public.queries fallback,
-        # never an arbitrary tenant picked by catalog query result order.
+        # No owner fallback: if the configured table was not discovered,
+        # resolve(None) returns the synthetic configured store, never an
+        # arbitrary tenant picked by catalog query result order.
 
     def _legacy_fallback_store(self) -> QueryStore:
-        """Synthetic legacy public.queries store for when nothing was discovered.
+        """Synthetic configured default store for when it was not discovered.
 
         Uses the REAL database_namespace captured by discover() (host/port/
         database from the actual metadata connection) whenever discovery has
@@ -393,30 +385,26 @@ class TenantRegistry:
         """
         return QueryStore(
             database_namespace=self._database_namespace or "localhost:5432/querysource",
-            schema="public",
-            table="queries",
-            contract=_LEGACY_CONTRACT,
-            columns=frozenset(["query_slug"]),
+            schema=QueryModel.Meta.schema,
+            table=QueryModel.Meta.name,
+            has_program_slug=True,
+            columns=frozenset(["query_slug", "program_slug"]),
         )
 
     def resolve(self, tenant: str | None = None) -> QueryStore:
         """Resolve exact selector; never fall back from an explicit name."""
+        default = self._default_store or self._legacy_fallback_store()
         if tenant is None:
-            # Return configured default store
-            if self._default_store is None:
-                return self._legacy_fallback_store()
-            return self._default_store
+            return default
 
-        # Check if tenant is in allowlist
-        for store in self._stores:
-            if store.schema == tenant:
-                return store
+        # A schema selector addresses that schema's store (its ``queries`` table first).
+        matches = [store for store in self._stores if store.schema == tenant]
+        if matches:
+            return next((store for store in matches if store.table == "queries"), matches[0])
 
-        # Check if tenant is public (literal)
-        if tenant == "public":
-            if self._default_store is not None and self._default_store.schema == "public":
-                return self._default_store
-            return self._legacy_fallback_store()
+        # The configured default's schema also addresses the default store.
+        if tenant == default.schema:
+            return default
 
         # Tenant not found
         raise TenantError(
@@ -431,6 +419,13 @@ class TenantRegistry:
     def diagnostics(self) -> tuple[Mapping[str, Any], ...]:
         """Return administrative discovery reasons without secrets."""
         return self._diagnostics
+
+
+def _sql_literal(value: str) -> str:
+    """Render a catalog-filter string literal with embedded quotes doubled."""
+    if "\0" in value:
+        raise ValueError(f"Invalid literal: {value!r}")
+    return "'" + value.replace("'", "''") + "'"
 
 
 def quote_identifier(value: str) -> str:

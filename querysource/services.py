@@ -244,6 +244,15 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
         routes.append(r)
 
+        ### Query store catalog and synchronous move (FEAT-176) ###
+        # Registered BEFORE the Query Manager: ``queries{meta:\:?.*}`` would shadow the move route.
+        from .handlers.query_moves import QueryMoveView
+        from .handlers.query_stores import QueryStoreCatalog
+        r = self.app.router.add_get('/api/v1/management/query-stores', QueryStoreCatalog().list)
+        routes.append(r)
+        r = self.app.router.add_route('POST', r'/api/v1/management/queries/{slug}/move', QueryMoveView)
+        routes.append(r)
+
         ### Query Manager ###
         r = self.app.router.add_view(
             r'/api/v1/management/queries/{slug}', QueryManager

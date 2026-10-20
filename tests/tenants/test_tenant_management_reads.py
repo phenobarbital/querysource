@@ -21,14 +21,14 @@ def _mock_registry() -> TenantRegistry:
         database_namespace="localhost:5432/querysource",
         schema="tenant1",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug", "description"}),
     )
     null_store = QueryStore(
         database_namespace="localhost:5432/querysource",
         schema="null",
         table="queries",
-        contract="legacy",
+        has_program_slug=True,
         columns=frozenset({"query_slug", "description", "program_slug"}),
     )
     registry._stores = (store, null_store)
@@ -74,7 +74,7 @@ async def test_selector_missing_null_duplicates_conflicts() -> None:
     )
     store = resolve_request_store(request, registry)
     assert store.schema == "tenant1"
-    assert store.contract == "tenant"
+    assert not store.has_program_slug
 
     # Test 2: Explicit tenant selector → exact store
     request = _mock_request(
@@ -85,7 +85,7 @@ async def test_selector_missing_null_duplicates_conflicts() -> None:
     )
     store = resolve_request_store(request, registry)
     assert store.schema == "tenant1"
-    assert store.contract == "tenant"
+    assert not store.has_program_slug
 
     # Test 3: Literal URL 'null' → treated as schema name
     request = _mock_request(
@@ -97,7 +97,7 @@ async def test_selector_missing_null_duplicates_conflicts() -> None:
     store = resolve_request_store(request, registry)
     # 'null' is treated as a schema name, not JSON null
     assert store.schema == "null"
-    assert store.contract == "legacy"
+    assert store.has_program_slug
 
     # Test 4: Empty string selector → 400 error
     request = _mock_request(
@@ -185,7 +185,7 @@ class _FakeRepo:
         # Tenant-contract stores never expose program_slug (AC-2/TASK-718:
         # "excluding tenant runtime-only program_slug").
         properties = {"query_slug": {"type": "string"}, "description": {"type": "string"}}
-        if store.contract == "legacy":
+        if store.has_program_slug:
             properties["program_slug"] = {"type": "string"}
         return {"properties": properties}
 
@@ -258,19 +258,18 @@ async def test_tenant_pagination_headers_and_empty() -> None:
 
 @pytest.mark.asyncio
 async def test_legacy_overrides_explicit_public() -> None:
-    """Test that explicit public remains literal and allowlisted even with legacy overrides."""
+    """FEAT-176: "public" is an ordinary schema selector (no hardcoded literal)."""
     registry = _mock_registry()
 
-    # Test 1: Explicit public selector → literal public.queries
+    # Test 1: no public store and a non-public default -> "public" is unknown
     request = _mock_request(
         method="GET",
         path="/api/v1/management/queries",
         query={"tenant": "public"},
         match_info={},
     )
-    store = resolve_request_store(request, registry)
-    assert store.schema == "public"
-    assert store.contract == "legacy"
+    with pytest.raises(web.HTTPBadRequest):
+        resolve_request_store(request, registry)
 
     # Test 2: Public in allowlist → resolved store
     registry_with_public = _mock_registry()
@@ -278,7 +277,7 @@ async def test_legacy_overrides_explicit_public() -> None:
         database_namespace="localhost:5432/querysource",
         schema="public",
         table="queries",
-        contract="legacy",
+        has_program_slug=True,
         columns=frozenset({"query_slug", "description", "program_slug"}),
     )
     registry_with_public._stores = (public_store,)
@@ -292,15 +291,11 @@ async def test_legacy_overrides_explicit_public() -> None:
     )
     store = resolve_request_store(request, registry_with_public)
     assert store.schema == "public"
-    assert store.contract == "legacy"
+    assert store.has_program_slug
 
-    # Test 3: "public" with no public store registered — spec §2 "explicit
-    # public is literal and allowlisted even without explicit
-    # configuration": TenantRegistry.resolve("public") never raises, it
-    # always falls back to the legacy public.queries store (verified
-    # against TenantRegistry.resolve, TASK-716). Unlike any other unknown
-    # tenant name, "public" is never a 400.
-    registry_unknown = _mock_registry()
+    # Test 3: nothing discovered -> "public" names the configured default
+    # schema (QS_QUERIES_SCHEMA), resolved to the synthetic configured store.
+    registry_unknown = TenantRegistry()
     request = _mock_request(
         method="GET",
         path="/api/v1/management/queries",
@@ -309,7 +304,7 @@ async def test_legacy_overrides_explicit_public() -> None:
     )
     store = resolve_request_store(request, registry_unknown)
     assert store.schema == "public"
-    assert store.contract == "legacy"
+    assert store.has_program_slug
 
     # A genuinely unknown, non-"public" tenant name IS rejected.
     request = _mock_request(
@@ -359,7 +354,7 @@ async def test_tenant_store_search_never_sql_references_program_slug() -> None:
 
     registry = _mock_registry()
     store = registry.resolve("tenant1")
-    assert store.contract == "tenant"
+    assert not store.has_program_slug
     app = {}
     app['qs_tenant_registry'] = registry
     app['qs_connection'] = _CapturingDb()

@@ -50,7 +50,7 @@ LEGACY_STORE = QueryStore(
     database_namespace="navigator",
     schema="public",
     table="queries",
-    contract="legacy",
+    has_program_slug=True,
     columns=frozenset({"query_slug", "query_raw", "provider"}),
 )
 

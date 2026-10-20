@@ -9,12 +9,21 @@ OWNERSHIP_STATUS = {
     "tenant_store_unavailable": 503,
     "tenant_write_forbidden": 403,
     "tenant_worker_unsupported": 502,
+    # FEAT-176 synchronous single-definition move.
+    "move_same_store": 400,
+    "move_validation_failed": 400,
+    "move_target_exists": 409,
+    "move_inherited_references": 409,
+    "move_dependency_analysis_unsupported": 409,
+    "move_run_in_flight": 409,
 }
 
 
 class TenantError(QueryException):
     """Separate a machine-readable owner error from the existing numeric code."""
 
-    def __init__(self, message: str, *, error_code: str) -> None:
+    def __init__(self, message: str, *, error_code: str, details: dict | None = None) -> None:
+        """Build the error; ``details`` is machine-readable context (never credentials or DSNs)."""
         super().__init__(message, code=OWNERSHIP_STATUS[error_code])
         self.error_code = error_code
+        self.details = details

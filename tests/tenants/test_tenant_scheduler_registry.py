@@ -8,12 +8,12 @@ from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryStore
 
 
-def _store(schema: str, contract: str = "tenant", table: str = "queries") -> QueryStore:
+def _store(schema: str, has_program_slug: bool = False, table: str = "queries") -> QueryStore:
     return QueryStore(
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table=table,
-        contract=contract,
+        has_program_slug=has_program_slug,
         columns=frozenset(
             {"query_slug", "attributes", "cache_options", "provider", "is_cached", "query_raw"}
         ),
@@ -104,8 +104,8 @@ async def test_startup_all_stores_and_legacy_override() -> None:
     # A configured default that is NOT the literal "public" schema still
     # gets legacy (unqualified) job ids (AC-1 "Honor configured legacy
     # overrides"); the other store gets qsj2-qualified ids (AC-2).
-    default_store = _store("configured_default", contract="legacy")
-    tenant_store = _store("tenant1", contract="tenant")
+    default_store = _store("configured_default", has_program_slug=True)
+    tenant_store = _store("tenant1", has_program_slug=False)
     registry = _FakeRegistry((default_store, tenant_store), default=default_store)
     repo = _FakeRepo(
         rows_by_store={
@@ -157,8 +157,8 @@ async def test_cross_tenant_same_slug_name_schedules_independently() -> None:
     does NOT mean two distinct tenant stores sharing a slug string collapse
     into one job. De-dup is now keyed on (store identity, slug).
     """
-    store_a = _store("store_a", contract="legacy")
-    store_b = _store("store_b", contract="tenant")
+    store_a = _store("store_a", has_program_slug=True)
+    store_b = _store("store_b", has_program_slug=False)
     registry = _FakeRegistry((store_a, store_b), default=store_a)
     # Same slug text appears in BOTH stores — two independent tenants'
     # queries, not a duplicate of the same physical row.
@@ -211,8 +211,8 @@ async def test_duplicate_physical_store_enumeration_schedules_once() -> None:
     independently. Here both registry entries resolve to the identical
     physical identity (database_namespace, schema, table).
     """
-    store_a = _store("store_a", contract="legacy")
-    duplicate_of_a = _store("store_a", contract="legacy")
+    store_a = _store("store_a", has_program_slug=True)
+    duplicate_of_a = _store("store_a", has_program_slug=True)
     registry = _FakeRegistry((store_a, duplicate_of_a), default=store_a)
     repo = _FakeRepo(rows_by_store={"store_a": (_row("shared_slug"),)})
 
@@ -232,8 +232,8 @@ async def test_duplicate_physical_store_enumeration_schedules_once() -> None:
 @pytest.mark.asyncio
 async def test_register_update_remove_only_owner() -> None:
     """register update remove only owner."""
-    default_store = _store("public", contract="legacy")
-    tenant_store = _store("tenant1", contract="tenant")
+    default_store = _store("public", has_program_slug=True)
+    tenant_store = _store("tenant1", has_program_slug=False)
     registry = _FakeRegistry((default_store, tenant_store), default=default_store)
     repo = _FakeRepo(
         get_results={
@@ -271,7 +271,7 @@ async def test_register_update_remove_only_owner() -> None:
 @pytest.mark.asyncio
 async def test_runtime_store_error_not_missing(caplog) -> None:
     """runtime store error not missing."""
-    default_store = _store("public", contract="legacy")
+    default_store = _store("public", has_program_slug=True)
     registry = _FakeRegistry((default_store,), default=default_store)
 
     # Case 1: genuinely missing definition -> TenantError(query_not_found)

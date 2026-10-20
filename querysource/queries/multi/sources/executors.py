@@ -16,7 +16,13 @@ from aiohttp import web
 from navconfig.logging import logging
 
 from querysource.ownership_logging import ownership_fields
-from querysource.tenants import LoadedDefinition, QueryStore, TenantOwnerEnvelope
+from querysource.tenants import (
+    LoadedDefinition,
+    QueryStore,
+    TenantOwnerEnvelope,
+    is_configured_default,
+    owner_envelope,
+)
 
 from ....conf import QWORKER_QUERY_TIMEOUT, QWORKER_TIMEOUT
 from ....exceptions import QueryException
@@ -176,15 +182,15 @@ class RemoteExecutor(QueryExecutor):
     ) -> None:
         """Dispatch the query to a remote qworker and place the result in the queue.
 
-        Routes on the resolved ``store`` (TASK-728): a tenant-owned store
-        (``store.contract == "tenant"``) is always dispatched through the
+        Routes on the resolved ``store`` (TASK-728): any store other than the
+        configured default is always dispatched through the
         versioned ``querysource.remote.tenant_query_handler_v1`` contract
         with a validated :class:`TenantOwnerEnvelope` (AC-1) — a distinct
         callable name so an old, ``**kwargs``-tolerant worker that doesn't
         understand ``owner=`` fails explicitly (unknown-handler on the
         worker side) instead of silently executing against its own
-        default schema. A legacy/default store (``store is None`` or
-        ``store.contract == "legacy"``) keeps dispatching through the
+        default schema. The configured default store (``store is None`` or
+        :func:`is_configured_default`) keeps dispatching through the
         unchanged ``querysource.remote.query_handler`` contract (AC-2).
         Neither path ever falls back to the other, and neither ever falls
         back to local execution (AC-3) — any handler-, version- or
@@ -198,45 +204,29 @@ class RemoteExecutor(QueryExecutor):
             queue: Shared asyncio queue for the result.
             request: aiohttp request (not sent to qworker; credentials are
                 resolved server-side by the qworker's own QuerySource install).
-            store: Resolved QueryStore for the query. ``None`` or a
-                ``"legacy"`` contract dispatches through the unchanged
-                legacy handler; a ``"tenant"`` contract dispatches through
-                the versioned handler with an owner envelope.
+            store: Resolved QueryStore for the query. ``None`` or the
+                configured default dispatches through the unchanged
+                legacy handler; any other store dispatches through the
+                versioned handler with an owner envelope.
 
         Returns:
             None — the result is placed into the queue directly.
 
         Raises:
-            QueryException: When ``store`` carries an unsupported
-                contract, the qworker is unreachable, the TCP connection
+            QueryException: When the qworker is unreachable, the TCP connection
                 fails, or the query times out. qworker-side errors
                 (SlugNotFound, DriverError, missing/incompatible handler,
                 etc.) propagate as-is — there is no fallback to the other
                 handler or to local execution.
         """
-        if store is not None and store.contract not in ("legacy", "tenant"):
-            logger.warning(
-                "Remote query %r rejected: unsupported store contract (%s)",
-                name, ownership_fields(store),
-            )
-            raise QueryException(
-                f"Remote query {name!r} rejected: unsupported store contract "
-                f"{store.contract!r}."
-            )
-        is_tenant = store is not None and store.contract == "tenant"
+        is_tenant = store is not None and not is_configured_default(store)
         if principal is not None:
             logger.warning("Remote query %r runs without principal propagation", name)
 
         owner: TenantOwnerEnvelope | None = None
         if is_tenant:
             handler = "querysource.remote.tenant_query_handler_v1"
-            owner = TenantOwnerEnvelope(
-                version=1,
-                database_namespace=store.database_namespace,
-                schema=store.schema,
-                table=store.table,
-                contract=store.contract,
-            )
+            owner = owner_envelope(store)
         else:
             handler = "querysource.remote.query_handler"
 

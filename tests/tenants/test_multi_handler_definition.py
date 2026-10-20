@@ -16,7 +16,7 @@ MULTI_RAW = json.dumps({"queries": {"a": {"slug": "child_a"}, "b": {"slug": "chi
 
 def _store(schema: str = "tenant1") -> QueryStore:
     return QueryStore(database_namespace="localhost:5432/qs", schema=schema, table="queries",
-                      contract="tenant", columns=frozenset({"query_slug"}))
+                      has_program_slug=False, columns=frozenset({"query_slug"}))
 
 
 def _loaded(query_raw: str = MULTI_RAW, columns: list | None = None) -> LoadedDefinition:

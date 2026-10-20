@@ -41,12 +41,12 @@ def _make_connection_factory(postgres_dsn: str):
     return connection_factory
 
 
-def _store(schema: str, table: str = "queries", contract: str = "tenant") -> QueryStore:
+def _store(schema: str, table: str = "queries", has_program_slug: bool = False) -> QueryStore:
     return QueryStore(
         database_namespace="integration-test",
         schema=schema,
         table=table,
-        contract=contract,
+        has_program_slug=has_program_slug,
         columns=frozenset(
             {"query_slug", "attributes", "cache_options", "provider", "is_cached", "query_raw", "description"}
         ),
@@ -270,21 +270,6 @@ async def test_scheduler_restart_and_worker_compatibility() -> None:
     from querysource.exceptions import QueryException
     from querysource.queries.multi.sources.executors import RemoteExecutor
     from querysource.scheduler.scheduler import QSScheduler
-
-    # Mandatory locally, no external service required: a store with an
-    # unsupported contract is rejected before any dispatch attempt.
-    class _BadStore:
-        contract = "unsupported"
-
-    remote_exec = RemoteExecutor(host="localhost", port=9)
-    with pytest.raises(QueryException, match="unsupported store contract"):
-        await remote_exec.execute(
-            name="probe",
-            query={"slug": "x"},
-            queue=asyncio.Queue(),
-            request=None,
-            store=_BadStore(),
-        )
 
     # Everything below needs real Postgres — entered now (skips from here
     # on only, never masking the mandatory check above).
