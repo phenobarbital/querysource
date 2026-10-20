@@ -1,0 +1,302 @@
+{
+  "version": 2,
+  "feature": "FEAT-176 query store catalog and synchronous move",
+  "notes": "Replayed in order against the real handlers by tests/tenants/test_query_move.py::test_responses_match_the_v2_contract_fixture (seed: qsmv_default.queries [daily, dup, wide], qsmv_a.queries [dup], qsmv_narrow.queries [] ). 'actor': null means no authenticated user.",
+  "endpoints": {
+    "catalog": {
+      "method": "GET",
+      "path": "/api/v1/management/query-stores"
+    },
+    "move": {
+      "method": "POST",
+      "path": "/api/v1/management/queries/{slug}/move"
+    }
+  },
+  "descriptor_keys": [
+    "tenant",
+    "schema",
+    "table",
+    "has_program_slug",
+    "is_default"
+  ],
+  "move_request": {
+    "required_keys": [
+      "tenant",
+      "destination_tenant"
+    ],
+    "values": "string or null (null = default store)",
+    "unknown_keys": "move_validation_failed"
+  },
+  "move_response": {
+    "version": 1,
+    "data_keys": [
+      "query_slug",
+      "from",
+      "to",
+      "scheduler"
+    ],
+    "store_keys": [
+      "tenant",
+      "schema",
+      "table"
+    ],
+    "scheduler_keys": [
+      "status",
+      "paused",
+      "registered"
+    ],
+    "scheduler_status": [
+      "ok",
+      "not_configured",
+      "failed"
+    ]
+  },
+  "error_shape": {
+    "keys": [
+      "error_code",
+      "message"
+    ],
+    "optional_keys": [
+      "details"
+    ]
+  },
+  "error_codes": {
+    "move_same_store": 400,
+    "move_validation_failed": 400,
+    "query_not_found": 404,
+    "tenant_not_available": 404,
+    "tenant_write_forbidden": 403,
+    "move_target_exists": 409,
+    "tenant_store_unavailable": 503
+  },
+  "cases": [
+    {
+      "name": "catalog",
+      "endpoint": "catalog",
+      "status": 200,
+      "response": {
+        "version": 1,
+        "data": [
+          {
+            "tenant": null,
+            "schema": "qsmv_default",
+            "table": "queries",
+            "has_program_slug": true,
+            "is_default": true
+          },
+          {
+            "tenant": "qsmv_a",
+            "schema": "qsmv_a",
+            "table": "queries",
+            "has_program_slug": false,
+            "is_default": false
+          },
+          {
+            "tenant": "qsmv_narrow",
+            "schema": "qsmv_narrow",
+            "table": "queries",
+            "has_program_slug": false,
+            "is_default": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "move_ok_default_to_tenant",
+      "endpoint": "move",
+      "slug": "daily",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_a"
+      },
+      "status": 200,
+      "response": {
+        "version": 1,
+        "data": {
+          "query_slug": "daily",
+          "from": {
+            "tenant": null,
+            "schema": "qsmv_default",
+            "table": "queries"
+          },
+          "to": {
+            "tenant": "qsmv_a",
+            "schema": "qsmv_a",
+            "table": "queries"
+          },
+          "scheduler": {
+            "status": "ok",
+            "paused": 1,
+            "registered": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "move_query_not_found",
+      "endpoint": "move",
+      "slug": "daily",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_a"
+      },
+      "status": 404,
+      "response": {
+        "error_code": "query_not_found",
+        "message": "Query not found: 'daily'"
+      }
+    },
+    {
+      "name": "move_target_exists",
+      "endpoint": "move",
+      "slug": "dup",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_a"
+      },
+      "status": 409,
+      "response": {
+        "error_code": "move_target_exists",
+        "message": "The destination store already has 'dup'"
+      }
+    },
+    {
+      "name": "move_validation_failed_columns",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_narrow"
+      },
+      "status": 400,
+      "response": {
+        "error_code": "move_validation_failed",
+        "message": "The destination store has no column for some of this definition's values",
+        "details": {
+          "columns": [
+            "h_filtering",
+            "is_cached",
+            "is_raw",
+            "parser",
+            "query_raw"
+          ]
+        }
+      }
+    },
+    {
+      "name": "move_same_store",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_default"
+      },
+      "status": 400,
+      "response": {
+        "error_code": "move_same_store",
+        "message": "Origin and destination are the same store"
+      }
+    },
+    {
+      "name": "move_unknown_destination",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "nope"
+      },
+      "status": 404,
+      "response": {
+        "error_code": "tenant_not_available",
+        "message": "Tenant not found: nope"
+      }
+    },
+    {
+      "name": "move_unknown_key",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_a",
+        "force": true
+      },
+      "status": 400,
+      "response": {
+        "error_code": "move_validation_failed",
+        "message": "Unsupported move option(s): force"
+      }
+    },
+    {
+      "name": "move_missing_key",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": {
+        "tenant": null
+      },
+      "status": 400,
+      "response": {
+        "error_code": "move_validation_failed",
+        "message": "'destination_tenant' is required (use null for the default store)"
+      }
+    },
+    {
+      "name": "move_body_not_object",
+      "endpoint": "move",
+      "slug": "wide",
+      "body": [
+        "qsmv_a"
+      ],
+      "status": 400,
+      "response": {
+        "error_code": "move_validation_failed",
+        "message": "The request body must be a JSON object"
+      }
+    },
+    {
+      "name": "move_without_actor",
+      "endpoint": "move",
+      "slug": "wide",
+      "actor": null,
+      "body": {
+        "tenant": null,
+        "destination_tenant": "qsmv_a"
+      },
+      "status": 403,
+      "response": {
+        "error_code": "tenant_write_forbidden",
+        "message": "An authenticated user is required to move a definition"
+      }
+    },
+    {
+      "name": "move_ok_tenant_to_default",
+      "endpoint": "move",
+      "slug": "daily",
+      "body": {
+        "tenant": "qsmv_a",
+        "destination_tenant": null
+      },
+      "status": 200,
+      "response": {
+        "version": 1,
+        "data": {
+          "query_slug": "daily",
+          "from": {
+            "tenant": "qsmv_a",
+            "schema": "qsmv_a",
+            "table": "queries"
+          },
+          "to": {
+            "tenant": null,
+            "schema": "qsmv_default",
+            "table": "queries"
+          },
+          "scheduler": {
+            "status": "ok",
+            "paused": 1,
+            "registered": 1
+          }
+        }
+      }
+    }
+  ]
+}
