@@ -1,23 +1,23 @@
-"""HTTP surface of explicit query moves (FEAT-176, M3).
+"""HTTP surface of explicit query moves (FEAT-176).
 
 Routes (static, registered before the broad management/tenant routes):
 
     GET  /api/v1/management/query-stores
     POST /api/v1/management/queries/{slug}/move/preview
     POST /api/v1/management/queries/{slug}/move
-    GET  /api/v1/management/query-moves/{operation_id}
-    POST /api/v1/management/query-moves/{operation_id}/reconcile
-    POST /api/v1/management/query-moves/{operation_id}/abort
+
+A move is one short transaction, so ``move`` answers ``200`` with its result: the HTTP
+response IS the acknowledgement. There is no operation id, no polling and no reconcile
+endpoint — if the connection drops, re-submitting the same request is safe (the source
+row is gone, so it answers ``404``) and the operator can see which store holds the slug.
 
 Authentication/authorization is the SAME deployed management boundary as the existing CRUD
-routes (app-level auth, database permissions, existing PBAC). No administrators-only rule, no
-new role and no ``slug:move`` action is added: the numeric authenticated actor is resolved for
-move audit attribution only and a client acknowledgement is never authorization. The existing
-``datasource:use`` on ``pg_admin`` gate still applies to a scheduled write-capable multi.
-An existing operation (status/reconcile/abort) is only accessible to the actor that submitted it
-or to an operator holding that same ``pg_admin`` scheduler grant; anyone else gets ``403``.
+routes (app-level auth, database permissions, existing PBAC). No administrators-only rule,
+no new role and no ``slug:move`` action is added: the numeric authenticated actor is
+resolved for move audit attribution only and a client acknowledgement is never
+authorization. The existing ``datasource:use`` on ``pg_admin`` gate still applies to a
+scheduled write-capable multi.
 """
-import uuid
 from collections.abc import Mapping
 from typing import Any
 
@@ -37,9 +37,7 @@ from querysource.tenants import QueryIdentity, QueryStore, TenantRegistry
 logger = logging.getLogger("QS.QueryMoves")
 
 _PREVIEW_KEYS = frozenset({"tenant", "destination_tenant"})
-_MOVE_KEYS = _PREVIEW_KEYS | {"plan_revision", ACK_CONSUMERS, ACK_PROGRAM, "idempotency_key"}
-_ABORT_KEYS = frozenset({"resolve_unknown_runs"})
-_TERMINAL = ("completed", "failed")
+_MOVE_KEYS = _PREVIEW_KEYS | {"plan_revision", ACK_CONSUMERS, ACK_PROGRAM}
 
 
 def _error(code: str, message: str, status: int, details: Mapping[str, Any] | None = None) -> web.Response:
@@ -68,7 +66,7 @@ async def _actor(request: web.Request) -> int | None:
 
 
 class QueryMoveHandler:
-    """Preview, submit, inspect and reconcile explicit single-definition moves."""
+    """Preview and execute explicit single-definition moves."""
 
     # -- request plumbing ---------------------------------------------------------------
 
@@ -77,8 +75,8 @@ class QueryMoveHandler:
         service = request.app.get("qs_move_service")
         if service is None:
             raise TenantError(
-                "Query moves are not available: the control tables are not deployed or the service did not start",
-                error_code="move_scheduler_not_ready",
+                "Query moves are not available: the move service did not start",
+                error_code="tenant_store_unavailable",
             )
         return service
 
@@ -150,41 +148,9 @@ class QueryMoveHandler:
             "attributes": getattr(runtime, "attributes", None),
         }
         if definition_requires_scheduler_grant(row):
-            await self._require_scheduler_grant(request)
-
-    @staticmethod
-    async def _require_scheduler_grant(request: web.Request) -> None:
-        """The existing ``datasource:use`` on ``pg_admin`` PBAC decision (raises ``HTTPNotFound`` on deny)."""
-        await enforce_request_pbac(request, ResourceType.DATASOURCE, "pg_admin", "datasource:use", logger=logger)
-
-    async def _authorize_operation(self, request: web.Request, service: QueryMoveService, operation_id: str) -> None:
-        """Allow the submitting actor, or an operator holding the ``pg_admin`` scheduler grant.
-
-        A move operation names identities and carries a journal; another user's operation is
-        never readable or actionable by id alone. Without PBAC the grant cannot be proven, so
-        only the submitting actor is accepted.
-
-        Raises:
-            TenantError: ``move_validation_failed``/``query_not_found`` for a bad/missing id,
-                ``tenant_write_forbidden`` (403) for anyone else.
-        """
-        owner = await service.operation_actor(operation_id)
-        actor = await _actor(request)
-        if actor is not None and actor == owner:
-            return
-        if request.app.get("security") is not None:
-            try:
-                await self._require_scheduler_grant(request)
-                return
-            except web.HTTPException as exc:
-                raise TenantError(
-                    "Only the user who submitted this move or an operator holding the scheduler grant can access it",
-                    error_code="tenant_write_forbidden",
-                ) from exc
-        raise TenantError(
-            "Only the user who submitted this move or an operator holding the scheduler grant can access it",
-            error_code="tenant_write_forbidden",
-        )
+            await enforce_request_pbac(
+                request, ResourceType.DATASOURCE, "pg_admin", "datasource:use", logger=logger
+            )
 
     @staticmethod
     def _unexpected(request: web.Request, exc: Exception) -> web.Response:
@@ -212,7 +178,7 @@ class QueryMoveHandler:
             return self._unexpected(request, exc)
 
     async def move(self, request: web.Request) -> web.Response:
-        """``202 MoveOperation``: durable submission (or the same operation on an authorized retry)."""
+        """``200 MoveResult``: pause, move in one transaction, re-register the schedules."""
         try:
             service = self._service(request)
             body = await self._body(request, _MOVE_KEYS)
@@ -228,102 +194,13 @@ class QueryMoveHandler:
             plan_revision = body.get("plan_revision")
             if not isinstance(plan_revision, str) or not plan_revision:
                 raise _invalid("'plan_revision' is required")
-            key = body.get("idempotency_key")
-            try:
-                if not isinstance(key, str):
-                    raise ValueError
-                uuid.UUID(key)
-            except ValueError as exc:
-                raise _invalid("'idempotency_key' must be a UUID") from exc
             await self._enforce_scheduler_grant(request, identity)
-            operation = await service.move(
-                identity, destination, plan_revision=plan_revision, idempotency_key=key, actor=actor,
+            result = await service.move(
+                identity, destination, plan_revision=plan_revision, actor=actor,
                 acknowledgements=acknowledgements,
                 request_info={"method": request.method, "path": request.path},
             )
-            worker = request.app.get("qs_move_worker")
-            if worker is not None:
-                worker.wake()
-            return web.json_response(operation, status=202)
-        except TenantError as exc:
-            return _tenant_error(exc)
-        except web.HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            return self._unexpected(request, exc)
-
-    async def status(self, request: web.Request) -> web.Response:
-        """``200 MoveOperation``: pure read, for the submitting actor or a scheduler-grant operator."""
-        try:
-            service = self._service(request)
-            operation_id = request.match_info.get("operation_id", "")
-            await self._authorize_operation(request, service, operation_id)
-            operation = await service.status(operation_id)
-            return web.json_response(operation, status=200)
-        except TenantError as exc:
-            return _tenant_error(exc)
-        except web.HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            return self._unexpected(request, exc)
-
-    @staticmethod
-    async def _abort_options(request: web.Request) -> bool:
-        """Parse the optional abort body ``{"resolve_unknown_runs": bool}`` (an empty body is allowed)."""
-        if getattr(request, "body_exists", True) is False:
-            return False
-        try:
-            body = await request.json()
-        except Exception as exc:  # noqa: BLE001 - any parse failure is the same 400
-            raise _invalid("The request body must be a JSON object") from exc
-        if body is None:
-            return False
-        if not isinstance(body, dict):
-            raise _invalid("The request body must be a JSON object")
-        unknown = sorted(set(body) - _ABORT_KEYS)
-        if unknown:
-            raise _invalid("Unsupported abort option(s): " + ", ".join(unknown))
-        value = body.get("resolve_unknown_runs", False)
-        if not isinstance(value, bool):
-            raise _invalid("'resolve_unknown_runs' must be a boolean")
-        return value
-
-    async def abort(self, request: web.Request) -> web.Response:
-        """``200 MoveOperation`` (``failed``/``move_aborted``): abandon a move that has not cut over.
-
-        Only ``preparing``/``draining`` operations with ``moved=false`` can be aborted; the source
-        gates are re-opened and the reservations released. ``409 move_in_progress`` once the
-        cutover marker exists (an indeterminate or committed cutover is only ever reconciled).
-        """
-        try:
-            service = self._service(request)
-            actor = await self._require_actor(request)
-            operation_id = request.match_info.get("operation_id", "")
-            await self._authorize_operation(request, service, operation_id)  # 400/404/403 before any mutation
-            resolve = await self._abort_options(request)
-            operation = await service.abort(operation_id, actor=actor, resolve_unknown_runs=resolve)
-            return web.json_response(operation, status=200)
-        except TenantError as exc:
-            return _tenant_error(exc)
-        except web.HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            return self._unexpected(request, exc)
-
-    async def reconcile(self, request: web.Request) -> web.Response:
-        """Repair the SAME operation (never repeats the row move).
-
-        ``200`` once the operation is final, ``202`` while it is still in progress (a committed
-        move that is still transferring schedules is NOT a completed success).
-        """
-        try:
-            service = self._service(request)
-            await self._require_actor(request)
-            operation_id = request.match_info.get("operation_id", "")
-            await self._authorize_operation(request, service, operation_id)  # 400/404/403 before any mutation
-            operation = await service.reconcile(operation_id)
-            final = operation["state"] in _TERMINAL
-            return web.json_response(operation, status=200 if final else 202)
+            return web.json_response(result, status=200)
         except TenantError as exc:
             return _tenant_error(exc)
         except web.HTTPException:
@@ -344,7 +221,4 @@ def register_routes(router: web.UrlDispatcher) -> list[Any]:
         router.add_get("/api/v1/management/query-stores", catalog.list, allow_head=False),
         router.add_post("/api/v1/management/queries/{slug}/move/preview", handler.preview),
         router.add_post("/api/v1/management/queries/{slug}/move", handler.move),
-        router.add_get("/api/v1/management/query-moves/{operation_id}", handler.status, allow_head=False),
-        router.add_post("/api/v1/management/query-moves/{operation_id}/reconcile", handler.reconcile),
-        router.add_post("/api/v1/management/query-moves/{operation_id}/abort", handler.abort),
     ]

@@ -15,6 +15,78 @@ tags: [query-stores, legacy-compatibility, explicit-migration, frontend-contract
 **Target version**: Next compatible release; no package version bump prescribed
 **Companion**: `navigator-frontend-next/sdd/specs/querysource-store-selection-and-migration.spec.md` (frontend **FEAT-252**, independently allocated).
 
+## 0. Amendment — 2026-10-20: live transfer withdrawn, scope reduced
+
+**Status**: approved by the user, 2026-10-20. This amendment **supersedes** the parts of
+sections 2 and 3 it names; everything else in this spec stands.
+
+The original spec recorded *User decision Q1: transfer schedules live*, and that single
+requirement drove the bulk of the implementation. Live transfer forces the move to be
+asynchronous (freeze admissions → drain in-flight runs → cut over → reconcile mirrors);
+asynchronous forces durability (a `202` plus an operation id the caller polls); and
+durability forces a journal, idempotency keys, recovery leases and a shared control plane.
+
+The user has since confirmed the operating reality the original design was hedging against
+does not exist: **QSScheduler runs in a single process with an in-memory job store and cannot
+be clustered.** Pausing a job in that process is therefore authoritative. With that confirmed,
+the live-transfer protocol buys nothing that `pause → move in one transaction → re-register`
+does not, and the user has withdrawn the Q1 decision in favour of a maintenance-window move.
+
+### What this removes
+
+- The entire shared control plane: `querysource/scheduler/handoff.py`,
+  `docs/sql/query_move_control.sql` and the `management.qs_*` tables. **No DDL is deployed.**
+- The durable operation lifecycle: `MoveOperation`, its `preparing/draining/cutover/
+  reconciling/completed/failed` states, `MoveWorker`, startup recovery, leases and
+  `idempotency_key`.
+- The `GET /query-moves/{id}`, `/reconcile` and `/abort` endpoints.
+- The CRUD move fence (`DefinitionRepository.write_fence`, `QueryManager._assert_not_moving`)
+  — with a synchronous move, a concurrent write simply blocks on the row lock.
+- Error codes `move_in_progress`, `move_idempotency_conflict`, `move_outcome_unknown` and
+  `move_scheduler_not_ready`.
+- The admission-gate changes to `scheduler.py`/`jobs.py` and the coordinator coupling in
+  `handlers/scheduler.py` (all reverted to their `dev` state).
+
+### What replaces it
+
+`POST /queries/{slug}/move` is **synchronous** and answers `200 MoveResult`: the HTTP response
+is the acknowledgement. It pauses the source slug's jobs, performs the row move in one
+transaction (ordered advisory locks, `FOR UPDATE`, plan re-digest, plain `INSERT`, readback,
+one-row `DELETE`, run-as audit), then re-registers the schedules under the destination. The
+source schedule is resumed in a `finally`, so a failed move never leaves a definition
+unscheduled. A lost response needs no recovery machinery: re-submitting answers `404`, because
+the source row is gone.
+
+### What is retained from the original design
+
+The contract-aware persistence of M1, the store catalog of M2, the whole read-only preview
+(blockers, inherited-reference analysis, `plan_revision` staleness, run-as rules, destination
+column dry-run), the acknowledgement rules, the run-as preservation and audit events, and the
+rule that verification is metadata-only and never executes the stored query.
+
+### New or re-scoped codes
+
+- `move_run_in_flight` (409) replaces the drain protocol: a move is refused while a scheduled
+  run of that identity is executing, instead of waiting it out.
+- `move_scheduler_unsupported` (409) now also covers *"this definition is scheduled and no
+  QSScheduler runs in this process"*, in addition to an external/DWH scheduler.
+- A missing run-as audit table is `move_validation_failed` (was `move_scheduler_not_ready`).
+
+### Accepted trade-offs
+
+- A move must run in the scheduler's process when the definition is scheduled.
+- The schedule is paused for the duration of the transaction; an occurrence due inside that
+  window is dispatched late under the destination, by the existing misfire/coalescing policy.
+  Operators are expected to move outside peak hours, and the plan says so in a warning.
+- Recovery from a lost commit acknowledgement is a human looking at which store holds the
+  slug, not an automated journal reconciliation. This is accepted for a supervised
+  administrative operation.
+- The pre-existing duplicate-dispatch exposure of a multi-process scheduler is **not** fixed
+  here. It is a separate concern and must get its own feature if the deployment ever needs to
+  clusterize QSScheduler.
+
+---
+
 ## 1. Motivation & Business Requirements
 
 ### Problem Statement
@@ -271,6 +343,10 @@ the same slug and must not remove or register each other's jobs.
     without being used by destination. Existing legacy routes keep their meaning.
 
 ### Live schedule coordination protocol (required implementation scope)
+
+> **SUPERSEDED by section 0.** The shared control plane was not implemented; the move
+> pauses the single in-process scheduler instead. Retained below for the record only.
+
 The current MemoryJobStore and per-process register_slug are insufficient for
 live transfers: they neither pause every process nor identify in-flight work.
 This feature adds shared control state in the existing PostgreSQL database,
@@ -341,6 +417,10 @@ without changing the storage location of query result data or client tables.
   documented deployment requirement, not a request for broader user permissions.
 
 ### Terminal and retry contract
+
+> **SUPERSEDED by section 0.** There is no durable operation to retry: a move is one
+> synchronous transaction. Retained below for the record only.
+
 Only state=completed with moved=true is final success. `cutover`/`reconciling`
 may already have moved=true and must be shown as a committed move still
 transferring schedules. `failed,moved=false` is safe pre-cutover failure.

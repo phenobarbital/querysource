@@ -12,9 +12,8 @@ from aiohttp import web
 from navconfig.logging import logging
 
 from querysource.query_moves import store_descriptor
-from querysource.scheduler.handoff import selector_for
 from querysource.tenant_errors import TenantError
-from querysource.tenants import QueryStore, TenantRegistry
+from querysource.tenants import QueryStore, TenantRegistry, selector_for
 
 logger = logging.getLogger("QS.QueryStoreCatalog")
 

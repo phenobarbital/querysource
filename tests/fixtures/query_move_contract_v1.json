@@ -1,544 +1,270 @@
 {
-  "abort": {
-    "abortable_states": [
-      "preparing",
-      "draining"
-    ],
-    "refused": {
-      "error_code": "move_in_progress",
-      "status": 409
-    },
-    "request": {
-      "body": {
-        "resolve_unknown_runs": false
-      },
-      "method": "POST",
-      "path": "/api/v1/management/query-moves/0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a/abort"
-    },
-    "response_status": 200
-  },
+  "version": 1,
   "catalog": {
     "request": {
       "method": "GET",
       "path": "/api/v1/management/query-stores"
     },
     "response": {
+      "version": 1,
       "data": [
         {
-          "contract": "legacy",
-          "is_default": true,
+          "tenant": null,
           "schema": "public",
           "table": "queries",
-          "tenant": null
+          "contract": "legacy",
+          "is_default": true
         },
         {
-          "contract": "tenant",
-          "is_default": false,
+          "tenant": "wm_assembly",
           "schema": "wm_assembly",
           "table": "queries",
-          "tenant": "wm_assembly"
+          "contract": "tenant",
+          "is_default": false
         }
-      ],
-      "version": 1
-    }
-  },
-  "errors": {
-    "move_acknowledgement_required": {
-      "body": {
-        "error_code": "move_acknowledgement_required",
-        "message": "move acknowledgement required"
-      },
-      "status": 400
-    },
-    "move_dependency_analysis_unsupported": {
-      "body": {
-        "error_code": "move_dependency_analysis_unsupported",
-        "message": "move dependency analysis unsupported"
-      },
-      "status": 409
-    },
-    "move_idempotency_conflict": {
-      "body": {
-        "error_code": "move_idempotency_conflict",
-        "message": "move idempotency conflict"
-      },
-      "status": 409
-    },
-    "move_in_progress": {
-      "body": {
-        "error_code": "move_in_progress",
-        "message": "move in progress"
-      },
-      "status": 409
-    },
-    "move_inherited_references": {
-      "body": {
-        "error_code": "move_inherited_references",
-        "message": "move inherited references"
-      },
-      "status": 409
-    },
-    "move_outcome_unknown": {
-      "body": {
-        "error_code": "move_outcome_unknown",
-        "message": "move outcome unknown"
-      },
-      "status": 503
-    },
-    "move_plan_stale": {
-      "body": {
-        "error_code": "move_plan_stale",
-        "message": "move plan stale"
-      },
-      "status": 409
-    },
-    "move_same_store": {
-      "body": {
-        "error_code": "move_same_store",
-        "message": "move same store"
-      },
-      "status": 400
-    },
-    "move_schedule_invalid": {
-      "body": {
-        "error_code": "move_schedule_invalid",
-        "message": "move schedule invalid"
-      },
-      "status": 409
-    },
-    "move_scheduler_not_ready": {
-      "body": {
-        "error_code": "move_scheduler_not_ready",
-        "message": "move scheduler not ready"
-      },
-      "status": 409
-    },
-    "move_scheduler_unsupported": {
-      "body": {
-        "error_code": "move_scheduler_unsupported",
-        "message": "move scheduler unsupported"
-      },
-      "status": 409
-    },
-    "move_stale_run_as": {
-      "body": {
-        "error_code": "move_stale_run_as",
-        "message": "move stale run as"
-      },
-      "status": 409
-    },
-    "move_target_exists": {
-      "body": {
-        "error_code": "move_target_exists",
-        "message": "move target exists"
-      },
-      "status": 409
-    },
-    "move_validation_failed": {
-      "body": {
-        "error_code": "move_validation_failed",
-        "message": "move validation failed"
-      },
-      "status": 400
-    }
-  },
-  "journal_error_codes": {
-    "move_aborted": "The operation was explicitly aborted before cutover (moved=false); source dispatch was restored."
-  },
-  "move": {
-    "request": {
-      "body": {
-        "acknowledge_external_consumers": true,
-        "acknowledge_runtime_program_change": true,
-        "destination_tenant": "wm_assembly",
-        "idempotency_key": "6f1f6f0e-2b43-4d83-8b1f-3d2f5f0f9a11",
-        "plan_revision": "a3f1c0de5b7e4f1d8a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7",
-        "tenant": null
-      },
-      "method": "POST",
-      "path": "/api/v1/management/queries/wm_pipeline/move"
-    },
-    "response_status": 202
-  },
-  "operations": {
-    "aborted": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "error_code": "move_aborted",
-      "message": "Aborted before cutover by user 7; source dispatch restored.",
-      "moved": false,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "failed",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "completed": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": true,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "ok",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "completed",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "completed_unscheduled": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": true,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "not_configured",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "completed",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "cutover": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": null,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "cutover",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "cutover_committed": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": true,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "cutover",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "draining": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": false,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "draining",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "failed": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "error_code": "move_target_exists",
-      "message": "Destination already holds this slug.",
-      "moved": false,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "failed",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "preparing": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "moved": false,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "preparing",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "reconciling": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "error_code": "move_scheduler_not_ready",
-      "message": "Scheduler mirror update pending.",
-      "moved": true,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "failed",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "reconciling",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
-    },
-    "unknown_outcome": {
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "error_code": "move_outcome_unknown",
-      "message": "Commit acknowledgement is indeterminate.",
-      "moved": null,
-      "operation_id": "0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a",
-      "query_slug": "wm_pipeline",
-      "scheduler_sync": "pending",
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "state": "cutover",
-      "updated_at": "2026-10-15T12:00:00+00:00",
-      "version": 1
+      ]
     }
   },
   "preview": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/management/queries/wm_pipeline/move/preview",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "wm_assembly"
+      }
+    },
+    "response": {
+      "version": 1,
+      "source": {
+        "tenant": null,
+        "schema": "public",
+        "table": "queries",
+        "contract": "legacy",
+        "is_default": true
+      },
+      "destination": {
+        "tenant": "wm_assembly",
+        "schema": "wm_assembly",
+        "table": "queries",
+        "contract": "tenant",
+        "is_default": false
+      },
+      "query_slug": "wm_pipeline",
+      "plan_revision": "a3f1c0de5b7e4f1d8a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7",
+      "can_move": true,
+      "blockers": [],
+      "warnings": [
+        {
+          "code": "external_consumers",
+          "message": "External consumers are not redirected; review and re-point them after the move."
+        },
+        {
+          "code": "runtime_program_change",
+          "message": "Runtime program changes from 'walmart' to 'wm_assembly'."
+        },
+        {
+          "code": "schedule_pause_window",
+          "message": "The schedule is paused for the duration of the move and resumed under the new owner; run it outside peak hours."
+        }
+      ],
+      "inherited_references": [],
+      "runtime_program": {
+        "before": "walmart",
+        "after": "wm_assembly"
+      },
+      "consumer_review_required": true,
+      "schedule_policy": "pause-and-transfer",
+      "schedules": [
+        {
+          "kind": "query",
+          "schedule_type": "interval",
+          "enabled": true
+        }
+      ]
+    },
     "blocked_response": {
+      "version": 1,
+      "source": {
+        "tenant": null,
+        "schema": "public",
+        "table": "queries",
+        "contract": "legacy",
+        "is_default": true
+      },
+      "destination": {
+        "tenant": "wm_assembly",
+        "schema": "wm_assembly",
+        "table": "queries",
+        "contract": "tenant",
+        "is_default": false
+      },
+      "query_slug": "wm_pipeline",
+      "plan_revision": "b4e2d1ef6c8f5a2e9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f708",
+      "can_move": false,
       "blockers": [
         {
           "code": "move_inherited_references",
-          "message": "Child query uses an implicit owner.",
-          "path": "queries.child"
+          "message": "Child 'detail' ('wm_detail') inherits its owner; pin 'tenant' explicitly (null selects the configured default) before moving.",
+          "path": "queries.detail.tenant"
         }
       ],
-      "can_move": false,
-      "consumer_review_required": true,
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "handoff_ready": false,
+      "warnings": [
+        {
+          "code": "external_consumers",
+          "message": "External consumers are not redirected; review and re-point them after the move."
+        }
+      ],
       "inherited_references": [
         {
-          "path": "queries.child",
-          "slug": "child_slug"
+          "path": "queries.detail",
+          "slug": "wm_detail"
         }
       ],
-      "plan_revision": "a3f1c0de5b7e4f1d8a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7",
-      "query_slug": "wm_pipeline",
       "runtime_program": {
-        "after": "wm_assembly",
-        "before": "wm"
+        "before": "walmart",
+        "after": "wm_assembly"
       },
-      "schedule_policy": "live-transfer",
-      "schedules": [
-        {
-          "enabled": true,
-          "kind": "query",
-          "next_fire_at": "2026-10-16T00:00:00+00:00",
-          "paused": false,
-          "run_as": "preserve-existing",
-          "timezone": "UTC"
-        }
-      ],
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "version": 1,
-      "warnings": [
-        {
-          "code": "external_consumers",
-          "message": "Review external consumers before moving."
-        }
-      ]
-    },
-    "request": {
-      "body": {
-        "destination_tenant": "wm_assembly",
-        "tenant": null
-      },
-      "method": "POST",
-      "path": "/api/v1/management/queries/wm_pipeline/move/preview"
-    },
-    "response": {
-      "blockers": [],
-      "can_move": true,
       "consumer_review_required": true,
-      "destination": {
-        "contract": "tenant",
-        "is_default": false,
-        "schema": "wm_assembly",
-        "table": "queries",
-        "tenant": "wm_assembly"
-      },
-      "handoff_ready": true,
-      "inherited_references": [],
-      "plan_revision": "a3f1c0de5b7e4f1d8a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7",
-      "query_slug": "wm_pipeline",
-      "runtime_program": {
-        "after": "wm_assembly",
-        "before": "wm"
-      },
-      "schedule_policy": "live-transfer",
-      "schedules": [
-        {
-          "enabled": true,
-          "kind": "query",
-          "next_fire_at": "2026-10-16T00:00:00+00:00",
-          "paused": false,
-          "run_as": "preserve-existing",
-          "timezone": "UTC"
-        }
-      ],
-      "source": {
-        "contract": "legacy",
-        "is_default": true,
-        "schema": "public",
-        "table": "queries",
-        "tenant": null
-      },
-      "version": 1,
-      "warnings": [
-        {
-          "code": "external_consumers",
-          "message": "Review external consumers before moving."
-        }
-      ]
+      "schedule_policy": "pause-and-transfer",
+      "schedules": []
     }
   },
-  "readiness_error": {
-    "body": {
-      "details": {
-        "missing": [
-          "management.qs_schedule_state"
-        ]
-      },
-      "error_code": "move_scheduler_not_ready",
-      "message": "Scheduler coordination DDL or worker protocol is not ready."
-    },
-    "status": 409
-  },
-  "reconcile": {
+  "move": {
     "request": {
       "method": "POST",
-      "path": "/api/v1/management/query-moves/0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a/reconcile"
+      "path": "/api/v1/management/queries/wm_pipeline/move",
+      "body": {
+        "tenant": null,
+        "destination_tenant": "wm_assembly",
+        "plan_revision": "a3f1c0de5b7e4f1d8a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7",
+        "acknowledge_external_consumers": true,
+        "acknowledge_runtime_program_change": true
+      }
     },
-    "response_status": [
-      200,
-      202
-    ]
-  },
-  "status": {
-    "request": {
-      "method": "GET",
-      "path": "/api/v1/management/query-moves/0b6f5d1e-7a2c-4c3e-9d5a-1f2e3d4c5b6a"
+    "response_status": 200,
+    "response": {
+      "version": 1,
+      "query_slug": "wm_pipeline",
+      "source": {
+        "tenant": null,
+        "schema": "public",
+        "table": "queries",
+        "contract": "legacy",
+        "is_default": true
+      },
+      "destination": {
+        "tenant": "wm_assembly",
+        "schema": "wm_assembly",
+        "table": "queries",
+        "contract": "tenant",
+        "is_default": false
+      },
+      "moved": true,
+      "schedules_transferred": 1,
+      "scheduler_sync": "ok",
+      "updated_at": "2026-10-20T09:15:00+00:00"
     },
-    "response_status": 200
+    "response_unscheduled": {
+      "version": 1,
+      "query_slug": "wm_pipeline",
+      "source": {
+        "tenant": null,
+        "schema": "public",
+        "table": "queries",
+        "contract": "legacy",
+        "is_default": true
+      },
+      "destination": {
+        "tenant": "wm_assembly",
+        "schema": "wm_assembly",
+        "table": "queries",
+        "contract": "tenant",
+        "is_default": false
+      },
+      "moved": true,
+      "schedules_transferred": 0,
+      "scheduler_sync": "not_configured",
+      "updated_at": "2026-10-20T09:15:00+00:00"
+    }
   },
-  "version": 1
+  "errors": {
+    "move_same_store": {
+      "status": 400,
+      "body": {
+        "error_code": "move_same_store",
+        "message": "Source and destination are the same store"
+      }
+    },
+    "move_acknowledgement_required": {
+      "status": 400,
+      "body": {
+        "error_code": "move_acknowledgement_required",
+        "message": "Missing acknowledgement(s): acknowledge_external_consumers"
+      }
+    },
+    "move_validation_failed": {
+      "status": 400,
+      "body": {
+        "error_code": "move_validation_failed",
+        "message": "'destination_tenant' is required (use null for the configured default)"
+      }
+    },
+    "move_plan_stale": {
+      "status": 409,
+      "body": {
+        "error_code": "move_plan_stale",
+        "message": "The definition changed after the plan was confirmed; review a fresh preview"
+      }
+    },
+    "move_target_exists": {
+      "status": 409,
+      "body": {
+        "error_code": "move_target_exists",
+        "message": "Destination already holds 'wm_pipeline'; nothing is overwritten."
+      }
+    },
+    "move_scheduler_unsupported": {
+      "status": 409,
+      "body": {
+        "error_code": "move_scheduler_unsupported",
+        "message": "The definition is scheduled by an external/DWH scheduler QuerySource does not drive; re-point it manually after the move."
+      }
+    },
+    "move_schedule_invalid": {
+      "status": 409,
+      "body": {
+        "error_code": "move_schedule_invalid",
+        "message": "The stored schedule definition cannot be interpreted"
+      }
+    },
+    "move_inherited_references": {
+      "status": 409,
+      "body": {
+        "error_code": "move_inherited_references",
+        "message": "Child 'detail' ('wm_detail') inherits its owner; pin 'tenant' explicitly (null selects the configured default) before moving."
+      }
+    },
+    "move_dependency_analysis_unsupported": {
+      "status": 409,
+      "body": {
+        "error_code": "move_dependency_analysis_unsupported",
+        "message": "Entry 'detail' uses a dynamic slug/tenant form that cannot be analysed."
+      }
+    },
+    "move_stale_run_as": {
+      "status": 409,
+      "body": {
+        "error_code": "move_stale_run_as",
+        "message": "The definition is unscheduled but still stores a run-as identity; clear it with the attributed repair procedure before moving."
+      }
+    },
+    "move_run_in_flight": {
+      "status": 409,
+      "body": {
+        "error_code": "move_run_in_flight",
+        "message": "A scheduled run of this definition is executing right now; retry when it finishes."
+      }
+    }
+  }
 }

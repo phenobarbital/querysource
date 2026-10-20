@@ -9,8 +9,7 @@ Three async callable job types for APScheduler:
 """
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from navconfig.logging import logging
@@ -19,7 +18,6 @@ from querysource.ownership_logging import ownership_fields
 from querysource.tenant_errors import TenantError
 
 if TYPE_CHECKING:
-    from querysource.scheduler.handoff import ScheduleHandoffCoordinator
     from querysource.scheduler.notifications import NotificationManager
     from querysource.tenants import TenantOwnerEnvelope
 
@@ -44,14 +42,41 @@ def _owner_selector(owner: TenantOwnerEnvelope | None) -> str | None:
     return schema
 
 
+# Slugs whose scheduled work is executing right now, keyed by (tenant selector, slug).
+# QSScheduler runs in a single process with an in-memory job store, so a plain dict is
+# an accurate census. An explicit move consults it to refuse while a run is in flight
+# instead of racing it (FEAT-176).
+_IN_FLIGHT: dict[tuple[str | None, str], int] = {}
+
+
+def in_flight(selector: str | None, slug: str) -> bool:
+    """True when a scheduled run of ``slug`` under ``selector`` is executing right now."""
+    return _IN_FLIGHT.get((selector, slug), 0) > 0
+
+
+@contextmanager
+def _running(selector: str | None, slug: str):
+    """Count one in-flight scheduled execution of ``slug`` for the duration of the block."""
+    key = (selector, slug)
+    _IN_FLIGHT[key] = _IN_FLIGHT.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        remaining = _IN_FLIGHT.get(key, 1) - 1
+        if remaining > 0:
+            _IN_FLIGHT[key] = remaining
+        else:
+            _IN_FLIGHT.pop(key, None)
+
+
+
 async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: str) -> None:
     """Re-resolve the envelope's owner against the CURRENT registry before executing.
 
     The envelope was captured at scheduler startup / registration time; the
     registry/allowlist configuration can differ by the time the job actually
     runs (e.g. after a restart with a changed allowlist) — so the stale
-    envelope alone is never trusted for execution (TASK-730 AC-1). The selector
-    comes from physical default identity, never from ``owner.schema`` alone.
+    envelope alone is never trusted for execution (TASK-730 AC-1).
 
     Args:
         query_obj: A constructed QS/MultiQS instance (Connection subclass),
@@ -68,7 +93,6 @@ async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: st
     current_store = repo.registry.resolve(_owner_selector(owner))
     if (
         current_store.database_namespace != owner.get("database_namespace")
-        or current_store.schema != owner.get("schema")
         or current_store.table != owner.get("table")
         or current_store.contract != owner.get("contract")
     ):
@@ -81,77 +105,12 @@ async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: st
         )
 
 
-async def _fenced(
-    *,
-    label: str,
-    slug: str,
-    owner: TenantOwnerEnvelope | None,
-    job_id: str,
-    notification_manager: NotificationManager | None,
-    coordinator: ScheduleHandoffCoordinator | None,
-    logical_schedule_id: str | None,
-    generation: int | None,
-    execute: Callable[[], Awaitable[None]],
-) -> None:
-    """Admit through the shared generation gate BEFORE building any QS/MultiQS, then run.
-
-    Without a ``coordinator`` the job runs exactly as before (uncoordinated
-    registration). With one, a stale/frozen/paused/duplicate occurrence is skipped
-    without any business execution, and the shared owner lock is held until the
-    query/pipeline (including awaited remote work) finishes. Losing the metadata
-    service fails closed (skip + notify); an admitted run is never replayed, and a
-    cancelled/interrupted run is recorded as ``unknown`` for operator reconciliation.
-    """
-    run = None
-    if coordinator is not None:
-        try:
-            run = await coordinator.admit(str(logical_schedule_id), int(generation or 0))
-        except Exception as exc:  # noqa: BLE001 - fail closed: never run unfenced
-            logger.warning(
-                "%s admission failed for slug '%s' (%s): %s", label, slug, ownership_fields(owner), exc
-            )
-            if notification_manager:
-                notification_manager.notify(job_id=job_id, slug=slug, error=exc)
-            return
-        if run is None:
-            logger.debug("%s for slug '%s' not admitted (stale, frozen, paused or already claimed)", label, slug)
-            return
-    outcome, error = "completed", None
-    try:
-        if run is not None:
-            await run.mark_running()
-        await execute()
-    except asyncio.CancelledError:
-        outcome, error = "unknown", "interrupted before the outcome was established"
-        raise
-    except Exception as exc:
-        outcome, error = "failed", str(exc)
-        logger.warning(
-            "%s failed for slug '%s' (%s): %s",
-            label, slug, ownership_fields(owner), exc,
-        )
-        if notification_manager:
-            notification_manager.notify(
-                job_id=job_id,
-                slug=slug,
-                error=exc
-            )
-    finally:
-        if run is not None:
-            # Shielded: a second cancellation (shutdown) must not interrupt recording the outcome
-            # and releasing the shared owner fence.
-            await asyncio.shield(run.finish(outcome, error))
-
-
 async def scheduled_query_job(
     slug: str,
     notification_manager: NotificationManager | None = None,
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
-    coordinator: ScheduleHandoffCoordinator | None = None,
-    logical_schedule_id: str | None = None,
-    generation: int | None = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and execute QS with matching runtime/cache context.
@@ -167,24 +126,27 @@ async def scheduled_query_job(
             legacy ``query_<slug>`` shape — falls back to that legacy guess
             only when the caller (e.g. an older registration path) never
             supplied it.
-        coordinator: Shared handoff coordinator; when given the job is admitted
-            through the durable generation gate before any QS is built.
-        logical_schedule_id: Durable schedule identity used for admission.
-        generation: The schedule generation this mirror was registered for.
         **kwargs: Additional keyword arguments (ignored).
     """
-    async def execute() -> None:
+    try:
         from querysource.queries.qs import QS
-        qs = QS(slug=slug, tenant=_owner_selector(owner))
-        if owner is not None:
-            await _revalidate_owner(qs, owner, slug)
-        await qs.query()
-
-    await _fenced(
-        label="Scheduled job", slug=slug, owner=owner, job_id=job_id or f"query_{slug}",
-        notification_manager=notification_manager, coordinator=coordinator,
-        logical_schedule_id=logical_schedule_id, generation=generation, execute=execute,
-    )
+        tenant = _owner_selector(owner)
+        with _running(tenant, slug):
+            qs = QS(slug=slug, tenant=tenant)
+            if owner is not None:
+                await _revalidate_owner(qs, owner, slug)
+            await qs.query()
+    except Exception as exc:
+        logger.warning(
+            "Scheduled job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
+        )
+        if notification_manager:
+            notification_manager.notify(
+                job_id=job_id or f"query_{slug}",
+                slug=slug,
+                error=exc
+            )
 
 
 async def scheduled_multiqs_job(
@@ -195,9 +157,6 @@ async def scheduled_multiqs_job(
     job_id: str | None = None,
     run_as_user_id: int | None = None,
     identity_auth: Any = None,
-    coordinator: ScheduleHandoffCoordinator | None = None,
-    logical_schedule_id: str | None = None,
-    generation: int | None = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and preserve it through all pipeline children.
@@ -229,34 +188,36 @@ async def scheduled_multiqs_job(
             re-guessed as the legacy ``multi_<slug>`` shape.
         run_as_user_id: Stored user id for sessionless delegated sources.
         identity_auth: Auth handler used to resolve the delegated identity.
-        coordinator: Shared handoff coordinator (durable admission, see
-            ``scheduled_query_job``).
-        logical_schedule_id: Durable schedule identity used for admission.
-        generation: The schedule generation this mirror was registered for.
         **kwargs: Additional keyword arguments (ignored).
     """
-    async def execute() -> None:
+    try:
         from querysource.queries import MultiQS
         tenant = _owner_selector(owner)
-        if run_as_user_id is not None:
-            from querysource.auth.identity_tokens import SourceIdentityContext
+        with _running(tenant, slug):
+            if run_as_user_id is not None:
+                from querysource.auth.identity_tokens import SourceIdentityContext
 
-            qs = MultiQS(
+                qs = MultiQS(
+                    slug=slug,
+                    tenant=tenant,
+                    identity_context=SourceIdentityContext.for_scheduler(run_as_user_id, identity_auth),
+                )
+            else:
+                qs = MultiQS(slug=slug, tenant=tenant)
+            if owner is not None:
+                await _revalidate_owner(qs, owner, slug)
+            await qs.query()
+    except Exception as exc:
+        logger.warning(
+            "Scheduled multi-query job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
+        )
+        if notification_manager:
+            notification_manager.notify(
+                job_id=job_id or f"multi_{slug}",
                 slug=slug,
-                tenant=tenant,
-                identity_context=SourceIdentityContext.for_scheduler(run_as_user_id, identity_auth),
+                error=exc
             )
-        else:
-            qs = MultiQS(slug=slug, tenant=tenant)
-        if owner is not None:
-            await _revalidate_owner(qs, owner, slug)
-        await qs.query()
-
-    await _fenced(
-        label="Scheduled multi-query job", slug=slug, owner=owner, job_id=job_id or f"multi_{slug}",
-        notification_manager=notification_manager, coordinator=coordinator,
-        logical_schedule_id=logical_schedule_id, generation=generation, execute=execute,
-    )
 
 
 async def cache_refresh_job(
@@ -265,9 +226,6 @@ async def cache_refresh_job(
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
-    coordinator: ScheduleHandoffCoordinator | None = None,
-    logical_schedule_id: str | None = None,
-    generation: int | None = None,
     **kwargs: Any
 ) -> None:
     """Refresh only this owner's current definition revision.
@@ -286,21 +244,24 @@ async def cache_refresh_job(
         job_id: The job's own real registered scheduler id — see
             ``scheduled_query_job``'s docstring for why this must not be
             re-guessed as the legacy ``cache_<slug>`` shape.
-        coordinator: Shared handoff coordinator (durable admission, see
-            ``scheduled_query_job``).
-        logical_schedule_id: Durable schedule identity used for admission.
-        generation: The schedule generation this mirror was registered for.
         **kwargs: Additional keyword arguments (ignored).
     """
-    async def execute() -> None:
+    try:
         from querysource.queries.qs import QS
-        qs = QS(slug=slug, tenant=_owner_selector(owner))
-        if owner is not None:
-            await _revalidate_owner(qs, owner, slug)
-        await qs.query()
-
-    await _fenced(
-        label="Cache refresh job", slug=slug, owner=owner, job_id=job_id or f"cache_{slug}",
-        notification_manager=notification_manager, coordinator=coordinator,
-        logical_schedule_id=logical_schedule_id, generation=generation, execute=execute,
-    )
+        tenant = _owner_selector(owner)
+        with _running(tenant, slug):
+            qs = QS(slug=slug, tenant=tenant)
+            if owner is not None:
+                await _revalidate_owner(qs, owner, slug)
+            await qs.query()
+    except Exception as exc:
+        logger.warning(
+            "Cache refresh job failed for slug '%s' (%s): %s",
+            slug, ownership_fields(owner), exc,
+        )
+        if notification_manager:
+            notification_manager.notify(
+                job_id=job_id or f"cache_{slug}",
+                slug=slug,
+                error=exc
+            )

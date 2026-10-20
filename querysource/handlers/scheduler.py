@@ -28,7 +28,6 @@ from navigator.views import BaseView
 from querysource.auth import ResourceType
 from querysource.auth.request_gate import enforce_request_pbac
 from querysource.queries.multi import definition_requires_scheduler_grant
-from querysource.scheduler.handoff import ScheduleHandoffCoordinator, ScheduleOwner
 from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity, TenantRegistry
 
@@ -154,22 +153,6 @@ class SchedulerJobsView(BaseView):
                 "datasource:use",
                 logger=logger,
             )
-
-    @staticmethod
-    def _coordinator_of(scheduler: QSScheduler) -> ScheduleHandoffCoordinator | None:
-        """The live-transfer coordinator, or None while the scheduler runs uncoordinated."""
-        coordinator = getattr(scheduler, "_coordinator", None)
-        return coordinator if isinstance(coordinator, ScheduleHandoffCoordinator) else None
-
-    def _durable_id(self, scheduler: QSScheduler, job: Job | None) -> str | None:
-        """Logical schedule id behind a coordinated mirror (None when uncoordinated)."""
-        if job is None or self._coordinator_of(scheduler) is None:
-            return None
-        return (job.kwargs or {}).get("logical_schedule_id")
-
-    def _tenant_error_response(self, exc: TenantError) -> web.Response:
-        """Ownership failure with its stable machine code and HTTP status."""
-        return self.json_response(response={"error": str(exc), "code": exc.error_code}, status=exc.code)
 
     def _serialize_job(self, job: Job) -> dict:
         """Include canonical owner/tenant identity from validated job kwargs; preserve current response fields.
@@ -339,10 +322,6 @@ class SchedulerJobsView(BaseView):
         await self._enforce_scheduler_grant(slug, tenant)
 
         try:
-            coordinator = self._coordinator_of(scheduler)
-            if coordinator is not None:
-                store = (self.request.app.get("qs_tenant_registry") or TenantRegistry()).resolve(tenant)
-                await coordinator.assert_not_moving([ScheduleOwner.from_store(store, slug)])
             result = await scheduler.register_slug(slug, tenant=tenant)
         except TenantError as exc:
             # Preserve the ownership error's own stable machine code
@@ -370,7 +349,6 @@ class SchedulerJobsView(BaseView):
             - **200** ``{status: "removed", id}`` on success.
             - **400** when ``job_id`` is missing from the path.
             - **404** when no such job exists.
-            - **409** ``move_in_progress`` while the query is being moved.
             - **503** when the scheduler isn't available yet.
         """
         scheduler = self._get_scheduler()
@@ -383,14 +361,6 @@ class SchedulerJobsView(BaseView):
                 response={"error": "job_id is required in the path."},
                 status=400,
             )
-        aps = getattr(scheduler, "_scheduler", None)
-        job = aps.get_job(job_id) if aps is not None else None
-        durable_id = self._durable_id(scheduler, job)
-        if durable_id is not None:
-            try:
-                await self._coordinator_of(scheduler).set_desired(durable_id, enabled=False)
-            except TenantError as exc:
-                return self._tenant_error_response(exc)
         if not scheduler.remove_job(job_id):
             return self.json_response(
                 response={"error": f"Job '{job_id}' not found."},
@@ -436,14 +406,6 @@ class SchedulerJobsView(BaseView):
                 response={"error": "Body 'action' must be 'pause' or 'resume'."},
                 status=400,
             )
-        aps = getattr(scheduler, "_scheduler", None)
-        job = aps.get_job(job_id) if aps is not None else None
-        durable_id = self._durable_id(scheduler, job)
-        if durable_id is not None:
-            try:
-                await self._coordinator_of(scheduler).set_desired(durable_id, paused=action == "pause")
-            except TenantError as exc:
-                return self._tenant_error_response(exc)
         if not scheduler.set_job_paused(job_id, action == "pause"):
             return self.json_response(
                 response={"error": f"Job '{job_id}' not found."},

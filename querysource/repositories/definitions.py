@@ -107,7 +107,6 @@ class DefinitionRepository:
         # Optional ``async (conn, store, slug)`` guard run INSIDE every definition write
         # transaction, before the row is touched (FEAT-176: the query-move service installs
         # its shared owner fence + reservation re-check here). It raises to abort the write.
-        self.write_fence: Callable[[Any, QueryStore, str], Awaitable[None]] | None = None
 
     # -- identifiers / column policy -------------------------------------------------
 
@@ -438,7 +437,7 @@ class DefinitionRepository:
 
         try:
             async with await self.connection_factory() as conn:
-                row = await self._fenced_statement(conn, store, str(persisted.get("query_slug")), sql, values)
+                row = await conn.fetch_one(sql, *values)
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise
@@ -677,8 +676,6 @@ class DefinitionRepository:
                 )
             await conn.transaction()
             try:
-                if self.write_fence is not None:
-                    await self.write_fence(conn, store, slug)
                 previous_row = await conn.fetch_one(
                     f"SELECT attributes FROM {table} WHERE query_slug = $1 for update", slug
                 )
@@ -695,25 +692,6 @@ class DefinitionRepository:
                 except Exception:  # noqa: BLE001 - never mask the original error
                     _logger.exception("Rollback failed after run-as write error on %s", table)
                 raise
-        return row
-
-    async def _fenced_statement(
-        self, conn: Any, store: QueryStore, slug: str, sql: str, values: list
-    ) -> Mapping[str, Any] | None:
-        """Run one write statement; inside a transaction behind ``write_fence`` when one is installed."""
-        if self.write_fence is None:
-            return await conn.fetch_one(sql, *values)
-        await conn.transaction()
-        try:
-            await self.write_fence(conn, store, slug)
-            row = await conn.fetch_one(sql, *values)
-            await conn.commit()
-        except BaseException:
-            try:
-                await conn.rollback()
-            except Exception:  # noqa: BLE001 - never mask the original error
-                _logger.exception("Rollback failed after a fenced write on %s", self._qualified_table(store))
-            raise
         return row
 
     async def _apply_run_as(
@@ -804,7 +782,7 @@ class DefinitionRepository:
 
         try:
             async with await self.connection_factory() as conn:
-                row = await self._fenced_statement(conn, store, identity.slug, sql, [identity.slug])
+                row = await conn.fetch_one(sql, identity.slug)
         except Exception as exc:
             self._translate_write_error(exc, store)
             raise

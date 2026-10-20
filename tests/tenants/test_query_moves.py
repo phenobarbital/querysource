@@ -1,17 +1,19 @@
 """Read-only move preview: collisions, schedules, dependency analysis, program and run-as rules."""
-import json
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-
 import pytest
-from apscheduler.triggers.interval import IntervalTrigger
-from test_handoff_state import (  # noqa: F401 - pg_dsn is a fixture
-    NS,
+from _movefixtures import (  # noqa: F401 - pg_dsn is a fixture
+    ACTOR,
+    LEGACY,
+    RUN_AS,
+    SCHEDULED,
+    TENANT,
+    FakeRepo,
+    FakeScheduler,
     _factory,
-    _Registry,
-    _reset,
     _store,
+    ident,
     pg_dsn,
+    raw_row,
+    setup_stores,
 )
 
 from querysource.query_moves import (
@@ -19,319 +21,215 @@ from querysource.query_moves import (
     ACK_PROGRAM,
     QueryMoveService,
     analyze_references,
+    schedule_inventory,
     store_descriptor,
 )
-from querysource.repositories.definitions import RUN_AS_COLUMN, DefinitionRepository
-from querysource.scheduler.handoff import ScheduleHandoffCoordinator, ScheduleOwner
 from querysource.tenant_errors import TenantError
-from querysource.tenants import QueryIdentity
-
-T0 = datetime(2026, 1, 5, 8, 0, tzinfo=timezone.utc)
-LEGACY = _store("public", "queries", "legacy")
-TENANT = _store("wm_assembly", "queries", "tenant")
-SCHEDULED = {"scheduler": {"schedule_type": "interval", "schedule": {"minutes": 5}}}
 
 
-def _parse(schedule_type, schedule):
-    return IntervalTrigger(start_date=T0, timezone="UTC", minutes=5)
+async def _service(dsn, rows, *, scheduler=None):
+    """A move service over the fake repository, with the real destination tables present."""
+    await setup_stores(dsn)
+    repo = FakeRepo(dsn, rows)
+    scheduler = scheduler if scheduler is not None else FakeScheduler()
+    return QueryMoveService(repo, registry=repo.registry, scheduler=scheduler), repo
 
 
-class _Repo:
-    """Minimal DefinitionRepository stand-in: one dict of raw rows per physical store."""
-
-    def __init__(self, dsn, rows):
-        self.registry = _Registry(LEGACY)
-        self.connection_factory = _factory(dsn)
-        self.rows = rows
-        self.fetches = 0
-
-    async def _fetch_row(self, store, slug):
-        self.fetches += 1
-        return self.rows.get((store.schema, slug))
-
-    async def get(self, identity):
-        row = self.rows.get((identity.store.schema, identity.slug))
-        if row is None:
-            raise TenantError("missing", error_code="query_not_found")
-        runtime = SimpleNamespace(
-            attributes=row.get("attributes"), cache_options=row.get("cache_options"),
-            provider=row.get("provider"), is_cached=row.get("is_cached", False),
-            dwh=row.get("dwh", False), dwh_scheduler=row.get("dwh_scheduler"),
-            program_slug=row.get("program_slug") if identity.store.contract == "legacy" else identity.store.schema,
-            query_raw=row.get("query_raw"),
-        )
-        return SimpleNamespace(runtime=runtime, revision="r")
-
-    def _run_as_audit_table(self, store):
-        return f'"{store.schema}"."{store.table}_run_as_audit"'
-
-    def _allowed_columns(self, store):
-        return DefinitionRepository._allowed_columns(self, store)
-
-
-# The destination tables preview introspects (I6): every business column ``_row`` can carry.
-DEST_COLUMNS = (
-    "query_slug text PRIMARY KEY, description text, provider text, attributes jsonb, is_cached boolean, "
-    "cache_options jsonb, query_raw text, dwh boolean, dwh_scheduler jsonb, scheduler_run_as_user_id int, "
-    "updated_at timestamptz, updated_by int"
-)
-DEST_DDL = (
-    f'CREATE TABLE IF NOT EXISTS "wm_assembly"."queries" ({DEST_COLUMNS}); '
-    f'CREATE TABLE IF NOT EXISTS "public"."queries" ({DEST_COLUMNS}, program_slug text)'
-)
-
-
-def _row(**over):
-    base = {"query_slug": "s", "provider": "db", "attributes": {}, "program_slug": "prog", "is_cached": False,
-            "cache_options": {}, "query_raw": "SELECT 1", RUN_AS_COLUMN: None}
-    base.update(over)
-    return base
-
-
-async def _reset_workers(coord):
-    await coord.register_worker()
-
-
-async def _service(dsn, rows):
-    async with await _factory(dsn)() as conn:
-        await conn.execute('CREATE SCHEMA IF NOT EXISTS "wm_assembly"')
-        await conn.execute(DEST_DDL)
-    repo = _Repo(dsn, rows)
-    coord = ScheduleHandoffCoordinator(
-        repo, deployment_id="d", worker_id="w", rollout_confirmed=True, trigger_parser=_parse, clock=lambda: T0
-    )
-    await _reset_workers(coord)
-    return QueryMoveService(repo, coord, registry=repo.registry), repo, coord
-
-
-def _ident(slug="s", store=LEGACY):
-    return QueryIdentity(store=store, slug=slug)
-
-
-def _codes(plan):
-    return {b["code"] for b in plan["blockers"]}
-
-
-# -- pure dependency analysis -------------------------------------------------------------
+# -- dependency analysis (pure) ----------------------------------------------------------
 
 
 def test_inherited_vs_pinned_vs_explicit_null_children() -> None:
     pipeline = {"queries": {
-        "inherit": {"slug": "a"},
-        "pinned": {"slug": "b", "tenant": "wm_assembly"},
-        "legacy_null": {"slug": "c", "tenant": None},
-        "raw": {"query": "SELECT 1", "driver": "pg"},
+        "a": {"slug": "child_a"},                      # inherits -> blocks
+        "b": {"slug": "child_b", "tenant": "wm"},      # pinned   -> fine
+        "c": {"slug": "child_c", "tenant": None},      # explicit null -> fine
+        "d": {"raw": "SELECT 1"},                      # raw child, no owner
     }}
-    inherited, blockers = analyze_references("multi", json.dumps(pipeline))
-    assert inherited == [{"path": "queries.inherit", "slug": "a"}]
+    inherited, blockers = analyze_references("multi", pipeline)
+    assert inherited == [{"path": "queries.a", "slug": "child_a"}]
     assert [b["code"] for b in blockers] == ["move_inherited_references"]
-    assert blockers[0]["path"] == "queries.inherit.tenant"
-    assert analyze_references("db", "SELECT 1") == ([], [])  # SQL text is never scanned
+    assert blockers[0]["path"] == "queries.a.tenant"
 
 
 def test_unknown_and_dynamic_forms_block_with_a_path() -> None:
-    _, blockers = analyze_references("multi", "{not json")
-    assert blockers[0]["code"] == "move_dependency_analysis_unsupported" and blockers[0]["path"] == "query_raw"
-    _, blockers = analyze_references("multi", {"queries": {"x": {"slug": "{{ tenant }}_q"}, "y": "oops"}})
-    assert {(b["code"], b["path"]) for b in blockers} == {
-        ("move_dependency_analysis_unsupported", "queries.x"),
-        ("move_dependency_analysis_unsupported", "queries.y"),
-    }
-    _, blockers = analyze_references("multi", {"sources": [{"SomeSource": {"slug": "q"}}]})
-    assert blockers[0]["path"] == "sources[0].SomeSource"
-    assert analyze_references("multi", None) == ([], [])
+    _, blockers = analyze_references("multi", {"queries": {"a": {"slug": "{{ var }}"}}})
+    assert [b["code"] for b in blockers] == ["move_dependency_analysis_unsupported"]
+    assert blockers[0]["path"] == "queries.a"
+    _, unparsable = analyze_references("multi", "not-json")
+    assert unparsable[0]["path"] == "query_raw"
+    # A non-multi provider has no saved children at all.
+    assert analyze_references("db", {"queries": {"a": {"slug": "x"}}}) == ([], [])
+
+
+def test_schedule_inventory_matches_the_scheduler_predicates() -> None:
+    assert schedule_inventory(raw_row()) == []
+    # A nonzero cache_refresh alone is not a schedule.
+    assert schedule_inventory(raw_row(is_cached=True, cache_refresh=300)) == []
+    assert [s["kind"] for s in schedule_inventory(raw_row(attributes=SCHEDULED))] == ["query"]
+    assert [s["kind"] for s in schedule_inventory(raw_row(provider="multi", attributes=SCHEDULED))] == ["multi"]
+    cached = raw_row(is_cached=True, cache_options={"schedule_type": "interval", "schedule": {"minutes": 5}})
+    assert [s["kind"] for s in schedule_inventory(cached)] == ["cache"]
 
 
 def test_descriptor_uses_physical_default_and_hides_connection_details() -> None:
-    registry = _Registry(_store("legacy_qs", "saved", "legacy"))
-    custom = store_descriptor(registry, _store("legacy_qs", "saved", "legacy"))
-    literal = store_descriptor(registry, _store("public", "queries", "legacy"))
-    assert custom == {"tenant": None, "schema": "legacy_qs", "table": "saved", "contract": "legacy",
-                      "is_default": True}
-    assert literal["tenant"] == "public" and literal["is_default"] is False
-    assert set(custom) == {"tenant", "schema", "table", "contract", "is_default"}
+    from _movefixtures import _Registry
+
+    custom = _store("ops", "qs_queries", "legacy")
+    registry = _Registry(custom)
+    assert store_descriptor(registry, custom) == {
+        "tenant": None, "schema": "ops", "table": "qs_queries", "contract": "legacy", "is_default": True,
+    }
+    # Literal public.queries beside a custom default keeps its own selector.
+    public = store_descriptor(registry, LEGACY)
+    assert public["tenant"] == "public" and public["is_default"] is False
+    assert not {"database_namespace", "dsn", "host"} & set(public)
 
 
-# -- preview -----------------------------------------------------------------------------
+# -- preview -------------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_preview_plain_move_is_read_only_and_reports_consumers_and_program(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, repo, _ = await _service(pg_dsn, {("public", "s"): _row()})
-    plan = await svc.preview(_ident(), TENANT, actor=7)
+    svc, repo = await _service(pg_dsn, {("public", "s"): raw_row()})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
     assert plan["can_move"] is True and plan["blockers"] == []
-    assert plan["version"] == 1 and plan["schedule_policy"] == "live-transfer"
+    assert plan["version"] == 1 and plan["schedule_policy"] == "pause-and-transfer"
     assert plan["consumer_review_required"] is True
     assert plan["runtime_program"] == {"before": "prog", "after": "wm_assembly"}
     assert {w["code"] for w in plan["warnings"]} == {"external_consumers", "runtime_program_change"}
-    assert plan["source"]["tenant"] is None and plan["destination"]["tenant"] == "wm_assembly"
-    assert len(plan["plan_revision"]) == 64
-    assert svc.required_acknowledgements(plan) == [ACK_CONSUMERS, ACK_PROGRAM]
-    async with await _factory(pg_dsn)() as conn:
-        assert await conn.fetchval("SELECT count(*) FROM management.qs_schedule_state", column=0) == 0
+    assert QueryMoveService.required_acknowledgements(plan) == [ACK_CONSUMERS, ACK_PROGRAM]
+    # Preview mutated nothing: the row is still only in the source.
+    assert repo.rows[("public", "s")]["query_slug"] == "s"
 
 
 @pytest.mark.asyncio
 async def test_program_acknowledgement_only_required_when_program_differs(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, _ = await _service(pg_dsn, {("wm_assembly", "s"): _row()})
-    plan = await svc.preview(_ident(store=TENANT), LEGACY, actor=7)
-    # tenant -> legacy: program is taken from the source runtime value (the schema), so it is unchanged
-    assert plan["runtime_program"]["before"] == plan["runtime_program"]["after"] == "wm_assembly"
-    assert svc.required_acknowledgements(plan) == [ACK_CONSUMERS]
+    svc, _ = await _service(pg_dsn, {("wm_assembly", "s"): raw_row(program_slug=None)})
+    plan = await svc.preview(ident(store=TENANT), LEGACY, actor=ACTOR)
+    assert plan["runtime_program"] == {"before": "wm_assembly", "after": "wm_assembly"}
+    assert QueryMoveService.required_acknowledgements(plan) == [ACK_CONSUMERS]
 
 
 @pytest.mark.asyncio
 async def test_preview_errors_missing_same_store_and_invalid_actor(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, _ = await _service(pg_dsn, {})
-    with pytest.raises(TenantError) as err:
-        await svc.preview(_ident(), TENANT, actor=7)
-    assert err.value.error_code == "query_not_found" and err.value.code == 404
-    svc, _, _ = await _service(pg_dsn, {("public", "s"): _row()})
-    with pytest.raises(TenantError) as err:
-        await svc.preview(_ident(), LEGACY, actor=7)
-    assert err.value.error_code == "move_same_store"
-    for bad in (0, None, "7", True):
-        with pytest.raises(TenantError) as err:
-            await svc.preview(_ident(), TENANT, actor=bad)
-        assert err.value.error_code == "move_validation_failed"
+    svc, _ = await _service(pg_dsn, {("public", "s"): raw_row()})
+    with pytest.raises(TenantError) as missing:
+        await svc.preview(ident("absent"), TENANT, actor=ACTOR)
+    assert missing.value.error_code == "query_not_found" and missing.value.code == 404
+
+    with pytest.raises(TenantError) as same:
+        await svc.preview(ident(), LEGACY, actor=ACTOR)
+    assert same.value.error_code == "move_same_store" and same.value.code == 400
+
+    for bad in (None, 0, -1, True, "7"):
+        with pytest.raises(TenantError) as invalid:
+            await svc.preview(ident(), TENANT, actor=bad)
+        assert invalid.value.error_code == "move_validation_failed"
 
 
 @pytest.mark.asyncio
 async def test_collision_never_overwrites_and_is_a_blocker(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, _ = await _service(pg_dsn, {("public", "s"): _row(), ("wm_assembly", "s"): _row()})
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert plan["can_move"] is False and "move_target_exists" in _codes(plan)
+    rows = {("public", "s"): raw_row(), ("wm_assembly", "s"): raw_row()}
+    svc, _ = await _service(pg_dsn, rows)
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert plan["can_move"] is False
+    assert [b["code"] for b in plan["blockers"]] == ["move_target_exists"]
 
 
 @pytest.mark.asyncio
-async def test_valid_schedules_are_not_blockers_but_readiness_is(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, coord = await _service(pg_dsn, {("public", "s"): _row(attributes=SCHEDULED)})
-    # Not bootstrapped yet: an explicit readiness blocker, never a silent success.
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert plan["can_move"] is False and plan["handoff_ready"] is False
-    assert _codes(plan) == {"move_scheduler_not_ready"}
-    # After the durable backfill the same live schedule is transferable.
-    await coord.bootstrap_row(ScheduleOwner.from_store(LEGACY, "s"), _row(attributes=SCHEDULED))
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert plan["can_move"] is True and plan["handoff_ready"] is True
+async def test_a_valid_schedule_is_not_a_blocker_and_is_inventoried(pg_dsn) -> None:
+    svc, _ = await _service(pg_dsn, {("public", "s"): raw_row(attributes=SCHEDULED)})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert plan["can_move"] is True, plan["blockers"]
     assert [s["kind"] for s in plan["schedules"]] == ["query"]
-    assert plan["schedules"][0]["run_as"] == "preserve-existing"
+    # The operator is told the schedule pauses for the move, not asked to disable it.
+    assert "schedule_pause_window" in {w["code"] for w in plan["warnings"]}
 
 
 @pytest.mark.asyncio
-async def test_revision_ignores_cursor_but_tracks_source_and_schedule_changes(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    rows = {("public", "s"): _row(attributes=SCHEDULED)}
-    svc, _, coord = await _service(pg_dsn, rows)
-    owner = ScheduleOwner.from_store(LEGACY, "s")
-    await coord.bootstrap_row(owner, rows[("public", "s")])
-    first = (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"]
-    async with await _factory(pg_dsn)() as conn:  # naturally advancing cursor + heartbeat
-        await conn.execute("UPDATE management.qs_schedule_state SET next_fire_at = next_fire_at + interval '5 min'")
-    await coord.register_worker()
-    assert (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"] == first
-    # Only the legacy program changed: the digest moves.
-    rows[("public", "s")] = _row(attributes=SCHEDULED, program_slug="other")
-    assert (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"] != first
-    # Only the run-as column changed: the digest moves.
-    rows[("public", "s")] = _row(attributes=SCHEDULED, **{RUN_AS_COLUMN: 5})
-    changed = (await svc.preview(_ident(), TENANT, actor=7))["plan_revision"]
-    assert changed != first
+async def test_a_scheduled_definition_needs_a_scheduler_in_this_process(pg_dsn) -> None:
+    svc, _ = await _service(pg_dsn, {("public", "s"): raw_row(attributes=SCHEDULED)}, scheduler=None)
+    svc.scheduler = None
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert [b["code"] for b in plan["blockers"]] == ["move_scheduler_unsupported"]
+    assert plan["blockers"][0]["path"] == "schedules"
 
 
 @pytest.mark.asyncio
 async def test_external_scheduler_is_unsupported(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, _ = await _service(pg_dsn, {("public", "s"): _row(dwh=True, dwh_scheduler={"cron": "* * * * *"})})
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert "move_scheduler_unsupported" in _codes(plan) and plan["can_move"] is False
+    row = raw_row(dwh=True, dwh_scheduler={"cron": "0 * * * *"})
+    svc, _ = await _service(pg_dsn, {("public", "s"): row})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert "move_scheduler_unsupported" in {b["code"] for b in plan["blockers"]}
+
+
+@pytest.mark.asyncio
+async def test_an_in_flight_run_blocks_the_plan(pg_dsn) -> None:
+    from querysource.scheduler import jobs
+
+    svc, _ = await _service(pg_dsn, {("public", "s"): raw_row(attributes=SCHEDULED)})
+    with jobs._running(None, "s"):  # the source is the configured default -> selector None
+        plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert "move_run_in_flight" in {b["code"] for b in plan["blockers"]}
+    # Once it finishes the plan is clean again.
+    assert (await svc.preview(ident(), TENANT, actor=ACTOR))["can_move"] is True
+
+
+@pytest.mark.asyncio
+async def test_revision_tracks_source_changes(pg_dsn) -> None:
+    rows = {("public", "s"): raw_row()}
+    svc, _ = await _service(pg_dsn, rows)
+    first = (await svc.preview(ident(), TENANT, actor=ACTOR))["plan_revision"]
+    assert (await svc.preview(ident(), TENANT, actor=ACTOR))["plan_revision"] == first
+    rows[("public", "s")] = raw_row(query_raw="SELECT 2")
+    assert (await svc.preview(ident(), TENANT, actor=ACTOR))["plan_revision"] != first
 
 
 @pytest.mark.asyncio
 async def test_stale_unscheduled_run_as_is_separate_from_valid_scheduled_run_as(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    svc, _, coord = await _service(pg_dsn, {("public", "s"): _row(**{RUN_AS_COLUMN: 5})})
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert _codes(plan) == {"move_stale_run_as"}
+    unscheduled = raw_row(scheduler_run_as_user_id=RUN_AS)
+    svc, _ = await _service(pg_dsn, {("public", "s"): unscheduled})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert "move_stale_run_as" in {b["code"] for b in plan["blockers"]}
 
-    rows = {("public", "s"): _row(attributes=SCHEDULED, **{RUN_AS_COLUMN: 5})}
-    svc, _, coord = await _service(pg_dsn, rows)
-    await coord.bootstrap_row(ScheduleOwner.from_store(LEGACY, "s"), rows[("public", "s")])
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    # Valid scheduled run-as is transferable, but missing audit infrastructure blocks readiness.
-    assert "move_stale_run_as" not in _codes(plan)
-    assert _codes(plan) == {"move_scheduler_not_ready"}
+    scheduled = raw_row(scheduler_run_as_user_id=RUN_AS, attributes=SCHEDULED)
+    svc, _ = await _service(pg_dsn, {("public", "s"): scheduled})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert "move_stale_run_as" not in {b["code"] for b in plan["blockers"]}
+    assert plan["can_move"] is True, plan["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_missing_run_as_audit_table_blocks_a_run_as_transfer(pg_dsn) -> None:
+    row = raw_row(scheduler_run_as_user_id=RUN_AS, attributes=SCHEDULED)
+    svc, _ = await _service(pg_dsn, {("public", "s"): row})
     async with await _factory(pg_dsn)() as conn:
-        for store in (LEGACY, TENANT):
-            await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{store.schema}"')
-            await conn.execute(f'CREATE TABLE "{store.schema}"."{store.table}_run_as_audit" (id int)')
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert plan["can_move"] is True
+        await conn.execute('DROP TABLE "wm_assembly"."queries_run_as_audit"')
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    blocker = next(b for b in plan["blockers"] if b.get("path") == "run_as_audit")
+    assert blocker["code"] == "move_validation_failed"
 
 
 @pytest.mark.asyncio
 async def test_inherited_children_block_the_plan_with_paths(pg_dsn) -> None:
-    await _reset(pg_dsn)
-    pipeline = json.dumps({"queries": {"child": {"slug": "c"}, "pinned": {"slug": "d", "tenant": None}}})
-    svc, _, _ = await _service(pg_dsn, {("public", "s"): _row(provider="multi", query_raw=pipeline)})
-    plan = await svc.preview(_ident(), TENANT, actor=7)
+    row = raw_row(provider="multi", query_raw={"queries": {"a": {"slug": "child"}}})
+    svc, _ = await _service(pg_dsn, {("public", "s"): row})
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
     assert plan["can_move"] is False
-    assert plan["inherited_references"] == [{"path": "queries.child", "slug": "c"}]
-    assert any(b["path"] == "queries.child.tenant" for b in plan["blockers"])
-
-
-@pytest.mark.asyncio
-async def test_reserved_identity_blocks_preview(pg_dsn) -> None:
-    from test_handoff_scheduler_controls import _reserve
-
-    await _reset(pg_dsn)
-    svc, _, _ = await _service(pg_dsn, {("public", "s"): _row()})
-    await _reserve(pg_dsn, ScheduleOwner.from_store(LEGACY, "s"), ScheduleOwner.from_store(TENANT, "s"))
-    plan = await svc.preview(_ident(), TENANT, actor=7)
-    assert "move_in_progress" in _codes(plan) and plan["can_move"] is False
+    assert plan["inherited_references"] == [{"path": "queries.a", "slug": "child"}]
+    assert "move_inherited_references" in {b["code"] for b in plan["blockers"]}
 
 
 @pytest.mark.asyncio
 async def test_preview_blocks_when_the_destination_cannot_hold_the_row(pg_dsn) -> None:
-    """I6: can_move is never true for a move the cutover's column mapping would reject."""
-    await _reset(pg_dsn)
-    svc, *_ = await _service(pg_dsn, {("public", "s"): _row()})
-    assert (await svc.preview(_ident(), TENANT, actor=7))["can_move"] is True
+    svc, _ = await _service(pg_dsn, {("public", "s"): raw_row()})
     async with await _factory(pg_dsn)() as conn:
         await conn.execute('ALTER TABLE "wm_assembly"."queries" DROP COLUMN query_raw')
-    try:
-        plan = await svc.preview(_ident(), TENANT, actor=7)
-        assert plan["can_move"] is False
-        blocker = next(b for b in plan["blockers"] if b["code"] == "move_validation_failed")
-        assert blocker["path"] == "destination_columns" and "query_raw" in blocker["message"]
-        missing = _store("nowhere", contract="tenant")
-        svc.registry._stores = (LEGACY, TENANT, missing)
-        plan = await svc.preview(_ident(), missing, actor=7)
-        assert any(b["code"] == "move_validation_failed" and b["path"] == "destination_tenant"
-                   for b in plan["blockers"])
-    finally:
-        async with await _factory(pg_dsn)() as conn:
-            await conn.execute('DROP TABLE "wm_assembly"."queries"')
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    blocker = next(b for b in plan["blockers"] if b["code"] == "move_validation_failed")
+    assert "query_raw" in blocker["message"]
 
-
-def test_cutover_failure_classification_prefers_sqlstate() -> None:
-    import asyncpg
-
-    unique = asyncpg.exceptions.UniqueViolationError("violates constraint qs_pk")
-    try:
-        raise RuntimeError("driver wrapper") from unique
-    except RuntimeError as wrapped:
-        assert QueryMoveService._classify(wrapped)[0] == "move_target_exists"
-    # A different constraint whose text merely mentions "unique" is not a slug collision.
-    check = asyncpg.exceptions.CheckViolationError('new row violates check "unique_name_format"')
-    assert QueryMoveService._classify(check)[0] == "move_validation_failed"
-    denied = asyncpg.exceptions.InsufficientPrivilegeError("nope")
-    assert QueryMoveService._classify(denied) == (
-        "move_validation_failed", "A database permission is missing for the move.")
-    assert QueryMoveService._classify(RuntimeError("duplicate key value"))[0] == "move_target_exists"
-    assert QueryMoveService._classify(RuntimeError("some unique thing"))[0] == "move_validation_failed"
+    async with await _factory(pg_dsn)() as conn:
+        await conn.execute('DROP TABLE "wm_assembly"."queries"')
+    plan = await svc.preview(ident(), TENANT, actor=ACTOR)
+    assert any(b["path"] == "destination_tenant" for b in plan["blockers"])

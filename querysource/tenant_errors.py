@@ -15,15 +15,12 @@ OWNERSHIP_STATUS = {
     "move_validation_failed": 400,
     "move_plan_stale": 409,
     "move_target_exists": 409,
-    "move_scheduler_not_ready": 409,
     "move_scheduler_unsupported": 409,
     "move_schedule_invalid": 409,
     "move_inherited_references": 409,
     "move_dependency_analysis_unsupported": 409,
     "move_stale_run_as": 409,
-    "move_in_progress": 409,
-    "move_idempotency_conflict": 409,
-    "move_outcome_unknown": 503,
+    "move_run_in_flight": 409,
 }
 
 

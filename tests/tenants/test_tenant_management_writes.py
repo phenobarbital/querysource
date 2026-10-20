@@ -274,57 +274,6 @@ async def test_legacy_upsert_and_delete_statuses() -> None:
 # -- FEAT-176: reserved moving identities and physical-default scheduler selector ------------------
 
 
-class _Coordinator:
-    """Reports a reservation for exactly one (schema, slug) like the durable journal would."""
-
-    def __init__(self, reserved: set[tuple[str, str]]) -> None:
-        self.reserved = reserved
-        self.checked: list[tuple] = []
-
-    async def assert_not_moving(self, owners) -> None:
-        for owner in owners:
-            self.checked.append(owner.as_tuple())
-            if (owner.schema, owner.slug) in self.reserved:
-                raise TenantError("Query is being moved", error_code="move_in_progress")
-
-
-def _with_move_service(manager, reserved):
-    manager.request.app["qs_move_service"] = type("S", (), {"coordinator": _Coordinator(reserved)})()
-    return manager.request.app["qs_move_service"].coordinator
-
-
-@pytest.mark.asyncio
-async def test_ordinary_crud_is_rejected_with_move_in_progress_for_reserved_identities() -> None:
-    """save/delete/create can neither resurrect a moving source nor overwrite its target."""
-    registry = _mock_registry()
-    for verb, method, data in (
-        ("patch", "PATCH", {"description": "x"}),
-        ("delete", "DELETE", None),
-        ("post", "POST", {"description": "x"}),
-        ("put", "PUT", {"query_slug": "test_query", "description": "x"}),
-    ):
-        repo = _FakeRepo()
-        request = _mock_request(method=method, match_info={"slug": "test_query"}, json_data=data)
-        manager = _manager_with_app(request, registry=registry, repo=repo)
-        coordinator = _with_move_service(manager, {("tenant1", "test_query")})
-        with pytest.raises(web.HTTPConflict) as raised:
-            await getattr(manager, verb)()
-        assert json.loads(raised.value.text)["error_code"] == "move_in_progress", verb
-        assert repo.calls == [], verb  # never reached the repository
-        assert coordinator.checked and coordinator.checked[0][1:] == ("tenant1", "queries", "test_query")
-
-    # Another slug in the same store, and deployments without the service, are unaffected.
-    repo = _FakeRepo()
-    request = _mock_request(match_info={"slug": "other"}, json_data={"description": "x"})
-    manager = _manager_with_app(request, registry=registry, repo=repo)
-    _with_move_service(manager, {("tenant1", "test_query")})
-    assert (await manager.post()).status == 201
-    repo = _FakeRepo()
-    request = _mock_request(match_info={"slug": "test_query"}, json_data={"description": "x"})
-    manager = _manager_with_app(request, registry=registry, repo=repo)
-    assert (await manager.post()).status == 201
-
-
 @pytest.mark.asyncio
 async def test_sync_selector_is_physical_default_not_legacy_contract() -> None:
     """A custom configured default and literal public.queries never remove each other's jobs."""
@@ -367,24 +316,3 @@ async def test_sync_selector_is_physical_default_not_legacy_contract() -> None:
     manager3.request.app["qs_scheduler"] = scheduler3
     await manager3._sync_definition_jobs(QueryIdentity(store=public, slug="same"))
     assert scheduler3.calls == [("same", "public")]
-
-
-@pytest.mark.asyncio
-async def test_in_transaction_move_fence_refusal_is_a_409_not_a_400() -> None:
-    """I3: the repository's in-transaction fence raises move_in_progress after the pre-check passed."""
-    registry = _mock_registry()
-    fenced = TenantError("Query 'test_query' is being moved", error_code="move_in_progress")
-    for verb, method, data, op in (
-        ("patch", "PATCH", {"description": "x"}, "patch"),
-        ("delete", "DELETE", None, "delete"),
-        ("post", "POST", {"description": "x"}, "upsert"),
-        ("put", "PUT", {"query_slug": "test_query", "description": "x"}, "upsert"),
-    ):
-        repo = _FakeRepo(raise_on={op: fenced})
-        request = _mock_request(method=method, match_info={"slug": "test_query"}, json_data=data)
-        manager = _manager_with_app(request, registry=registry, repo=repo)
-        _with_move_service(manager, set())  # the fast pre-check sees no reservation (TOCTOU window)
-        with pytest.raises(web.HTTPConflict) as raised:
-            await getattr(manager, verb)()
-        assert json.loads(raised.value.text)["error_code"] == "move_in_progress", verb
-        assert repo.calls and repo.calls[0][0] == op, verb

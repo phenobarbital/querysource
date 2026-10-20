@@ -389,8 +389,6 @@ ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
 QS_SCHEDULER_TIMEZONE = config.get('QS_SCHEDULER_TIMEZONE', fallback=TIMEZONE)
 QS_SCHEDULER_MAX_INSTANCES = config.getint('QS_SCHEDULER_MAX_INSTANCES', fallback=1)
 QS_SCHEDULER_COALESCE = config.getboolean('QS_SCHEDULER_COALESCE', fallback=True)
-# FEAT-176: scope of move idempotency keys and of the live-transfer rollout.
-QS_SCHEDULE_DEPLOYMENT_ID = config.get('QS_SCHEDULE_DEPLOYMENT_ID', fallback='default')
 
 ## QuerySource Query Timeout:
 DEFAULT_QUERY_TIMEOUT = config.getint('DEFAULT_QUERY_TIMEOUT', fallback=3600)

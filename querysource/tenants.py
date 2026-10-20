@@ -485,3 +485,39 @@ def quote_identifier(value: str) -> str:
     """Quote one validated identifier, preserving case and embedded quotes."""
     registry = TenantRegistry()
     return registry._quote_identifier(value)
+
+
+def is_default_store(registry: TenantRegistry, store: QueryStore) -> bool:
+    """True only for the exact configured physical default (not merely a legacy contract).
+
+    Args:
+        registry: The resolved tenant registry.
+        store: The physical store to test.
+
+    Returns:
+        True when ``store`` is the same physical table the registry resolves for
+        a ``None`` selector.
+    """
+    default = registry.resolve()
+    return (
+        store.database_namespace == default.database_namespace
+        and store.schema == default.schema
+        and store.table == default.table
+    )
+
+
+def selector_for(registry: TenantRegistry, store: QueryStore) -> str | None:
+    """Map a physical store to its tenant selector.
+
+    ``None`` is returned only for the exact configured default; every other store
+    (including literal ``public.queries`` next to a custom default) uses its
+    registered schema. ``contract == "legacy"`` is never used to pick ``None``.
+
+    Args:
+        registry: The resolved tenant registry.
+        store: The physical store to map.
+
+    Returns:
+        ``None`` for the configured default, otherwise the store's schema.
+    """
+    return None if is_default_store(registry, store) else store.schema
