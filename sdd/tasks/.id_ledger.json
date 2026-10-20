@@ -1,6 +1,6 @@
 {
   "next_task_id": 929,
-  "next_feature_id": 178,
-  "updated_at": "2026-10-20T22:44:15+00:00",
-  "updated_by": "scheduler-execution-history"
+  "next_feature_id": 182,
+  "updated_at": "2026-10-20T22:53:18+00:00",
+  "updated_by": "scheduler-execution-history (manual fix: FEAT-177..180 already in use)"
 }
