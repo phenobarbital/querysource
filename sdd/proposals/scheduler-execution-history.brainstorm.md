@@ -494,7 +494,7 @@ In Concierge (`navigator-frontend-next`, route
 | `docs/QSSCHEDULER.md` | modifies | Document history, run-now, durable pause, single-execution |
 | `navigator-frontend-next` (`SchedulerMonitor.svelte`, `SlugInspectorPanel.svelte`, `src/lib/api/querysource.ts`, `src/lib/types/querysource.ts`) | extends (other repo) | History drawer, last-run columns, run-now, inspector panel |
 | FEAT-176 (query-store-management-and-migration) | depends on / coordinates | Its cheap "pause → move → re-register" can reuse durable pause + fire-time guard; must not also add its own claim |
-| `navigator-api` prod deploy | depends on | Needs a QS release + manual DDL; prod pin drift (4.5.13 pin vs 5.1.5 installed) must be fixed first |
+| `navigator-api` prod deploy | depends on | Needs a QS release + manual DDL (pin drift handled separately, not blocking) |
 
 ---
 
@@ -649,6 +649,7 @@ class NavScheduler:
   introduce `handoff.py`. The lead's 2026-10-20 rejection means those tasks are
   likely re-scoped. This feature should land first, or FEAT-176's simplified move
   should be rebased onto it.
+- **Frontend counterpart of FEAT-176:** `navigator-frontend-next` **FEAT-252** (`sdd/specs/querysource-store-selection-and-migration.spec.md`, branches `feat-FEAT-252-querysource-store-selection-and-migration` and `feat-FEAT-252-simple-query-move`; frontend numbering is independent). `feat-FEAT-252-simple-query-move` modifies `SlugInspectorPanel.svelte`, `src/lib/api/querysource.ts` and `src/lib/types/querysource.ts`, which are the same files this feature's frontend spec extends. It does not touch `SchedulerMonitor.svelte`. The frontend spec for this feature should rebase on FEAT-252 or land after it.
 - **Recommended isolation:** `mixed`. The ledger, jobs wrapper, pause and API are
   sequential in one worktree because of shared files. Alerts and the destinations
   collector can use separate worktrees.
@@ -668,7 +669,7 @@ class NavScheduler:
 - [x] Should a scheduled fire skip while a manual run of the same job is `running`? — *Owner: Juan Rodriguez*: **no**, following flowtask. Manual runs from its task monitor go straight to qworker and are not coordinated with scheduled fires. The scheduler only enforces `max_instances` (default 2, `flowtask/conf.py:188`) and records `EVENT_JOB_MAX_INSTANCES` as "Not Submitted". QS keeps its slot-unique claim for scheduled fires and records an APScheduler max-instances rejection as `skipped`. "Run now" returns `409` only if a **manual** run of the same job is still `running`.
 - [ ] Coordination with FEAT-176: does this feature land first and FEAT-176's simplified move consume durable pause + claim, or is FEAT-176 re-scoped to drop TASK-915/916/918? — *Owner: Jesus Lara*
 - [x] Frontend work: tracked here or in the frontend repo? — *Owner: Juan Rodriguez*: **a separate spec in `navigator-frontend-next`**. That repo has its own SDD tree (`sdd/specs`, `sdd/tasks`, `sdd/WORKFLOW.md`) and already shipped an execution-history UI the same way (FEAT-250 / TASK-457 → `CrewBuilder/ExecutionHistory.svelte`, which reuses `Badge`, `AppDatePicker` and `AppDialog`). This spec owns the API contract (`/runs`, `/run`, `last_run`, durable `paused`), and the frontend spec consumes it, mirroring the TASK-457 pattern.
-- [ ] Prod rollout prerequisite: fix the `navigator-api` QS pin drift (pinned 4.5.13 vs installed 5.1.5) before shipping, so a deploy doesn't silently revert? — *Owner: Juan Rodriguez*
+- [x] Is the `navigator-api` QS pin drift (pinned 4.5.13 vs installed 5.1.5) a rollout prerequisite? — *Owner: Juan Rodriguez*: no, not blocking (2026-10-20); it is handled separately from this feature.
 - [x] Which jobs are recorded? — *Owner: Juan Rodriguez*: all kinds (query, multi, cache-refresh).
 - [x] N-worker duplicate execution in scope? — *Owner: Juan Rodriguez*: yes, fix it in this feature.
 - [x] UI scope? — *Owner: Juan Rodriguez*: per-job history, last-run column with failure badge, slug-inspector history, full error + ExecuteSQL details.
