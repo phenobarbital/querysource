@@ -140,13 +140,18 @@ class TenantRegistry:
     def _is_compatible_store(
         self,
         columns: frozenset[str],
-        has_program_slug: bool,
     ) -> tuple[bool, str | None]:
-        """Check if a store is compatible with the tenant contract."""
-        # Check for program_slug - incompatible with tenant contract
-        if has_program_slug:
-            return False, "contains program_slug column (incompatible with tenant contract)"
+        """Check whether a discovered table can serve as a query store at all.
 
+        This is a shape check, not a contract check: ``program_slug`` decides which
+        contract the store follows (see ``discover``), never whether it is eligible.
+
+        Args:
+            columns: The table's column names.
+
+        Returns:
+            ``(is_compatible, reason)`` where ``reason`` is None when compatible.
+        """
         # Check for required columns
         required_columns = {"query_slug"}
         if not required_columns.issubset(columns):
@@ -253,8 +258,8 @@ class TenantRegistry:
             self._discovered = True
             return
 
-        # Read the full shape: program_slug distinguishes legacy rows and
-        # disqualifies nonlegacy tables from the tenant contract.
+        # Read the full shape: the presence of program_slug is what selects the
+        # store's persistence contract.
         columns_query = f"""
         SELECT
             table_schema,
@@ -361,15 +366,7 @@ class TenantRegistry:
 
             columns_set = schema_columns[schema][table]
 
-            # Check for program_slug column
-            has_program_slug = "program_slug" in columns_set
-
-            # public.queries retains the legacy row contract. Only other
-            # schemas must satisfy the tenant contract (no program_slug).
-            is_legacy = is_configured or (schema == "public" and table == "queries")
-            is_compatible, reason = self._is_compatible_store(
-                columns_set, has_program_slug and not is_legacy
-            )
+            is_compatible, reason = self._is_compatible_store(columns_set)
             if not is_compatible:
                 diagnostics.append(
                     {
@@ -380,8 +377,11 @@ class TenantRegistry:
                 )
                 continue
 
-            # Determine contract
-            contract = _LEGACY_CONTRACT if is_legacy else _TENANT_CONTRACT
+            # The contract IS the physical shape: a table that stores program_slug
+            # follows the legacy row contract, one that does not follows the tenant
+            # contract. Neither the schema name nor "is this the configured default"
+            # takes part — a store is whatever its table actually is.
+            contract = _LEGACY_CONTRACT if "program_slug" in columns_set else _TENANT_CONTRACT
 
             # Create store
             store = QueryStore(
@@ -434,7 +434,9 @@ class TenantRegistry:
             schema="public",
             table="queries",
             contract=_LEGACY_CONTRACT,
-            columns=frozenset(["query_slug"]),
+            # Declares program_slug so this synthetic store satisfies the same rule
+            # discovery applies: a legacy contract IS a table that stores program_slug.
+            columns=frozenset(["query_slug", "program_slug"]),
         )
 
     def resolve(self, tenant: str | None = None) -> QueryStore:

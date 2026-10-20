@@ -61,16 +61,16 @@ async def test_discovery_preserves_legacy_program_slug_when_loading() -> None:
 
     registry = TenantRegistry()
     await registry.discover(conn)
-    assert {store.schema for store in registry.stores()} == {"public", "tenant1"}
+    assert {store.schema for store in registry.stores()} == {"public", "tenant1", "old_tenant"}
     legacy = registry.resolve(None)
     assert legacy == registry.resolve("public")
     assert legacy.contract == "legacy"
     assert legacy.columns == frozenset({"query_slug", "program_slug", "description"})
     assert registry.resolve("tenant1").contract == "tenant"
-    assert any(
-        item["schema"] == "old_tenant" and "program_slug" in item["reason"]
-        for item in registry.diagnostics()
-    )
+    # A non-public table that stores program_slug is NOT discarded: it is exactly
+    # what its shape says it is — a legacy-contract store on its own selector.
+    assert registry.resolve("old_tenant").contract == "legacy"
+    assert not any(item["schema"] == "old_tenant" for item in registry.diagnostics())
 
     repo = DefinitionRepository(registry=registry, connection_factory=connection_factory)
     loaded = await repo.get(QueryIdentity(store=legacy, slug="hisense_stores"))
@@ -131,6 +131,9 @@ async def test_allowlist_none_empty_exact_and_duplicates() -> None:
                         ("tenant1", "queries", "query_slug", "text", "NO"),
                         ("tenant2", "queries", "query_slug", "text", "NO"),
                         ("public", "queries", "query_slug", "text", "NO"),
+                        # The real legacy table stores program_slug; its physical
+                        # shape is what makes it a legacy-contract store.
+                        ("public", "queries", "program_slug", "text", "NO"),
                     ],
                     None,
                 )
@@ -190,6 +193,9 @@ async def test_discovery_tables_views_marker_shape_grants() -> None:
                         ("tenant1", "queries", "query_slug", "text", "NO"),
                         ("tenant2", "queries", "query_slug", "text", "NO"),
                         ("public", "queries", "query_slug", "text", "NO"),
+                        # The real legacy table stores program_slug; its physical
+                        # shape is what makes it a legacy-contract store.
+                        ("public", "queries", "program_slug", "text", "NO"),
                     ],
                     None,
                 )
@@ -254,6 +260,9 @@ async def test_quoted_names_and_default_alias_dedup() -> None:
                         ("tenant1", "queries", "query_slug", "text", "NO"),
                         ("tenant1", "queries", "query_slug", "text", "NO"),  # Duplicate
                         ("public", "queries", "query_slug", "text", "NO"),
+                        # The real legacy table stores program_slug; its physical
+                        # shape is what makes it a legacy-contract store.
+                        ("public", "queries", "program_slug", "text", "NO"),
                     ],
                     None,
                 )
@@ -499,3 +508,68 @@ async def test_never_discovered_registry_keeps_legacy_fallback() -> None:
     """A bare registry (scheduler bootstrap) keeps the synthetic public.queries fallback."""
     store = TenantRegistry().resolve(None)
     assert (store.schema, store.table, store.contract) == ("public", "queries", "legacy")
+
+
+@pytest.mark.asyncio
+async def test_contract_is_derived_from_the_program_slug_column_not_the_schema_name() -> None:
+    """The persistence contract IS the physical shape — no schema is special-cased.
+
+    ``public`` is just a tenant that happens to be the usual configured default; what
+    makes a store legacy is that its table stores ``program_slug``, nothing else.
+    """
+    conn = _catalog_conn(
+        [
+            ("public", "queries", ()),                    # public WITHOUT program_slug
+            ("wm_assembly", "queries", ("program_slug",)),  # a tenant WITH program_slug
+            ("tenant1", "queries", ()),
+        ]
+    )
+    registry = TenantRegistry()
+    await registry.discover(conn, allowlist=None)
+    by_schema = {s.schema: s for s in registry.stores()}
+
+    # The schema name grants nothing: a public.queries with no program_slug column
+    # follows the tenant contract.
+    assert by_schema["public"].contract == "tenant"
+    # And a non-public table that does store program_slug follows the legacy one,
+    # instead of being discarded as "incompatible" the way it used to be.
+    assert by_schema["wm_assembly"].contract == "legacy"
+    assert by_schema["tenant1"].contract == "tenant"
+    assert not any(item["schema"] == "wm_assembly" for item in registry.diagnostics())
+
+
+@pytest.mark.asyncio
+async def test_a_tenant_shaped_configured_default_keeps_the_tenant_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Being the configured default does not confer the legacy contract either."""
+    from querysource.models import QueryModel
+
+    monkeypatch.setattr(QueryModel.Meta, "schema", "ops")
+    monkeypatch.setattr(QueryModel.Meta, "name", "qs_queries")
+    conn = _catalog_conn([("ops", "qs_queries", ()), ("tenant1", "queries", ())])
+    registry = TenantRegistry()
+    await registry.discover(conn, allowlist=None)
+
+    default = registry.resolve(None)
+    assert (default.schema, default.table) == ("ops", "qs_queries")
+    assert default.contract == "tenant", "no program_slug column means no legacy contract"
+
+
+@pytest.mark.asyncio
+async def test_a_table_without_query_slug_is_still_rejected() -> None:
+    """Eligibility is a separate concern from the contract and is unchanged."""
+
+    class NoSlug:
+        def get_dsn(self) -> str:
+            return "postgresql://localhost:5432/querysource"
+
+        async def query(self, sentence: str):
+            if "information_schema.columns" in sentence:
+                return ([("broken", "queries", "description", "text", "NO")], None)
+            return ([("broken", "queries", "BASE TABLE")], None)
+
+    registry = TenantRegistry()
+    await registry.discover(NoSlug(), allowlist=None)
+    assert [s.schema for s in registry.stores()] == []
+    assert any("query_slug" in d["reason"] for d in registry.diagnostics())
