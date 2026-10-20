@@ -21,7 +21,7 @@ def _registry() -> TenantRegistry:
     registry = TenantRegistry()
     store = QueryStore(
         database_namespace="localhost:5432/querysource", schema="tenant1", table="queries",
-        contract="tenant", columns=frozenset({"query_slug", "description"}),
+        has_program_slug=False, columns=frozenset({"query_slug", "description"}),
     )
     registry._stores = (store,)
     registry._default_store = store

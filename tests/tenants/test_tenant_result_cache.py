@@ -14,7 +14,7 @@ def mock_query_store():
         database_namespace="public",
         schema="queries",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner", "updated_at"])
     )
 
@@ -77,14 +77,14 @@ async def test_identical_sql_owner_key_isolation():
         database_namespace="public",
         schema="tenant_a",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner"])
     )
     store_b = QueryStore(
         database_namespace="public",
         schema="tenant_b",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner"])
     )
 
@@ -122,7 +122,7 @@ async def test_revision_changed_by_external_edit():
         database_namespace="public",
         schema="tenant_a",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner"])
     )
     identity = QueryIdentity(store=store, slug="test_query")
@@ -163,7 +163,7 @@ async def test_delayed_old_writer_after_edit_delete():
         database_namespace="public",
         schema="tenant_a",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner"])
     )
     identity = QueryIdentity(store=store, slug="test_query")
@@ -202,7 +202,7 @@ async def test_ttl_refresh_and_no_double_wrapping():
         database_namespace="public",
         schema="tenant_a",
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["id", "slug", "body", "owner", "cache_ttl"])
     )
     identity = QueryIdentity(store=store, slug="test_query")

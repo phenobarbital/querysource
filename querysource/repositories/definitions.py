@@ -36,11 +36,11 @@ from querysource.types.validators import Entity
 _DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 200
 _DEFAULT_SORT_FIELD = "updated_at"
+# Established QueryModel default, applied only when a program_slug row is inserted.
+_DEFAULT_PROGRAM = "default"
 
-# Every persistence column a tenant-contract store may project/filter/sort on.
-# program_slug is never a member here: a tenant-contract store never has that
-# column (see querysource/tenants.py TenantRegistry._is_compatible_store),
-# and TenantQueryDefinition never declares it either.
+# Every persistence column a store without program_slug may project/filter/sort on.
+# program_slug is never a member here: TenantQueryDefinition never declares it.
 _TENANT_COLUMNS: frozenset = frozenset(
     TenantQueryDefinition(query_slug="__probe__").columns().keys()
 )
@@ -110,14 +110,12 @@ class DefinitionRepository:
         return f"{quote_identifier(store.schema)}.{quote_identifier(store.table)}"
 
     def _allowed_columns(self, store: QueryStore) -> frozenset:
-        """Return the projection/filter/sort allowlist for this store's contract.
+        """Return the projection/filter/sort allowlist for this store's shape.
 
-        Tenant-contract stores are restricted to TenantQueryDefinition's
-        fields (program_slug is never a member — AC-4 "Reject tenant
-        program_slug requests"). Legacy-contract stores keep the full,
-        existing QueryModel column set.
+        Stores without program_slug are restricted to TenantQueryDefinition's
+        fields; stores with program_slug keep the full QueryModel column set.
         """
-        if store.contract == "tenant":
+        if not store.has_program_slug:
             return _TENANT_COLUMNS
         return frozenset(QueryModel(query_slug="__probe__", program_slug="__probe__").columns().keys())
 
@@ -127,7 +125,7 @@ class DefinitionRepository:
         """Validate a persisted row with TenantQueryDefinition.
 
         Returns the validated persisted fields (never including
-        program_slug) plus, for a legacy-contract store only, the legacy
+        program_slug) plus, for a store with program_slug only, the
         stored program_slug value (kept as-is, never derived).
 
         ``TenantQueryDefinition.updated_at`` uses ``encoder=rigth_now``
@@ -141,21 +139,27 @@ class DefinitionRepository:
         data = dict(row)
         # FEAT-159: repository-only column; never enters models, revisions or API output.
         data.pop(RUN_AS_COLUMN, None)
-        legacy_program_slug = data.pop("program_slug", None) if store.contract == "legacy" else None
+        legacy_program_slug = data.pop("program_slug", None) if store.has_program_slug else None
         validated = TenantQueryDefinition(**data)
         persisted = validated.to_dict()
         if "updated_at" in data:
             persisted["updated_at"] = data["updated_at"]
         return persisted, legacy_program_slug
 
+    def _project(self, row: Mapping[str, Any], store: QueryStore) -> dict:
+        """Return the persisted projection, keeping a stored program_slug when the store has one."""
+        persisted, legacy_program_slug = self._row_to_persisted(row, store)
+        if store.has_program_slug and legacy_program_slug is not None:
+            persisted["program_slug"] = legacy_program_slug
+        return persisted
+
     def _runtime_model(self, persisted: dict, store: QueryStore, legacy_program_slug: str | None) -> QueryModel:
         """Construct a fresh, detached runtime QueryModel for provider/parser use.
 
-        Tenant program_slug is always derived from the store's schema
-        (structural ownership); legacy program_slug retains its stored
-        value (AC-2).
+        Without a program_slug column it is derived from the store's schema
+        (structural ownership); otherwise the stored value is kept (AC-2).
         """
-        program_slug = legacy_program_slug if store.contract == "legacy" else store.schema
+        program_slug = legacy_program_slug if store.has_program_slug else store.schema
         return QueryModel(**persisted, program_slug=program_slug)
 
     async def _fetch_row(self, store: QueryStore, slug: str) -> Mapping[str, Any] | None:
@@ -164,6 +168,12 @@ class DefinitionRepository:
         sql = f"SELECT * FROM {table} WHERE query_slug = $1 LIMIT 1"
         async with await self.connection_factory() as conn:
             return await conn.fetch_one(sql, slug)
+
+    async def exists(self, store: QueryStore, slug: str) -> bool:
+        """Return True when this store has a row for ``slug`` (cheap ``SELECT 1``)."""
+        sql = f"SELECT 1 AS present FROM {self._qualified_table(store)} WHERE query_slug = $1"
+        async with await self.connection_factory() as conn:
+            return await conn.fetch_one(sql, slug) is not None
 
     def _translate_write_error(self, err: Exception, store: QueryStore) -> None:
         """Translate a mutation failure to the correct TenantError and raise it.
@@ -208,7 +218,11 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
         persisted, legacy_program_slug = self._row_to_persisted(row, store)
-        revision = definition_revision(persisted)
+        # A stored program_slug changes query meaning, so it is part of the revision.
+        if store.has_program_slug:
+            revision = definition_revision({**persisted, "program_slug": legacy_program_slug})
+        else:
+            revision = definition_revision(persisted)
         runtime = self._runtime_model(persisted, store, legacy_program_slug)
         return LoadedDefinition(identity=identity, runtime=runtime, revision=revision)
 
@@ -273,11 +287,13 @@ class DefinitionRepository:
             )
             rows = await conn.fetch_all(page_sql, *page_bind_values)
 
-        persisted_rows = tuple(self._row_to_persisted(row, store)[0] for row in (rows or []))
+        persisted_rows = tuple(self._project(row, store) for row in (rows or []))
         return DefinitionPage(rows=persisted_rows, total=int(total or 0))
 
     def schema(self, store: QueryStore) -> Mapping[str, Any]:
-        """Return persistence metadata, excluding tenant runtime-only program_slug."""
+        """Return persistence metadata; program_slug only when the store persists it."""
+        if store.has_program_slug:
+            return QueryModel.schema(as_dict=True)
         return TenantQueryDefinition(query_slug="__probe__").schema(as_dict=True)
 
     async def export_insert(self, identity: QueryIdentity) -> str:
@@ -296,8 +312,12 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
         data = dict(row)
-        data.pop("program_slug", None)
-        validated = TenantQueryDefinition(**data)
+        data.pop(RUN_AS_COLUMN, None)
+        if store.has_program_slug:
+            validated: Any = QueryModel(**data)
+        else:
+            data.pop("program_slug", None)
+            validated = TenantQueryDefinition(**data)
 
         table = self._qualified_table(store)
         columns: list = []
@@ -346,6 +366,41 @@ class DefinitionRepository:
 
     # -- mutation methods ----------------------------------------------------------
 
+    @staticmethod
+    def _program_slug_of(data: Mapping[str, Any]) -> str | None:
+        """Return a validated ``program_slug`` from a payload, or None if omitted."""
+        if "program_slug" not in data:
+            return None
+        value = data["program_slug"]
+        if not isinstance(value, str) or not value:
+            raise TenantError("program_slug must be a non-empty string", error_code="invalid_tenant")
+        return value
+
+    def _validate_write(self, store: QueryStore, data: Mapping[str, Any]) -> tuple[dict, str | None]:
+        """Validate a create/upsert payload against the store's shape.
+
+        Stores without program_slug reject it before any SQL. Stores with it
+        validate the shared fields and return the payload's program_slug
+        separately (None = omitted: preserved on conflict, defaulted on insert).
+        """
+        payload = dict(data)
+        if not store.has_program_slug:
+            if "program_slug" in payload:
+                raise TenantError("program_slug cannot be set on this store", error_code="invalid_tenant")
+            program_slug = None
+        else:
+            program_slug = self._program_slug_of(payload)
+            payload.pop("program_slug", None)
+        persisted = TenantQueryDefinition(**payload).to_dict()
+        # Remove None values to let database defaults apply
+        persisted = {k: v for k, v in persisted.items() if v is not None}
+        # FEAT-151: an empty declaration never requires the migrated column.
+        if not persisted.get("columns_definition"):
+            persisted.pop("columns_definition", None)
+        if store.has_program_slug:
+            persisted["program_slug"] = program_slug or _DEFAULT_PROGRAM
+        return persisted, program_slug
+
     async def create(self, store: QueryStore, data: Mapping[str, Any]) -> Mapping[str, Any]:
         """Validate and insert persisted fields, retaining database constraints.
 
@@ -353,15 +408,7 @@ class DefinitionRepository:
         Raises TenantError(tenant_store_unavailable) if the store table is missing.
         """
         self._reject_run_as(data)
-        # Validate input data with TenantQueryDefinition (rejects program_slug)
-        validated = TenantQueryDefinition(**data)
-        persisted = validated.to_dict()
-
-        # Remove None values to let database defaults apply
-        persisted = {k: v for k, v in persisted.items() if v is not None}
-        # FEAT-151: an empty declaration never requires the migrated column.
-        if not persisted.get("columns_definition"):
-            persisted.pop("columns_definition", None)
+        persisted, _ = self._validate_write(store, data)
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
@@ -383,8 +430,7 @@ class DefinitionRepository:
                 error_code="tenant_store_unavailable",
             )
 
-        persisted_result, _ = self._row_to_persisted(dict(row), store)
-        return persisted_result
+        return self._project(dict(row), store)
 
     async def upsert(
         self,
@@ -405,16 +451,7 @@ class DefinitionRepository:
         """
         store = identity.store
         self._reject_run_as(data)
-
-        # Validate input data with TenantQueryDefinition (rejects program_slug)
-        validated = TenantQueryDefinition(**data)
-        persisted = validated.to_dict()
-
-        # Remove None values to let database defaults apply
-        persisted = {k: v for k, v in persisted.items() if v is not None}
-        # FEAT-151: an empty declaration never requires the migrated column.
-        if not persisted.get("columns_definition"):
-            persisted.pop("columns_definition", None)
+        persisted, program_slug = self._validate_write(store, data)
 
         table = self._qualified_table(store)
         columns = list(persisted.keys())
@@ -424,6 +461,8 @@ class DefinitionRepository:
         # Build ON CONFLICT DO UPDATE using query_slug as the primary key
         update_clauses = []
         for col in columns:
+            if col == "program_slug" and program_slug is None:
+                continue  # omitted: keep the stored value on conflict
             if col != "query_slug":
                 update_clauses.append(f"{quote_identifier(col)} = EXCLUDED.{quote_identifier(col)}")
 
@@ -458,8 +497,7 @@ class DefinitionRepository:
         row_data = dict(row)
         row_data.pop("is_inserted", None)
 
-        persisted_result, _ = self._row_to_persisted(row_data, store)
-        return persisted_result, is_created
+        return self._project(row_data, store), is_created
 
     async def patch(
         self,
@@ -489,10 +527,18 @@ class DefinitionRepository:
 
         self._reject_run_as(data)
 
-        # Reject program_slug (never allowed for tenants)
-        if "program_slug" in data:
+        # program_slug is runtime-derived on stores without the column.
+        if not store.has_program_slug and "program_slug" in data:
             raise TenantError(
                 "program_slug cannot be modified",
+                error_code="invalid_tenant",
+            )
+        if store.has_program_slug:
+            self._program_slug_of(data)
+        unknown = set(data) - self._allowed_columns(store)
+        if unknown:
+            raise TenantError(
+                f"Unknown or immutable field(s): {sorted(unknown)!r}",
                 error_code="invalid_tenant",
             )
 
@@ -500,8 +546,8 @@ class DefinitionRepository:
         set_clauses = []
         values = []
         for key, value in data.items():
-            # Skip query_slug (identity) and program_slug (forbidden)
-            if key in ("query_slug", "program_slug"):
+            # Skip identity and the server-managed timestamp
+            if key in ("query_slug", "updated_at"):
                 continue
             set_clauses.append(f"{quote_identifier(key)} = ${len(values) + 1}")
             values.append(value)
@@ -514,8 +560,7 @@ class DefinitionRepository:
                     f"Query not found: {identity.slug!r}",
                     error_code="query_not_found",
                 )
-            persisted_result, _ = self._row_to_persisted(dict(row), store)
-            return persisted_result
+            return self._project(dict(row), store)
 
         # Add updated_at timestamp
         set_clauses.append(f"{quote_identifier('updated_at')} = now()")
@@ -543,8 +588,7 @@ class DefinitionRepository:
                 error_code="query_not_found",
             )
 
-        persisted_result, _ = self._row_to_persisted(dict(row), store)
-        return persisted_result
+        return self._project(dict(row), store)
 
     @staticmethod
     def _reject_run_as(data: Mapping[str, Any]) -> None:
@@ -727,3 +771,109 @@ class DefinitionRepository:
             )
 
         return True
+
+    # -- move ----------------------------------------------------------------------
+
+    @staticmethod
+    def _project_move(row: Mapping[str, Any], origin: QueryStore, dest_columns: frozenset) -> dict:
+        """Project one origin row onto the destination's columns.
+
+        A missing ``program_slug`` on the destination is dropped (it becomes
+        runtime-derived from the destination schema); a destination that
+        persists it receives the origin's runtime value. Any other origin
+        column without a destination counterpart must be null or empty.
+
+        Raises:
+            TenantError: ``move_validation_failed`` with ``details.columns``.
+        """
+        projected: dict = {}
+        incompatible: list = []
+        for column, value in row.items():
+            if column in dest_columns:
+                projected[column] = value
+            elif column != "program_slug" and value not in (None, "", [], {}):
+                incompatible.append(column)
+        if incompatible:
+            raise TenantError(
+                "The destination store has no column for some of this definition's values",
+                error_code="move_validation_failed",
+                details={"columns": sorted(incompatible)},
+            )
+        if "program_slug" in dest_columns and "program_slug" not in row:
+            projected["program_slug"] = origin.schema
+        return projected
+
+    async def move(self, slug: str, origin: QueryStore, destination: QueryStore) -> None:
+        """Move one definition row between two stores in ONE transaction.
+
+        Locks the origin row (``FOR UPDATE``), checks the destination has no
+        row, projects the row onto the destination's live columns, inserts it
+        and deletes exactly one origin row. Any failure rolls everything back.
+
+        Args:
+            slug: The definition slug.
+            origin: The store currently holding the row.
+            destination: The store receiving the row (same database).
+
+        Raises:
+            TenantError: ``query_not_found``, ``move_target_exists``,
+                ``move_validation_failed``, ``tenant_write_forbidden`` or
+                ``tenant_store_unavailable``.
+        """
+        if origin.database_namespace != destination.database_namespace:
+            raise TenantError(
+                "Both stores must belong to the same database",
+                error_code="move_validation_failed",
+            )
+        src = self._qualified_table(origin)
+        dst = self._qualified_table(destination)
+        try:
+            async with await self.connection_factory() as conn:
+                await conn.transaction()
+                try:
+                    row = await conn.fetch_one(f"SELECT * FROM {src} WHERE query_slug = $1 FOR UPDATE", slug)
+                    if row is None:
+                        raise TenantError(f"Query not found: {slug!r}", error_code="query_not_found")
+                    if await conn.fetch_one(f"SELECT 1 AS present FROM {dst} WHERE query_slug = $1", slug):
+                        raise TenantError(
+                            f"The destination store already has {slug!r}", error_code="move_target_exists"
+                        )
+                    found = await conn.fetch_all(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = $1 AND table_name = $2",
+                        destination.schema, destination.table,
+                    )
+                    dest_columns = frozenset(r["column_name"] for r in found or [])
+                    if not dest_columns:
+                        raise TenantError(
+                            f"Store table not available: {destination.schema}.{destination.table}",
+                            error_code="tenant_store_unavailable",
+                        )
+                    projected = self._project_move(dict(row), origin, dest_columns)
+                    columns = list(projected)
+                    await conn.fetch_one(
+                        f"INSERT INTO {dst} ({', '.join(quote_identifier(c) for c in columns)}) "
+                        f"VALUES ({', '.join(f'${i + 1}' for i in range(len(columns)))}) RETURNING query_slug",
+                        *projected.values(),
+                    )
+                    deleted = await conn.fetch_all(f"DELETE FROM {src} WHERE query_slug = $1 RETURNING query_slug", slug)
+                    if len(deleted or []) != 1:
+                        raise TenantError(
+                            "The origin row could not be removed exactly once", error_code="tenant_store_unavailable"
+                        )
+                    await conn.commit()
+                except BaseException:
+                    try:
+                        await conn.rollback()
+                    except Exception:  # noqa: BLE001 - never mask the original error
+                        _logger.exception("Rollback failed after a move error on %s", src)
+                    raise
+        except TenantError:
+            raise
+        except Exception as exc:
+            if "duplicate key" in str(exc).lower():
+                raise TenantError(
+                    f"The destination store already has {slug!r}", error_code="move_target_exists"
+                ) from exc
+            self._translate_write_error(exc, destination)
+            raise

@@ -9,6 +9,7 @@ Three async callable job types for APScheduler:
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from navconfig.logging import logging
@@ -47,7 +48,7 @@ async def _revalidate_owner(query_obj: Any, owner: TenantOwnerEnvelope, slug: st
     if (
         current_store.database_namespace != owner.get("database_namespace")
         or current_store.table != owner.get("table")
-        or current_store.contract != owner.get("contract")
+        or current_store.has_program_slug != owner.get("has_program_slug")
     ):
         raise TenantError(
             f"Scheduled job owner envelope for slug {slug!r} no longer "
@@ -64,6 +65,7 @@ async def scheduled_query_job(
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
+    guard: Callable[[str, str | None], Awaitable[bool]] | None = None,
     **kwargs: Any
 ) -> None:
     """Revalidate owner and execute QS with matching runtime/cache context.
@@ -73,6 +75,8 @@ async def scheduled_query_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        guard: Fire-time existence check bound by QSScheduler; a False
+            result skips the run (the job was removed from this worker).
         job_id: The job's own real registered scheduler id, threaded in by
             QSScheduler at registration time. A non-default (tenant) store
             registers its job under the qualified ``qsj2-...`` id, not the
@@ -81,6 +85,8 @@ async def scheduled_query_job(
             supplied it.
         **kwargs: Additional keyword arguments (ignored).
     """
+    if guard is not None and not await guard(slug, job_id):
+        return
     try:
         from querysource.queries.qs import QS
         tenant = owner.get("schema") if owner is not None else None
@@ -107,6 +113,7 @@ async def scheduled_multiqs_job(
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
+    guard: Callable[[str, str | None], Awaitable[bool]] | None = None,
     run_as_user_id: int | None = None,
     identity_auth: Any = None,
     **kwargs: Any
@@ -135,6 +142,8 @@ async def scheduled_multiqs_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        guard: Fire-time existence check bound by QSScheduler; a False
+            result skips the run (the job was removed from this worker).
         job_id: The job's own real registered scheduler id — see
             ``scheduled_query_job``'s docstring for why this must not be
             re-guessed as the legacy ``multi_<slug>`` shape.
@@ -142,6 +151,8 @@ async def scheduled_multiqs_job(
         identity_auth: Auth handler used to resolve the delegated identity.
         **kwargs: Additional keyword arguments (ignored).
     """
+    if guard is not None and not await guard(slug, job_id):
+        return
     try:
         from querysource.queries import MultiQS
         tenant = owner.get("schema") if owner is not None else None
@@ -177,6 +188,7 @@ async def cache_refresh_job(
     *,
     owner: TenantOwnerEnvelope | None = None,
     job_id: str | None = None,
+    guard: Callable[[str, str | None], Awaitable[bool]] | None = None,
     **kwargs: Any
 ) -> None:
     """Refresh only this owner's current definition revision.
@@ -192,11 +204,15 @@ async def cache_refresh_job(
         notification_manager: Optional NotificationManager for error reporting.
         owner: Optional TenantOwnerEnvelope for tenant ownership validation.
             None preserves the pre-TASK-730 legacy/default behavior exactly.
+        guard: Fire-time existence check bound by QSScheduler; a False
+            result skips the run (the job was removed from this worker).
         job_id: The job's own real registered scheduler id — see
             ``scheduled_query_job``'s docstring for why this must not be
             re-guessed as the legacy ``cache_<slug>`` shape.
         **kwargs: Additional keyword arguments (ignored).
     """
+    if guard is not None and not await guard(slug, job_id):
+        return
     try:
         from querysource.queries.qs import QS
         tenant = owner.get("schema") if owner is not None else None

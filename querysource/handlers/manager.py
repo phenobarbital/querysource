@@ -26,7 +26,7 @@ from ..models import QueryModel
 from ..queries.multi import definition_requires_scheduler_grant
 from ..repositories import DefinitionRepository
 from ..tenant_errors import TenantError
-from ..tenants import QueryIdentity, QueryStore, TenantRegistry
+from ..tenants import QueryIdentity, QueryStore, TenantRegistry, is_configured_default
 from ..types.validators import Entity
 
 # Output
@@ -233,7 +233,8 @@ class QueryManager(QueryView):
             
         try:
             # Synchronize only the selected owner's scheduled jobs
-            await scheduler.register_slug(identity.slug, tenant=identity.store.schema if identity.store.contract == "tenant" else None)
+            tenant = None if is_configured_default(identity.store) else identity.store.schema
+            await scheduler.register_slug(identity.slug, tenant=tenant)
             return True
         except Exception as exc:
             # Failure logs and returns False; callers set failure header
@@ -397,11 +398,11 @@ class QueryManager(QueryView):
                 status=400,
             )
 
-        # AC-3: tenant-contract stores reject program_slug in sort/search/
+        # AC-3: stores without program_slug reject it in sort/search/
         # fields — a request-local check scoped to this store, never a
         # module-global mutation of SORTABLE_COLUMNS/SEARCHABLE_COLUMNS
         # (which must keep serving legacy program_slug listing unchanged).
-        if store is not None and store.contract == "tenant" and (
+        if store is not None and not store.has_program_slug and (
             params.sort_field == "program_slug"
             or (params.fields and "program_slug" in params.fields)
             or "program_slug" in qp
@@ -445,7 +446,7 @@ class QueryManager(QueryView):
             # unconditionally SQL'd against program_slug for every store.
             exclude_search_columns = (
                 frozenset({"program_slug"})
-                if store is not None and store.contract == "tenant"
+                if store is not None and not store.has_program_slug
                 else frozenset()
             )
             where = build_where_clause(

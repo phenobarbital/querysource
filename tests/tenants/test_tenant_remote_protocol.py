@@ -16,7 +16,7 @@ def _tenant_store(schema: str = "tenant1") -> QueryStore:
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug", "description"}),
     )
 
@@ -26,7 +26,7 @@ def _legacy_store() -> QueryStore:
         database_namespace="localhost:5432/querysource",
         schema="public",
         table="queries",
-        contract="legacy",
+        has_program_slug=True,
         columns=frozenset({"query_slug"}),
     )
 
@@ -98,7 +98,7 @@ async def test_exact_callable_and_owner_envelope() -> None:
         "database_namespace": "localhost:5432/querysource",
         "schema": "tenant1",
         "table": "queries",
-        "contract": "tenant",
+        "has_program_slug": False,
     }
 
     # AC-1: alias queue output preserved — keyed by `name`, not the slug.

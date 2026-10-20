@@ -41,7 +41,7 @@ def definitions(monkeypatch: pytest.MonkeyPatch):
         database_namespace="test/querysource",
         schema="public",
         table="queries",
-        contract="legacy",
+        has_program_slug=True,
         columns=frozenset({"query_slug", "provider"}),
     )
 

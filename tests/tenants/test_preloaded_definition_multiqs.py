@@ -10,7 +10,7 @@ MULTI_RAW = '{"queries": {"a": {"slug": "child_a"}}}'
 
 def _store(schema: str = "tenant1") -> QueryStore:
     return QueryStore(database_namespace="localhost:5432/qs", schema=schema, table="queries",
-                      contract="tenant", columns=frozenset({"query_slug"}))
+                      has_program_slug=False, columns=frozenset({"query_slug"}))
 
 
 class _FakeRegistry:

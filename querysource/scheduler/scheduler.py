@@ -19,6 +19,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Any, Optional, Union
 from urllib.parse import quote
 
@@ -164,7 +165,7 @@ class QSScheduler:
             database_namespace=store.database_namespace,
             schema=store.schema,
             table=store.table,
-            contract=store.contract,
+            has_program_slug=store.has_program_slug,
         )
 
     def _is_default_store(self, store: QueryStore) -> bool:
@@ -357,6 +358,7 @@ class QSScheduler:
                     # "qsj2-..." id, not the legacy "multi_<slug>" shape a
                     # notify() callback would otherwise have to guess.
                     "job_id": job_id,
+                    "guard": partial(self.definition_present, store),
                     "run_as_user_id": row.get(RUN_AS_COLUMN),
                     "identity_auth": getattr(self, "_auth", None),
                 },
@@ -379,6 +381,7 @@ class QSScheduler:
                 # See the multi-query registration above — the job's own
                 # real registered id, not a guessed legacy shape.
                 "job_id": job_id,
+                "guard": partial(self.definition_present, store),
             },
         )
         self.logger.info(f"Registered scheduled query job: {job_id}")
@@ -445,6 +448,7 @@ class QSScheduler:
                 # See the multi-query registration above — the job's own
                 # real registered id, not a guessed legacy shape.
                 "job_id": job_id,
+                "guard": partial(self.definition_present, store),
             },
         )
         self.logger.info(f"Registered cache refresh job: {job_id}")
@@ -605,6 +609,51 @@ class QSScheduler:
             self.logger.info("Resumed scheduler job: %s", job_id)
         return True
 
+    def pause_slug_jobs(self, slug: str, store: QueryStore) -> list:
+        """Pause this worker's running jobs for ``slug`` in ``store``; return the paused ids.
+
+        Already-paused jobs are left alone so a rollback never resumes them.
+        """
+        if self._scheduler is None:
+            return []
+        paused = []
+        for jid in self._slug_job_ids(slug, store=store):
+            job = self._scheduler.get_job(jid)
+            if job is not None and job.next_run_time is not None and self.set_job_paused(jid, True):
+                paused.append(jid)
+        return paused
+
+    def remove_slug_jobs(self, slug: str, store: QueryStore) -> list:
+        """Remove this worker's jobs for ``slug`` in ``store``; return the removed ids."""
+        return [jid for jid in self._slug_job_ids(slug, store=store) if self.remove_job(jid)]
+
+    async def definition_present(self, store: QueryStore, slug: str, job_id: str | None) -> bool:
+        """Fire-time guard: True when the slug still exists in the job's store.
+
+        Each worker owns an in-memory scheduler, so a move/delete served by another
+        worker leaves a stale job here: it is skipped and removed from this worker.
+        A failed check never blocks the job (its own error handling applies).
+        """
+        if self._repository is None:
+            return True
+        try:
+            present = await self._repository.exists(store, slug)
+        except Exception as exc:  # noqa: BLE001 - the guard must not block a job
+            self.logger.warning(
+                "QSScheduler: existence check failed for '%s' in %s.%s: %s",
+                slug, store.schema, store.table, exc,
+            )
+            return True
+        if present:
+            return True
+        self.logger.info(
+            "QSScheduler: '%s' no longer exists in %s.%s; skipping and removing job %s",
+            slug, store.schema, store.table, job_id,
+        )
+        if job_id:
+            self.remove_job(job_id)
+        return False
+
     async def register_slug(self, slug: str, *, tenant: str | None = None) -> dict:
         """Synchronize only the selected owner's scheduled jobs (no restart).
 
@@ -663,7 +712,7 @@ class QSScheduler:
                 "database_namespace": store.database_namespace,
                 "schema": store.schema,
                 "table": store.table,
-                "contract": store.contract,
+                "has_program_slug": store.has_program_slug,
             },
             "registered": registered,
             "removed": removed,
