@@ -17,7 +17,8 @@ tags: [qsscheduler, execution-history, observability, concierge, single-executio
 **Feature ID**: FEAT-181
 **Date**: 2026-10-20
 **Author**: Juan Rodriguez (drafted with Claude)
-**Status**: draft
+**Status**: approved
+**Approved by**: Juan Rodriguez, 2026-10-20 (DocumentDB history + fire-and-forget confirmed with Jesus Lara)
 **Target version**: next minor release (no version bump prescribed)
 **Brainstorm**: `sdd/proposals/scheduler-execution-history.brainstorm.md` (Option A). This
 revision supersedes the brainstorm's Postgres storage after the lead's review (§8).
@@ -870,7 +871,7 @@ Verified against: `20db6f5`
 - [x] **Single-execution claim** — *Resolved 2026-10-20 by Juan Rodriguez*: unique insert in DocumentDB (`_id` = occurrence id), awaited ≤2 s, fail-open.
 - [x] **Where the durable pause lives** — *Resolved 2026-10-20 by Juan Rodriguez*: on the slug definition, `attributes.scheduler.paused` (flowtask `troc.jobs.enabled` precedent); no new tables.
 - [ ] Verify at task time that navigator-api's vault exposes `EVENT_CHAT_BOT` / `EVENT_CHAT_ID` and the `DOCUMENTDB_*` keys for QS (on prod `.env` only one of those keys is set; the rest may come from vault). — *Owner: Juan Rodriguez*
-- [ ] Confirm the lead's "fire-and-forget" covers the awaited ≤2 s claim (coordination, not logging), or whether single-execution must use a different mechanism. — *Owner: Jesus Lara*
+- [x] Does the lead's "fire-and-forget" cover the awaited ≤2 s claim? — *Resolved 2026-10-20*: yes. The claim is coordination, not logging; it is bounded at 2 s and fail-open, so it never blocks execution.
 
 ---
 
@@ -891,3 +892,4 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 |---|---|---|---|
 | 0.1 | 2026-10-20 | Juan Rodriguez (with Claude) | Initial draft from brainstorm Option A (Postgres ledger), rebased on FEAT-176 simple move |
 | 0.2 | 2026-10-20 | Juan Rodriguez (with Claude) | Lead review: history moved to DocumentDB with 90-day TTL; fire-and-forget writer; claim = unique DocumentDB insert (fail-open); durable pause moved to `attributes.scheduler.paused`; no Postgres tables |
+| 1.0 | 2026-10-20 | Juan Rodriguez | Approved; awaited ≤2 s fail-open claim confirmed as compatible with fire-and-forget |
