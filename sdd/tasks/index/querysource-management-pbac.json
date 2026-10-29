@@ -56,7 +56,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -64,8 +64,9 @@
       "parallelism_notes": "Independent: only querysource/handlers/service.py and its own new test file; no symbol from other FEAT-182 tasks.",
       "assigned_to": null,
       "started_at": "2026-10-29T04:45:17+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-945-queryservice-driver-route-and-test-query-pbac.md"
+      "completed_at": "2026-10-29T05:02:46+00:00",
+      "file": "sdd/tasks/completed/TASK-945-queryservice-driver-route-and-test-query-pbac.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-946",

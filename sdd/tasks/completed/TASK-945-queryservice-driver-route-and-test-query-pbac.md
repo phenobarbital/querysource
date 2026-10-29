@@ -232,10 +232,8 @@ Same as TASK-943, with this task's id and files.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
+**Completed by**: sdd-worker (sequential, Sonnet)
+**Date**: 2026-10-29
+**Notes**: `query()`: new first branch `if slug is None` → `driver:query` on `ResourceType.DRIVER`/`args.get('driver')` (registry never touched); registry/legacy branches kept verbatim as `elif`/`else`, later datasource:use/driver:use checks untouched. `run_query()`: `raw_query:execute` then `driver:use` (driver default 'db') before `get_source`. Tests: real setup_pbac/YAML; only get_session (abstract) and get_source patched. Mutation-checked: driver branch off → 2 red; raw_query gate off → red (needed a driver:use-only user in the matrix); driver:use gate off → red. Existing smoke tests pass. Pre-existing: `tests/integration/test_pbac_enforcement.py::TestPbacOff` 2 tests fail on dev too (need live Postgres) — unrelated.
+**Contract drift**: none (anchors matched; helper extraction not needed).
 **Deviations from spec**: none
