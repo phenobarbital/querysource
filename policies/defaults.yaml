@@ -26,6 +26,9 @@ policies:
       - "raw_query:execute"
       - "slug:describe"
       - "slug:describe_raw"
+      - "slug:view"
+      - "slug:manage"
+      - "driver:query"
     subjects:
       groups:
         - superuser

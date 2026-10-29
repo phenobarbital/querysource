@@ -11,6 +11,8 @@ from typing import Any
 from aiohttp import web
 from navconfig.logging import logging
 
+from querysource.auth import ResourceType
+from querysource.auth.request_gate import enforce_request_pbac
 from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryStore, TenantRegistry
 
@@ -69,6 +71,10 @@ class QueryStoreCatalog:
 
     async def list(self, request: web.Request) -> web.Response:
         """Return ``200 {version: 1, data: [descriptor, ...]}`` or 503 without a registry."""
+        # FEAT-182: the catalogue is part of the management boundary.
+        await enforce_request_pbac(
+            request, ResourceType.SLUG, "*", "slug:view", logger=logger,
+        )
         registry = request.app.get("qs_tenant_registry")
         if registry is None:
             return tenant_error_response(

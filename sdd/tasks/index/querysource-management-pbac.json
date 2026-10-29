@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-29T04:42:49+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-29T05:11:34+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -16,16 +16,17 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Root task: adds QueryManager._enforce_definition_access in querysource/handlers/manager.py; touches manager.py + its own new test file only.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-943-querymanager-pbac-gate.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T04:54:40+00:00",
+      "file": "sdd/tasks/completed/TASK-943-querymanager-pbac-gate.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-944",
@@ -34,7 +35,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -43,27 +44,29 @@
       "parallel": true,
       "parallelism_notes": "needs QueryManager._enforce_definition_access from TASK-943 (querysource/handlers/manager.py), inherited by QueryMoveView.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-944-move-and-store-catalog-pbac.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T04:55:55+00:00",
+      "file": "sdd/tasks/completed/TASK-944-move-and-store-catalog-pbac.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-945",
       "slug": "queryservice-driver-route-and-test-query-pbac",
-      "title": "QueryService gates \u2014 driver:query and run_query raw_query:execute",
+      "title": "QueryService gates — driver:query and run_query raw_query:execute",
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Independent: only querysource/handlers/service.py and its own new test file; no symbol from other FEAT-182 tasks.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-945-queryservice-driver-route-and-test-query-pbac.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T05:02:46+00:00",
+      "file": "sdd/tasks/completed/TASK-945-queryservice-driver-route-and-test-query-pbac.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-946",
@@ -72,25 +75,26 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "Independent: conf.py (QS_DESCRIBE_* block) + handlers/describe.py; TASK-947 waits on it because both edit querysource/conf.py.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-946-describe-execute-fallback-flag.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T05:04:59+00:00",
+      "file": "sdd/tasks/completed/TASK-946-describe-execute-fallback-flag.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-947",
       "slug": "pbac-strict-boot",
-      "title": "QS_PBAC_STRICT_BOOT \u2014 abort startup when PBAC bootstrap fails",
+      "title": "QS_PBAC_STRICT_BOOT — abort startup when PBAC bootstrap fails",
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -99,9 +103,10 @@
       "parallel": true,
       "parallelism_notes": "serialized after TASK-946: both modify querysource/conf.py (shared file).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-947-pbac-strict-boot.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T05:06:20+00:00",
+      "file": "sdd/tasks/completed/TASK-947-pbac-strict-boot.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-948",
@@ -110,7 +115,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -123,9 +128,10 @@
       "parallel": true,
       "parallelism_notes": "integration matrix exercises the gates of TASK-943/944 (manager, moves, stores), TASK-945 (service), TASK-946 (describe flag) and documents TASK-947's QS_PBAC_STRICT_BOOT.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-948-policies-docs-and-integration-matrix.md"
+      "started_at": "2026-10-29T04:45:17+00:00",
+      "completed_at": "2026-10-29T05:11:34+00:00",
+      "file": "sdd/tasks/completed/TASK-948-policies-docs-and-integration-matrix.md",
+      "verification": "verified"
     }
   ]
 }

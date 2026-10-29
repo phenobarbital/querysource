@@ -315,10 +315,8 @@ See the `tests/handlers/test_management_pbac.py` blueprint above. Use the real
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
+**Completed by**: sdd-worker (sequential, Sonnet; no native Haiku seat)
+**Date**: 2026-10-29
+**Notes**: Added `QueryManager._enforce_definition_access` (slug None → "*"; slug str()-coerced) and gated get (slug:view, before the try/catch-all) and post/put/patch/delete (slug:manage, before any repo/registry access). Tests use real `setup_pbac` + YAML in tmp_path; sessions injected by a middleware that sets `request['user_session']` (nested under AUTH_SESSION_OBJECT); `enforce_request_pbac` never mocked. Mutation-checked: helper short-circuited → 7 denial tests red; restored by inverse edit; green. Existing pagination/run_as suites pass (56 passed). Worktree needed `setup.py build_ext --inplace` (Cython) to import.
+**Contract drift**: none; anchors matched.
 **Deviations from spec**: none

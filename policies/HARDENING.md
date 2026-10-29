@@ -33,7 +33,19 @@ independientemente de las políticas.
 
 **Tipos de recurso**: `slug`, `datasource`, `driver`, `raw_query`.
 **Acciones en uso**: `slug:execute`, `slug:list`, `slug:read`, `datasource:use`,
-`datasource:list`, `driver:use`, `driver:list`, `raw_query:execute`.
+`datasource:list`, `driver:use`, `driver:list`, `raw_query:execute`, y (FEAT-182)
+`slug:view`, `slug:manage`, `driver:query`.
+
+| Acción (FEAT-182) | Recurso | La comprueba |
+|---|---|---|
+| `slug:view` | `slug:<slug>` (uno) / `slug:*` (listado, `:meta`, catálogo de stores) | `GET /api/v1/management/queries*`, `GET /api/v1/management/query-stores` |
+| `slug:manage` | `slug:<slug>` | `POST/PUT/PATCH/DELETE /api/v1/management/queries*`, `POST …/queries/{slug}/move` |
+| `driver:query` | `driver:<driver>` | ruta directa `/api/v2/queries/{driver}/{source}/{attribute}` (sin slug) |
+| `raw_query:execute` + `driver:use` | `raw_query:raw_query` / `driver:<driver>` | `POST /api/v2/test/queries` (igual que `/api/v1/queries/run`) |
+
+El listado de gestión es **todo-o-nada** (`slug:view` sobre `slug:*`): no se
+filtra por slug porque pagina y cuenta en SQL. La visibilidad por slug es
+cometido de la API *describe*. Sin `slug:view` la respuesta es 404.
 
 > `effect` debe ir en **minúsculas** (`allow` / `deny`).
 
@@ -197,6 +209,58 @@ policies:
                                   # is_business_hours, is_weekend, day_segment
     priority: 30
 ```
+
+---
+
+### 3.6 Catálogo y gestión para un grupo; ejecución abierta (FEAT-182)
+
+Caso típico: todo usuario autenticado ejecuta slugs (los dashboards), pero solo
+el grupo `qs-team` ve el catálogo, lee/edita definiciones (incluido `query_raw`)
+y usa SQL libre. La ruta directa a drivers queda abierta solo para `http`.
+
+```yaml
+  - name: everyone_execute
+    effect: allow
+    resources: ["slug:*", "datasource:*", "driver:*"]
+    actions: ["slug:execute", "datasource:use", "driver:use"]
+    subjects:
+      groups: ["*"]
+    priority: 20
+
+  - name: everyone_direct_http_driver
+    effect: allow
+    description: "Ruta /api/v2/queries/http/... abierta; pg/mysql/... siguen cerradas."
+    resources: ["driver:http"]
+    actions: ["driver:query"]
+    subjects:
+      groups: ["*"]
+    priority: 20
+
+  - name: qs_team_catalogue_and_management
+    effect: allow
+    resources: ["slug:*"]
+    actions: ["slug:view", "slug:manage", "slug:list", "slug:describe", "slug:describe_raw"]
+    subjects:
+      groups: ["qs-team"]
+    priority: 30
+
+  - name: qs_team_free_sql
+    effect: allow
+    resources: ["raw_query:raw_query", "driver:*"]
+    actions: ["raw_query:execute", "driver:query"]
+    subjects:
+      groups: ["qs-team"]
+    priority: 30
+```
+
+Para que el catálogo *describe* (`slug:list` / `slug:describe`) quede realmente
+restringido al grupo mientras `slug:execute` sigue abierto a todos, define
+`QS_DESCRIBE_EXECUTE_FALLBACK=false`: sin ello, `slug:execute` sigue valiendo
+como alternativa en list/detalle/columns.
+
+Arranque estricto: con `QS_PBAC_STRICT_BOOT=true`, si `QS_PBAC_ENABLED=True` y el
+bootstrap de PBAC falla (YAML inválido, navigator-auth ausente), el proceso
+aborta con `RuntimeError` en lugar de arrancar con la política desactivada.
 
 ---
 
