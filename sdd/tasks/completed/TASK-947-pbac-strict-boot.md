@@ -170,10 +170,8 @@ Same as TASK-943, with this task's id and files. TASK-946 must be `done` first.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
+**Completed by**: sdd-worker (sequential, Sonnet)
+**Date**: 2026-10-29
+**Notes**: Added `QS_PBAC_STRICT_BOOT` (default False) in conf.py; services.py imports it and raises `RuntimeError(_msg)` (same diagnostic text) in the failed-bootstrap branch, else warns as before. Tests drive `QuerySource(lazy=True).setup()` with the REAL `setup_pbac` over a directory of invalid YAML (precondition asserts the bootstrap really returns (None,None,None)); also a healthy-policies strict case and the default. Mutation-checked (raise disabled → test_strict_boot_raises red). Neighbours pass (test_pbac_bootstrap, services/test_querysource_setup_pbac: 14 passed).
+**Contract drift**: none.
 **Deviations from spec**: none
