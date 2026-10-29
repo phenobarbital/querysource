@@ -75,7 +75,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [],
@@ -83,8 +83,9 @@
       "parallelism_notes": "Independent: conf.py (QS_DESCRIBE_* block) + handlers/describe.py; TASK-947 waits on it because both edit querysource/conf.py.",
       "assigned_to": null,
       "started_at": "2026-10-29T04:45:17+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-946-describe-execute-fallback-flag.md"
+      "completed_at": "2026-10-29T05:04:59+00:00",
+      "file": "sdd/tasks/completed/TASK-946-describe-execute-fallback-flag.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-947",
