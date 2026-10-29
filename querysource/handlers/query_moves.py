@@ -72,6 +72,8 @@ class QueryMoveView(QueryManager):
     async def post(self) -> web.Response:
         """Move one definition; 200 with the result or a ``{error_code, message, details?}`` error."""
         slug = self.request.match_info.get("slug")
+        # FEAT-182: same slug:manage gate as the CRUD write methods.
+        await self._enforce_definition_access(slug, "slug:manage")
         try:
             body = await self._move_body()
             registry = self.request.app.get("qs_tenant_registry")
