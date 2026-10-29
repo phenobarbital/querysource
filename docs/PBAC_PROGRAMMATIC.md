@@ -201,6 +201,33 @@ request-less `QS` call has always used.
   denied outright, without ever reaching the evaluator — mirroring how a
   handler denies a session-less HTTP request when the same flag is off.
 
+## Management, direct-driver and test-endpoint actions (FEAT-182)
+
+HTTP requests (not the principal path above) are additionally gated by these
+actions. All use the request gate (`enforce_request_pbac`): fail-closed, `404`
+on deny, no-op when PBAC is off.
+
+| Action | Resource | Checked by |
+|---|---|---|
+| `slug:view` | `slug:<slug>` / `slug:*` (list, `:meta`, store catalogue) | `GET /api/v1/management/queries*`, `GET /api/v1/management/query-stores` |
+| `slug:manage` | `slug:<slug>` | `POST/PUT/PATCH/DELETE /api/v1/management/queries*`, `POST /api/v1/management/queries/{slug}/move` |
+| `driver:query` | `driver:<driver>` | `/api/v2/queries/{driver}/{source}/{attribute}` when the request carries no slug |
+| `raw_query:execute` | `raw_query:raw_query` | `POST /api/v2/test/queries` (`QueryService.run_query`) |
+| `driver:use` | `driver:<driver>` (body `driver`, default `db`) | `POST /api/v2/test/queries`, after `raw_query:execute` |
+
+`slug:read` is deliberately not reused: it already names the component
+catalogue. The management list is all-or-nothing (`slug:view` on `*`), because
+it paginates and counts in SQL.
+
+Configuration flags:
+
+- `QS_DESCRIBE_EXECUTE_FALLBACK` (default `true`): when `false`, describe
+  list/detail/columns stop accepting `slug:execute` as a fallback (see
+  `docs/DESCRIBE_API.md`).
+- `QS_PBAC_STRICT_BOOT` (default `false`): when `true` and `QS_PBAC_ENABLED` is
+  on, a failed `setup_pbac()` raises `RuntimeError` from `QuerySource.setup()`
+  instead of logging a warning and running with enforcement off.
+
 ## Example: mapping an ai-parrot `PermissionContext`
 
 Mapping ai-parrot's own `PermissionContext` (or an equivalent caller-side

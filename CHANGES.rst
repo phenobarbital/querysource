@@ -1,6 +1,32 @@
 Unreleased
 ==========
 
+PBAC coverage for the management API, the direct driver route and describe (FEAT-182)
+-------------------------------------------------------------------------------------
+
+- **Behaviour change for hosts running ``QS_PBAC_ENABLED=true``.** Management
+  and direct-driver calls now need explicit grants. Hosts whose policy set has
+  a ``*:*`` allow floor (e.g. navigator-api's ``baseline.yaml``) keep working
+  unchanged; narrower setups MUST grant the new actions before upgrading, or
+  these calls start returning 404. With PBAC off nothing changes.
+- New actions: ``slug:view`` (``GET /api/v1/management/queries*`` and
+  ``/api/v1/management/query-stores``; the list and ``:meta`` are evaluated on
+  ``slug:*``, all-or-nothing), ``slug:manage`` (``POST/PUT/PATCH/DELETE`` on
+  ``/api/v1/management/queries*`` and ``POST …/{slug}/move``) and
+  ``driver:query`` (the direct route ``/api/v2/queries/{driver}/{source}/{attribute}``,
+  evaluated on ``driver:<driver>``). ``policies/defaults.yaml``
+  ``admin_full_access`` grants all three.
+- Fixed: the direct driver route returned 404 for everyone, admins included,
+  once PBAC was on (it evaluated ``slug:execute`` on an empty slug name).
+- Fixed: ``POST /api/v2/test/queries`` ran free SQL with no PBAC check. It now
+  requires ``raw_query:execute`` and ``driver:use`` on the requested driver,
+  like ``POST /api/v1/queries/run``.
+- New ``QS_DESCRIBE_EXECUTE_FALLBACK`` (default ``true``): set to ``false`` to
+  stop describe list/detail/columns accepting ``slug:execute`` as a fallback.
+- New ``QS_PBAC_STRICT_BOOT`` (default ``false``): abort startup when
+  ``QS_PBAC_ENABLED`` is on but the PBAC bootstrap fails, instead of running
+  with enforcement off.
+
 Timezone transforms hosted in QuerySource (FEAT-174)
 ----------------------------------------------------
 
