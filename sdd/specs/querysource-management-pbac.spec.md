@@ -51,7 +51,15 @@ are still not governable by policy:
    to every user (every dashboard runs slugs) therefore cannot restrict the
    slug catalogue to a group.
 
-A fourth, smaller issue: when `QS_PBAC_ENABLED=True` but `setup_pbac()` fails
+4. **Free SQL on the test endpoint has no PBAC** (found at task time, rev 1.1).
+   `POST /api/v2/test/queries` (`services.py:181` → `QueryService.run_query`,
+   `handlers/service.py:52`) takes an arbitrary `query` and `driver` from the
+   body and runs them through `get_source(slug=None, query=…)` with **no
+   `_enforce_pbac` call at all**. `QueryExecutor` (`/api/v1/queries/run`)
+   already gates the same capability with `raw_query:execute`. This endpoint
+   bypasses it.
+
+A fifth, smaller issue: when `QS_PBAC_ENABLED=True` but `setup_pbac()` fails
 (for example, bad YAML), QS logs a warning and **runs with enforcement off**
 (`services.py:159-163`). That is a silent fail-open.
 
@@ -87,9 +95,16 @@ New action vocabulary (strings; navigator-auth accepts free-form actions in YAML
 
 | Action | Resource | Checked by |
 |---|---|---|
-| `slug:view` | `slug:<slug>` (single) / per-item filter (list) / `slug:*` for `:meta` and the store catalogue | `QueryManager.get`, `QueryStoreCatalog.list` |
+| `slug:view` | `slug:<slug>` (single) / `slug:*` for the list, `:meta` and the store catalogue | `QueryManager.get`, `QueryStoreCatalog.list` |
 | `slug:manage` | `slug:<slug>` | `QueryManager.post/put/patch/delete`, `QueryMoveView.post` |
-| `driver:query` | `driver:<driver>` | `QueryService.query` (and `get_columns`/`columns`/`test_slug`) when the request carries no slug |
+| `driver:query` | `driver:<driver>` | `QueryService.query` when the request carries no slug (direct driver route) |
+| `raw_query:execute` (existing) | `raw_query:raw_query` | `QueryService.run_query` (`POST /api/v2/test/queries`), same resource name as `QueryExecutor` |
+
+The management **list** is all-or-nothing (`slug:view` on `*`), not filtered
+per item. `_paginate_list` paginates and counts in SQL
+(`manager.py:452-503`), so a post-filter would corrupt `total` and pages.
+Per-slug catalogue visibility is what the describe API (`filter_visible`) is
+for.
 
 `slug:read` is **not** reused: it already names the component catalogue
 (`handlers/components.py:45,89`), and overloading it would let a component-doc
@@ -154,8 +169,8 @@ None beyond the action names and flags above (documented in `docs/`).
 - **Paths**: `querysource/handlers/manager.py`, `querysource/handlers/query_moves.py`, `querysource/handlers/query_stores.py`
 - **Responsibility**:
   - `GET …/queries/{slug}`, and `?slug=` / `slug:meta` on the collection: `slug:view` on that slug, then 404 on deny.
-  - `GET …/queries` (list/paginate): the result is filtered by `slug:view` through `filter_visible` (order-preserving, fail-closed, no fallback). `total`/pagination metadata reflects the filtered set.
-  - `GET …/queries:meta` (schema, no slug): `slug:view` on `*`.
+  - `GET …/queries` (list/paginate) and `GET …/queries:meta` (schema, no slug): `slug:view` on `*` (all-or-nothing; see §2).
+  - The gate runs **before** the method's `try:` block, because `get()`'s `except Exception` (`manager.py:361`) would otherwise swallow the `HTTPNotFound` into a 500.
   - `POST`/`PUT`/`PATCH`/`DELETE`: `slug:manage` on the target slug, evaluated **before** any repository read or write and before `_enforce_scheduler_grant` (which stays as an additional check).
   - `QueryMoveView.post`: `slug:manage` on the slug before the move transaction.
   - `QueryStoreCatalog.list`: `slug:view` on `*`.
@@ -168,9 +183,12 @@ None beyond the action names and flags above (documented in `docs/`).
           """slug:view / slug:manage gate; slug None → '*'. No-op when PBAC is off; 404 on deny."""
   ```
 
-### Module 2: Driver-route gate
+### Module 2: QueryService gates (driver route + test endpoint)
 - **Path**: `querysource/handlers/service.py`
-- **Responsibility**: in `query()` (and the no-slug branches of `get_columns`, `columns`, `test_slug`, lines 431/559/699), when `slug is None`, evaluate `driver:query` with `ResourceType.DRIVER` on the route's `driver` path parameter instead of `slug:execute`. A missing driver name means 404 (the existing fail-closed rule). The later `datasource:use` / `driver:use` checks (`service.py`, after provider resolution) stay as they are.
+- **Responsibility**:
+  - In `query()`, when `slug is None` (only the direct driver route reaches `query()` without a slug), evaluate `driver:query` with `ResourceType.DRIVER` on `args['driver']` instead of `slug:execute`. A missing driver name means 404 (the existing fail-closed rule). The later `datasource:use` / `driver:use` checks after provider resolution stay as they are.
+  - `get_columns`, `columns` and `test_slug` are **not** changed: their routes always carry `{slug}`, so their `slug = None` branches are unreachable from HTTP.
+  - In `run_query()`, gate `raw_query:execute` on `ResourceType.RAW_QUERY` / `"raw_query"` (same name as `QueryExecutor._enforce_payload`, `handlers/executor.py`) **before** `get_source`. Also gate `driver:use` on the body's `driver` (default `'db'`), mirroring the executor's driver check.
 - **Depends on**: none.
 
 ### Module 3: Describe fallback flag
@@ -202,7 +220,9 @@ Each new denial test is mutation-checked: revert the gate and the test goes red.
 | Test | Module | Description |
 |---|---|---|
 | `test_manager_get_single_denied_404` | M1 | user without `slug:view` → 404, no repo read |
-| `test_manager_list_filtered_by_view` | M1 | list returns only allowed slugs; totals match |
+| `test_manager_list_requires_view_star` | M1 | list/`:meta` → 404 without `slug:view` on `*`; with it, unchanged pagination |
+| `test_manager_gate_not_swallowed` | M1 | denial is a 404, never the 500 from `get()`'s catch-all |
+| `test_run_query_requires_raw_query` | M2 | `POST /api/v2/test/queries` → 404 without `raw_query:execute`; `get_source` never called |
 | `test_manager_write_methods_require_manage` | M1 | POST/PUT/PATCH/DELETE → 404 without `slug:manage`; repo untouched |
 | `test_manager_admin_full_access` | M1/M5 | shipped `defaults.yaml` admin passes all methods |
 | `test_move_requires_manage` | M1 | move denied without `slug:manage` |
@@ -226,6 +246,7 @@ Each new denial test is mutation-checked: revert the gate and the test goes red.
 
 - [ ] With PBAC on, a user lacking `slug:view` cannot read any definition or `query_raw` through `/api/v1/management/queries*` (404 / filtered list).
 - [ ] With PBAC on, a user lacking `slug:manage` cannot create, update, patch, delete or move a slug, and the repository is untouched.
+- [ ] `POST /api/v2/test/queries` requires `raw_query:execute` (and `driver:use` on the requested driver), like `/api/v1/queries/run`.
 - [ ] `/api/v2/queries/{driver}/…` is decided by `driver:query` on the driver. An admin is allowed. `http` can be granted without granting `pg`.
 - [ ] `QS_DESCRIBE_EXECUTE_FALLBACK=false` removes the `slug:execute` fallback from describe list/detail/columns.
 - [ ] `QS_PBAC_STRICT_BOOT=true` makes a failed PBAC bootstrap abort startup.
@@ -312,7 +333,9 @@ Verified against: `b3bca15`
 | `querysource/handlers/manager.py` | MODIFY | `class QueryManager(QueryView):` | `:47` | 1 |
 | `querysource/handlers/query_moves.py` | MODIFY | `class QueryMoveView(QueryManager):` | `:32` | 1 |
 | `querysource/handlers/query_stores.py` | MODIFY | `    async def list(self, request: web.Request) -> web.Response:` | `:70` | 1 |
-| `querysource/handlers/service.py` | MODIFY | `            slug: str = None` | `:180,431,559,699` | 4 — quote surrounding context per site |
+| `querysource/handlers/service.py` | MODIFY | `                resource_name=slug,` (inside `query()`'s `else:` PBAC branch) | `:223` | 1 |
+| `querysource/handlers/service.py` | MODIFY | `            identity = QueryIdentity(store=store, slug=slug)` | `:213` | 1 |
+| `querysource/handlers/service.py` | MODIFY | `        conditions = {**options, **params}` + next line `self.logger.debug(f'Test Query: …')` (in `run_query`, just before `get_source`) | `:90-92` | substring of the `get_source` anchor matches 4× (`:93,307,443,588`); anchor on the `Test Query` debug line instead |
 | `querysource/handlers/describe.py` | MODIFY | `"slug:list", "slug:execute",` | `:236` | 1 |
 | `querysource/handlers/describe.py` | MODIFY | `"slug:describe", "slug:execute",` | `:138` | 1 |
 | `querysource/conf.py` | MODIFY | `QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)` | `:463` | 1 |
@@ -357,3 +380,4 @@ Skipped: spec written directly from the FieldSync brainstorm's verified findings
 |---|---|---|---|
 | 0.1 | 2026-10-29 | Juan Ruffato / Claude | Initial draft |
 | 1.0 | 2026-10-29 | Juan Ruffato / Claude | Open questions resolved (non-blocking); approved |
+| 1.1 | 2026-10-29 | Juan Ruffato / Claude | Task-time findings: `run_query` free-SQL gap added to M2; management list is all-or-nothing (SQL pagination); `get_columns`/`columns`/`test_slug` out of M2 (their routes always carry `{slug}`); gate must sit before `get()`'s catch-all |
