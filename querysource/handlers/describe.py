@@ -56,6 +56,8 @@ def _execute_fallback() -> str | None:
     time so the flag can be patched in tests.
     """
     return "slug:execute" if QS_DESCRIBE_EXECUTE_FALLBACK else None
+
+
 VOCABULARY_LINK = "/api/v1/queries/vocabulary"
 _PAGINATION_KEYS = frozenset({"page", "page_size", "sort", "search", "q", "fields"})
 
