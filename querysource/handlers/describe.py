@@ -24,7 +24,7 @@ from ..auth.slug_visibility import (
     resolve_principal,
     tenant_store,
 )
-from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT, QS_DESCRIBE_MAX_SCAN
+from ..conf import QS_DESCRIBE_COLUMNS_TIMEOUT, QS_DESCRIBE_EXECUTE_FALLBACK, QS_DESCRIBE_MAX_SCAN
 from ..exceptions import ParserError, QueryException, SlugNotFound
 from ..queries.describe import (
     RESERVED_PLACEHOLDERS,
@@ -47,6 +47,15 @@ from ._pagination import (
 from .abstract import AbstractHandler
 
 SLUG_PATTERN = r"[A-Za-z0-9_.\-:]{1,255}"
+
+
+def _execute_fallback() -> str | None:
+    """``slug:execute`` as the describe fallback action, or ``None`` when disabled (FEAT-182).
+
+    Reads ``QS_DESCRIBE_EXECUTE_FALLBACK`` from this module's globals at call
+    time so the flag can be patched in tests.
+    """
+    return "slug:execute" if QS_DESCRIBE_EXECUTE_FALLBACK else None
 VOCABULARY_LINK = "/api/v1/queries/vocabulary"
 _PAGINATION_KEYS = frozenset({"page", "page_size", "sort", "search", "q", "fields"})
 
@@ -135,7 +144,7 @@ class QueryDescribe(AbstractHandler):
             # decision cache) so a cached decision for one tenant's slug can
             # never leak into another tenant's identically-named slug.
             if not await can_access(
-                request, principal, slug, "slug:describe", "slug:execute",
+                request, principal, slug, "slug:describe", _execute_fallback(),
                 detached=not store.has_program_slug,
             ):
                 raise web.HTTPNotFound()
@@ -233,7 +242,7 @@ class QueryDescribe(AbstractHandler):
         # Tenant stores use a detached evaluator — see the comment in
         # _load_visible for why this matters.
         allowed = await filter_visible(
-            request, principal, slugs, "slug:list", "slug:execute",
+            request, principal, slugs, "slug:list", _execute_fallback(),
             detached=not store.has_program_slug,
         )
         allowed_set = set(allowed)

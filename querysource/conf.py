@@ -383,6 +383,9 @@ QS_DESCRIBE_ADMIN_GROUPS = [
 ]
 # Seconds allowed for GET /api/v1/queries/{slug}/columns to prepare the statement.
 QS_DESCRIBE_COLUMNS_TIMEOUT = float(config.get('QS_DESCRIBE_COLUMNS_TIMEOUT', fallback=5))
+# FEAT-182: when False, describe list/detail/columns require slug:list / slug:describe
+# and no longer accept slug:execute as a fallback.
+QS_DESCRIBE_EXECUTE_FALLBACK = config.getboolean('QS_DESCRIBE_EXECUTE_FALLBACK', fallback=True)
 
 ## QSScheduler (APScheduler-based query scheduler):
 ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
