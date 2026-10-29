@@ -466,6 +466,9 @@ os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
 QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
+# FEAT-182: abort startup when QS_PBAC_ENABLED is on but the PBAC bootstrap failed,
+# instead of silently running with enforcement off.
+QS_PBAC_STRICT_BOOT = config.getboolean('QS_PBAC_STRICT_BOOT', fallback=False)
 
 # Allow requests that carry no user session but were authorized by a
 # sessionless navigator-auth authz backend (IP / host / User-Agent, e.g.

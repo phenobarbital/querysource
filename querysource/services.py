@@ -45,6 +45,7 @@ from .conf import (
     QS_AIRTABLE_OAUTH_ENABLED,  # added (FEAT-096)
     QS_PBAC_CACHE_TTL,
     QS_PBAC_ENABLED,
+    QS_PBAC_STRICT_BOOT,
     QS_POLICY_PATH,
     USE_VECTORS,
     vector_models,
@@ -157,11 +158,14 @@ class QuerySource(metaclass=Singleton):
                     QS_POLICY_PATH, QS_PBAC_CACHE_TTL,
                 )
             else:
-                _svc_logger.warning(
+                _msg = (
                     "QS_PBAC_ENABLED=True but PBAC bootstrap returned None. "
                     "Policy enforcement is OFF for this process. "
                     "Check QS_POLICY_PATH and navigator-auth installation."
                 )
+                if QS_PBAC_STRICT_BOOT:
+                    raise RuntimeError(_msg)
+                _svc_logger.warning(_msg)
         else:
             _svc_logger.debug("QS PBAC disabled (QS_PBAC_ENABLED=False)")
         # ──────────────────────────────────────────────────────────────────
