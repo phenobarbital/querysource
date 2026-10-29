@@ -16,7 +16,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -24,8 +24,9 @@
       "parallelism_notes": "Root task: adds QueryManager._enforce_definition_access in querysource/handlers/manager.py; touches manager.py + its own new test file only.",
       "assigned_to": null,
       "started_at": "2026-10-29T04:45:17+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-943-querymanager-pbac-gate.md"
+      "completed_at": "2026-10-29T04:54:40+00:00",
+      "file": "sdd/tasks/completed/TASK-943-querymanager-pbac-gate.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-944",
