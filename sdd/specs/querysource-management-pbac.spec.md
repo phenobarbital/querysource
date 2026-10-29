@@ -10,7 +10,7 @@ tags: [pbac, authorization, management-api, hardening]
 **Feature ID**: FEAT-182
 **Date**: 2026-10-29
 **Author**: Juan Ruffato / Claude
-**Status**: draft
+**Status**: approved
 **Target version**: 5.3.0
 **Consumer**: FieldSync brainstorm `querysource-pbac-policies` (fieldsync repo,
 branch `sdd/querysource-pbac-policies`). FieldSync will switch
@@ -340,8 +340,8 @@ None new (navigator-auth as already pinned).
 
 ## 8. Open Questions
 
-- [ ] Should `QS_DESCRIBE_EXECUTE_FALLBACK` eventually default to `False` (next major)? — *Owner: Jesús Lara*
-- [ ] Do navigator-api callers use the management API or the direct driver route with non-admin users? If so, they need the new grants before upgrading. — *Owner: Jesús Lara / Javier León*
+- [x] Should `QS_DESCRIBE_EXECUTE_FALLBACK` eventually default to `False` (next major)? — *Owner: Juan (decided with our recommendation; Jesús validates at the end)*: not in this feature. The default stays `True` (today's behaviour) in 5.3.0. Flipping it is a breaking change for a later major, and Jesús may raise it at review.
+- [x] Do navigator-api callers use the management API or the direct driver route with non-admin users? — *Owner: Juan (decided with our recommendation; Jesús/Javier validate at the end)*: non-blocking. navigator-api ships `baseline.yaml` (`*:*` allow for every authenticated user, priority 1), so the new `slug:view` / `slug:manage` / `driver:query` checks are allowed there exactly as today. The `CHANGES.rst` entry (M5) tells PBAC-on hosts without such a floor to grant the new actions before upgrading.
 
 ---
 
@@ -356,3 +356,4 @@ Skipped: spec written directly from the FieldSync brainstorm's verified findings
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1 | 2026-10-29 | Juan Ruffato / Claude | Initial draft |
+| 1.0 | 2026-10-29 | Juan Ruffato / Claude | Open questions resolved (non-blocking); approved |
