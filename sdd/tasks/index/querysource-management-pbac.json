@@ -35,7 +35,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -45,8 +45,9 @@
       "parallelism_notes": "needs QueryManager._enforce_definition_access from TASK-943 (querysource/handlers/manager.py), inherited by QueryMoveView.",
       "assigned_to": null,
       "started_at": "2026-10-29T04:45:17+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-944-move-and-store-catalog-pbac.md"
+      "completed_at": "2026-10-29T04:55:55+00:00",
+      "file": "sdd/tasks/completed/TASK-944-move-and-store-catalog-pbac.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-945",
