@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-10-29T04:42:49+00:00",
-  "completed_at": null,
+  "completed_at": "2026-10-29T05:11:34+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "tasks": [
@@ -115,7 +115,7 @@
       "feature_id": "FEAT-182",
       "feature": "querysource-management-pbac",
       "spec": "sdd/specs/querysource-management-pbac.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "M",
       "depends_on": [
@@ -129,8 +129,9 @@
       "parallelism_notes": "integration matrix exercises the gates of TASK-943/944 (manager, moves, stores), TASK-945 (service), TASK-946 (describe flag) and documents TASK-947's QS_PBAC_STRICT_BOOT.",
       "assigned_to": null,
       "started_at": "2026-10-29T04:45:17+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-948-policies-docs-and-integration-matrix.md"
+      "completed_at": "2026-10-29T05:11:34+00:00",
+      "file": "sdd/tasks/completed/TASK-948-policies-docs-and-integration-matrix.md",
+      "verification": "verified"
     }
   ]
 }
