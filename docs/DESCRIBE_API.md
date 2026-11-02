@@ -18,6 +18,7 @@ Read-only discovery of stored query slugs. None of these endpoints execute a que
 - **Columns (`GET /api/v1/queries/{slug}/columns`):** Requires `slug:describe` or `slug:execute`. Denials return `404`.
 - **Raw Query (`query_raw`):** Requires `slug:describe_raw`.
 - **Admin Fields:** Gated by `userinfo.superuser` or a session group in `QS_DESCRIBE_ADMIN_GROUPS` (default `admin,superuser`).
+- **`slug:execute` fallback (FEAT-182):** the `slug:execute` alternatives above apply only while `QS_DESCRIBE_EXECUTE_FALLBACK` is `true` (the default). Set it to `false` to make list, detail and columns require `slug:list` / `slug:describe` exclusively, so a host can keep `slug:execute` open to every user while restricting the slug catalogue to a group. `slug:describe_raw` never had a fallback.
 
 ### PBAC Disabled
 When PBAC is disabled (i.e., `app['security']` is absent), ABAC checks are no-ops that allow access, mirroring `_enforce_pbac`. The program pre-filter and the `401` rule still apply.
@@ -255,3 +256,4 @@ The Describe API behavior is controlled by the following configuration keys:
 | `QS_DESCRIBE_MAX_SCAN` | `10000` | The maximum number of query slugs scanned during list pagination. |
 | `QS_DESCRIBE_ADMIN_GROUPS` | `admin,superuser` | Comma-separated list of session groups granted access to admin-only fields. |
 | `QS_DESCRIBE_COLUMNS_TIMEOUT` | `5` | Timeout in seconds for preparing statements to fetch column metadata. |
+| `QS_DESCRIBE_EXECUTE_FALLBACK` | `true` | When `false`, describe list/detail/columns no longer accept `slug:execute` as a fallback for `slug:list` / `slug:describe` (FEAT-182). |

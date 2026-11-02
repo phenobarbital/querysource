@@ -177,10 +177,8 @@ Same as TASK-943, with this task's id and files.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
+**Completed by**: sdd-worker (sequential, Sonnet)
+**Date**: 2026-10-29
+**Notes**: Added `QS_DESCRIBE_EXECUTE_FALLBACK` (default True) to conf.py; `describe.py` imports it and uses module helper `_execute_fallback()` at both call sites (:138 detail/columns via `_load_visible`, :236 list); `slug:describe_raw` untouched. Tests use real setup_pbac/YAML and real can_access/filter_visible (only principal + loader pinned). Mutation-checked (helper always returns slug:execute → disabled test red). Existing describe suites (list/detail/columns/tenant) pass: 39 passed.
+**Contract drift**: none.
 **Deviations from spec**: none

@@ -185,10 +185,8 @@ Same as TASK-943, with this task's id and files. TASK-943 must be `done` first.
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
+**Completed by**: sdd-worker (sequential, Sonnet)
+**Date**: 2026-10-29
+**Notes**: `QueryMoveView.post` gates `slug:manage` right after the slug read, before the try/body parse; `QueryStoreCatalog.list` gates `slug:view` on "*" via `enforce_request_pbac` before the registry lookup. Tests use real setup_pbac/YAML; mutation-checked (both gates disabled → 2 red; restored by inverse edits → green).
+**Contract drift**: none.
 **Deviations from spec**: none

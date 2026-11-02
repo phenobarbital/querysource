@@ -383,6 +383,9 @@ QS_DESCRIBE_ADMIN_GROUPS = [
 ]
 # Seconds allowed for GET /api/v1/queries/{slug}/columns to prepare the statement.
 QS_DESCRIBE_COLUMNS_TIMEOUT = float(config.get('QS_DESCRIBE_COLUMNS_TIMEOUT', fallback=5))
+# FEAT-182: when False, describe list/detail/columns require slug:list / slug:describe
+# and no longer accept slug:execute as a fallback.
+QS_DESCRIBE_EXECUTE_FALLBACK = config.getboolean('QS_DESCRIBE_EXECUTE_FALLBACK', fallback=True)
 
 ## QSScheduler (APScheduler-based query scheduler):
 ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
@@ -463,6 +466,9 @@ os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
 QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
+# FEAT-182: abort startup when QS_PBAC_ENABLED is on but the PBAC bootstrap failed,
+# instead of silently running with enforcement off.
+QS_PBAC_STRICT_BOOT = config.getboolean('QS_PBAC_STRICT_BOOT', fallback=False)
 
 # Allow requests that carry no user session but were authorized by a
 # sessionless navigator-auth authz backend (IP / host / User-Agent, e.g.

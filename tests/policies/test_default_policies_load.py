@@ -1,6 +1,7 @@
 """Smoke tests for default policy YAML files (TASK-639)."""
-import pytest
 from pathlib import Path
+
+import pytest
 
 POLICY_DIR = Path(__file__).parent.parent.parent / "policies"
 
@@ -124,3 +125,20 @@ def test_defaults_admin_policy_grants_describe_actions():
     actions = set(pol.get("actions", []))
     assert "slug:describe" in actions
     assert "slug:describe_raw" in actions
+
+
+def test_defaults_admin_policy_grants_management_actions():
+    """FEAT-182: admin_full_access grants slug:view, slug:manage and driver:query."""
+    import yaml
+    p = POLICY_DIR / "defaults.yaml"
+    if not p.exists():
+        pytest.skip("policies/defaults.yaml not present")
+    with open(p) as f:
+        data = yaml.safe_load(f)
+    pol = next(
+        (pol for pol in data.get("policies", []) if pol.get("name") == "admin_full_access"),
+        None,
+    )
+    assert pol is not None
+    actions = set(pol.get("actions", []))
+    assert {"slug:view", "slug:manage", "driver:query"} <= actions

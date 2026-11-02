@@ -179,10 +179,9 @@ Same as TASK-943, with this task's id and files. TASK-943..947 must be `done` fi
 
 ## Completion Note
 
-*(Agent fills this in when done)*
-
-**Completed by**:
-**Date**:
-**Notes**:
-
-**Deviations from spec**: version bump deferred to `/release`.
+**Completed by**: sdd-worker (sequential, Sonnet)
+**Date**: 2026-10-29
+**Notes**: defaults.yaml admin_full_access gains slug:view/slug:manage/driver:query; HARDENING.md (action table + worked example 3.6 + flags), DESCRIBE_API.md (flag + config row), PBAC_PROGRAMMATIC.md (actions, run_query gates, strict boot), CHANGES.rst (FEAT-182 with PBAC-on upgrade note). Shipped-policy test added. Matrix (tests/integration/test_management_pbac_matrix.py, 41 tests) runs the REAL QuerySource(lazy=True).setup() with real PBAC from tmp_path (shipped defaults.yaml + qsteam/plain policies, no *:* floor); only pool, get_source and startup hooks patched. Mutation-checked per gate (manager helper → 6 red; catalogue → 1; driver branch → driver-http-plain; run_query raw_query gate → test-queries-plain). Note: driver-pg-plain stays green when the driver branch is removed (empty-slug deny also yields 404); driver-http-plain is the discriminating row. Doc says qsteam also holds driver:use (needed because run_query also gates driver:use). PBAC doc file confirmed: docs/PBAC_PROGRAMMATIC.md.
+Pre-existing failures on dev (unrelated): tests/auth/test_identity_tokens.py (4), tests/policies/test_authorized_policy.py (6), tests/handlers/test_airtable_oauth.py (missing aioresponses), tests/integration/test_pbac_enforcement.py::TestPbacOff (needs Postgres).
+**Contract drift**: none.
+**Deviations from spec**: version bump to 5.3.0 deferred to /release (task scope); spec AC 'version bumped' left for the owner.
