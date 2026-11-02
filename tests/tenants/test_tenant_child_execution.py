@@ -84,9 +84,9 @@ async def test_parent_explicit_null_and_named_child_owner() -> None:
     created_threads = []
     
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None, principal=None):
             super().__init__(
-                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition, principal=principal
             )
             created_threads.append(self)
 
@@ -220,7 +220,7 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
     local_exec = LocalExecutor()
     
     class FakeQueryObject:
-        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None):
+        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None, principal=None):
             self.definition = definition
             self.name = name
             self.query_dict = query
@@ -333,9 +333,9 @@ async def test_raw_query_child_skips_ownership_preflight_no_slug_required() -> N
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None, principal=None):
             super().__init__(
-                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition, principal=principal
             )
             created_threads.append(self)
 
@@ -440,9 +440,9 @@ async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None, principal=None):
             super().__init__(
-                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition, principal=principal
             )
             created_threads.append(self)
 
@@ -496,9 +496,9 @@ async def test_preloaded_single_query_slug_is_loaded_once_and_handed_to_the_thre
     created_threads = []
 
     class FakeThreadQuery(ThreadQuery):
-        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None):
+        def __init__(self, name, query, request, queue, remote_config=None, *, store=None, definition=None, hooks=None, principal=None):
             super().__init__(
-                name, query, request, queue, remote_config=remote_config, store=store, definition=definition
+                name, query, request, queue, remote_config=remote_config, store=store, definition=definition, principal=principal
             )
             created_threads.append(self)
 
@@ -530,7 +530,7 @@ async def test_local_executor_forwards_the_loaded_definition_to_query_object() -
     created = []
 
     class FakeQueryObject:
-        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None):
+        def __init__(self, name, query, queue, request, loop, tenant=None, definition=None, principal=None):
             self.name = name
             self.queue = queue
             self.definition = definition

@@ -11,6 +11,7 @@ from querysource.tenant_errors import TenantError
 from querysource.tenants import QueryIdentity, QueryStore, TenantRegistry
 
 _PBAC = "querysource.handlers.manager.enforce_request_pbac"
+_DEF_ACCESS = "querysource.handlers.manager.QueryManager._enforce_definition_access"
 
 WRITE_RAW = json.dumps({"queries": {"a": {"slug": "report_a"}}, "Output": [{"TableDelete": {"table": "t"}}]})
 READ_RAW = json.dumps({"queries": {"a": {"slug": "report_a"}}, "Output": [{"Table": {"table": "t"}}]})
@@ -83,6 +84,7 @@ def _assert_pg_admin_call(mock: AsyncMock) -> None:
 async def test_manager_gate_denies_scheduled_write_multi(verb, monkeypatch):
     deny = AsyncMock(side_effect=web.HTTPNotFound())
     monkeypatch.setattr(_PBAC, deny)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored=None)
     manager = _manager(repo, json_data=_write_multi(), match_info={"slug": "s1"} if verb == "post" else {})
     with pytest.raises(web.HTTPNotFound):
@@ -95,6 +97,7 @@ async def test_manager_gate_denies_scheduled_write_multi(verb, monkeypatch):
 async def test_manager_gate_allows_with_grant(verb, monkeypatch):
     allow = AsyncMock(return_value=None)
     monkeypatch.setattr(_PBAC, allow)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored=None)
     manager = _manager(repo, json_data=_write_multi(), match_info={"slug": "s1"} if verb == "post" else {})
     response = await getattr(manager, verb)()
@@ -106,6 +109,7 @@ async def test_manager_gate_allows_with_grant(verb, monkeypatch):
 async def test_manager_gate_read_only_multi_no_pbac_call(monkeypatch):
     pbac = AsyncMock()
     monkeypatch.setattr(_PBAC, pbac)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored=None)
     manager = _manager(repo, json_data=_write_multi(query_raw=READ_RAW))
     response = await manager.put()
@@ -116,6 +120,7 @@ async def test_manager_gate_read_only_multi_no_pbac_call(monkeypatch):
 async def test_manager_gate_pbac_disabled_skips_stored_read(monkeypatch):
     pbac = AsyncMock()
     monkeypatch.setattr(_PBAC, pbac)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored=None)
     repo.get = AsyncMock(side_effect=AssertionError("stored row must not be read"))
     manager = _manager(repo, json_data=_write_multi(), pbac=False)
@@ -127,6 +132,7 @@ async def test_manager_gate_pbac_disabled_skips_stored_read(monkeypatch):
 async def test_manager_gate_patch_adding_write_step_is_gated(monkeypatch):
     deny = AsyncMock(side_effect=web.HTTPNotFound())
     monkeypatch.setattr(_PBAC, deny)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored={"provider": "multi", "query_raw": READ_RAW, "attributes": {"scheduler": SCHEDULE}})
     manager = _manager(repo, json_data={"query_raw": WRITE_RAW}, match_info={"slug": "s1"})
     with pytest.raises(web.HTTPNotFound):
@@ -137,6 +143,7 @@ async def test_manager_gate_patch_adding_write_step_is_gated(monkeypatch):
 async def test_manager_gate_patch_adding_schedule_is_gated(monkeypatch):
     deny = AsyncMock(side_effect=web.HTTPNotFound())
     monkeypatch.setattr(_PBAC, deny)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored={"provider": "multi", "query_raw": WRITE_RAW, "attributes": {"owner": "x"}})
     manager = _manager(repo, json_data={"attributes": {"scheduler": SCHEDULE}}, match_info={"slug": "s1"})
     with pytest.raises(web.HTTPNotFound):
@@ -147,6 +154,7 @@ async def test_manager_gate_patch_adding_schedule_is_gated(monkeypatch):
 async def test_manager_gate_patch_unscheduled_write_multi_not_gated(monkeypatch):
     pbac = AsyncMock()
     monkeypatch.setattr(_PBAC, pbac)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored={"provider": "multi", "query_raw": READ_RAW, "attributes": None})
     manager = _manager(repo, json_data={"query_raw": WRITE_RAW}, match_info={"slug": "s1"})
     response = await manager.patch()
@@ -159,6 +167,7 @@ async def test_manager_gate_patch_unscheduled_write_multi_not_gated(monkeypatch)
 async def test_manager_gate_null_attributes_does_not_bypass(verb, monkeypatch):
     deny = AsyncMock(side_effect=web.HTTPNotFound())
     monkeypatch.setattr(_PBAC, deny)
+    monkeypatch.setattr(_DEF_ACCESS, AsyncMock())
     repo = _Repo(stored={"provider": "db", "query_raw": "SELECT 1", "attributes": {"scheduler": SCHEDULE}})
     payload = {"query_slug": "s1", "provider": "multi", "attributes": None, "query_raw": WRITE_RAW}
     manager = _manager(repo, json_data=payload, match_info={"slug": "s1"})

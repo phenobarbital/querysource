@@ -3,6 +3,7 @@
 Manage Database connections and supporting datasources.
 """
 import asyncio
+import copy
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Union
@@ -60,6 +61,7 @@ class QueryConnection(Connection, metaclass=Singleton):
         if hasattr(self, '__initialized__'):
             if self.__initialized__ is True:  # pylint: disable=E0203
                 return  # already configured.
+        self.pgargs = copy.deepcopy(type(self).pgargs)
         Connection.__init__(self, **kwargs)
         self.__initialized__ = True
         self._postgres = None
