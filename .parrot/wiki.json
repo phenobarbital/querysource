@@ -18,6 +18,7 @@
     ]
   },
   "sync_graph": false,
+  "remote": null,
   "arango_database": null,
   "arango_credentials_env": "ARANGODB",
   "arango_text_analyzer": "text_en",
@@ -39,7 +40,9 @@
     "max_output_tokens": 2000,
     "max_files": 8,
     "max_candidates": 3,
-    "timeout_seconds": 60
+    "timeout_seconds": 60,
+    "local_prefix": null,
+    "known_prefixes": []
   },
   "schema": {
     "enabled": true,
@@ -89,6 +92,8 @@
     "date_format": "%Y-%m-%d",
     "stage_git": true,
     "max_candidates": 20,
-    "lock_timeout": 30.0
+    "lock_timeout": 30.0,
+    "stability_window": 3.0,
+    "stability_poll_interval": 1.5
   }
 }
