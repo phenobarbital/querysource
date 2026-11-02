@@ -1,0 +1,80 @@
+**Option A** is recommended because:
+
+- It delivers the complete feature set (Ossie import, multi-metric types,
+  symmetric aggregates, dialect-aware SQL, compile-time RLS) with Medium effort,
+  while Option B is High effort for a subset and Option C adds an operational
+  dependency that fights the DB-first model store we chose.
+- The `SemanticCompiler` Protocol and QuerySource-owned `SemanticQuery` /
+  `CompiledQuery` models make the AGPL dependency replaceable: Option B can be
+  implemented later as a second compiler without touching providers, handlers or
+  callers.
+- Compile-only use keeps execution, caching, PBAC and tenant isolation on the
+  paths QuerySource already tests; the only new runtime surface is a pure
+  function from (model, request, user attributes, dialect) to SQL.
+- What we trade off: an AGPL + DuckDB dependency as an **optional extra**
+  (import is lazy; the base package stays unaffected), and reliance on a young
+  project pinned to `0.12.x`. Both are explicitly accepted in Round 1 and
+  recorded in Open Questions for legal/ops confirmation.
+
+---
+
+### Option A (recommended)
+Sidemantic adapter behind a `SemanticCompiler` Protocol (compile-only)
+
+Add a `querysource/semantic/` package with: the public models
+(`SemanticQuery`, `SemanticFilter`, `CompiledQuery`, `SemanticModelRef`,
+`CompilationTarget`), the `SemanticCompiler` Protocol, a model loader
+(inline / directory, Ossie or Sidemantic native YAML, cached per definition
+revision), a dialect map from datasource drivers, a filter validator, and a
+`SidemanticCompiler` implementation. Add `querysource/providers/semantic.py`
+(`semanticProvider`, `__parser__ = None`) that: parses `query_raw` as the
+resource YAML, resolves the datasource by name, builds the `SemanticQuery` from
+the request conditions, applies PBAC on the catalog, compiles with
+`user_attributes`, runs the SQL on the asyncdb connection and returns the
+result like `defaultProvider.query`. `dry_run()` returns the compiled SQL.
+
+✅ **Pros:**
+- Covers Ossie *and* 14 other formats for free; symmetric aggregates, ratio /
+  derived / cumulative metrics, time grains, relationships all come from
+  Sidemantic 0.12.0.
+- Compile-time RLS (`SecurityPolicy`, deny-by-default, typed literal rendering)
+  is exactly the second governance layer we decided on.
+- Execution stays on QuerySource's asyncdb providers, PBAC, cache, writers and
+  tenant stores; nothing new to operate.
+- The Protocol keeps the public contract QuerySource-owned, so the compiler
+  can be swapped (Option B) without touching callers.
+
+❌ **Cons:**
+- AGPL-3.0 single-author dependency; DuckDB is a hard transitive dependency even
+  when never used for execution (`SemanticLayer()` opens an in-memory DuckDB by
+  default; we must construct it with a non-executing adapter or accept the
+  import cost).
+- Inline Ossie documents: `OssieAdapter.parse_document` takes a *path*; inline
+  support needs either a temp file or the lower-level
+  `parse_ossie_document(bytes, ...)` API (internal, may change).
+- "Young project" per its own README; converting formats may hit rough edges.
+
+📊 **Effort:** Medium
+
+📦 **Libraries / Tools:**
+| Package | Purpose | Notes |
+|---|---|---|
+| `sidemantic>=0.12.0,<0.13` | Semantic model + SQL compiler, RLS | AGPL-3.0, Python ≥3.11, released 2026-09-13; hard deps: duckdb≥1.0, sqlglot≥30.1, pydantic≥2, pyyaml≥6, jinja2, antlr4, click, typer. **No** `sidemantic-rs` in `requires_dist`. |
+| `sidemantic[ossie]` | Offline JSON-Schema validation of Ossie docs | adds `jsonschema<5,>=4.23`; schemas vendored and checksum-pinned (0.1.1 / 0.2.0.dev0 profiles). |
+| `sqlglot>=30.1` | Parse/validate predicate strings, render literals, dialect names | Already installed transitively (30.20.0 in venv) but **not declared** in `pyproject.toml`; declare it in the extra. |
+| `pydantic>=2` | `SemanticQuery`, `CompiledQuery`, `SemanticResource` models | Decided: pydantic v2 for the whole `querysource/semantic/` package; 2.12.5 installed, to be declared as a core dependency. |
+| `pyyaml>=6` | Parse the resource YAML in `query_raw` | 6.0.3 installed, transitive. |
+
+🔗 **Existing Code to Reuse:**
+- `querysource/providers/abstract.py` — `BaseProvider` (`__init__`, `dry_run`, `query`, `close`, `columns`, `describe_columns`).
+- `querysource/providers/default.py` — `defaultProvider.query()` pattern (`async with await self._connection.connection() as conn: result, error = await conn.query(sql)`).
+- `querysource/queries/qs.py` — `QS.build_provider()` slug path (repository read, `get_provider`, conditions merge).
+- `querysource/interfaces/connections.py` — `Connection.get_provider`, `load_provider`, `datasource(name)`, `DATASOURCES`.
+- `querysource/datasources/drivers/__init__.py` — `SUPPORTED` driver registry (driver name → dialect map source).
+- `querysource/auth/_resource_types.py`, `querysource/auth/enforcement.py` — `ResourceType` shim and `enforce_principal`.
+- `querysource/auth/principal.py` — `QSPrincipal.to_userinfo()` as the source of `user_attributes`.
+- `querysource/handlers/service.py` — `QueryService.query()` already merges JSON body + query params into `conditions`, so `metrics`/`dimensions`/`filters` arrive at the provider unchanged.
+- `querysource/queries/describe.py` — `describe_slug()` to publish the metric/dimension catalog.
+- `tests/e2e/conftest.py` — `FakeDefinitionRepository` for provider tests without a database.
+
+---

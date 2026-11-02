@@ -8,7 +8,7 @@ from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
 
 def _store() -> QueryStore:
     return QueryStore(database_namespace="localhost:5432/qs", schema="tenant1",
-                      table="queries", contract="tenant",
+                      table="queries", has_program_slug=False,
                       columns=frozenset({"query_slug"}))
 
 

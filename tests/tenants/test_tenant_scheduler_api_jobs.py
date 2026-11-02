@@ -8,12 +8,12 @@ from aiohttp import web
 from querysource.tenants import QueryStore
 
 
-def _store(schema: str = "tenant1", contract: str = "tenant") -> QueryStore:
+def _store(schema: str = "tenant1", has_program_slug: bool = False) -> QueryStore:
     return QueryStore(
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract=contract,
+        has_program_slug=has_program_slug,
         columns=frozenset({"query_slug"}),
     )
 
@@ -24,7 +24,7 @@ def _envelope(store: QueryStore) -> dict:
         "database_namespace": store.database_namespace,
         "schema": store.schema,
         "table": store.table,
-        "contract": store.contract,
+        "contract": "legacy" if store.has_program_slug else "tenant",
     }
 
 
@@ -76,7 +76,7 @@ async def test_query_multi_refresh_envelope_roundtrip() -> None:
         scheduled_query_job,
     )
 
-    store = _store("tenant1", "tenant")
+    store = _store("tenant1", False)
     envelope = _envelope(store)
 
     # AC-1: a matching envelope revalidates cleanly and QS/MultiQS receive
@@ -117,7 +117,7 @@ async def test_query_multi_refresh_envelope_roundtrip() -> None:
         database_namespace="otherhost:5432/other",
         schema="tenant1",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug"}),
     )
     notified = []
@@ -171,7 +171,7 @@ async def test_api_serialization_filter_pause_resume_delete() -> None:
         return job
 
     view = SchedulerJobsView.__new__(SchedulerJobsView)
-    tenant_owner = _envelope(_store("tenant1", "tenant"))
+    tenant_owner = _envelope(_store("tenant1", False))
     serialized = view._serialize_job(_mock_job("qsj2-query-abc123-shared", tenant_owner))
     assert serialized["kind"] == "query"
     assert serialized["owner"]["schema"] == "tenant1"
@@ -237,7 +237,7 @@ async def test_crud_commit_then_sync_failure_header() -> None:
     from querysource.tenants import QueryIdentity, TenantRegistry
 
     tenant_registry = TenantRegistry()
-    store = _store("tenant1", "tenant")
+    store = _store("tenant1", False)
     tenant_registry._stores = (store,)
     tenant_registry._default_store = store
 

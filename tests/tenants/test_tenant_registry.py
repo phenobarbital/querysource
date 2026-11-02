@@ -61,16 +61,15 @@ async def test_discovery_preserves_legacy_program_slug_when_loading() -> None:
 
     registry = TenantRegistry()
     await registry.discover(conn)
-    assert {store.schema for store in registry.stores()} == {"public", "tenant1"}
+    # FEAT-176: a non-default table WITH program_slug is accepted (has_program_slug=True).
+    assert {store.schema for store in registry.stores()} == {"public", "tenant1", "old_tenant"}
+    assert registry.resolve("old_tenant").has_program_slug
     legacy = registry.resolve(None)
     assert legacy == registry.resolve("public")
-    assert legacy.contract == "legacy"
+    assert legacy.has_program_slug
     assert legacy.columns == frozenset({"query_slug", "program_slug", "description"})
-    assert registry.resolve("tenant1").contract == "tenant"
-    assert any(
-        item["schema"] == "old_tenant" and "program_slug" in item["reason"]
-        for item in registry.diagnostics()
-    )
+    assert not registry.resolve("tenant1").has_program_slug
+    assert not any(item["schema"] == "old_tenant" for item in registry.diagnostics())
 
     repo = DefinitionRepository(registry=registry, connection_factory=connection_factory)
     loaded = await repo.get(QueryIdentity(store=legacy, slug="hisense_stores"))
@@ -214,7 +213,7 @@ async def test_discovery_tables_views_marker_shape_grants() -> None:
     assert isinstance(store, QueryStore)
     assert store.schema == "tenant1"
     assert store.table == "queries"
-    assert store.contract in ("legacy", "tenant")
+    assert isinstance(store.has_program_slug, bool)
 
     # Test resolve with public
     public_store = registry.resolve("public")
@@ -396,7 +395,7 @@ async def test_no_public_schema_never_picks_arbitrary_tenant_as_default() -> Non
     # ...but neither is silently promoted to "the default".
     default_store = registry.resolve(None)
     assert default_store.schema == "public"
-    assert default_store.contract == "legacy"
+    assert default_store.has_program_slug
     # And the fallback's namespace matches the REAL connection this
     # registry actually discovered against — not a divergent hardcoded
     # literal — so its cache-key/job-id digest is consistent with every

@@ -28,9 +28,12 @@ with one key difference:
 | `program_slug` | Persisted | **Not persisted** — derived at runtime from owner schema |
 | `program_id` | Optional | Required, defaults to 1 |
 
-The runtime adapter creates a detached `QueryModel` with `program_slug=store.schema`
-for tenant definitions. This adapter is never exported as DDL, schema metadata,
-or CRUD payloads.
+FEAT-176: the shape is a single flag, `QueryStore.has_program_slug`, computed at
+discovery as `"program_slug" in columns` (there is no legacy/tenant contract enum).
+A store **with** the column keeps and uses the stored value (any schema, not only
+`public`); a store **without** it derives `program_slug=store.schema` at runtime.
+The runtime adapter is never exported as DDL, schema metadata, or CRUD payloads.
+The default store is the configured `QS_QUERIES_SCHEMA`.`QS_QUERIES_TABLE`.
 
 ### Provisional DDL gate
 
@@ -270,6 +273,72 @@ result, error = await QS(slug="legacy_report", tenant="public").query()
 Library callers that run a slug on behalf of a user pass `principal=QSPrincipal(...)`;
 `tenant=` still selects the store. See [PBAC_PROGRAMMATIC.md](PBAC_PROGRAMMATIC.md).
 
+### Moving a definition between stores (FEAT-176)
+
+`GET /api/v1/management/query-stores` lists the registered stores without any
+host or DSN: `{"version": 1, "data": [{"tenant", "schema", "table",
+"has_program_slug", "is_default"}]}` (default first, `tenant: null`).
+
+`POST /api/v1/management/queries/{slug}/move` with body
+`{"tenant": str|null, "destination_tenant": str|null}` (both keys required,
+`null` = default store, no other keys) moves one definition synchronously. It uses
+the same management boundary as the CRUD writes (authenticated actor required,
+`datasource:use` on `pg_admin` for a scheduled write-capable multi). Procedure:
+
+1. Resolve both stores (`move_same_store` 400, `tenant_not_available` 404).
+2. Refuse while a scheduled run of this definition is executing in this worker
+   (`move_run_in_flight` 409) — pausing stops future dispatches, not a live run.
+3. If this process runs the scheduler, pause the slug's origin jobs.
+4. One transaction: `SELECT ... FOR UPDATE` the origin row (`query_not_found` 404),
+   refuse a pipeline whose saved children would be silently re-pointed (below),
+   check the destination has none (`move_target_exists` 409), record the run-as
+   transfer (below), project the row onto the destination's live columns,
+   `INSERT`, read the persisted row back and compare it field by field, then
+   `DELETE` exactly one origin row. The readback catches a destination that
+   stored something other than what was sent (a coercing column type, a
+   rewriting trigger) while the origin row is still there to roll back to:
+   `move_validation_failed` 400 with `details.columns`.
+   `program_slug` is dropped when the destination lacks it; a destination that has
+   it receives the origin's runtime value (its schema). Any other non-null,
+   non-empty origin value without a destination column fails with
+   `move_validation_failed` 400 and `details.columns`. `updated_by`/`updated_at`
+   are stamped with the mover; `created_*` is preserved verbatim.
+5. On failure before commit the paused jobs are resumed and the error returned.
+6. After commit: `register_slug(slug, tenant=destination)` and remove the origin
+   jobs. A re-registration failure keeps the move committed and answers 200 with
+   `scheduler.status: "failed"` (`"not_configured"` without a scheduler).
+
+**Inherited child references.** A saved child inside a multi pipeline that omits
+`tenant` resolves against its parent's owner, so moving the parent re-points it —
+silently, because nothing fails at move time. The pipeline then breaks on its next
+run, or quietly runs a *different* definition that happens to share the slug in the
+destination. The move refuses with `move_inherited_references` 409 and
+`details.blockers: [{code, message, path}]` naming each `queries.<alias>.tenant` to
+pin first (an explicit `null` selects the default store and is a valid pin). A
+reference whose slug or tenant is templated or computed cannot be proven safe and
+refuses with `move_dependency_analysis_unsupported` 409. `query_raw` is never
+rewritten and SQL text is never scanned with a regex.
+
+**Run-as transfer.** When the definition carries `scheduler_run_as_user_id`, the
+move writes a `clear` event on the origin's `{table}_run_as_audit` and a `set`
+event on the destination's, both attributed to the user performing the move — a
+delegated execution identity never changes owner store without a trail. The
+original stored identity is preserved: a move never rebinds execution to whoever
+pressed Move. If either audit table is missing, the move refuses with
+`move_validation_failed` 400 and `details.run_as_audit` before anything is written.
+
+Errors use `{error_code, message, details?}`; the exact request/response contract
+is `tests/fixtures/query_move_contract_v2.json`, replayed against the real handler.
+
+**Per-worker caveat.** Each gunicorn worker has its own in-memory scheduler and
+there is no cross-worker resync (no polling, no LISTEN/NOTIFY). Steps 2 and 5 only
+affect the worker that served the request. Other workers keep their origin job,
+but every scheduled job first runs a cheap `SELECT 1` against its own store and,
+when the row is gone, skips the run and removes itself from that worker. Other
+workers start the destination schedule only after a restart (or the operator's
+usual reload). The cheapest safe procedure for scheduled definitions remains:
+pause/stop the scheduler, move, restart.
+
 ## Discovery and allowlist
 
 ### Startup discovery
@@ -282,7 +351,8 @@ On QuerySource initialization:
 3. Exclude the system schemas `information_schema`, `pg_catalog`, `pg_toast`, `pg_temp`
 4. Exclude the reserved `management` schema (reserved for legacy routes)
 5. Exclude any schema whose name contains a `/`
-6. Validate complete column contract for tenant compatibility
+6. Register every remaining table (plus the configured `QS_QUERIES_SCHEMA`.`QS_QUERIES_TABLE`)
+   and record `has_program_slug`; a table with `program_slug` is no longer rejected
 7. Publish immutable registry snapshot
 
 ### Allowlist behavior
@@ -372,7 +442,7 @@ The scheduler uses qualified job IDs:
 | Legacy (public) | `query_<slug>`, `multi_<slug>`, `cache_<slug>` |
 | Tenant | `qsj2-<kind>-<store_digest>-<encoded_slug>` |
 
-Every job carries canonical schema/table/contract and tenant selection.
+Every job carries canonical schema/table/has_program_slug and tenant selection.
 Scheduler sync failures are reported in response header `X-QS-Scheduler-Sync: failed`.
 
 **Process ownership (per-process visibility only).** `QSScheduler`'s
@@ -418,7 +488,7 @@ TenantOwnerEnvelope = {
     "database_namespace": str,
     "schema": str,
     "table": str,
-    "contract": "legacy" | "tenant"
+    "has_program_slug": bool
 }
 ```
 

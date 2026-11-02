@@ -1,0 +1,56 @@
+Decisions taken during discovery (Rounds 0–2) are binding for the spec:
+
+- **Flow**: `type: feature`, `base_branch: dev`.
+- **Entry point**: a new `BaseProvider` subclass (`semanticProvider`) dispatched
+  by the existing slug path (`QS.build_provider` → `Connection.get_provider` →
+  `load_provider('semantic')`). The Python `compile()/execute()` API is a thin
+  wrapper on top of the same code, not a separate engine.
+- **Model store**: the DB record (`QueryModel.query_raw`) holds the QuerySource
+  resource YAML (`kind: semantic`, `connection`, `semantic:` block). The
+  `semantic.definition` is either an **inline** model document or a **relative
+  path** resolved under a configured directory (`QS_SEMANTIC_MODELS_DIR`).
+  Inline wins when both are present.
+- **Dependency policy**: Sidemantic is an **optional extra**
+  (`querysource[semantic]`), used **compile-only** (never DuckDB execution).
+  Execution always goes through the datasource's asyncdb connection. A small
+  `SemanticCompiler` Protocol keeps Sidemantic objects out of the public
+  contract so another compiler can be plugged in later.
+- **Governance, both layers**: navigator-auth PBAC gates the resource and the
+  per-metric / per-dimension allow-list (new `ResourceType.SEMANTIC`); when PBAC
+  is disabled everything is allowed, exactly like `enforce_principal` today.
+  Sidemantic `SecurityPolicy` (access gate + `row_filters`) is enforced at
+  compile time from `user_attributes` derived from the session / principal, and
+  stays deny-by-default for secured models even without PBAC.
+- **Filter contract**: structured `{field, op, value}` objects **plus**
+  validated predicate strings (parsed with sqlglot, columns checked against the
+  model's dimensions, operator allow-list). Nothing reaches the compiler
+  unvalidated.
+- **Resolved on 2026-10-14 (see Open Questions)**: explicit `semantic` branch
+  in `Connection.get_provider()`; `pydantic.BaseModel` for the semantic models
+  and `pydantic>=2` declared as a core dependency; AGPL extra approved as an
+  unmodified dependency; `user_attributes` always in the
+  `QSPrincipal.to_userinfo()` shape; `ResourceType.SEMANTIC` via the shim now
+  and upstream later; field permissions named `<slug>:metric:<name>` /
+  `<slug>:dimension:<name>` with action `semantic:use`; inline Ossie through a
+  temp file and the public adapter API; request-level `time_grain` rewrites
+  unsuffixed time dimensions; a catalog endpoint
+  `GET /api/v1/semantic/{slug}/catalog` ships in v1; role-based
+  `governance.row_filters` live in the resource YAML.
+- **Targets**: any dialect Sidemantic supports; dialect is derived from the
+  datasource driver (`pg`/`pg_admin`/`postgres` → `postgres`, `bigquery`,
+  `mysql`, `mariadb` → `mysql`, `sqlserver` → `tsql`, `clickhouse`, `oracle`,
+  `sqlite`, …). Unknown drivers compile with the ANSI generator and a warning.
+- **Compile result is an object**, not a string: `sql`, `parameters`,
+  `connection`, `dialect`, `model_version`, `warnings`, plus the resolved
+  metric/dimension list.
+- **Async-first, no event-loop blocking**: compilation is CPU-bound Python
+  (sqlglot); it must be short and cached per model revision. Loading a model
+  must never open a warehouse connection.
+- **No raw SQL from callers**: never concatenate user input into SQL; filters
+  are rendered through sqlglot/Sidemantic literal quoting.
+- **Licensing**: Sidemantic is AGPL-3.0; QuerySource only imports it as an
+  unmodified optional dependency. Legal sign-off recorded as an open question.
+- **Code standards**: aiohttp handlers, `navconfig` for settings, `self.logger`,
+  Google docstrings, strict type hints, tests in `tests/`.
+
+---

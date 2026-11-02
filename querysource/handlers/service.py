@@ -90,6 +90,19 @@ class QueryService(AbstractHandler):
         # get conditions
         conditions = {**options, **params}
         self.logger.debug(f'Test Query: {query}, format: {queryformat}, conditions: {conditions}')
+        # FEAT-182: free SQL — same gates as QueryExecutor._enforce_payload.
+        await self._enforce_pbac(
+            request,
+            resource_type=ResourceType.RAW_QUERY,
+            resource_name="raw_query",
+            action="raw_query:execute",
+        )
+        await self._enforce_pbac(
+            request,
+            resource_type=ResourceType.DRIVER,
+            resource_name=driver,
+            action="driver:use",
+        )
         if query := await self.get_source(
                 request,
                 slug=None,
@@ -199,7 +212,18 @@ class QueryService(AbstractHandler):
         # original, unchanged _enforce_pbac path.
         tenant = request.get('qs_tenant')
         registry = request.app.get("qs_tenant_registry")
-        if registry is not None:
+        if slug is None:
+            # FEAT-182: direct driver route (/api/v2/queries/{driver}/...) —
+            # there is no definition to own, so the request is decided by
+            # driver:query on the driver (and never touches the tenant
+            # registry). A missing driver name is a 404 (fail-closed).
+            await self._enforce_pbac(
+                request,
+                resource_type=ResourceType.DRIVER,
+                resource_name=args.get('driver'),
+                action="driver:query",
+            )
+        elif registry is not None:
             try:
                 store = registry.resolve(tenant)
             except web.HTTPNotFound:

@@ -67,7 +67,7 @@ def _fake_qs(slug: str, principal: QSPrincipal) -> tuple[QS, list]:
         database_namespace="localhost:5432/querysource",
         schema="client_a",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset({"query_slug"}),
     )
     identity = QueryIdentity(store=store, slug=slug)

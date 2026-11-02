@@ -383,6 +383,9 @@ QS_DESCRIBE_ADMIN_GROUPS = [
 ]
 # Seconds allowed for GET /api/v1/queries/{slug}/columns to prepare the statement.
 QS_DESCRIBE_COLUMNS_TIMEOUT = float(config.get('QS_DESCRIBE_COLUMNS_TIMEOUT', fallback=5))
+# FEAT-182: when False, describe list/detail/columns require slug:list / slug:describe
+# and no longer accept slug:execute as a fallback.
+QS_DESCRIBE_EXECUTE_FALLBACK = config.getboolean('QS_DESCRIBE_EXECUTE_FALLBACK', fallback=True)
 
 ## QSScheduler (APScheduler-based query scheduler):
 ENABLE_QS_SCHEDULER = config.getboolean('ENABLE_QS_SCHEDULER', fallback=False)
@@ -463,6 +466,9 @@ os.environ['GENSIM_DATA_DIR'] = str(GENSIM_DATA_DIR)
 QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)
 QS_POLICY_PATH = config.get('QS_POLICY_PATH', fallback=str(BASE_DIR / 'policies'))
 QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
+# FEAT-182: abort startup when QS_PBAC_ENABLED is on but the PBAC bootstrap failed,
+# instead of silently running with enforcement off.
+QS_PBAC_STRICT_BOOT = config.getboolean('QS_PBAC_STRICT_BOOT', fallback=False)
 
 # Allow requests that carry no user session but were authorized by a
 # sessionless navigator-auth authz backend (IP / host / User-Agent, e.g.
@@ -475,6 +481,14 @@ QS_PBAC_CACHE_TTL = config.getint('QS_PBAC_CACHE_TTL', fallback=300)
 QS_PBAC_ALLOW_SESSIONLESS_AUTHZ = config.getboolean(
     'QS_PBAC_ALLOW_SESSIONLESS_AUTHZ', fallback=False
 )
+
+# ── Semantic layer (FEAT-175) ─────────────────────────────────────────────────
+QS_SEMANTIC_MODELS_DIR = config.get('QS_SEMANTIC_MODELS_DIR', fallback=str(BASE_DIR / 'semantic'))
+QS_SEMANTIC_DEFAULT_LIMIT = config.getint('QS_SEMANTIC_DEFAULT_LIMIT', fallback=500)
+QS_SEMANTIC_MAX_LIMIT = config.getint('QS_SEMANTIC_MAX_LIMIT', fallback=5000)
+QS_SEMANTIC_MAX_FILTERS = config.getint('QS_SEMANTIC_MAX_FILTERS', fallback=32)
+QS_SEMANTIC_CACHE_SIZE = config.getint('QS_SEMANTIC_CACHE_SIZE', fallback=64)
+QS_SEMANTIC_MAX_MODEL_BYTES = config.getint('QS_SEMANTIC_MAX_MODEL_BYTES', fallback=2 * 1024 * 1024)
 
 # ── Airtable Integration (FEAT-096) ───────────────────────────────────────────
 # OAuth2 client credentials (server-side; never sent to the browser).

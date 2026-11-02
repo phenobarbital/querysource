@@ -27,6 +27,7 @@ from .handlers import (
     QueryHandler,
     QueryManager,
     QueryService,
+    SemanticCatalog,
     VariablesService,
 )
 from .template import TemplateParser
@@ -44,6 +45,7 @@ from .conf import (
     QS_AIRTABLE_OAUTH_ENABLED,  # added (FEAT-096)
     QS_PBAC_CACHE_TTL,
     QS_PBAC_ENABLED,
+    QS_PBAC_STRICT_BOOT,
     QS_POLICY_PATH,
     USE_VECTORS,
     vector_models,
@@ -156,11 +158,14 @@ class QuerySource(metaclass=Singleton):
                     QS_POLICY_PATH, QS_PBAC_CACHE_TTL,
                 )
             else:
-                _svc_logger.warning(
+                _msg = (
                     "QS_PBAC_ENABLED=True but PBAC bootstrap returned None. "
                     "Policy enforcement is OFF for this process. "
                     "Check QS_POLICY_PATH and navigator-auth installation."
                 )
+                if QS_PBAC_STRICT_BOOT:
+                    raise RuntimeError(_msg)
+                _svc_logger.warning(_msg)
         else:
             _svc_logger.debug("QS PBAC disabled (QS_PBAC_ENABLED=False)")
         # ──────────────────────────────────────────────────────────────────
@@ -225,6 +230,13 @@ class QuerySource(metaclass=Singleton):
         r = self.app.router.add_get('/api/v1/{tenant}/queries/{slug}/columns', dh.columns)
         routes.append(r)
 
+        ### Semantic catalog (FEAT-175): metrics/dimensions with per-field grants.
+        sc = SemanticCatalog()
+        r = self.app.router.add_get('/api/v1/semantic/{slug}/catalog', sc.catalog)
+        routes.append(r)
+        r = self.app.router.add_get('/api/v1/{tenant}/semantic/{slug}/catalog', sc.catalog)
+        routes.append(r)
+
         ### Logging Service:
         lg = LoggingService()
         r = self.app.router.add_get('/api/v1/qs/audit_log', lg.audit_log)
@@ -234,6 +246,15 @@ class QuerySource(metaclass=Singleton):
             qs = f'?{request.query_string}' if request.query_string else ''
             raise web.HTTPTemporaryRedirect(f'/api/v1/qs/audit_log{qs}')
         r = self.app.router.add_get('/api/v1/audit_log', _redirect_audit_log)
+        routes.append(r)
+
+        ### Query store catalog and synchronous move (FEAT-176) ###
+        # Registered BEFORE the Query Manager: ``queries{meta:\:?.*}`` would shadow the move route.
+        from .handlers.query_moves import QueryMoveView
+        from .handlers.query_stores import QueryStoreCatalog
+        r = self.app.router.add_get('/api/v1/management/query-stores', QueryStoreCatalog().list)
+        routes.append(r)
+        r = self.app.router.add_route('POST', r'/api/v1/management/queries/{slug}/move', QueryMoveView)
         routes.append(r)
 
         ### Query Manager ###

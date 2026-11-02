@@ -26,7 +26,7 @@ from ..models import QueryModel
 from ..queries.multi import definition_requires_scheduler_grant
 from ..repositories import DefinitionRepository
 from ..tenant_errors import TenantError
-from ..tenants import QueryIdentity, QueryStore, TenantRegistry
+from ..tenants import QueryIdentity, QueryStore, TenantRegistry, is_configured_default
 from ..types.validators import Entity
 
 # Output
@@ -215,6 +215,20 @@ class QueryManager(QueryView):
                 logger=self.logger,
             )
 
+    async def _enforce_definition_access(self, slug: str | None, action: str) -> None:
+        """Gate a management call with ``slug:view`` / ``slug:manage`` (FEAT-182).
+
+        ``slug=None`` (list, route-level ``:meta``) is evaluated on ``"*"``.
+        No-op when PBAC is off; raises ``web.HTTPNotFound`` on deny.
+        """
+        await enforce_request_pbac(
+            self.request,
+            ResourceType.SLUG,
+            str(slug) if slug else "*",
+            action,
+            logger=self.logger,
+        )
+
     async def _sync_definition_jobs(self, identity: QueryIdentity) -> bool:
         """Synchronize jobs only after the definition transaction commits.
         
@@ -233,7 +247,8 @@ class QueryManager(QueryView):
             
         try:
             # Synchronize only the selected owner's scheduled jobs
-            await scheduler.register_slug(identity.slug, tenant=identity.store.schema if identity.store.contract == "tenant" else None)
+            tenant = None if is_configured_default(identity.store) else identity.store.schema
+            await scheduler.register_slug(identity.slug, tenant=tenant)
             return True
         except Exception as exc:
             # Failure logs and returns False; callers set failure header
@@ -264,6 +279,10 @@ class QueryManager(QueryView):
                 pass
         except KeyError:
             query_slug = None
+
+        # FEAT-182: gate before the try/except below, whose catch-all would turn
+        # a PBAC 404 into a 500.
+        await self._enforce_definition_access(query_slug, "slug:view")
 
         # Resolve store once before any field/filter/:meta/:insert decision
         # (AC-2/AC-4: get, pagination, :meta and :insert all route through
@@ -397,11 +416,11 @@ class QueryManager(QueryView):
                 status=400,
             )
 
-        # AC-3: tenant-contract stores reject program_slug in sort/search/
+        # AC-3: stores without program_slug reject it in sort/search/
         # fields — a request-local check scoped to this store, never a
         # module-global mutation of SORTABLE_COLUMNS/SEARCHABLE_COLUMNS
         # (which must keep serving legacy program_slug listing unchanged).
-        if store is not None and store.contract == "tenant" and (
+        if store is not None and not store.has_program_slug and (
             params.sort_field == "program_slug"
             or (params.fields and "program_slug" in params.fields)
             or "program_slug" in qp
@@ -445,7 +464,7 @@ class QueryManager(QueryView):
             # unconditionally SQL'd against program_slug for every store.
             exclude_search_columns = (
                 frozenset({"program_slug"})
-                if store is not None and store.contract == "tenant"
+                if store is not None and not store.has_program_slug
                 else frozenset()
             )
             where = build_where_clause(
@@ -523,6 +542,7 @@ class QueryManager(QueryView):
                 response={"message": 'Query Slug is missing'},
                 headers=headers
             )
+        await self._enforce_definition_access(query_slug, "slug:manage")
         # try to got post data
         data = await self.json_data()
         if not data:
@@ -652,6 +672,7 @@ class QueryManager(QueryView):
                 exception=err,
                 headers=headers
             )
+        await self._enforce_definition_access(query_slug, "slug:manage")
         
         # Resolve store once before any field/filter/:meta/:insert decision
         registry = self.request.app.get('qs_tenant_registry')
@@ -797,6 +818,7 @@ class QueryManager(QueryView):
                 response={"message": 'Query Name (slug) is missing'},
                 headers=headers
             )
+        await self._enforce_definition_access(data['query_slug'], "slug:manage")
         
         # Resolve store once before any field/filter/:meta/:insert decision
         registry = self.request.app.get('qs_tenant_registry')
@@ -912,6 +934,7 @@ class QueryManager(QueryView):
                 response={"message": "Cannot Update row without JSON post data"},
                 status=406
             )
+        await self._enforce_definition_access(slug["query_slug"], "slug:manage")
         
         # Resolve store once before any field/filter/:meta/:insert decision
         registry = self.request.app.get('qs_tenant_registry')

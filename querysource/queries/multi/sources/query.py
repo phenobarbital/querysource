@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 from aiohttp import web
@@ -9,6 +9,9 @@ from querysource.tenants import LoadedDefinition, QueryStore
 from ....interfaces.source_hooks import SourceHooks
 from .base import ThreadSource
 from .executors import LocalExecutor, RemoteConfig, RemoteExecutor
+
+if TYPE_CHECKING:
+    from ....auth.principal import QSPrincipal
 
 
 class ThreadQuery(ThreadSource):
@@ -39,6 +42,7 @@ class ThreadQuery(ThreadSource):
         store: Optional[QueryStore] = None,
         definition: Optional[LoadedDefinition] = None,
         hooks: Optional[SourceHooks] = None,
+        principal: "QSPrincipal | None" = None,
     ):
         assert isinstance(query, dict), (
             f"ThreadQuery expects a dict for 'query', got {type(query).__name__!r}"
@@ -50,6 +54,7 @@ class ThreadQuery(ThreadSource):
         self._store = store
         # Definition MultiQS already loaded for this child (None → the QueryObject loads it).
         self._definition = definition
+        self._principal = principal
         # FEAT-157: MultiQS-validated pre/post-hooks, run around fetch() by ThreadSource.run().
         self.set_hooks(hooks)
         # Note: self._request is already set by ThreadSource.__init__ (via super());
@@ -89,12 +94,17 @@ class ThreadQuery(ThreadSource):
             :class:`~querysource.exceptions.QueryException`: On provider
                 build or query execution failure (local or remote).
         """
+        execute_kwargs = {
+            "store": self._store,
+            "definition": self._definition,
+        }
+        if self._principal is not None:
+            execute_kwargs["principal"] = self._principal
         await self._executor.execute(
             self._name,
             self._query,
             self._queue,
             self._request,
-            store=self._store,
-            definition=self._definition,
+            **execute_kwargs,
         )
         return None

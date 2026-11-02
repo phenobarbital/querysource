@@ -73,7 +73,7 @@ async def test_tenant_list_with_superuser(test_client, fake_qs_connection):
         database_namespace="test_ns",
         schema="acme_schema",
         table="acme_queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -105,7 +105,7 @@ async def test_tenant_membership_prefilter_deny(test_client, fake_qs_connection)
         database_namespace="test_ns",
         schema="acme_schema",
         table="acme_queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -128,7 +128,7 @@ async def test_tenant_membership_prefilter_allow(test_client, fake_qs_connection
         database_namespace="test_ns",
         schema="acme_schema",
         table="acme_queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -154,7 +154,7 @@ async def test_tenant_sort_program_slug_400(test_client, fake_qs_connection):
         database_namespace="test_ns",
         schema="acme_schema",
         table="acme_queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -176,7 +176,7 @@ async def test_tenant_case_sensitive_schema(test_client, fake_qs_connection):
         database_namespace="test_ns",
         schema="AcMe_Schema",  # Mixed case
         table="definitions",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -204,7 +204,7 @@ async def test_tenant_detail_loader_repository(test_client, fake_qs_connection):
         database_namespace="test_ns",
         schema="acme",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -254,7 +254,7 @@ async def test_tenant_detail_loader_toctou_query_not_found_gives_404(test_client
         database_namespace="test_ns",
         schema="acme",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -290,7 +290,7 @@ async def test_tenant_columns_passes_tenant_to_qs(test_client, fake_qs_connectio
         database_namespace="test_ns",
         schema="acme",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -349,7 +349,7 @@ async def test_tenant_evaluator_isolated_call_wiring(test_client, fake_qs_connec
         database_namespace="test_ns",
         schema="acme",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]
@@ -386,7 +386,7 @@ async def test_tenant_evaluator_never_shares_app_cache(test_client, fake_qs_conn
         database_namespace="test_ns",
         schema="acme",
         table="queries",
-        contract="tenant",
+        has_program_slug=False,
         columns=frozenset(["query_slug", "provider", "description", "updated_at"])
     )
     registry = test_client.app["qs_tenant_registry"]

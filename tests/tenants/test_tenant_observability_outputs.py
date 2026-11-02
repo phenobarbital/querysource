@@ -9,12 +9,12 @@ from querysource.ownership_logging import implicit_artifact_name, ownership_fiel
 from querysource.tenants import QueryIdentity, QueryStore
 
 
-def _store(schema: str = "tenant1", contract: str = "tenant") -> QueryStore:
+def _store(schema: str = "tenant1", has_program_slug: bool = False) -> QueryStore:
     return QueryStore(
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract=contract,
+        has_program_slug=has_program_slug,
         columns=frozenset({"query_slug"}),
     )
 
@@ -37,7 +37,7 @@ async def test_ownership_fields_exclude_secrets() -> None:
     assert "url" not in fields
 
     # A bare QueryStore (no slug attached) still yields owner/schema/table.
-    store_only = ownership_fields(_store("tenant2", "legacy"))
+    store_only = ownership_fields(_store("tenant2", True))
     assert store_only == {"owner": "tenant2", "schema": "tenant2", "table": "queries"}
     assert "slug" not in store_only
 
@@ -194,7 +194,7 @@ async def test_event_context_non_http_and_nested() -> None:
         async def get_definition_repository(self):
             class _Registry:
                 def resolve(self, tenant):
-                    return _store("tenant1", "tenant")
+                    return _store("tenant1", False)
 
             class _Repo:
                 registry = _Registry()

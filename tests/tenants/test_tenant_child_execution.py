@@ -13,12 +13,12 @@ from querysource.queries.multi.sources.query import ThreadQuery
 from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
 
 
-def _tenant_store(schema: str = "tenant1", contract: str = "tenant") -> QueryStore:
+def _tenant_store(schema: str = "tenant1", has_program_slug: bool = False) -> QueryStore:
     return QueryStore(
         database_namespace="localhost:5432/querysource",
         schema=schema,
         table="queries",
-        contract=contract,
+        has_program_slug=has_program_slug,
         columns=frozenset({"query_slug", "description"}),
     )
 
@@ -29,7 +29,7 @@ async def test_parent_explicit_null_and_named_child_owner() -> None:
     # Setup fake repository and registry
     store_tenant1 = _tenant_store("tenant1")
     store_tenant2 = _tenant_store("tenant2")
-    store_legacy = _tenant_store("public", "legacy")
+    store_legacy = _tenant_store("public", True)
 
     # We have a parent MultiQS with tenant=None (explicit null)
     # It has two child queries:
@@ -117,7 +117,7 @@ async def test_parent_explicit_null_and_named_child_owner() -> None:
 @pytest.mark.asyncio
 async def test_input_config_is_not_mutated() -> None:
     """input config is not mutated."""
-    store_legacy = _tenant_store("public", "legacy")
+    store_legacy = _tenant_store("public", True)
     ident_q1 = QueryIdentity(store=store_legacy, slug="q1")
     loaded_q1 = LoadedDefinition(
         identity=ident_q1,
@@ -169,7 +169,7 @@ async def test_alias_vs_slug_preflight_before_side_effect() -> None:
     # Preflight policy checks on resolved references before a known batch starts.
     # If a child query is missing a slug, or if a child query's preflight check fails,
     # it must raise before starting any threads.
-    store_legacy = _tenant_store("public", "legacy")
+    store_legacy = _tenant_store("public", True)
 
     class FakeRegistry:
         def resolve(self, tenant):
@@ -213,8 +213,8 @@ async def test_thread_loop_owner_and_single_queue_put() -> None:
     """thread loop owner and single queue put."""
     # Verify LocalExecutor forwards resolved store into loop-local QueryObject
     # and RemoteExecutor accepts the keyword now and refuses nonlegacy store.
-    store_tenant = _tenant_store("tenant1", "tenant")
-    store_legacy = _tenant_store("public", "legacy")
+    store_tenant = _tenant_store("tenant1", False)
+    store_legacy = _tenant_store("public", True)
 
     # LocalExecutor test
     local_exec = LocalExecutor()
@@ -373,7 +373,7 @@ async def test_query_missing_slug_and_query_still_raises() -> None:
 
     class FakeRegistry:
         def resolve(self, tenant):
-            return _tenant_store("public", "legacy")
+            return _tenant_store("public", True)
 
     class FakeRepo:
         registry = FakeRegistry()
@@ -469,7 +469,7 @@ async def test_top_level_stored_slug_lookup_passes_tenant_selector() -> None:
 async def test_preloaded_single_query_slug_is_loaded_once_and_handed_to_the_thread() -> None:
     """A definition already loaded for the top-level slug is never re-read: not by the child preflight,
     and not by the thread's QueryObject (which gets it via ThreadQuery → LocalExecutor)."""
-    store_tenant1 = _tenant_store("tenant1", "tenant")
+    store_tenant1 = _tenant_store("tenant1", False)
     ident = QueryIdentity(store=store_tenant1, slug="dashboard")
     loaded = LoadedDefinition(
         identity=ident,
@@ -521,7 +521,7 @@ async def test_preloaded_single_query_slug_is_loaded_once_and_handed_to_the_thre
 @pytest.mark.asyncio
 async def test_local_executor_forwards_the_loaded_definition_to_query_object() -> None:
     """LocalExecutor hands the child's loaded definition to QueryObject (reused instead of re-read)."""
-    store_tenant = _tenant_store("tenant1", "tenant")
+    store_tenant = _tenant_store("tenant1", False)
     loaded = LoadedDefinition(
         identity=QueryIdentity(store=store_tenant, slug="q1"),
         runtime=QueryModel(query_slug="q1", program_slug="tenant1", provider="db"),

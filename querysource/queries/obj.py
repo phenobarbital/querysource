@@ -7,9 +7,11 @@ from ..exceptions import (
     DataNotFound,
     DriverError,
     EmptySentence,
+    QueryAccessDenied,
     QueryException,
 )
 from ..providers import BaseProvider  # renamed to Providers.
+from ..semantic.exceptions import SemanticError
 from .base import BaseQuery
 
 
@@ -150,11 +152,15 @@ class QueryObject(BaseQuery):
                     "definition": objquery,
                     "conditions": conditions,
                     "request": self._request,
-                    "loop": self._loop
+                    "loop": self._loop,
+                    "principal": self._principal,
                 }
                 self._qs = provider(**args)
                 await self._qs.prepare_connection()
                 return self
+            except (SemanticError, QueryAccessDenied):
+                # Semantic and access errors keep their own status code.
+                raise
             except Exception as err:
                 self._logger.exception(
                     f"Cannot Initialize the provider {provider}, error: {err}"
@@ -228,7 +234,7 @@ class QueryObject(BaseQuery):
                         "QS unhandled Exception",
                         exception=ex,
                         code=500
-                    )
+                    ) from ex
                 finally:
                     await self._qs.close()
         elif self._type == 'query':
@@ -252,7 +258,7 @@ class QueryObject(BaseQuery):
                 except (RuntimeError, QueryException) as ex:
                     raise QueryException(
                         f"Error on Query: {ex}"
-                    )
+                    ) from ex
         else:
             result = {
                 "result": self._query
