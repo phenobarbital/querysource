@@ -1,0 +1,6 @@
+# >>> parrot-wiki Codex permissions >>>
+prefix_rule(pattern=["wikitoolkit"], decision="allow", justification="Allow repository WikiToolkit commands installed by parrot codex install")
+prefix_rule(pattern=["parrot", "wiki"], decision="allow", justification="Allow repository WikiToolkit commands installed by parrot codex install")
+prefix_rule(pattern=["/home/jesuslara/proyectos/querysource/.venv/bin/wikitoolkit"], decision="allow", justification="Allow repository WikiToolkit commands installed by parrot codex install")
+prefix_rule(pattern=["/home/jesuslara/proyectos/querysource/.venv/bin/parrot", "wiki"], decision="allow", justification="Allow repository WikiToolkit commands installed by parrot codex install")
+# <<< parrot-wiki Codex permissions <<<
