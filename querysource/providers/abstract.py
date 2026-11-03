@@ -35,6 +35,9 @@ RAW_QUERY_REASON = "no value was supplied for them in the conditions"
 class BaseProvider(SourceHooksMixin, ABC):
 
     __parser__: AbstractParser = None
+    #: Only providers whose parser applies the FEAT-184 user-filter step may
+    #: serve a ``user_filtering`` definition. Default False = fail closed.
+    __user_filter_capable__: bool = False
     _parser_options: dict = {}
 
     #: qsurl capabilities this provider renders natively (querysource/qsurl/capabilities.py).
@@ -273,8 +276,10 @@ class BaseProvider(SourceHooksMixin, ABC):
         return bool(getattr(definition, "user_filtering", False))
 
     def _assert_user_filter_capable(self) -> None:
-        """Refuse a ``user_filtering`` definition on a provider without a parser."""
-        if self._parser is None and self.user_filtering_required():
+        """Refuse user filtering unless this provider explicitly opts in."""
+        if not self.user_filtering_required():
+            return
+        if self.__parser__ is None or not type(self).__user_filter_capable__:
             from ..auth.user_filter import REASON_PARSER_REQUIRED
 
             self._logger.warning(
