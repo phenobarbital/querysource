@@ -70,7 +70,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -80,8 +80,9 @@
       "parallelism_notes": "Modifies querysource/auth/user_filter.py created by TASK-950 and imports its UserFilterOptions/UserFilterResult/reason constants and UserFilterDenied.",
       "assigned_to": null,
       "started_at": "2026-11-03T17:11:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-951-user-filter-compiler.md"
+      "completed_at": "2026-11-03T17:28:28+00:00",
+      "file": "sdd/tasks/completed/TASK-951-user-filter-compiler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-952",
@@ -109,7 +110,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -119,8 +120,9 @@
       "parallelism_notes": "Needs the QueryModel.user_filtering / user_filter_options fields from TASK-952 (describe_slug builds base from QueryModel.columns).",
       "assigned_to": null,
       "started_at": "2026-11-03T17:11:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-953-describe-user-filtering.md"
+      "completed_at": "2026-11-03T17:28:28+00:00",
+      "file": "sdd/tasks/completed/TASK-953-describe-user-filtering.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-954",
