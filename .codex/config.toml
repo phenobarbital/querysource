@@ -1,0 +1,32 @@
+# >>> parrot-wiki Codex MCP >>>
+[mcp_servers.wikitoolkit]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/wikitoolkit"
+args = ["mcp"]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.parrot-bounded-source]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/parrot"
+args = ["mcp-local", "bounded-source", "--config", "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"]
+
+[mcp_servers.parrot-browsing]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/parrot"
+args = ["mcp-local", "browsing", "--config", "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"]
+
+[mcp_servers.parrot-memory]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/parrot"
+args = ["mcp-local", "memory", "--config", "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"]
+
+[mcp_servers.parrot-sdd-coder]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/parrot"
+args = ["mcp-local", "sdd-coder", "--config", "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"]
+# <<< parrot-wiki Codex MCP <<<
+
+# >>> parrot-bookstore Codex MCP >>>
+[mcp_servers.bookstore]
+command = "/home/jesuslara/proyectos/querysource/.venv/bin/python"
+args = ["-m", "parrot.knowledge.bookstore.cli", "mcp"]
+cwd = "/home/jesuslara/proyectos/querysource"
+env_vars = ["PARROT_LIBRARY_DIR", "PARROT_HOME", "PARROT_BOOKSTORE_LLM", "PARROT_BOOKSTORE_LLM_LIGHT"]
+startup_timeout_sec = 30
+tool_timeout_sec = 180
+# <<< parrot-bookstore Codex MCP <<<
