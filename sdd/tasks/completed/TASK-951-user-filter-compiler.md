@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-950
@@ -308,8 +308,8 @@ See the test block in the Implementation Blueprint.
 
 ## Completion Note
 
-**Completed by**:
+**Completed by**: sdd-worker (FEAT-184)
 **Date**:
-**Notes**:
+**Notes**: Seat: gpt-5.6-sol (codex) · Attempts: 1 · merged by engine. Validated: tests/auth/test_user_filter.py green.
 
 **Deviations from spec**: none

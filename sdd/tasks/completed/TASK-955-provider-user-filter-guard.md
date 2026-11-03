@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: M (2-4h)
 **Depends-on**: TASK-954
@@ -275,8 +275,8 @@ See the test block in the Implementation Blueprint.
 
 ## Completion Note
 
-**Completed by**:
+**Completed by**: sdd-worker (FEAT-184)
 **Date**:
-**Notes**:
+**Notes**: Seat: gpt-5.6-sol x2 then gpt-5.6-luna (attempt 3) · merged manually (engine task-tier validation reported 0 failures). Source matched the blueprint; two tests in test_user_filter_guard.py had raw fixtures carrying {where_cond} that tripped the pre-existing RawQueryPlaceholderError in __init__, fixed in 89d45838 (test-only). Validated in feature worktree: test_user_filter_guard + test_semantic_provider -> 6 passed, 11 skipped. feedback NOT recorded (fixture defect, lesson not yet filed).
 
 **Deviations from spec**: none

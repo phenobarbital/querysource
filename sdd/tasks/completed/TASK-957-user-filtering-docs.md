@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: S (< 2h)
 **Depends-on**: TASK-953, TASK-956
@@ -177,8 +177,8 @@ No new tests; the describe tests (TASK-953 and test_describe_detail.py) guard th
 
 ## Completion Note
 
-**Completed by**:
-**Date**:
-**Notes**:
+**Completed by**: sdd-worker (coder seat kimi, nova:moonshotai.kimi-k2.5, attempt 3)
+**Date**: 2026-11-03
+**Notes**: Docs delivered (USER_FILTERING.md, DESCRIBE_API.md, PBAC_PROGRAMMATIC.md, CHANGES.rst). tests/handlers/test_describe_detail.py: 7 passed. Engine task-tier validation unavailable (attempt has no execution_id); merged manually.
 
 **Deviations from spec**: none

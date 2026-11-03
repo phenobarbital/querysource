@@ -45,6 +45,8 @@ def _base_row(**overrides) -> dict:
         "columns_definition": [],
         "qry_options": {},
         "h_filtering": False,
+        "user_filtering": False,
+        "user_filter_options": {},
         "query_raw": "SELECT 1",
         "is_raw": False,
         "is_cached": True,

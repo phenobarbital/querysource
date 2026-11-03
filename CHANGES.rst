@@ -1,6 +1,15 @@
 Unreleased
 ==========
 
+Per-user automatic filtering (FEAT-184)
+---------------------------------------
+
+- New definition columns ``user_filtering`` and ``user_filter_options``. Run
+  ``docs/sql/user_filtering.sql`` on every query store (ADD-only).
+- Enforced in the parser; denials answer **403**; invalid options answer 500.
+- ``h_filtering`` is deprecated: still accepted, never consulted, reported in
+  describe as an alias of ``user_filtering``. Removed in 5.3.0.
+
 PBAC coverage for the management API, the direct driver route and describe (FEAT-182)
 -------------------------------------------------------------------------------------
 
