@@ -13,7 +13,7 @@ from typing import Any, Union
 from aiohttp import web
 from navconfig.logging import logging
 
-from ..exceptions import DataNotFound, ParserError, QueryException, RawQueryPlaceholderError
+from ..exceptions import DataNotFound, ParserError, QueryException, RawQueryPlaceholderError, UserFilterDenied
 from ..interfaces.source_hooks import SourceHooksMixin
 from ..models import QueryModel
 from ..parsers.abstract import AbstractParser
@@ -121,6 +121,10 @@ class BaseProvider(SourceHooksMixin, ABC):
                 raise RuntimeError(
                     f"There is no Running Loop on Query Provider: {ex}"
                 ) from ex
+        # FEAT-184: caller identity for per-user filtering. Not `_principal`
+        # (owned by semanticProvider, providers/semantic.py).
+        self._user_principal = kwargs.pop('principal', None)
+        self._user_info = kwargs.pop('userinfo', None)
         ## Parser Logic:
         self._parser: Callable = None
         if self.__parser__:
@@ -129,6 +133,8 @@ class BaseProvider(SourceHooksMixin, ABC):
                     query=self._query,
                     definition=definition,
                     conditions=conditions,
+                    principal=self._user_principal,
+                    userinfo=self._user_info,
                     **self._parser_options
                 )
             except Exception as err:
@@ -138,6 +144,7 @@ class BaseProvider(SourceHooksMixin, ABC):
                 raise ParserError(
                     f"Error on Query Parser: {err}"
                 ) from err
+        self._assert_user_filter_capable()
 
         # driver information
         if 'driver' in kwargs:
@@ -255,6 +262,26 @@ class BaseProvider(SourceHooksMixin, ABC):
 
     def __str__(self) -> str:
         return f"<{self.__name__}>"
+
+    def user_filtering_required(self) -> bool:
+        """Return whether the definition declares ``user_filtering``."""
+        definition = self._definition
+        if definition is None:
+            return False
+        if isinstance(definition, dict):
+            return bool(definition.get('user_filtering', False))
+        return bool(getattr(definition, 'user_filtering', False))
+
+    def _assert_user_filter_capable(self) -> None:
+        """Refuse a ``user_filtering`` definition on a provider without a parser."""
+        if self._parser is None and self.user_filtering_required():
+            from ..auth.user_filter import REASON_PARSER_REQUIRED
+
+            self._logger.warning(
+                "user_filter denied slug=%s reason=%s provider=%s",
+                self._slug, REASON_PARSER_REQUIRED, self.__name__,
+            )
+            raise UserFilterDenied(reason_code=REASON_PARSER_REQUIRED, slug=self._slug)
 
     async def prepare_connection(self):
         """Signal run before connection is made.

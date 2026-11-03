@@ -12,7 +12,7 @@ from aiohttp import web
 from asyncdb.exceptions import DriverError, NoDataFound, ProviderError
 from datamodel.typedefs import SafeDict
 
-from ..exceptions import DataNotFound, ParserError, QueryException
+from ..exceptions import DataNotFound, ParserError, QueryException, UserFilterDenied
 from ..models import QueryModel
 from ..parsers.sql import SQLParser
 from ..qs_parsers import HAS_RUST
@@ -146,10 +146,13 @@ class sqlProvider(BaseProvider):
         if self._type == 'query':
             use_parser = self._needs_parser(self._query) or self._has_parser_conditions(self._conditions)
             if not use_parser:
+                # FEAT-184: never run a user_filtering slug unparsed.
+                self._refuse_unparsed_user_filtering()
                 # Keep SQL untouched to avoid formatting collisions with
                 # literals that contain braces (e.g. Postgres array/json syntax).
                 return self
         if self.is_raw is True:
+            self._refuse_unparsed_user_filtering()
             return self
         await super().prepare_connection()
         ## Parse Query:
@@ -159,6 +162,17 @@ class sqlProvider(BaseProvider):
             raise ParserError(
                 f"Unable to parse Query: {ex}"
             ) from ex
+
+    def _refuse_unparsed_user_filtering(self) -> None:
+        """Raise ``UserFilterDenied(parser_required)`` when parsing is skipped."""
+        if self.user_filtering_required():
+            from ..auth.user_filter import REASON_PARSER_REQUIRED
+
+            self._logger.warning(
+                "user_filter denied slug=%s reason=%s provider=%s",
+                self._slug, REASON_PARSER_REQUIRED, self.__name__,
+            )
+            raise UserFilterDenied(reason_code=REASON_PARSER_REQUIRED, slug=self._slug)
 
     def raw_query(self, query: str):
         # SECURITY (FEAT-103): Two-phase substitution:
