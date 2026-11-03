@@ -52,6 +52,10 @@ cdef class AbstractParser:
         self._limit = kwargs.pop('max_limit', 0)
         self.string_literal = kwargs.pop('string_literal', False)
         self.definition = definition if definition else None
+        # FEAT-184: caller identity resolved once by QS/BaseProvider.
+        self.principal = kwargs.pop('principal', None)
+        self.userinfo = kwargs.pop('userinfo', None)
+        self.user_filter_applied = ()
         self._distinct = False
         self.set_attributes()
         self.define_conditions(conditions)
@@ -172,6 +176,7 @@ cdef class AbstractParser:
         self._qry_options_sync()
         self._query_filter_sync()
         self._qs_filters_sync()
+        self._user_filter_sync()
         self._col_definition_sync()
 
     cdef void _parse_hierarchy_sync(self):
@@ -341,6 +346,37 @@ cdef class AbstractParser:
             if _filter_name in self.conditions:
                 _f = self.conditions.pop(_filter_name)
                 self._query_filters[_filter_name] = (fn, _f)
+
+    cpdef void _user_filter_sync(self) except *:
+        """Merge the caller's compiled per-user predicates into ``self.filter`` (FEAT-184).
+
+        No-op unless ``definition.user_filtering`` is truthy. Raises
+        ``UserFilterDenied`` (403) or ``ConfigError`` (500) unchanged.
+        """
+        cdef object result
+        cdef dict merged
+        if self.definition is None or not getattr(self.definition, 'user_filtering', False):
+            self.user_filter_applied = ()
+            return
+        # Lazy import: querysource.auth pulls queries.describe/models (import cycle guard).
+        from ..auth.user_filter import compile_user_filter
+        result = compile_user_filter(
+            getattr(self.definition, 'user_filter_options', None),
+            program_slug=self.program_slug,
+            principal=self.principal,
+            userinfo=self.userinfo,
+            slug=self._slug,
+            logger=self.logger,
+        )
+        if result.predicates:
+            self.logger.debug(
+                "user_filter overwriting caller filter keys: %s",
+                set(self.filter or {}) & set(result.predicates),
+            )
+        # New dict on purpose: self.filter may alias the cached definition.filtering (spec §7).
+        merged = {**(self.filter or {}), **result.predicates}
+        self.filter = merged
+        self.user_filter_applied = tuple(result.applied)
 
     cdef void _col_definition_sync(self):
         self.cond_definition = self.conditions.pop('cond_definition', {})

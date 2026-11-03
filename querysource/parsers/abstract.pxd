@@ -39,6 +39,10 @@ cdef class AbstractParser:
     # Parser Options:
     cdef public dict params
     cdef public dict _query_filters
+    # FEAT-184 per-user filtering:
+    cdef public object principal
+    cdef public object userinfo
+    cdef public tuple user_filter_applied
     cdef public list _hierarchy
     cdef int32_t c_length
     cdef bint _paged
@@ -79,6 +83,7 @@ cdef class AbstractParser:
     cdef void _filter_options_sync(self)
     cdef void _query_filter_sync(self)
     cdef void _qs_filters_sync(self)
+    cpdef void _user_filter_sync(self) except *
     cdef void _col_definition_sync(self)
     cdef void _qry_options_sync(self)
     cdef object _get_redis(self)

@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -214,8 +214,8 @@ See the test block in the Implementation Blueprint.
 
 ## Completion Note
 
-**Completed by**:
+**Completed by**: sdd-worker (FEAT-184)
 **Date**:
-**Notes**:
+**Notes**: Seat: gpt-5.6-luna x2 then gpt-5.6-sol (attempt 3) · merged manually (engine task-tier validation unavailable: attempt 3 had no execution_id; sub-worktree lacked built .so). Validated in feature worktree: tests/test_models_user_filtering.py + tests/tenants -> 155 passed. Review fix f28c0c7: tests/tenants/test_tenant_repository_reads.py (outside task file list) fixture needed the two new columns because revision hashes the model's to_dict(). Residual lint: models.py DTZ005 (left to /sdd-done). feedback NOT recorded (repo-level fixture lesson).
 
 **Deviations from spec**: none

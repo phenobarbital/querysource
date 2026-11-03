@@ -5,7 +5,7 @@
   "type": "feature",
   "base_branch": "dev",
   "created_at": "2026-11-03T17:10:05+00:00",
-  "completed_at": null,
+  "completed_at": "2026-11-03T21:49:38+00:00",
   "parallel_semantics": "exclusive",
   "validation_contract": "required",
   "test_contract": {
@@ -51,16 +51,17 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No dependencies: creates querysource/auth/user_filter.py and UserFilterDenied in querysource/exceptions.py.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-950-user-filter-options-and-exception.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:24:13+00:00",
+      "file": "sdd/tasks/completed/TASK-950-user-filter-options-and-exception.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-951",
@@ -69,7 +70,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -78,9 +79,10 @@
       "parallel": true,
       "parallelism_notes": "Modifies querysource/auth/user_filter.py created by TASK-950 and imports its UserFilterOptions/UserFilterResult/reason constants and UserFilterDenied.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-951-user-filter-compiler.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:28:28+00:00",
+      "file": "sdd/tasks/completed/TASK-951-user-filter-compiler.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-952",
@@ -89,16 +91,17 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
       "parallel": true,
       "parallelism_notes": "No dependencies: touches only querysource/models.py, tenant_models.py, docs/sql and the move-test DDL.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-952-definition-fields-and-migration.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:24:13+00:00",
+      "file": "sdd/tasks/completed/TASK-952-definition-fields-and-migration.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-953",
@@ -107,7 +110,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -116,9 +119,10 @@
       "parallel": true,
       "parallelism_notes": "Needs the QueryModel.user_filtering / user_filter_options fields from TASK-952 (describe_slug builds base from QueryModel.columns).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-953-describe-user-filtering.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:28:28+00:00",
+      "file": "sdd/tasks/completed/TASK-953-describe-user-filtering.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-954",
@@ -127,7 +131,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -137,9 +141,10 @@
       "parallel": false,
       "parallelism_notes": "Exclusive: rebuilds the shared Cython extension (make build-inplace). Lazy-imports compile_user_filter from TASK-951 (querysource/auth/user_filter.py); reads definition.user_filtering from TASK-952 (querysource/models.py).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-954-parser-user-filter-step.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:33:22+00:00",
+      "file": "sdd/tasks/completed/TASK-954-parser-user-filter-step.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-955",
@@ -148,7 +153,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -157,9 +162,10 @@
       "parallel": true,
       "parallelism_notes": "Passes principal=/userinfo= to the parser constructor that TASK-954 makes accept them (querysource/parsers/abstract.pyx); UserFilterDenied/REASON_PARSER_REQUIRED come transitively from TASK-950.",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-955-provider-user-filter-guard.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:41:27+00:00",
+      "file": "sdd/tasks/completed/TASK-955-provider-user-filter-guard.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-956",
@@ -168,7 +174,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -178,9 +184,10 @@
       "parallel": true,
       "parallelism_notes": "Imports session_userinfo from TASK-951 (querysource/auth/user_filter.py); passes userinfo to BaseProvider which TASK-955 makes consume it (querysource/providers/abstract.py).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-956-qs-identity-plumbing.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T17:50:59+00:00",
+      "file": "sdd/tasks/completed/TASK-956-qs-identity-plumbing.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-957",
@@ -189,7 +196,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
       "depends_on": [
@@ -199,9 +206,10 @@
       "parallel": true,
       "parallelism_notes": "Documents the describe payload from TASK-953 (querysource/queries/describe.py) and the QS/provider behaviour finished in TASK-956 (querysource/queries/qs.py).",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-957-user-filtering-docs.md"
+      "started_at": "2026-11-03T17:11:57+00:00",
+      "completed_at": "2026-11-03T19:23:25+00:00",
+      "file": "sdd/tasks/completed/TASK-957-user-filtering-docs.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-958",
@@ -210,7 +218,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -219,9 +227,10 @@
       "parallel": true,
       "parallelism_notes": "edits _assert_user_filter_capable() created by TASK-955 in querysource/providers/abstract.py; both modify abstract.py and sql.py",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-958-user-filter-capability-allowlist.md"
+      "started_at": "2026-11-03T19:45:18+00:00",
+      "completed_at": "2026-11-03T19:53:05+00:00",
+      "file": "sdd/tasks/completed/TASK-958-user-filter-capability-allowlist.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-959",

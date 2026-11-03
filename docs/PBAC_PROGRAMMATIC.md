@@ -254,3 +254,11 @@ def to_qs_principal(ctx) -> QSPrincipal:
 The full ai-parrot-side change (wiring this into `QuerySlugSource` /
 `MultiQuerySlugSource` and passing `record.tenant` as `tenant=`) is tracked
 as a separate ai-parrot feature, out of scope for FEAT-150.
+
+## Per-user filtering (FEAT-184)
+
+Slugs with `user_filtering` enabled need a caller identity. HTTP callers get it from the
+session; library callers must pass `QS(slug=..., principal=QSPrincipal(...))`. Without a
+principal the call fails with 403 (`UserFilterDenied`), even when `QS_PBAC_ENABLED` is off.
+Rules that reference non-claim attributes (for example `attributes.store_id`) are only
+satisfiable through an HTTP session. See `docs/USER_FILTERING.md`.

@@ -3,7 +3,7 @@
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
 **Discovered-from**: `issue:e632c01feda8`
-**Status**: pending
+**Status**: done
 **Priority**: critical
 **Estimated effort**: S (1-2h)
 **Depends-on**: TASK-955

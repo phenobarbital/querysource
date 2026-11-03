@@ -2,7 +2,7 @@
 
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
-**Status**: pending
+**Status**: done
 **Priority**: medium
 **Estimated effort**: S (< 2h)
 **Depends-on**: TASK-952
@@ -168,8 +168,8 @@ See the test block in the Implementation Blueprint.
 
 ## Completion Note
 
-**Completed by**:
+**Completed by**: sdd-worker (FEAT-184)
 **Date**:
-**Notes**:
+**Notes**: Seat: gpt-5.6-luna x2 then gpt-5.6-sol (attempt 3) · merged manually (engine task-tier validation reported 0 failures/unavailable; sub-worktree lacks built .so). Validated in feature worktree: describe user-filtering + describe detail tests green (31 passed with 951).
 
 **Deviations from spec**: none
