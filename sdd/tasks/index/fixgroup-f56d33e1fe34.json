@@ -1,0 +1,51 @@
+{
+  "feature": "fixgroup-f56d33e1fe34",
+  "feature_id": "FEAT-183",
+  "spec": "sdd/specs/fixgroup-f56d33e1fe34.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-11-03T15:55:00Z",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "test_contract": {
+    "schema": 2,
+    "runners": [
+      {
+        "kind": "pytest",
+        "targets": [
+          "tests/unit/test_pandas3_modin_fallback.py"
+        ],
+        "settings": {
+          "markers": ""
+        },
+        "tiers": [
+          "task",
+          "merge",
+          "feature"
+        ]
+      }
+    ],
+    "digest": "sha256:ccc7ff4c8dac44c99c8e8faf1aa42f28aa72fa96f2d42198f586b242b0bda53a"
+  },
+  "tasks": [
+    {
+      "id": "TASK-949",
+      "slug": "modin-best-effort-docs",
+      "title": "Document modin extra as best-effort and verify runtime fallback",
+      "feature_id": "FEAT-183",
+      "feature": "fixgroup-f56d33e1fe34",
+      "spec": "sdd/specs/fixgroup-f56d33e1fe34.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "single task, no dependencies",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-949-modin-best-effort-docs.md"
+    }
+  ]
+}
