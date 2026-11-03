@@ -174,7 +174,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [
@@ -185,8 +185,9 @@
       "parallelism_notes": "Imports session_userinfo from TASK-951 (querysource/auth/user_filter.py); passes userinfo to BaseProvider which TASK-955 makes consume it (querysource/providers/abstract.py).",
       "assigned_to": null,
       "started_at": "2026-11-03T17:11:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-956-qs-identity-plumbing.md"
+      "completed_at": "2026-11-03T17:50:59+00:00",
+      "file": "sdd/tasks/completed/TASK-956-qs-identity-plumbing.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-957",
