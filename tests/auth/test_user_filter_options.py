@@ -1,4 +1,5 @@
 """FEAT-184 TASK-950 — UserFilterDenied and user_filter_options validation."""
+
 from __future__ import annotations
 
 import pytest

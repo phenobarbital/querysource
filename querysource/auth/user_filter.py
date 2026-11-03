@@ -5,6 +5,7 @@ Pure module: imports only ``querysource.auth.principal`` and
 an import cycle and the multi-query follow-up can reuse it unchanged
 (FEAT-184).
 """
+
 from __future__ import annotations
 
 import re
@@ -22,9 +23,7 @@ REASON_MISSING_ATTRIBUTE: Final[str] = "missing_attribute"
 REASON_PROGRAM_RESTRICTED: Final[str] = "program_restricted"
 REASON_PARSER_REQUIRED: Final[str] = "parser_required"
 SUPERUSER_BYPASS: Final[str] = "superuser"
-COLUMN_GRAMMAR: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$"
-)
+COLUMN_GRAMMAR: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
 
 
 class UserFilterRule(BaseModel):
@@ -72,7 +71,7 @@ class UserFilterOptions(BaseModel):
     bypass: tuple[str, ...] = (SUPERUSER_BYPASS,)
 
     @model_validator(mode="after")
-    def _declares_something(self) -> "UserFilterOptions":
+    def _declares_something(self) -> UserFilterOptions:
         """A switch without rules nor program restriction is a configuration mistake."""
         if not self.rules and not self.program.restricted:
             raise ValueError("user_filtering is on but user_filter_options declares nothing")
