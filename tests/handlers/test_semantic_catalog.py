@@ -19,12 +19,7 @@ def test_catalog_route_registered():
     assert ("GET", "/api/v1/{tenant}/semantic/{slug}/catalog") in routes
 
 
-def test_describe_semantic_derived():
-    """Semantic describe payload contains compiler-free resource metadata."""
-    definition = MagicMock()
-    definition.query_slug = "orders"
-    definition.provider = "semantic"
-    definition.query_raw = """
+SEMANTIC_DESCRIBE_RESOURCE = """
 name: orders
 kind: semantic
 connection: warehouse
@@ -37,6 +32,14 @@ governance:
     default: []
     analyst: []
 """
+
+
+def _semantic_definition(query_raw: str = SEMANTIC_DESCRIBE_RESOURCE) -> MagicMock:
+    """Build a MagicMock query definition for a semantic slug."""
+    definition = MagicMock()
+    definition.query_slug = "orders"
+    definition.provider = "semantic"
+    definition.query_raw = query_raw
     definition.conditions = {}
     definition.cond_definition = {}
     definition.fields = []
@@ -49,7 +52,18 @@ governance:
                  "parser", "cache_timeout", "cache_refresh", "program_id", "program_slug", "dwh", "dwh_driver",
                  "dwh_info", "dwh_scheduler", "created_at", "created_by", "updated_at", "updated_by"):
         setattr(definition, name, None)
-    payload = describe_slug(definition, DescribeGrants(raw=True, admin=True), columns_link="/columns", vocabulary_link="/vocabulary")
+    return definition
+
+
+def _describe(definition: MagicMock, *, raw: bool, admin: bool) -> dict:
+    return describe_slug(
+        definition, DescribeGrants(raw=raw, admin=admin), columns_link="/columns", vocabulary_link="/vocabulary"
+    )
+
+
+def test_describe_semantic_derived():
+    """Semantic describe payload contains compiler-free resource metadata."""
+    payload = _describe(_semantic_definition(), raw=True, admin=True)
     assert payload["derived"]["semantic"] == {
         "format": "ossie",
         "connection": "warehouse",
@@ -57,6 +71,30 @@ governance:
         "governance_roles": ["analyst"],
         "catalog": "/api/v1/semantic/orders/catalog",
     }
+
+
+def test_describe_semantic_non_raw_hides_connection_and_roles():
+    """Non-raw callers get no connection/governance roles and query_raw is redacted."""
+    payload = _describe(_semantic_definition(), raw=False, admin=False)
+    assert payload["derived"]["semantic"] == {
+        "format": "ossie",
+        "definition_kind": "inline",
+        "catalog": "/api/v1/semantic/orders/catalog",
+    }
+    assert "query_raw" in payload["redacted"]
+
+
+def test_describe_semantic_invalid_yaml_non_raw_is_generic():
+    """Non-raw callers never see the parser error text."""
+    payload = _describe(_semantic_definition("not: [valid"), raw=False, admin=False)
+    assert payload["derived"]["semantic"] == {"error": "invalid semantic resource"}
+
+
+def test_describe_semantic_invalid_yaml_raw_shows_real_error():
+    """Raw callers still get the real parser error."""
+    payload = _describe(_semantic_definition("not: [valid"), raw=True, admin=True)
+    error = payload["derived"]["semantic"]["error"]
+    assert error and error != "invalid semantic resource"
 
 
 # --- real handler behaviour (AC-16 / AC-26) -------------------------------------------------
@@ -143,22 +181,3 @@ async def test_catalog_denied_datasource_is_404(monkeypatch, fake_evaluator):
     with pytest.raises(web.HTTPNotFound):
         await _handler(monkeypatch).catalog(_request())
 
-
-def test_describe_semantic_non_raw_hides_connection_roles_and_errors():
-    definition = MagicMock()
-    definition.query_slug = "orders"
-    definition.provider = "semantic"
-    definition.query_raw = "name: orders\nkind: semantic\nconnection: warehouse\nsemantic:\n  definition: {models: {}}\ngovernance:\n  row_filters:\n    analyst: []\n"
-    definition.conditions = {}
-    definition.cond_definition = {}
-    for name in ("fields", "ordering", "grouping"):
-        setattr(definition, name, [])
-    for name in ("filtering", "qry_options"):
-        setattr(definition, name, {})
-    definition.h_filtering = False
-    payload = describe_slug(definition, DescribeGrants(raw=False, admin=False), columns_link="/c", vocabulary_link="/v")
-    semantic = payload["derived"]["semantic"]
-    assert "connection" not in semantic and "governance_roles" not in semantic
-    definition.query_raw = "not: [valid"
-    payload = describe_slug(definition, DescribeGrants(raw=False, admin=False), columns_link="/c", vocabulary_link="/v")
-    assert payload["derived"]["semantic"] == {"error": "invalid semantic resource"}
