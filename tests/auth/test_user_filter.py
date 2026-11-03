@@ -1,4 +1,5 @@
 """FEAT-184 TASK-951 — compile_user_filter and helpers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
