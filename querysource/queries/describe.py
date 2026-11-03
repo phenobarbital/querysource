@@ -32,7 +32,9 @@ IMPLICIT_DEFAULTS: dict[str, str] = {
     "firstdate": "current_date", "lastdate": "current_date", "filterdate": "current_date",
 }
 RAW_FIELDS: tuple[str, ...] = ("query_raw",)
-ADMIN_FIELDS: tuple[str, ...] = ("dwh_info", "dwh_scheduler", "cache_options", "created_by", "updated_by")
+ADMIN_FIELDS: tuple[str, ...] = (
+    "dwh_info", "dwh_scheduler", "cache_options", "created_by", "updated_by", "user_filter_options",
+)
 _KEY_GRAMMAR = re.compile(r"^[A-Za-z0-9_.]+$")  # rust/src/safe_dict.rs:116-120
 
 VariableSource = Literal["cond_definition", "conditions", "placeholder"]
@@ -264,7 +266,9 @@ def describe_slug(
         "filtering": base.get("filtering") or {},
         "ordering": base.get("ordering") or [],
         "grouping": base.get("grouping") or [],
-        "h_filtering": bool(base.get("h_filtering") or False),
+        "user_filtering": bool(base.get("user_filtering") or False),
+        # Deprecated alias (FEAT-184): same value as user_filtering, removed in 5.3.0.
+        "h_filtering": bool(base.get("user_filtering") or False),
         "qry_options": base.get("qry_options") or {},
         "refresh_param": "refresh",
     }
