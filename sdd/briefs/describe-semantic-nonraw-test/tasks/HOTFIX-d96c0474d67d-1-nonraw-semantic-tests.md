@@ -1,7 +1,7 @@
 # HOTFIX-d96c0474d67d-1: Non-raw tests for describe_slug derived.semantic
 
 **Brief**: `sdd/briefs/describe-semantic-nonraw-test.brief.md`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (< 2h)
 **Depends-on**: none
@@ -45,3 +45,5 @@ def _semantic_summary(base: dict[str, Any], *, raw: bool) -> dict[str, Any]
 - `pytest tests/handlers/test_semantic_catalog.py -q`
 
 ## Completion Note
+
+Added non-raw redaction test, invalid-YAML non-raw/raw tests and a shared `_semantic_definition` helper in tests/handlers/test_semantic_catalog.py (replaced the old weaker non-raw test). 8 passed; removing `if raw:` at describe.py:224 makes the new test fail (verified, reverted). ruff clean. No production code changed.
