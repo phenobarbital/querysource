@@ -29,6 +29,7 @@ from ..exceptions import (
     QueryError,
     QueryException,
     RawQueryPlaceholderError,
+    UserFilterDenied,
 )
 from ..ownership_logging import ownership_fields
 from ..providers import BaseProvider
@@ -213,6 +214,14 @@ class QS(BaseQuery):
             except Exception:
                 _pbac_session = None
 
+        # FEAT-184: caller identity for per-user filtering, resolved once.
+        from ..auth.user_filter import session_userinfo
+        _user_principal = self._principal
+        if _user_principal is None and _pbac_session is not None:
+            from ..semantic.governance import principal_from_session
+            _user_principal = principal_from_session(_pbac_session)
+        _user_info = session_userinfo(_pbac_session)
+
         if self._principal is not None and self._type != 'slug':
             from ..auth._resource_types import ResourceType
             from ..auth.enforcement import enforce_principal
@@ -309,12 +318,13 @@ class QS(BaseQuery):
                     "conditions": conditions,
                     "request": self._request,
                     "loop": self._loop,
-                    "principal": self._principal,
+                    "principal": _user_principal,
+                    "userinfo": _user_info,
                 }
                 self._qs = self._provider(**args)
                 await self._qs.prepare_connection()
                 return self
-            except (RawQueryPlaceholderError, SemanticError, QueryAccessDenied):
+            except (RawQueryPlaceholderError, SemanticError, QueryAccessDenied, UserFilterDenied):
                 # Operational, semantic, and access errors surface with their own code.
                 raise
             except Exception as err:
