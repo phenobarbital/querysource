@@ -1,4 +1,5 @@
 """FEAT-184 TASK-955 — provider identity forwarding and fail-closed guard."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

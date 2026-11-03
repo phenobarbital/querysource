@@ -123,8 +123,8 @@ class BaseProvider(SourceHooksMixin, ABC):
                 ) from ex
         # FEAT-184: caller identity for per-user filtering. Not `_principal`
         # (owned by semanticProvider, providers/semantic.py).
-        self._user_principal = kwargs.pop('principal', None)
-        self._user_info = kwargs.pop('userinfo', None)
+        self._user_principal = kwargs.pop("principal", None)
+        self._user_info = kwargs.pop("userinfo", None)
         ## Parser Logic:
         self._parser: Callable = None
         if self.__parser__:
@@ -135,7 +135,7 @@ class BaseProvider(SourceHooksMixin, ABC):
                     conditions=conditions,
                     principal=self._user_principal,
                     userinfo=self._user_info,
-                    **self._parser_options
+                    **self._parser_options,
                 )
             except Exception as err:
                 self._logger.error(
@@ -269,8 +269,8 @@ class BaseProvider(SourceHooksMixin, ABC):
         if definition is None:
             return False
         if isinstance(definition, dict):
-            return bool(definition.get('user_filtering', False))
-        return bool(getattr(definition, 'user_filtering', False))
+            return bool(definition.get("user_filtering", False))
+        return bool(getattr(definition, "user_filtering", False))
 
     def _assert_user_filter_capable(self) -> None:
         """Refuse a ``user_filtering`` definition on a provider without a parser."""
@@ -279,7 +279,9 @@ class BaseProvider(SourceHooksMixin, ABC):
 
             self._logger.warning(
                 "user_filter denied slug=%s reason=%s provider=%s",
-                self._slug, REASON_PARSER_REQUIRED, self.__name__,
+                self._slug,
+                REASON_PARSER_REQUIRED,
+                self.__name__,
             )
             raise UserFilterDenied(reason_code=REASON_PARSER_REQUIRED, slug=self._slug)
 

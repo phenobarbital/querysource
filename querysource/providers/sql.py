@@ -170,7 +170,9 @@ class sqlProvider(BaseProvider):
 
             self._logger.warning(
                 "user_filter denied slug=%s reason=%s provider=%s",
-                self._slug, REASON_PARSER_REQUIRED, self.__name__,
+                self._slug,
+                REASON_PARSER_REQUIRED,
+                self.__name__,
             )
             raise UserFilterDenied(reason_code=REASON_PARSER_REQUIRED, slug=self._slug)
 
