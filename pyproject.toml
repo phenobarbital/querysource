@@ -119,8 +119,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# modin is optional (FEAT-161): modin<=0.37.1 pins pandas<2.4, so it cannot be
-# co-installed with pandas>=3 until upstream ships pandas 3 support.
+# modin is optional and BEST-EFFORT on pandas >= 3 (FEAT-161, FEAT-183):
+# modin <= 0.37.1 pins pandas < 2.4, so `pip install querysource[modin]` will
+# fail with a resolver conflict.  Only `uv` honours the [tool.uv] override
+# that forces pandas >= 3.  The runtime catches broad Exception on import
+# (TASK-835) and falls back to pandas when modin is broken or absent.
 modin = ["modin>=0.37.1", "distributed"]
 
 analytics = [
@@ -322,8 +325,10 @@ known-first-party = ["querysource"]
 [tool.uv]
 link-mode = "copy"
 # FEAT-158: asyncdb[boto3] pins aiobotocore==2.15.2 and aioboto3==13.2.0, which conflict with s3fs>=2026.9.
-# FEAT-161: modin<=0.37.1 declares pandas<2.4; override so the optional [modin]
-# extra stays lockable alongside pandas>=3 (modin is opt-in and unsupported on pandas 3).
+# FEAT-161/FEAT-183: modin<=0.37.1 declares pandas<2.4; override so the
+# optional [modin] extra stays lockable alongside pandas>=3.  This override is
+# uv-only — pip install querysource[modin] will hit a resolver conflict.
+# modin is opt-in and best-effort on pandas 3.
 override-dependencies = ["aiobotocore[boto3]>=2.25,<2.26", "aioboto3>=15", "pandas>=3.0,<4"]
 
 [tool.uv.sources]

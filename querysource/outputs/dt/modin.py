@@ -4,8 +4,15 @@ from .abstract import OutputFormat
 
 
 class modinFormat(OutputFormat):
-    """
-    Returns a Pandas Dataframe from a Resultset
+    """Returns a Pandas Dataframe from a Resultset.
+
+    .. warning:: Best-effort on pandas >= 3
+
+       modin <= 0.37.1 declares ``pandas < 2.4``.  This output format is
+       available only when modin imports successfully; on pandas 3 it may
+       raise at init time, which is surfaced as a ``QueryException``.
+       Install with ``uv pip install querysource[modin]`` (pip cannot
+       resolve the extra against pandas >= 3).
     """
     def __init__(self):
         try:
