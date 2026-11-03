@@ -17,7 +17,7 @@ Use this skill when the user asks to run `sdd-proposal`, turn a ticket into a
 proposal, research a bug report before spec writing, or resume proposal
 research.
 
-Codex invocation: `$sdd-proposal <source> [--mode=investigation|enrichment] [--budget=tight|default|loose] [--no-gate]`.
+Codex invocation: `$sdd-proposal <source> [--mode=investigation|enrichment] [--budget=tight|default|loose] [--no-gate] [--no-parallel]`.
 
 ## Purpose
 
@@ -39,8 +39,7 @@ source -> research plan -> budgeted research -> synthesis -> review gate -> targ
 - Persist state under `sdd/state/<FEAT-ID>/`.
 - Do not write implementation code.
 - Commit only proposal and state files.
-- Fill frontmatter `projects` (parts of the codebase, vocabulary `KNOWN_PROJECTS` in
-  `scripts/sdd/sdd_meta.py`; unknown values warn) and `tags` (2–6 kebab-case keywords) — FEAT-576.
+- Fill frontmatter `projects` (parts of the codebase, vocabulary: the project areas in `sdd/CONVENTIONS.md` (§ Project areas), or the `projects` list in `sdd/config.json` when set; unknown values warn) and `tags` (2–6 kebab-case keywords) — FEAT-576.
 
 ## Inputs
 
@@ -61,6 +60,10 @@ Budget profiles:
 | tight | 15 | 10 | 5 | 1 | 120 |
 | default | 40 | 25 | 10 | 2 | 300 |
 | loose | 100 | 60 | 20 | 3 | 900 |
+
+`default`/`loose` may split Phase 2 into codebase/git/wiki lanes on hosts with
+forks (Claude Code). Codex has no forks: research always runs sequentially and
+`--no-parallel` is accepted as a no-op.
 
 ## Workflow
 
@@ -86,12 +89,15 @@ Budget profiles:
    - Include wiki, grep, read, git log, and tree queries as appropriate.
    - Present the plan unless `--no-gate` was supplied.
 5. Execute research:
+   - Sequential here (no forks). Findings are `FNNN`; no lane merge step.
    - Wiki queries are free against the budget.
    - Use `rg` for grep-style searches.
    - Read files before citing symbols.
    - Persist compact findings as
      `sdd/state/<FEAT-ID>/findings/FNNN-<slug>.md` using
-     `sdd/templates/finding.md`.
+     `sdd/templates/finding.md`; `<slug>` is lowercase `[a-z0-9-]` only
+     (`:`, `*`, `|`, quotes break Windows checkouts and fail
+     the repository's portable-path CI check).
 6. Synthesize:
    - Use source, plan, findings, and budget status.
    - Produce `sdd/state/<FEAT-ID>/synthesis.json`.

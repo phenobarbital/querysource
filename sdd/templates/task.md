@@ -34,9 +34,9 @@
 
 | File | Action | Description |
 |---|---|---|
-| `querysource/path/to/new_file.py` | CREATE | Main implementation |
+| `parrot/path/to/new_file.py` | CREATE | Main implementation |
 | `tests/unit/test_new_file.py` | CREATE | Unit tests |
-| `querysource/path/to/existing.py` | MODIFY | Add import / register component |
+| `parrot/path/to/existing.py` | MODIFY | Add import / register component |
 
 ---
 
@@ -50,14 +50,14 @@
 ### Verified Imports
 <!-- Exact import statements. Use these VERBATIM — do not guess alternatives. -->
 ```python
-from querysource.module import ClassName  # verified: querysource/module/__init__.py:NN
+from parrot.module import ClassName  # verified: parrot/module/__init__.py:NN
 ```
 
 ### Existing Signatures to Use
 <!-- Classes/methods this task extends, calls, or integrates with.
      Include the file path and line number for each. -->
 ```python
-# querysource/path/to/file.py:NN
+# parrot/path/to/file.py:NN
 class ExistingClass(BaseClass):
     attribute: Type  # line NN
     async def method(self, param: Type) -> ReturnType:  # line NN
@@ -65,7 +65,7 @@ class ExistingClass(BaseClass):
 
 ### Does NOT Exist
 <!-- Things the agent might assume exist but DO NOT. Prevents hallucination. -->
-- ~~`querysource.module.NonExistentThing`~~ — does not exist
+- ~~`parrot.module.NonExistentThing`~~ — does not exist
 - ~~`ClassName.phantom_attribute`~~ — not a real attribute
 
 ---
@@ -91,16 +91,16 @@ class ExistingClass(BaseClass):
   "schema_version": 1,
   "targets": [
     {
-      "path": "querysource/path/to/new_file.py",
+      "path": "parrot/path/to/new_file.py",
       "action": "CREATE"
     },
     {
-      "path": "querysource/path/to/existing.py",
+      "path": "parrot/path/to/existing.py",
       "action": "MODIFY"
     }
   ],
   "contract_symbols": [
-    "sym:querysource/path/to/existing.py#ExistingClass"
+    "sym:parrot/path/to/existing.py#ExistingClass"
   ]
 }
 ```
@@ -165,7 +165,7 @@ safety net against shipping an unverified packet:
 ```bash
 sha256sum pkg/__init__.py
 # or, without coreutils:
-python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" pkg/__init__.py
+python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" pkg/__init__.py
 ```
 
 A `create` target MUST have a block tagged with `path=<target>`; that block
@@ -198,7 +198,7 @@ validator rejects them as `placeholder_code`.
 ### Pattern to Follow
 ```python
 # Reference implementation pattern from existing code
-# e.g. copy this structure from querysource/providers/abstract.py
+# e.g. copy this structure from parrot/loaders/base.py
 class ExistingPattern(AbstractBase):
     async def method(self) -> Result:
         ...
@@ -211,8 +211,8 @@ class ExistingPattern(AbstractBase):
 - Add `self.logger` calls at key points
 
 ### References in Codebase
-- `querysource/path/reference1.py` — pattern to follow
-- `querysource/path/reference2.py` — integration point
+- `parrot/path/reference1.py` — pattern to follow
+- `parrot/path/reference2.py` — integration point
 
 ---
 
@@ -229,12 +229,12 @@ class ExistingPattern(AbstractBase):
 1. <imperative step> — *why*: <one sentence>
 2. <imperative step> — *why*: <one sentence>
 
-### `querysource/path/to/new_file.py` (CREATE)
+### `parrot/path/to/new_file.py` (CREATE)
 ```python
 """<module docstring>."""
 from __future__ import annotations
 
-from querysource.module import ClassName  # verified: querysource/module/__init__.py:NN
+from parrot.module import ClassName  # verified: parrot/module/__init__.py:NN
 
 
 class NewComponent(ClassName):
@@ -248,10 +248,10 @@ class NewComponent(ClassName):
 ```
 **Why this shape**: <2–4 sentences: which spec decision each block implements; what must NOT change>
 
-### `querysource/path/to/existing.py` (MODIFY)
+### `parrot/path/to/existing.py` (MODIFY)
 ```python
-# occurrences: <N> (verified: grep -c '<verbatim anchor line>' querysource/path/to/existing.py)
-# AFTER — insert below `<verbatim anchor line>` (verified: querysource/path/to/existing.py:NN)
+# occurrences: <N> (verified: grep -c '<verbatim anchor line>' parrot/path/to/existing.py)
+# AFTER — insert below `<verbatim anchor line>` (verified: parrot/path/to/existing.py:NN)
 <new lines>
 ```
 **Why**: <1–2 sentences>. If `<N>` > 1: replace the block above with
@@ -267,18 +267,19 @@ anchor unique` instead of a bare one-line anchor.
 
 - [ ] Implementation complete per scope
 - [ ] All tests pass: `pytest <test_path> -v`
-- [ ] No linting errors: `ruff check querysource/<path>`
-- [ ] Imports work: `from querysource.<module> import <Component>`
+- [ ] No linting errors from the linters the repository configures (e.g. `ruff check <path>` when it configures ruff)
+- [ ] Imports work: `from parrot.<module> import <Component>`
 - [ ] Criterion N
 
 ---
 
 ## Validation Commands
 
-> File-level pytest only — no directories, no package roots.
+> Commands a registered test runner recognises — `pytest`, `vitest`, `cargo test`, `parrot e2e` or an
+> `[extensions]` entry in `.parrot/test_runners.toml`. pytest: file-level only — no directories, no package roots.
 
-- `pytest tests/handlers/test_describe_list.py -q`
-- `pytest tests/test_error_formatter.py::test_production_minimal -q`
+- `pytest <tests>/path/test_module.py -q`
+- `pytest <tests>/path/test_module.py::test_case -q`
 
 ---
 
@@ -290,7 +291,7 @@ anchor unique` instead of a bare one-line anchor.
 ```python
 # tests/unit/test_<module>.py
 import pytest
-from querysource.<module> import <Component>
+from parrot.<module> import <Component>
 
 
 @pytest.fixture
@@ -326,7 +327,7 @@ class Test<Component>:
 When you pick up this task:
 
 1. **Work in the feature worktree** — never on `base_branch`
-   (`python -m scripts.sdd.ensure_worktree --slug <feature-slug> --feature-id FEAT-<NNN>`)
+   (`parrot sdd worktree ensure --slug <feature-slug> --feature-id FEAT-<NNN>`)
 2. **Read the spec** at the path listed above for full context
 3. **Check dependencies** — every `Depends-on` task must be `"done"` in the
    per-spec index `sdd/tasks/index/<feature-slug>.json`
@@ -341,7 +342,7 @@ When you pick up this task:
    `# FILL IN:` marker, and never change a signature or path the blueprint fixes
 7. **Verify** all acceptance criteria are met — run the Validation Commands
 8. **Commit the code** — stage only the files this task lists (never `git add .` / `-A`)
-9. **Close the task** with `scripts/sdd/close_task.sh TASK-<NNN> <feature-slug> verified`
+9. **Close the task** with `parrot sdd task close TASK-<NNN> <feature-slug> verified`
    — it moves this file to `sdd/tasks/completed/` and marks it `"done"` in the
    index; never move or copy the file by hand
 10. **Fill in the Completion Note** below, then commit the staged SDD state

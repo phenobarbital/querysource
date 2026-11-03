@@ -16,12 +16,12 @@ and legacy shell examples; retain all workflow gates and evidence requirements.
 Use this skill when the user asks to run `sdd-spec`, create a formal SDD
 specification, or convert a brainstorm/proposal into a spec.
 
-Codex invocation: `$sdd-spec [<feature-slug>] [--type feature|hotfix] [--base-branch <branch>] [--interview | --no-interview] [--resume [<staging-dir>]] [--research full|light|none] [--no-gate] [--budget tight|default|loose] [-- <notes>]`.
+Codex invocation: `$sdd-spec [<feature-slug>] [--type feature] [--base-branch <branch>] [--interview | --no-interview] [--resume [<staging-dir>]] [--research full|light|none] [--no-gate] [--budget tight|default|loose] [-- <notes>]`.
 
 ## Purpose
 
 Create `sdd/specs/<feature-slug>.spec.md`, the single source of truth for a
-feature or hotfix.
+feature. Hotfixes are not specs: use `$sdd-brief <source>` (FEAT-698).
 
 ## Guardrails
 
@@ -67,12 +67,13 @@ stay with the thinking model — eligibility never delegates a design choice.
    - Libraries -> External Dependencies
    - Parallelism Assessment -> Worktree Strategy
    - Open Questions -> preserve `[x]` and `[ ]`
-4. Resolve flow metadata with `scripts.sdd.sdd_meta.resolve_flow()`:
+4. Resolve flow metadata with `parrot.sdd.scripts.sdd_meta.resolve_flow()`:
    - explicit flags win
    - exploration frontmatter is next
-   - default is `type: feature`, `base_branch: dev`
+   - default is `type: feature` with the `base_branch` from `sdd/config.json`
 5. Validate:
-   - hotfix requires `main`
+   - `--type hotfix` or `type: hotfix` exploration frontmatter: abort with
+     `⚠️  /sdd-spec no longer scaffolds hotfixes — use /sdd-brief <source> (FEAT-698).`
    - feature must not use `main`
 6. Sync base branch:
    - refuse if inside `.claude/worktrees/`
@@ -109,15 +110,18 @@ stay with the thinking model — eligibility never delegates a design choice.
    - If frontmatter has `reuse_feature_id`, use it only for an intentional
      multi-spec split, document the reuse, and skip reservation.
    - Only for a new feature without an existing or explicitly reused ID, call:
-     `python -m scripts.sdd.reserve_ids --kind feature --count 1 --base-branch <base_branch> --label <feature-slug>`.
+     `parrot sdd ids reserve --kind feature --count 1 --base-branch <base_branch> --label <feature-slug>`.
    - Use the returned `FEAT-NNN` verbatim.
    - Do not fall back to hand-computed IDs.
-   - For `type: hotfix`, reserve no `FEAT-NNN`; use the Jira key as identity
-     when available.
+9b. Retrieve governing decisions (FEAT-784), before drafting §2:
+   - write the draft spec with frontmatter (`projects`, `tags`) and §1 first
+   - run `wikitoolkit spec governing <spec>` and design within the listed decisions
+   - changing one requires an explicit `supersedes:` / `contradicts:` entry in `## Decisions`
+   - skip when it prints `decision audit not configured in this repository`
 10. Write the spec:
    - frontmatter `type` and `base_branch`
    - frontmatter `projects` and `tags`, carried from the exploration doc (FEAT-576)
-   - ID or Jira identity
+   - Feature ID
    - date
    - architecture and module breakdown
    - Interface Skeletons for every module: public signatures and docstrings,
@@ -131,7 +135,26 @@ stay with the thinking model — eligibility never delegates a design choice.
    - tests and acceptance criteria
    - mandatory Codebase Contract
    - Worktree Strategy
+   - `### Validation Contract` in §4 (FEAT-699): explicit pytest operands or `none — fallback` (repos with `test_command` set in `sdd/config.json`: write `none — fallback`)
+     — or the FEAT-709 `runners:` form (pytest/vitest/cargo/parrot-e2e blocks; kinds, tiers and settings from
+     `.parrot/test_runners.toml`; `parrot-e2e` never at task tier). The flat form is lifted on read to one pytest runner.
+   - optional `e2e` frontmatter and `### E2E Scenarios` subsection (FEAT-581)
+     only when the feature exercises the deterministic E2E gate: `policy`
+     must be exactly `required`, `optional` or `none` (never coerced when
+     invalid — the loader fails plan loading closed instead); a `required`
+     policy needs at least one required, codified (non-exploratory,
+     node-bearing) scenario; live and exploratory scenarios are listed
+     separately from deterministic ones and are never called
+     "deterministic" — exploratory scenarios can never be `required`.
+     Omit both entirely for a feature with no E2E surface (absence defaults
+     the later-generated plan's policy to `optional`); the complete
+     `e2e-plan.md` frontmatter is generated later, at task decomposition,
+     once pytest node IDs are frozen
    - Open Questions with resolved/unresolved state preserved
+10b. Consequence gate (FEAT-784):
+   - `parrot sdd spec consequences <spec> --render`, then the same without `--render`
+   - exit 0 pass/skipped · 1 conflict · 2 invalid · 3 incomplete/stale/missing
+   - refuse `**Status**: approved` on any non-zero exit; `skipped` proceeds
 11. Commit:
    - preserve unrelated staging; stop before committing if it is outside this run's scope
    - stage `sdd/specs/<feature-slug>.spec.md` and only this run's promoted artifacts
@@ -141,12 +164,12 @@ stay with the thinking model — eligibility never delegates a design choice.
    - never overwrite existing promoted directories; retain staging and report
      the collision for inspection; preserve source artifacts until copying succeeds
    - verify cached names
-   - commit `sdd: add spec for FEAT-NNN - <feature-slug>` for features, or a
-     hotfix equivalent for hotfixes
+   - commit `sdd: add spec for FEAT-NNN - <feature-slug>`
+   - publish the base branch: `git pull --no-rebase --no-edit origin <base_branch> && git push origin <base_branch>`
+     — worktrees are created from `origin/<base_branch>`, so an unpushed spec is invisible to the
+     next implementation run; on failure never force, stop and print that exact command
 
 ## Output
-
-For features:
 
 ```text
 Spec created and committed: sdd/specs/<feature-slug>.spec.md
@@ -155,19 +178,9 @@ Isolation: per-spec|mixed
 Next: review, mark approved, run $sdd-task sdd/specs/<feature-slug>.spec.md
 ```
 
-For hotfixes:
-
-```text
-Spec created and committed: sdd/specs/<feature-slug>.spec.md
-Identity: Jira <KEY> or hotfix slug
-Base branch: main
-Next: normally skip task decomposition and dispatch direct development; run
-$sdd-task only for unusually large hotfixes.
-```
-
 ## References
 
 - `sdd/templates/spec.md`
 - `sdd/WORKFLOW.md`
-- `scripts/sdd/sdd_meta.py`
-- `scripts/sdd/reserve_ids.py`
+- `parrot.sdd.scripts.sdd_meta`
+- `parrot.sdd.scripts.reserve_ids`

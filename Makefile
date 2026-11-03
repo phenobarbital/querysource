@@ -4,7 +4,7 @@
 .PHONY: venv install develop setup dev release format lint test clean distclean lock sync build-rust stage-rust
 
 # Python version to use
-PYTHON_VERSION := 3.11
+PYTHON_VERSION := 3.12
 
 # Auto-detect available tools
 HAS_UV := $(shell command -v uv 2> /dev/null)

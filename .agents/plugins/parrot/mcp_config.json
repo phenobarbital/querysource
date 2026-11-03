@@ -29,6 +29,13 @@
         "/home/jesuslara/proyectos/querysource/.parrot/mcp-toolkits.yaml"
       ],
       "cwd": "/home/jesuslara/proyectos/querysource"
+    },
+    "wikitoolkit": {
+      "command": "/home/jesuslara/proyectos/querysource/.venv/bin/wikitoolkit",
+      "args": [
+        "mcp"
+      ],
+      "cwd": "/home/jesuslara/proyectos/querysource"
     }
   }
 }

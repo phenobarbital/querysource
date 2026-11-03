@@ -16,11 +16,11 @@ once the spec is approved.
 
 ## Architecture
 
-### The Key Insight: Shell-Level Orchestration
+### The Key Insight: Shell-Level AgentCrew
 
 Claude Code agents run as separate CLI processes. Orchestration happens at the
 shell level via `claude -p "prompt"` (non-interactive) and `claude --agent <name>`
-invocations. This mirrors a typical async DAG orchestration pattern but with:
+invocations. This mirrors the `AgentCrew.run_flow()` DAG pattern but with:
 
 - **Agents** = Claude Code agent definitions (`.claude/agents/*.md`)
 - **Tasks** = CLI invocations with structured prompts
@@ -88,9 +88,9 @@ can execute without asking questions.
 ### Usage
 
 ```
-/sdd-fromjira NAV-8036
-/sdd-fromjira NAV-8036 --auto-approve    # skip manual spec approval (risky)
-/sdd-fromjira NAV-8036 --complexity=fix  # hint: simple fix, minimal Q&A
+/sdd-fromjira PROJ-123
+/sdd-fromjira PROJ-123 --auto-approve    # skip manual spec approval (risky)
+/sdd-fromjira PROJ-123 --complexity=fix  # hint: simple fix, minimal Q&A
 ```
 
 ### Flow
@@ -162,12 +162,12 @@ detailed comments, not just prose descriptions:
 ### 4.1 OAuth Callback Handler
 
 ```python
-# File: querysource/handlers/oauth.py
+# File: parrot/integrations/jira/oauth.py
 # Extends: aiohttp route handler
 
 async def handle_oauth_callback(request: web.Request) -> web.Response:
     """
-    Receives the OAuth 2.0 authorization code from the provider's redirect (e.g., Salesforce).
+    Receives the OAuth 2.0 authorization code from Jira's redirect.
     
     Flow:
     1. Extract `code` and `state` from query params
@@ -195,14 +195,14 @@ async def handle_oauth_callback(request: web.Request) -> web.Response:
     token_response = await exchange_oauth_code(
         code=code,
         redirect_uri=OAUTH_REDIRECT_URI,  # from env
-        client_id=SF_OAUTH_CLIENT_ID,
-        client_secret=SF_OAUTH_CLIENT_SECRET,
+        client_id=JIRA_OAUTH_CLIENT_ID,
+        client_secret=JIRA_OAUTH_CLIENT_SECRET,
     )
     
     # Store token
     await credential_store.save(
         user_id=user_id,
-        provider='salesforce',
+        provider='jira',
         credentials=token_response,
         ttl=token_response.get('expires_in', 3600)
     )
@@ -217,10 +217,10 @@ async def handle_oauth_callback(request: web.Request) -> web.Response:
 ## 6. Codebase Contract
 
 ### Does NOT Exist (verified)
-- `querysource.auth.OAuthManager` — does not exist, must be created
-- `BaseProvider.set_credentials()` — no such method
-- `querysource.auth.pbac.permission_context` — planned but not yet implemented
-- `salesforceProvider.oauth_mode` — no such attribute; auth is set at __init__
+- `parrot.auth.OAuthManager` — does not exist, must be created
+- `AbstractToolkit.set_credentials()` — no such method
+- `parrot.tools.context.permission_context` — planned but not yet implemented
+- `JiraToolkit.oauth_mode` — no such attribute; auth is set at __init__
 ```
 
 ##### c) Acceptance Criteria Mapping
@@ -250,7 +250,7 @@ After spec approval, automatically runs task decomposition.
 #### 6. Create Worktree
 
 ```bash
-python -m scripts.sdd.ensure_worktree --json \
+parrot sdd worktree ensure --json \
   --slug <slug> --feature-id FEAT-<NNN> \
   --spec sdd/specs/<slug>.spec.md \
   --index sdd/tasks/index/<slug>.json
@@ -259,22 +259,22 @@ python -m scripts.sdd.ensure_worktree --json \
 #### 7. Output & Handoff
 
 ```
-✅ /sdd-fromjira complete for NAV-8036
+✅ /sdd-fromjira complete for PROJ-123
 
-   Jira: NAV-8036 — "Add OAuth 2.0 support for Salesforce provider"
-   Spec: sdd/specs/salesforce-oauth.spec.md (committed to dev)
+   Jira: PROJ-123 — "Add OAuth 2.0 support for JiraToolkit"
+   Spec: sdd/specs/jira-oauth.spec.md (committed to dev)
    Tasks: 4 tasks generated (committed to dev)
-   Worktree: .claude/worktrees/feat-071-salesforce-oauth
+   Worktree: .claude/worktrees/feat-071-jira-oauth
 
    AC Coverage: 3/3 criteria mapped to tasks
 
    To execute autonomously:
-     cd .claude/worktrees/feat-071-salesforce-oauth
+     cd .claude/worktrees/feat-071-jira-oauth
      claude --agent sdd-autopilot --verbose
 
    Or manually:
      cd .claude/worktrees/feat-071-jira-oauth
-     claude --agent sdd-worker --verbose
+     claude --agent sdd-worker --setting-sources project,local --verbose
 ```
 
 ---
@@ -324,7 +324,7 @@ REVIEW_ITERATION=0
 # ──────────────────────────────────────────────
 # Stage 1: IMPLEMENT (sdd-worker)
 # ──────────────────────────────────────────────
-claude --agent sdd-worker \
+claude --agent sdd-worker --setting-sources project,local \
   --model sonnet \
   --verbose \
   --output-format json \
@@ -359,7 +359,7 @@ while [[ $REVIEW_ITERATION -lt $MAX_REVIEW_ITERATIONS ]]; do
     echo "⚠️ Code review: NEEDS_CHANGES (iteration $((REVIEW_ITERATION + 1)))"
     
     # Feed review findings back to worker for fixes
-    claude --agent sdd-worker \
+    claude --agent sdd-worker --setting-sources project,local \
       --model sonnet \
       -p "Fix the issues found in .autopilot/review-report.md for $FEAT_ID. \
           Only fix the issues listed — no scope creep." \
@@ -393,7 +393,7 @@ if [[ "$QA_VERDICT" != "PASS" ]]; then
     echo "❌ QA failed. See .autopilot/qa-report.md"
     echo "   Attempting auto-fix..."
     
-    claude --agent sdd-worker \
+    claude --agent sdd-worker --setting-sources project,local \
       --model sonnet \
       -p "Fix failing tests described in .autopilot/qa-report.md for $FEAT_ID." \
       2>&1 | tee .autopilot/qa-fix-output.log
@@ -417,9 +417,9 @@ fi
 # Push feature branch
 git push origin HEAD
 
-# Create PR against dev
+# Create PR against the flow's base_branch
 PR_URL=$(gh pr create \
-  --base dev \
+  --base "$BASE_BRANCH" \
   --head "$(git branch --show-current)" \
   --title "feat($FEAT_ID): $(cat sdd/specs/*.spec.md | head -1 | sed 's/# //')" \
   --body-file .autopilot/review-report.md \
@@ -478,7 +478,7 @@ Each stage produces a checkpoint file in `.autopilot/`:
 ```json
 {
   "feature_id": "FEAT-071",
-  "jira_key": "NAV-8036",
+  "jira_key": "PROJ-123",
   "started_at": "2026-04-14T10:30:00Z",
   "stages": {
     "worker": {
@@ -564,7 +564,8 @@ You validate feature implementations. You do NOT fix code — you report issues.
 1. Read the spec and task files to understand what was implemented.
 2. Identify all new/modified files from git diff.
 3. Run the test suite:
-   a. `TASK_FILES=$(jq -r '.tasks[].file' sdd/tasks/index/<feature-slug>.json); python -m scripts.sdd.select_tests --tier feature
+   a. If `test_command` in `sdd/config.json` is set, run it once from the repo root instead of `select_tests` (record command, exit code and output tail; non-zero blocks the merge; zero tests run → "⚠️ not run — no tests selected", never ✅). When null, use:
+      `TASK_FILES=$(jq -r '.tasks[].file' sdd/tasks/index/<feature-slug>.json); parrot sdd tests select --tier feature
       --base origin/<base_branch> $(printf -- '--task-file %s ' $TASK_FILES) --run` — the feature
       tier (mirror of directories ∪ declared Validation Commands ∪ core escalation); never a full-suite run
    b. `ruff check` on modified files
@@ -621,15 +622,15 @@ worker never needs to ask:
 #### Level 1 — Minimum (current sdd-task)
 ```markdown
 ## Scope
-- Create `oauth.py` in `querysource/handlers/`
+- Create `oauth.py` in `parrot/integrations/jira/`
 - Implement OAuth callback handler
 ```
 
 #### Level 2 — Worker-Ready (required for autopilot)
 ```markdown
 ## Scope
-- **CREATE** `querysource/handlers/oauth.py`
-- **MODIFY** `querysource/providers/salesforce.py` — add `_resolve_credentials()` method
+- **CREATE** `parrot/integrations/jira/oauth.py`
+- **MODIFY** `parrot_tools/jiratoolkit.py` — add `_resolve_credentials()` method
 
 ## Pseudo-Code
 
@@ -639,34 +640,34 @@ worker never needs to ask:
 # 2. Extract code + state from query params
 # 3. Validate state against Redis (key: oauth:state:{state_value})
 # 4. Exchange code → access_token via POST to:
-#      https://login.salesforce.com/services/oauth2/token
+#      https://auth.atlassian.com/oauth/token
 #    Body: grant_type=authorization_code, code=..., redirect_uri=...
 # 5. Store token in Redis (key: oauth:token:{user_id}, TTL from expires_in)
 # 6. Return HTML success page
 `` `
 
-### salesforce.py modifications
+### jiratoolkit.py modifications
 ```python
-# In salesforceProvider.__init__:
+# In JiraToolkit.__init__:
 #   Add self.credential_resolver: Optional[CredentialResolver] = None
 #   If credential_resolver is provided, skip basic_auth/token_auth setup
 #
 # New method _resolve_credentials(self, user_id: str) -> Dict:
 #   If self.credential_resolver:
-#     return await self.credential_resolver.resolve('salesforce', user_id)
+#     return await self.credential_resolver.resolve('jira', user_id)
 #   Else:
 #     return {'auth_type': self.auth_type, 'token': self.token, ...}
 `` `
 
 ## Codebase Contract
 ### Verified Imports
-- `from querysource.providers.abstract import BaseProvider` — querysource/providers/abstract.py:24
-- `from querysource.providers.external import externalProvider` — querysource/providers/external.py:1
+- `from <pkg>.module import ClassName` — <src>/<pkg>/module.py:15
+- `from <pkg>.other import helper` — <src>/<pkg>/other.py:1
 
 ### Does NOT Exist
-- `querysource.auth.CredentialResolver` — must be created in this task
-- `BaseProvider.credentials` — no such attribute
-- `salesforceProvider.refresh_token()` — no such method
+- `parrot.auth.CredentialResolver` — must be created in this task
+- `AbstractToolkit.credentials` — no such attribute
+- `JiraToolkit.refresh_token()` — no such method
 
 ## Test Skeleton
 ```python
@@ -699,7 +700,7 @@ async def test_oauth_callback_invalid_state():
 
 ```bash
 # Human does: review Jira ticket, approve spec
-/sdd-fromjira NAV-8036
+/sdd-fromjira PROJ-123
 
 # Then walk away
 cd .claude/worktrees/feat-071-jira-oauth
@@ -712,16 +713,16 @@ claude --agent sdd-autopilot --verbose
 
 ```bash
 # Planning phase (interactive)
-/sdd-fromjira NAV-8036
+/sdd-fromjira PROJ-123
 
 # Run worker + reviewer only
 cd .claude/worktrees/feat-071-jira-oauth
-claude --agent sdd-worker --verbose
+claude --agent sdd-worker --setting-sources project,local --verbose
 claude --agent code-reviewer -p "Review feat-071"
 
 # Human reviews code, then:
 /sdd-done FEAT-071
-/pr-review <PR_URL> NAV-8036
+/pr-review <PR_URL> PROJ-123
 ```
 
 ### Background Execution (tmux)
@@ -795,16 +796,16 @@ curl -s -X POST "$SLACK_WEBHOOK_URL" \
 
 ---
 
-## Comparison with in-process Python orchestration
+## Comparison with ai-parrot AgentCrew
 
-| Aspect | Python asyncio orchestrator | sdd-autopilot (Claude Code) |
-|--------|-----------------------------|-----------------------------|
-| Runtime | Python asyncio event loop | Bash + Claude CLI processes |
-| Agent type | Python classes / coroutines | `.claude/agents/*.md` files |
-| Context passing | In-memory dicts / dataclasses | Files on disk (`.autopilot/`) |
-| Dependency graph | DAG resolver / `asyncio.gather` | Sequential with gates |
-| Error handling | try/except + retries | Exit codes + retry loops |
+| Aspect | AgentCrew (ai-parrot) | sdd-autopilot (Claude Code) |
+|--------|----------------------|----------------------------|
+| Runtime | Python asyncio | Bash + Claude CLI processes |
+| Agent type | `BasicAgent` / `AbstractBot` | `.claude/agents/*.md` files |
+| Context passing | In-memory `AgentContext` | Files on disk (`.autopilot/`) |
+| Dependency graph | `task_flow()` + DAG resolver | Sequential with gates |
+| Error handling | `on_error` transitions | Exit codes + retry loops |
 | Parallelism | `asyncio.gather()` | Not needed (sequential pipeline) |
-| Observability | Structured logs + metrics | `state.json` + log files |
-| Resume | Custom checkpointing | Yes (reads `state.json`) |
-| LLM for synthesis | Inline LLM call | PR review = synthesis |
+| Observability | `ExecutionMemory` + logs | `state.json` + log files |
+| Resume | No | Yes (reads `state.json`) |
+| LLM for synthesis | Optional synthesis step | PR review = synthesis |

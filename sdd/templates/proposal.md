@@ -8,16 +8,16 @@ status: discussion | review | accepted
 source:
   kind: jira | inline | file
   jira_key: NAV-XXXX | null
-  jira_url: https://trocglobal.atlassian.net/browse/NAV-XXXX | null
+  jira_url: https://your-org.atlassian.net/browse/NAV-XXXX | null
   fetched_at: YYYY-MM-DD
   summary_oneline: <≤120 chars>
 overall_confidence: high | medium | low
-base_branch: dev
-# projects: parts of the codebase this doc concerns: `querysource` or a subsystem
-#   (providers, parsers, rust-parsers, outputs, multiquery, handlers, datasources,
-#   auth, cache, scheduler) or an area (sdd-tooling, dev-loop, docs, ci). Unknown values warn, not fail.
+base_branch: <base_branch>   # default: the base_branch in sdd/config.json
+# projects: parts of the codebase this doc concerns. Use the project areas of your
+#   repository (`sdd/CONVENTIONS.md` § Project areas, or the `projects` list in
+#   `sdd/config.json`). Unknown values warn, not fail.
 projects: []
-# tags: free-form kebab-case keywords for organizing specs (e.g. bigquery, cache).
+# tags: free-form kebab-case keywords for organizing specs (e.g. memory, mcp).
 tags: []
 research_state: sdd/state/FEAT-XXX/
 created: YYYY-MM-DD
@@ -90,7 +90,7 @@ Conventions, contracts, or downstream callers any solution must respect.
   *Implication*: regressions can land silently in `dev`.
   *Evidence*: F006
 
-- **Async-first convention.** QuerySource conventions require async public
+- **Async-first convention.** AI-Parrot conventions require async public
   methods; this module recently migrated.
   *Implication*: rolling back to sync is not an option.
   *Evidence*: F002

@@ -1,0 +1,11 @@
+{
+  "base_branch": "dev",
+  "staging_branch": null,
+  "hotfix_base": "main",
+  "ledger_branch": null,
+  "issue_tracker": "none",
+  "jira_host": null,
+  "reviewer": "none",
+  "test_command": null,
+  "projects": null
+}

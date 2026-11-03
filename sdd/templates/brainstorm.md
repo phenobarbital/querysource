@@ -1,14 +1,14 @@
 ---
 # SDD flow type and base branch (FEAT-145).
-# - type: feature  (default)  → base_branch: dev (or any non-main branch)
-# - type: hotfix              → base_branch MUST be: main
+# - type: feature  (default)  → base_branch: the base_branch in sdd/config.json (or any non-hotfix branch)
+# - type: hotfix              → base_branch MUST be the hotfix_base in sdd/config.json
 type: feature
-base_branch: dev
-# projects: parts of the codebase this doc concerns: `querysource` or a subsystem
-#   (providers, parsers, rust-parsers, outputs, multiquery, handlers, datasources,
-#   auth, cache, scheduler) or an area (sdd-tooling, dev-loop, docs, ci). Unknown values warn, not fail.
+base_branch: <base_branch>   # default: the base_branch in sdd/config.json
+# projects: parts of the codebase this doc concerns. Use the project areas of your
+#   repository (`sdd/CONVENTIONS.md` § Project areas, or the `projects` list in
+#   `sdd/config.json`). Unknown values warn, not fail.
 projects: []
-# tags: free-form kebab-case keywords for organizing specs (e.g. bigquery, cache).
+# tags: free-form kebab-case keywords for organizing specs (e.g. memory, mcp).
 tags: []
 ---
 
@@ -178,7 +178,7 @@ tags: []
 
 #### Classes & Signatures
 ```python
-# From querysource/path/to/file.py:NN
+# From parrot/path/to/file.py:NN
 class ExistingClass(BaseClass):
     attribute: Type  # line NN
     async def method(self, param: Type) -> ReturnType:  # line NN
@@ -188,17 +188,17 @@ class ExistingClass(BaseClass):
 #### Verified Imports
 ```python
 # These imports have been confirmed to work:
-from querysource.module import ClassName  # querysource/module/__init__.py:NN
+from parrot.module import ClassName  # parrot/module/__init__.py:NN
 ```
 
 #### Key Attributes & Constants
 <!-- List attributes/constants that tasks will need to reference -->
-- `ClassName.attribute_name` → `Type` (querysource/path/file.py:NN)
+- `ClassName.attribute_name` → `Type` (parrot/path/file.py:NN)
 
 ### Does NOT Exist (Anti-Hallucination)
 <!-- List things that might seem like they should exist but DO NOT.
      This prevents implementing agents from assuming these are available. -->
-- ~~`querysource.module.NonExistentThing`~~ — does not exist
+- ~~`parrot.module.NonExistentThing`~~ — does not exist
 - ~~`ClassName.phantom_attribute`~~ — not a real attribute
 
 ---
