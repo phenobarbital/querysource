@@ -260,7 +260,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "in-progress",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -270,7 +270,7 @@
       "parallel": false,
       "parallelism_notes": "modifies parse_user_filter_options() created by TASK-950 and the QS slug branch touched by TASK-956",
       "assigned_to": null,
-      "started_at": null,
+      "started_at": "2026-11-03T22:04:05+00:00",
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-960-config-error-message-redaction.md"
     }
