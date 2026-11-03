@@ -41,6 +41,7 @@ class sqlProvider(BaseProvider):
     }
 
     __parser__ = SQLParser
+    __user_filter_capable__ = True
     capabilities = qsurl_caps.BASE | {qsurl_caps.ALIAS, qsurl_caps.SORT, qsurl_caps.LIMIT, qsurl_caps.OFFSET}
     _PARSER_PLACEHOLDERS = (
         "{where_cond}",
