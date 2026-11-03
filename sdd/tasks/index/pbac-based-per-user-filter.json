@@ -222,6 +222,26 @@
       "started_at": null,
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-958-user-filter-capability-allowlist.md"
+    },
+    {
+      "id": "TASK-959",
+      "slug": "user-filter-value-type-restriction",
+      "title": "Type-restrict identity values before they reach filter_conditions",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-951"
+      ],
+      "parallel": true,
+      "parallelism_notes": "modifies compile_user_filter() created by TASK-951 in querysource/auth/user_filter.py",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-959-user-filter-value-type-restriction.md"
     }
   ]
 }
