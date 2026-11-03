@@ -86,7 +86,9 @@ Retrieves detailed metadata for a specific query slug.
   "filtering": {},
   "ordering": [],
   "grouping": [],
+  "user_filtering": false,
   "h_filtering": false,
+  "user_filter_options": {},
   "qry_options": {},
   "is_cached": false,
   "cache_timeout": null,
@@ -112,6 +114,7 @@ Retrieves detailed metadata for a specific query slug.
       "filtering": {},
       "ordering": [],
       "grouping": [],
+      "user_filtering": false,
       "h_filtering": false,
       "qry_options": {},
       "refresh_param": "refresh"
@@ -125,6 +128,15 @@ Retrieves detailed metadata for a specific query slug.
   "redacted": []
 }
 ```
+
+**Notes on filtering fields:**
+
+- `user_filtering` (bool): Whether per-user automatic filtering is enabled for this slug.
+- `h_filtering` (bool): **Deprecated alias** of `user_filtering`. Still returned for
+  backward compatibility; removed in 5.3.0.
+- `user_filter_options` (object): The rule document that configures filtering. This field
+  is **admin-only** — it appears in the response only when the caller is a superuser or
+  belongs to `QS_DESCRIBE_ADMIN_GROUPS`. Otherwise it is listed in `redacted`.
 
 ## GET /api/v1/queries/{slug}/columns
 
