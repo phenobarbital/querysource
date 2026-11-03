@@ -85,7 +85,7 @@ class QueryModel(Model):
     )
     user_filter_options: Optional[dict] = Field(
         required=False,
-        db_type='jsonb',
+        db_type="jsonb",
         default_factory=dict,
         comment="Typed rule list: {rules, program, bypass} (FEAT-184).",
     )

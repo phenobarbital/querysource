@@ -58,18 +58,18 @@ class TenantQueryDefinition(BaseModel):
     h_filtering: bool = Field(
         required=False,
         default=False,
-        comment='DEPRECATED alias of user_filtering; column dropped in 5.3.0. Never consulted.',
+        comment="DEPRECATED alias of user_filtering; column dropped in 5.3.0. Never consulted.",
     )
     user_filtering: bool = Field(
         required=False,
         default=False,
-        comment='Per-user automatic filtering compiled from user_filter_options (FEAT-184).',
+        comment="Per-user automatic filtering compiled from user_filter_options (FEAT-184).",
     )
     user_filter_options: Optional[dict] = Field(
         required=False,
-        db_type='jsonb',
+        db_type="jsonb",
         default_factory=dict,
-        comment='Typed rule list: {rules, program, bypass} (FEAT-184).',
+        comment="Typed rule list: {rules, program, bypass} (FEAT-184).",
     )
     query_raw: str = Field(required=False)
     is_raw: bool = Field(required=False, default=False)

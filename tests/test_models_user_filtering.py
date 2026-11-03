@@ -1,4 +1,5 @@
 """FEAT-184 TASK-952 — definition fields."""
+
 from __future__ import annotations
 
 from querysource.models import QueryModel
