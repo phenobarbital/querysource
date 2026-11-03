@@ -38,6 +38,12 @@ REASON_PROGRAM_RESTRICTED: Final[str] = "program_restricted"
 REASON_PARSER_REQUIRED: Final[str] = "parser_required"
 REASON_INVALID_ATTRIBUTE: Final[str] = "invalid_attribute"
 
+#: Fixed caller-facing text. The validation detail is logged, never returned:
+#: it echoes admin-authored columns, attribute paths and failing input values.
+INVALID_OPTIONS_MESSAGE: Final[str] = (
+    "Invalid user_filter_options for this query definition; see server logs."
+)
+
 # Values with operator meaning in dialect filter_conditions() (parsers/sql.pyx).
 _OPERATOR_TOKENS: Final[tuple[str, ...]] = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
 SUPERUSER_BYPASS: Final[str] = "superuser"
@@ -120,7 +126,8 @@ def parse_user_filter_options(raw: Mapping[str, Any] | UserFilterOptions | None)
     try:
         return UserFilterOptions.model_validate(dict(raw))
     except (ValidationError, ValueError, TypeError) as err:
-        raise ConfigError(f"Invalid user_filter_options: {err}") from err
+        _logger.error("FEAT-184: invalid user_filter_options document: %s", err, exc_info=True)
+        raise ConfigError(INVALID_OPTIONS_MESSAGE) from err
 
 
 def session_userinfo(session: Any | None) -> dict[str, Any]:

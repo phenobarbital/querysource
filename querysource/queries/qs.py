@@ -22,6 +22,7 @@ from datamodel.typedefs import AttrDict
 
 from ..connections import QueryConnection
 from ..exceptions import (
+    ConfigError,
     DataNotFound,
     EmptySentence,
     ParserError,
@@ -326,8 +327,10 @@ class QS(BaseQuery):
                 self._qs = self._provider(**args)
                 await self._qs.prepare_connection()
                 return self
-            except (RawQueryPlaceholderError, SemanticError, QueryAccessDenied, UserFilterDenied):
-                # Operational, semantic, and access errors surface with their own code.
+            except (RawQueryPlaceholderError, SemanticError, QueryAccessDenied, UserFilterDenied, ConfigError):
+                # Operational, semantic, access and configuration errors surface
+                # with their own code — re-wrapping a ConfigError would splice its
+                # message (and the provider repr) into the caller's response.
                 raise
             except Exception as err:
                 self._logger.exception(
