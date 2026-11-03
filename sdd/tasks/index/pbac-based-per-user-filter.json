@@ -1,0 +1,207 @@
+{
+  "feature": "pbac-based-per-user-filter",
+  "feature_id": "FEAT-184",
+  "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+  "type": "feature",
+  "base_branch": "dev",
+  "created_at": "2026-11-03T17:10:05+00:00",
+  "completed_at": null,
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "test_contract": {
+    "schema": 2,
+    "runners": [
+      {
+        "kind": "pytest",
+        "targets": [
+          "tests/auth/test_user_filter_options.py",
+          "tests/auth/test_user_filter.py",
+          "tests/test_models_user_filtering.py",
+          "tests/handlers/test_describe_user_filtering.py",
+          "tests/test_sql_parser_user_filter.py",
+          "tests/providers/test_user_filter_guard.py",
+          "tests/test_qs_user_filtering.py",
+          "tests/handlers/test_queryservice_pbac_smoke.py",
+          "tests/test_sql_parser_combinations.py",
+          "tests/auth/test_principal.py",
+          "tests/semantic/test_governance.py",
+          "tests/handlers/test_describe_detail.py",
+          "tests/tenants/test_tenant_repository_reads.py",
+          "tests/tenants/test_tenant_repository_writes.py",
+          "tests/tenants/test_columns_definition.py",
+          "tests/providers/test_semantic_provider.py"
+        ],
+        "settings": {
+          "markers": ""
+        },
+        "tiers": [
+          "task",
+          "merge",
+          "feature"
+        ]
+      }
+    ],
+    "digest": "sha256:3fafefab6de3a55308ce5d91d1ea9468ea2fc5bc4a58806b1b791d7cef794fc3"
+  },
+  "tasks": [
+    {
+      "id": "TASK-950",
+      "slug": "user-filter-options-and-exception",
+      "title": "UserFilterDenied exception and typed user_filter_options models",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "No dependencies: creates querysource/auth/user_filter.py and UserFilterDenied in querysource/exceptions.py.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-950-user-filter-options-and-exception.md"
+    },
+    {
+      "id": "TASK-951",
+      "slug": "user-filter-compiler",
+      "title": "Rule compiler: attribute resolution, bypass, program check, compile_user_filter",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-950"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Modifies querysource/auth/user_filter.py created by TASK-950 and imports its UserFilterOptions/UserFilterResult/reason constants and UserFilterDenied.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-951-user-filter-compiler.md"
+    },
+    {
+      "id": "TASK-952",
+      "slug": "definition-fields-and-migration",
+      "title": "user_filtering / user_filter_options fields and ADD-only migration",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "No dependencies: touches only querysource/models.py, tenant_models.py, docs/sql and the move-test DDL.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-952-definition-fields-and-migration.md"
+    },
+    {
+      "id": "TASK-953",
+      "slug": "describe-user-filtering",
+      "title": "Describe exposure of user_filtering (alias + admin-only rules)",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-952"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Needs the QueryModel.user_filtering / user_filter_options fields from TASK-952 (describe_slug builds base from QueryModel.columns).",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-953-describe-user-filtering.md"
+    },
+    {
+      "id": "TASK-954",
+      "slug": "parser-user-filter-step",
+      "title": "Parser step _user_filter_sync (Cython .pyx/.pxd)",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-951",
+        "TASK-952"
+      ],
+      "parallel": false,
+      "parallelism_notes": "Exclusive: rebuilds the shared Cython extension (make build-inplace). Lazy-imports compile_user_filter from TASK-951 (querysource/auth/user_filter.py); reads definition.user_filtering from TASK-952 (querysource/models.py).",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-954-parser-user-filter-step.md"
+    },
+    {
+      "id": "TASK-955",
+      "slug": "provider-user-filter-guard",
+      "title": "Provider identity forwarding and fail-closed guard",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-954"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Passes principal=/userinfo= to the parser constructor that TASK-954 makes accept them (querysource/parsers/abstract.pyx); UserFilterDenied/REASON_PARSER_REQUIRED come transitively from TASK-950.",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-955-provider-user-filter-guard.md"
+    },
+    {
+      "id": "TASK-956",
+      "slug": "qs-identity-plumbing",
+      "title": "QS identity resolution and 403 propagation",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "M",
+      "depends_on": [
+        "TASK-951",
+        "TASK-955"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Imports session_userinfo from TASK-951 (querysource/auth/user_filter.py); passes userinfo to BaseProvider which TASK-955 makes consume it (querysource/providers/abstract.py).",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-956-qs-identity-plumbing.md"
+    },
+    {
+      "id": "TASK-957",
+      "slug": "user-filtering-docs",
+      "title": "Documentation: user guide, describe API, programmatic callers, changelog",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "medium",
+      "effort": "S",
+      "depends_on": [
+        "TASK-953",
+        "TASK-956"
+      ],
+      "parallel": true,
+      "parallelism_notes": "Documents the describe payload from TASK-953 (querysource/queries/describe.py) and the QS/provider behaviour finished in TASK-956 (querysource/queries/qs.py).",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-957-user-filtering-docs.md"
+    }
+  ]
+}

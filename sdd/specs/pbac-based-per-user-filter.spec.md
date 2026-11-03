@@ -697,6 +697,14 @@ user_filter_options                                # admin grant only (ADMIN_FIE
 ### Validation Contract
 
 tests:
+- tests/auth/test_user_filter_options.py
+- tests/auth/test_user_filter.py
+- tests/test_models_user_filtering.py
+- tests/handlers/test_describe_user_filtering.py
+- tests/test_sql_parser_user_filter.py
+- tests/providers/test_user_filter_guard.py
+- tests/test_qs_user_filtering.py
+- tests/handlers/test_queryservice_pbac_smoke.py
 - tests/test_sql_parser_combinations.py
 - tests/auth/test_principal.py
 - tests/semantic/test_governance.py
@@ -1148,4 +1156,5 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 
 | Version | Date | Author | Change |
 |---|---|---|---|
+| 0.2 | 2026-11-03 | Claude (`/sdd-task`) | Validation Contract lists the feature's new test files and the QS PBAC smoke test |
 | 0.1 | 2026-11-03 | Jesus Lara / Claude | Initial draft from `pbac-based-per-user-filter.brainstorm.md` (Option A); ADD-only migration and `_user_principal` naming decided from codebase research |
