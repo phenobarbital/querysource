@@ -55,7 +55,22 @@ class TenantQueryDefinition(BaseModel):
         comment='Declared output columns of a multi-query definition (HEAD/PATCH inspection).',
     )
     qry_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict)
-    h_filtering: bool = Field(required=False, default=False, comment='filtering based on Hierarchical rules.')
+    h_filtering: bool = Field(
+        required=False,
+        default=False,
+        comment='DEPRECATED alias of user_filtering; column dropped in 5.3.0. Never consulted.',
+    )
+    user_filtering: bool = Field(
+        required=False,
+        default=False,
+        comment='Per-user automatic filtering compiled from user_filter_options (FEAT-184).',
+    )
+    user_filter_options: Optional[dict] = Field(
+        required=False,
+        db_type='jsonb',
+        default_factory=dict,
+        comment='Typed rule list: {rules, program, bypass} (FEAT-184).',
+    )
     query_raw: str = Field(required=False)
     is_raw: bool = Field(required=False, default=False)
     is_cached: bool = Field(required=False, default=True)
