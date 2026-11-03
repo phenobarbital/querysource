@@ -45,7 +45,7 @@ async def test_sql_provider_raw_guard() -> None:
     provider = sqlProvider(
         slug="s",
         qstype="slug",
-        definition=_definition(is_raw=True),
+        definition=_definition(is_raw=True, query_raw="SELECT * FROM t"),
         conditions={},
         connection=MagicMock(),
     )
@@ -90,7 +90,7 @@ async def test_provider_no_flag_unchanged() -> None:
     provider = sqlProvider(
         slug="s",
         qstype="slug",
-        definition=_definition(user_filtering=False, is_raw=True),
+        definition=_definition(user_filtering=False, is_raw=True, query_raw="SELECT * FROM t"),
         conditions={},
         connection=MagicMock(),
     )
