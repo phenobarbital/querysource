@@ -17,6 +17,7 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 from ..exceptions import ConfigError, UserFilterDenied
+from ..parsers.filter_values import has_between_prefix
 from .principal import QSPrincipal
 
 try:
@@ -35,6 +36,10 @@ REASON_AUTHZ_PRINCIPAL: Final[str] = "authz_principal"
 REASON_MISSING_ATTRIBUTE: Final[str] = "missing_attribute"
 REASON_PROGRAM_RESTRICTED: Final[str] = "program_restricted"
 REASON_PARSER_REQUIRED: Final[str] = "parser_required"
+REASON_INVALID_ATTRIBUTE: Final[str] = "invalid_attribute"
+
+# Values with operator meaning in dialect filter_conditions() (parsers/sql.pyx).
+_OPERATOR_TOKENS: Final[tuple[str, ...]] = ('<', '>', '>=', '<=', '<>', '!=', 'IS NOT', 'IS')
 SUPERUSER_BYPASS: Final[str] = "superuser"
 COLUMN_GRAMMAR: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
 
@@ -205,6 +210,29 @@ def check_program(
         raise UserFilterDenied(reason_code=REASON_PROGRAM_RESTRICTED, slug=slug)
 
 
+def _safe_scalar(value: Any) -> bool:
+    """Return True if *value* is a plain scalar with no filter-operator meaning."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if not isinstance(value, str) or not value:
+        return False
+    if value.startswith("!") or value.lower() == "null":
+        return False
+    if has_between_prefix(value):
+        return False
+    return value.strip().upper() not in _OPERATOR_TOKENS
+
+
+def _safe_filter_value(value: Any) -> bool:
+    """Return True if *value* can be passed to filter_conditions as a literal equality/IN value."""
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+        return bool(items) and all(_safe_scalar(v) for v in items)
+    return _safe_scalar(value)
+
+
 def compile_user_filter(
     options: Mapping[str, Any] | UserFilterOptions | None,
     *,
@@ -250,6 +278,12 @@ def compile_user_filter(
             )
             log.warning("user_filter denied slug=%s reason=%s %s", slug, reason_code, log_fields)
             raise UserFilterDenied(reason_code=reason_code, slug=slug)
+        if not _safe_filter_value(value):
+            log.warning(
+                "user_filter deny: invalid attribute value type for %s (column %s, slug %s)",
+                rule.attribute, rule.column, slug,
+            )
+            raise UserFilterDenied(reason_code=REASON_INVALID_ATTRIBUTE, slug=slug)
         if isinstance(value, (list, tuple)) or rule.operator == "in":
             predicates[rule.column] = list(value) if isinstance(value, (list, tuple)) else [value]
         else:
