@@ -51,7 +51,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "M",
       "depends_on": [],
@@ -59,8 +59,9 @@
       "parallelism_notes": "No dependencies: creates querysource/auth/user_filter.py and UserFilterDenied in querysource/exceptions.py.",
       "assigned_to": null,
       "started_at": "2026-11-03T17:11:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-950-user-filter-options-and-exception.md"
+      "completed_at": "2026-11-03T17:24:13+00:00",
+      "file": "sdd/tasks/completed/TASK-950-user-filter-options-and-exception.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-951",
@@ -89,7 +90,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [],
@@ -97,8 +98,9 @@
       "parallelism_notes": "No dependencies: touches only querysource/models.py, tenant_models.py, docs/sql and the move-test DDL.",
       "assigned_to": null,
       "started_at": "2026-11-03T17:11:57+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-952-definition-fields-and-migration.md"
+      "completed_at": "2026-11-03T17:24:13+00:00",
+      "file": "sdd/tasks/completed/TASK-952-definition-fields-and-migration.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-953",
