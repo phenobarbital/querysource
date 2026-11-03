@@ -1,0 +1,31 @@
+{
+  "feature": "describe-semantic-nonraw-test",
+  "feature_id": "BRIEF-d96c0474d67d",
+  "spec": "sdd/briefs/describe-semantic-nonraw-test.brief.md",
+  "type": "brief",
+  "base_branch": "dev",
+  "created_at": "2026-11-03",
+  "completed_at": "2026-11-03T16:00:16+00:00",
+  "parallel_semantics": "exclusive",
+  "validation_contract": "required",
+  "tasks": [
+    {
+      "id": "HOTFIX-d96c0474d67d-1",
+      "slug": "nonraw-semantic-tests",
+      "title": "Non-raw tests for describe_slug derived.semantic",
+      "feature_id": "BRIEF-d96c0474d67d",
+      "feature": "describe-semantic-nonraw-test",
+      "spec": "sdd/briefs/describe-semantic-nonraw-test.brief.md",
+      "status": "done",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [],
+      "parallel": true,
+      "parallelism_notes": "",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": "2026-11-03T16:00:16+00:00",
+      "file": "sdd/briefs/describe-semantic-nonraw-test/tasks/HOTFIX-d96c0474d67d-1-nonraw-semantic-tests.md"
+    }
+  ]
+}
