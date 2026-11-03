@@ -71,6 +71,29 @@ class QueryAccessDenied(QueryException):
         super().__init__(message or "Query not available.", code=404)
 
 
+class UserFilterDenied(QueryException):
+    """Per-user filtering refused to run the query (HTTP 403).
+
+    The message is always generic and never names the rule, attribute or
+    program that failed. ``reason_code`` carries the machine-readable cause
+    for logs: ``no_principal``, ``authz_principal``, ``missing_attribute``,
+    ``program_restricted`` or ``parser_required``.
+    """
+
+    default_code = 403
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        reason_code: str = "denied",
+        slug: str | None = None,
+    ) -> None:
+        super().__init__(message or "Access denied.", code=403)
+        self.reason_code = reason_code
+        self.slug = slug
+
+
 class DriverError(QueryException):
     pass
 
