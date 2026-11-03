@@ -210,6 +210,26 @@
       "completed_at": "2026-11-03T19:23:25+00:00",
       "file": "sdd/tasks/completed/TASK-957-user-filtering-docs.md",
       "verification": "verified"
+    },
+    {
+      "id": "TASK-958",
+      "slug": "user-filter-capability-allowlist",
+      "title": "Fail closed on every non-sqlProvider provider (capability allowlist)",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "in-progress",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-955"
+      ],
+      "parallel": true,
+      "parallelism_notes": "edits _assert_user_filter_capable() created by TASK-955 in querysource/providers/abstract.py; both modify abstract.py and sql.py",
+      "assigned_to": null,
+      "started_at": "2026-11-03T19:45:18+00:00",
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-958-user-filter-capability-allowlist.md"
     }
   ]
 }
