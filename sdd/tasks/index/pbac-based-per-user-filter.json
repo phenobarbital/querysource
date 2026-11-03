@@ -239,7 +239,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "in-progress",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -249,8 +249,9 @@
       "parallelism_notes": "modifies compile_user_filter() created by TASK-951 in querysource/auth/user_filter.py",
       "assigned_to": null,
       "started_at": "2026-11-03T21:58:41+00:00",
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-959-user-filter-value-type-restriction.md"
+      "completed_at": "2026-11-03T22:01:33+00:00",
+      "file": "sdd/tasks/completed/TASK-959-user-filter-value-type-restriction.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-960",
