@@ -14,7 +14,7 @@ tags: [pbac, user-filtering, row-level-security, parser, program-restriction, se
 
 # Feature Specification: PBAC-based per-user automatic filtering (`user_filtering`)
 
-**Feature ID**: FEAT-<NNN>
+**Feature ID**: FEAT-184
 **Date**: 2026-11-03
 **Author**: Jesus Lara / Claude (`/sdd-spec`)
 **Status**: draft
@@ -174,7 +174,7 @@ answers):**
   `QueryModel` and `TenantQueryDefinition` reject unknown keyword arguments
   (`TypeError`, verified by construction — `querysource/tenant_models.py:30-33`
   and a live probe), and the tenant repository validates every row with
-  `TenantQueryDefinition(**data)` (`querysource/repositories/definitions.py:158`).
+  `TenantQueryDefinition(**data)` (`querysource/repositories/definitions.py:159`).
   Renaming the column while dropping the field would make every row of an
   un-migrated store unreadable. Therefore: `h_filtering` remains declared on
   both models (deprecated, never consulted), the SQL migration only **adds**
@@ -508,7 +508,7 @@ user_filter_options                                # admin grant only (ADMIN_FIE
   # querysource/models.py  (modifies querysource/models.py:76)
   class QueryModel(Model):  # verified: querysource/models.py:49
       h_filtering: bool = Field(required=False, default=False, comment="DEPRECATED alias of user_filtering; column dropped in 5.3.0. Never consulted.")
-      user_filtering: bool = Field(required=False, default=False, comment="Per-user automatic filtering compiled from user_filter_options (FEAT-<NNN>).")
+      user_filtering: bool = Field(required=False, default=False, comment="Per-user automatic filtering compiled from user_filter_options (FEAT-184).")
       user_filter_options: Optional[dict] = Field(required=False, db_type='jsonb', default_factory=dict, comment="Typed rule list: {rules, program, bypass}.")
 
   # querysource/tenant_models.py  (modifies querysource/tenant_models.py:58) — identical three fields on TenantQueryDefinition  # verified: tenant_models.py:24
@@ -776,7 +776,7 @@ combinatorial tests.
 ## 6. Codebase Contract
 
 > **CRITICAL — Anti-Hallucination Anchor**
-> Verified against HEAD `7289f4b` (code identical to `a76422c`; the only commit since is the brainstorm file). Every path/line below was re-read for this spec.
+> Verified against HEAD `f3b6bf6` (anchors re-checked after merges #689–#691; the only code change since `7289f4b` is `repositories/definitions.py:479`, below every cited line). Every path/line below was re-read for this spec.
 
 ### Verified Imports
 ```python
@@ -810,7 +810,7 @@ class TenantQueryDefinition(BaseModel):                                      # l
     h_filtering: bool = Field(required=False, default=False, comment='filtering based on Hierarchical rules.')  # line 58
 
 # querysource/repositories/definitions.py
-    def _row_to_persisted(self, row, store) -> tuple[dict, str | None]:     # line 140 → TenantQueryDefinition(**data) at line 158
+    def _row_to_persisted(self, row, store) -> tuple[dict, str | None]:     # line 140 → TenantQueryDefinition(**data) at line 159
     def _runtime_model(self, persisted, store, legacy_program_slug) -> QueryModel:  # line 172
         program_slug = legacy_program_slug if store.has_program_slug else store.schema   # line 178 (tenant store → program = schema)
 
@@ -951,7 +951,7 @@ QS_PBAC_ENABLED = config.getboolean('QS_PBAC_ENABLED', fallback=False)       # l
 
 ### Edit Sites (Blueprint Anchors)
 
-Verified against: `7289f4b` (`grep -c` counts taken 2026-11-03).
+Verified against: `f3b6bf6` (`grep -c` counts taken 2026-11-03).
 
 | File | Action | Verbatim anchor line | Verified at | Occurrences |
 |---|---|---|---|---|
@@ -1119,7 +1119,7 @@ Summary: **0** confirmed · **0** rejected · **0** escalated.
 
 ## Worktree Strategy
 
-- **Isolation**: one feature worktree (`feat-FEAT-<NNN>-pbac-based-per-user-filter`);
+- **Isolation**: one feature worktree (`feat-FEAT-184-pbac-based-per-user-filter`);
   the `sdd-coder` engine gives each task its own sub-worktree inside it.
 - **Module dependency graph** (edges = imports/uses):
   - M3 → M1 (lazy-imports `compile_user_filter`; propagates `UserFilterDenied`, `ConfigError`)
