@@ -245,7 +245,10 @@ def parse_user_filter_options(raw: Mapping[str, Any] | UserFilterOptions | None)
         return raw
     # FILL IN: None / empty / non-Mapping → ConfigError("user_filter_options is required when user_filtering is on")
     # FILL IN: return UserFilterOptions.model_validate(dict(raw)); map ValidationError/ValueError/TypeError
-    #          to ConfigError(f"Invalid user_filter_options: {err}") raised `from err` — bounded by AC-8
+    #          log the detail (logger.error, exc_info=True) and raise ConfigError with a CONSTANT
+    #          message `from err` — never interpolate `{err}`: the pydantic report echoes admin-authored
+    #          columns/attribute paths and failing input values straight into the HTTP response
+    #          (TASK-960 / issue:4be97634adbe owns the final wording) — bounded by AC-8
     raise ConfigError("Invalid user_filter_options")
 ```
 **Why this shape**: names, defaults and reason codes are fixed by spec §2 Data Models; TASK-951 appends functions below `parse_user_filter_options` and imports these constants, so do not rename them.

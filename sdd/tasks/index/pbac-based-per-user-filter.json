@@ -242,6 +242,27 @@
       "started_at": null,
       "completed_at": null,
       "file": "sdd/tasks/active/TASK-959-user-filter-value-type-restriction.md"
+    },
+    {
+      "id": "TASK-960",
+      "slug": "config-error-message-redaction",
+      "title": "Keep user_filter_options validation detail out of the HTTP response",
+      "feature_id": "FEAT-184",
+      "feature": "pbac-based-per-user-filter",
+      "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
+      "status": "pending",
+      "priority": "high",
+      "effort": "S",
+      "depends_on": [
+        "TASK-950",
+        "TASK-956"
+      ],
+      "parallel": false,
+      "parallelism_notes": "modifies parse_user_filter_options() created by TASK-950 and the QS slug branch touched by TASK-956",
+      "assigned_to": null,
+      "started_at": null,
+      "completed_at": null,
+      "file": "sdd/tasks/active/TASK-960-config-error-message-redaction.md"
     }
   ]
 }
