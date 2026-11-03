@@ -1,4 +1,5 @@
 """FEAT-184 TASK-953 — describe exposure of user_filtering."""
+
 from __future__ import annotations
 
 from querysource.models import QueryModel

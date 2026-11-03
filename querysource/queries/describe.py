@@ -33,7 +33,12 @@ IMPLICIT_DEFAULTS: dict[str, str] = {
 }
 RAW_FIELDS: tuple[str, ...] = ("query_raw",)
 ADMIN_FIELDS: tuple[str, ...] = (
-    "dwh_info", "dwh_scheduler", "cache_options", "created_by", "updated_by", "user_filter_options",
+    "dwh_info",
+    "dwh_scheduler",
+    "cache_options",
+    "created_by",
+    "updated_by",
+    "user_filter_options",
 )
 _KEY_GRAMMAR = re.compile(r"^[A-Za-z0-9_.]+$")  # rust/src/safe_dict.rs:116-120
 
