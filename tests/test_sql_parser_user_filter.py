@@ -1,4 +1,5 @@
 """FEAT-184 TASK-954 — parser user_filter step (requires `make build-inplace`)."""
+
 from __future__ import annotations
 
 import pytest
