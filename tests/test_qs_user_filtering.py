@@ -1,4 +1,5 @@
 """FEAT-184 TASK-956 — QS identity plumbing and 403 propagation."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -12,7 +13,6 @@ from querysource.models import QueryModel
 from querysource.providers.sql import sqlProvider
 from querysource.queries.qs import QS
 from querysource.tenants import LoadedDefinition, QueryIdentity, QueryStore
-
 
 OPTIONS = {"rules": [{"column": "user_id", "attribute": "user_id"}], "program": {"restricted": True}}
 
@@ -102,6 +102,7 @@ async def test_qs_resolves_principal_from_session(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.asyncio
 async def test_qs_reraises_user_filter_denied(monkeypatch: pytest.MonkeyPatch):
     """A provider's per-user denial keeps its 403 exception type and code."""
+
     class DenyingProvider(_Provider):
         async def prepare_connection(self):
             raise UserFilterDenied(reason_code="program_restricted")

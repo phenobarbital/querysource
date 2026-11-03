@@ -216,9 +216,11 @@ class QS(BaseQuery):
 
         # FEAT-184: caller identity for per-user filtering, resolved once.
         from ..auth.user_filter import session_userinfo
+
         _user_principal = self._principal
         if _user_principal is None and _pbac_session is not None:
             from ..semantic.governance import principal_from_session
+
             _user_principal = principal_from_session(_pbac_session)
         _user_info = session_userinfo(_pbac_session)
 
