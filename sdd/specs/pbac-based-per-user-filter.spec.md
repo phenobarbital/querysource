@@ -17,7 +17,7 @@ tags: [pbac, user-filtering, row-level-security, parser, program-restriction, se
 **Feature ID**: FEAT-184
 **Date**: 2026-11-03
 **Author**: Jesus Lara / Claude (`/sdd-spec`)
-**Status**: draft
+**Status**: approved
 **Target version**: 5.2.7 (deprecated `h_filtering` alias removed in 5.3.0)
 **Exploration**: `sdd/proposals/pbac-based-per-user-filter.brainstorm.md` (Recommended Option A)
 
