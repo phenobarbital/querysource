@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
@@ -108,9 +109,12 @@ class QuerySource(metaclass=Singleton):
         # This avoids binding asyncdb pools to a loop that is not the one
         # aiohttp will run with.
         if kwargs.get('loop') is not None:
-            logging.getLogger("querysource.services").warning(
-                "QuerySource(loop=...) is deprecated; loop is captured "
-                "automatically from the running event loop."
+            warnings.warn(
+                "QuerySource(loop=...) is deprecated since 4.2.0 and will be "
+                "removed in 5.3.0; the loop is captured automatically from "
+                "the running event loop.",
+                DeprecationWarning,
+                stacklevel=2,
             )
         try:
             self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
