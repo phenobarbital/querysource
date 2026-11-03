@@ -207,6 +207,33 @@ async def test_concurrent_upserts_same_identity() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("store_factory", [_tenant_store, _legacy_store])
+async def test_upsert_assigns_each_column_once(store_factory) -> None:
+    """upsert's ON CONFLICT SET assigns updated_at (and every column) exactly once.
+
+    TenantQueryDefinition always materialises updated_at, so it reaches the
+    column list even when the payload omits it; PostgreSQL rejects a SET that
+    assigns it twice ("multiple assignments to same column").
+    """
+    store = store_factory()
+    payload = _base_row(query_slug="test_save")
+    payload.pop("updated_at")
+    if store.has_program_slug:
+        payload["program_slug"] = "localhost"
+    conn = _MockConn(rows=[{**_base_row(query_slug="test_save"), "is_inserted": True}])
+    repo = DefinitionRepository(registry=None, connection_factory=_factory(conn))
+
+    await repo.upsert(QueryIdentity(store=store, slug="test_save"), payload)
+
+    sql = next(c[1] for c in conn.calls if "ON CONFLICT" in c[1])
+    set_clause = sql.split("DO UPDATE SET", 1)[1].split("RETURNING", 1)[0]
+    targets = [part.split("=", 1)[0].strip() for part in set_clause.split(",")]
+    assert len(targets) == len(set(targets)), f"duplicate SET targets: {targets}"
+    assert targets.count('"updated_at"') == 1
+    assert '"updated_at" = now()' in set_clause
+
+
+@pytest.mark.asyncio
 async def test_patch_null_and_immutable_keys() -> None:
     """patch null and immutable keys."""
     store = _tenant_store()

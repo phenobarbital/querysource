@@ -479,7 +479,8 @@ class DefinitionRepository:
         for col in columns:
             if col == "program_slug" and program_slug is None:
                 continue  # omitted: keep the stored value on conflict
-            if col != "query_slug":
+            # updated_at is server-managed below; assigning it twice is a SQL error
+            if col not in ("query_slug", "updated_at"):
                 update_clauses.append(f"{quote_identifier(col)} = EXCLUDED.{quote_identifier(col)}")
 
         # Add updated_at timestamp for the update case
