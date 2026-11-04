@@ -3,7 +3,7 @@
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
 **Discovered-from**: `issue:4be97634adbe`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (1-2h)
 **Depends-on**: TASK-950, TASK-956
@@ -218,4 +218,8 @@ message and the 500 that `ConfigError` already sets.
 ```
 
 ## Completion Note
-_(filled by the implementer)_
+**Completed by**: Claude (sdd-start, direct)
+**Date**: 2026-11-03
+**Notes**: parse_user_filter_options logs the validation detail at ERROR and raises ConfigError(INVALID_OPTIONS_MESSAGE); ConfigError added to the slug-branch pass-through in QS.build_provider. 88 tests pass across the redaction, options, qs, user_filter and value-type suites. Closes issue:4be97634adbe on /sdd-done.
+
+**Deviations from spec**: none. Test imports the TASK-956 helpers via the bare module name because tests/ is not a package.

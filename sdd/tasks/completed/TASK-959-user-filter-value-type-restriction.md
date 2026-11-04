@@ -3,7 +3,7 @@
 **Feature**: FEAT-184 — PBAC-based per-user automatic filtering (`user_filtering`)
 **Spec**: `sdd/specs/pbac-based-per-user-filter.spec.md`
 **Discovered-from**: `issue:5102f6025f4a`
-**Status**: pending
+**Status**: done
 **Priority**: high
 **Estimated effort**: S (1-2h)
 **Depends-on**: TASK-951
@@ -174,4 +174,8 @@ dialect parser unchanged and fails closed; never log the value itself
 ```
 
 ## Completion Note
-_(filled by the implementer)_
+**Completed by**: Claude (sdd-start, direct)
+**Date**: 2026-11-03
+**Notes**: Added REASON_INVALID_ATTRIBUTE, _safe_scalar/_safe_filter_value and a deny in the compile_user_filter rule loop. 66 tests pass (new value-type tests + test_user_filter.py); 22 related regression tests pass. Closes issue:5102f6025f4a on /sdd-done.
+
+**Deviations from spec**: Empty list and None stay "missing" (missing_attribute when required, skipped when optional) because the existing missing-attribute branch runs first; the task text listed `[]` as invalid_attribute. Both fail closed when required. Blank strings are still denied as invalid_attribute. Build note: this worktree had no compiled extensions, so I ran `python setup.py build_ext --inplace` inside it (gitignored artifacts only).

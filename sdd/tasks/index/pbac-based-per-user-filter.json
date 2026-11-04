@@ -239,7 +239,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -248,9 +248,10 @@
       "parallel": true,
       "parallelism_notes": "modifies compile_user_filter() created by TASK-951 in querysource/auth/user_filter.py",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-959-user-filter-value-type-restriction.md"
+      "started_at": "2026-11-03T21:58:41+00:00",
+      "completed_at": "2026-11-03T22:01:33+00:00",
+      "file": "sdd/tasks/completed/TASK-959-user-filter-value-type-restriction.md",
+      "verification": "verified"
     },
     {
       "id": "TASK-960",
@@ -259,7 +260,7 @@
       "feature_id": "FEAT-184",
       "feature": "pbac-based-per-user-filter",
       "spec": "sdd/specs/pbac-based-per-user-filter.spec.md",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "effort": "S",
       "depends_on": [
@@ -269,9 +270,10 @@
       "parallel": false,
       "parallelism_notes": "modifies parse_user_filter_options() created by TASK-950 and the QS slug branch touched by TASK-956",
       "assigned_to": null,
-      "started_at": null,
-      "completed_at": null,
-      "file": "sdd/tasks/active/TASK-960-config-error-message-redaction.md"
+      "started_at": "2026-11-03T22:04:05+00:00",
+      "completed_at": "2026-11-03T22:04:31+00:00",
+      "file": "sdd/tasks/completed/TASK-960-config-error-message-redaction.md",
+      "verification": "verified"
     }
   ]
 }
