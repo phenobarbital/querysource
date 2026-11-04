@@ -65,7 +65,7 @@ dependencies = [
     "snapshot-selenium>=0.0.2",
     "webdriver-manager>=4.0.2",
     # Playwright Support
-    "playwright==1.52.0",
+    "playwright==1.64.1",
     # NAV libraries - using compatible versions
     "proxylists>=0.14.0",
     "async-notify[default,uvloop,ses,slack,twilio,xmpp,server,push,google,azure,templates]>=1.4.0",
